@@ -82,7 +82,7 @@ The Notion MCP server supports **OAuth**!
 
 ## 🙌 Credits
 
-- **Skills** by the Notion
-- **MCP Server** by Notion  
-- **Plugin Specification** by Anthropic 
-- **COYS** 
+- **Skills** by Notion
+- **MCP Server** by Notion
+- **Plugin Specification** by Anthropic
+- **COYS**
