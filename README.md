@@ -53,4 +53,4 @@ We welcome contributions from the community. Whether you want to add a new examp
 
 ## License
 
-MIT
+This project is licensed under the [MIT License](LICENSE).
