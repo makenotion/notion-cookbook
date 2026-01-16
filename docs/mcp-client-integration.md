@@ -43,39 +43,39 @@ npm install --save-dev @types/node
 
 **Python:**
 
-- **MCP SDK**: [mcp-python-sdk](https://github.com/modelcontextprotocol/python-sdk) (official)
-- **OAuth 2.0**: [`authlib`](https://github.com/lepture/authlib) or [`requests-oauthlib`](https://github.com/requests/requests-oauthlib)
-- **PKCE**: Built into `authlib` or use [`pkce`](https://pypi.org/project/pkce/) package
+- **MCP SDK**: [python-sdk](https://github.com/modelcontextprotocol/python-sdk) (official)
+- **OAuth 2.0**: [`authlib`](https://docs.authlib.org) (recommended) or [`requests-oauthlib`](https://requests-oauthlib.readthedocs.io)
+- **PKCE**: Built into both `authlib` and `requests-oauthlib`
 
 **Go:**
 
-- **MCP SDK**: [mcp-go-sdk](https://github.com/modelcontextprotocol/go-sdk) (official)
-- **OAuth 2.0**: [`golang.org/x/oauth2`](https://golang.org/x/oauth2) (standard library)
-- **PKCE**: Built into `oauth2` package
+- **MCP SDK**: [go-sdk](https://github.com/modelcontextprotocol/go-sdk) (official)
+- **OAuth 2.0**: [`golang.org/x/oauth2`](https://pkg.go.dev/golang.org/x/oauth2) (official extended package)
+- **PKCE**: Supported via `oauth2.SetAuthURLParam("code_challenge", ...)` and `oauth2.SetAuthURLParam("code_challenge_method", "S256")`
 
 **Rust:**
 
-- **MCP SDK**: [mcp-rust-sdk](https://github.com/modelcontextprotocol/rust-sdk) (official)
+- **MCP SDK**: [rust-sdk](https://github.com/modelcontextprotocol/rust-sdk) (official)
 - **OAuth 2.0**: [`oauth2`](https://docs.rs/oauth2) crate
-- **PKCE**: Built into `oauth2` crate
+- **PKCE**: Built into `oauth2` crate via `PkceCodeChallenge` and `PkceCodeVerifier`
 
 **Java:**
 
 - **MCP SDK**: Use HTTP client libraries (Apache HttpClient, OkHttp, or Java 11+ `HttpClient`)
-- **OAuth 2.0**: [`ScribeJava`](https://github.com/scribejava/scribejava) or [`Spring Security OAuth2`](https://spring.io/projects/spring-security-oauth)
-- **PKCE**: Built into ScribeJava or use [`nimbus-jose-jwt`](https://connect2id.com/products/nimbus-jose-jwt)
+- **OAuth 2.0**: [`Spring Security OAuth2`](https://docs.spring.io/spring-security/reference/servlet/oauth2/index.html) (recommended) or [`ScribeJava`](https://github.com/scribejava/scribejava)
+- **PKCE**: Built into Spring Security OAuth2 Client; supported in ScribeJava via `PKCE` configuration
 
 **C# / .NET:**
 
-- **MCP SDK**: Use `HttpClient` or [RestSharp](https://restsharp.dev)
-- **OAuth 2.0**: [`IdentityModel.OidcClient`](https://github.com/IdentityModel/IdentityModel.OidcClient) or [`OAuth.NET`](https://github.com/oauth-net)
-- **PKCE**: Built into IdentityModel.OidcClient
+- **MCP SDK**: Use `HttpClient` with [`System.Net.Http.Json`](https://learn.microsoft.com/en-us/dotnet/api/system.net.http.json)
+- **OAuth 2.0**: [`IdentityModel.OidcClient`](https://github.com/IdentityModel/IdentityModel.OidcClient) or [`Microsoft.Identity.Web`](https://learn.microsoft.com/en-us/azure/active-directory/develop/microsoft-identity-web)
+- **PKCE**: Built into both libraries
 
 **Ruby:**
 
-- **MCP SDK**: Use `Net::HTTP` or [Faraday](https://github.com/lostisland/faraday)
+- **MCP SDK**: Use `Net::HTTP` (standard library) or [`Faraday`](https://lostisland.github.io/faraday/)
 - **OAuth 2.0**: [`oauth2`](https://github.com/oauth-xx/oauth2) gem
-- **PKCE**: Built into `oauth2` gem
+- **PKCE**: Supported via `oauth2` gem with appropriate configuration
 
 ### Key references
 
