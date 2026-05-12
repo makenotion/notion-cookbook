@@ -18,9 +18,14 @@ The [javascript](javascript/) directory includes examples built with Notion's of
 
 ### Workers
 
-The [workers](workers/) directory includes examples built with the Notion Workers SDK:
+The [workers](workers/) directory includes examples built with the [Notion Workers](https://developers.notion.com/docs/workers) platform:
 
-- **[ppt-creator](workers/tools/ppt-creator/)**: Read a Notion page and generate a PowerPoint presentation, uploaded as a page comment
+- **[syncs/zendesk](workers/syncs/zendesk/)**: One-way sync from Zendesk tickets into a Notion database _(coming soon)_
+- **[syncs/salesforce](workers/syncs/salesforce/)**: One-way sync from Salesforce records into a Notion database _(coming soon)_
+- **[syncs/linear](workers/syncs/linear/)**: One-way sync from Linear issues into a Notion database _(coming soon)_
+- **[tools/snowflake-query](workers/tools/snowflake-query/)**: Query Snowflake from a Notion agent and return results _(coming soon)_
+- **[tools/spotify-control](workers/tools/spotify-control/)**: Start and control Spotify playback from a Notion agent _(coming soon)_
+
 
 ## Running an example
 
