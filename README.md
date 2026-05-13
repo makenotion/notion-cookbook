@@ -11,8 +11,9 @@ This repository is a community hub for learning how to build with Notion, whethe
 Ready-to-run code samples showing how to integrate with Notion's API:
 
 - **[JavaScript examples](examples/javascript/)**: Integrations built with Notion's official JavaScript SDK, from basic API calls to full web applications
+- **[Python examples](examples/python/)**: Python scripts and integrations using public APIs
 
-Future additions will include examples for other languages and frameworks.
+Future additions will include examples for additional languages and frameworks.
 
 ### Skills
 

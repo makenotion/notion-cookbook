@@ -16,6 +16,12 @@ The [javascript](javascript/) directory includes examples built with Notion's of
 - **[parse-text-from-any-block-type](javascript/parse-text-from-any-block-type/)**: Extract text content from different block types
 - **[web-form-with-express](javascript/web-form-with-express/)**: Build a web form that submits data to Notion
 
+### Python
+
+The [python](python/) directory includes examples built with Python:
+
+- **[nyc-weather](python/nyc-weather/)**: Fetch the latest National Weather Service forecast for New York City
+
 ### Workers
 
 The [workers](workers/) directory includes examples built with the [Notion Workers](https://developers.notion.com/docs/workers) platform:
