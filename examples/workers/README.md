@@ -8,7 +8,7 @@ The [syncs](syncs/) directory includes one-way sync examples that bring data fro
 
 - **[zendesk](syncs/zendesk/)**: One-way sync from Zendesk tickets into a Notion database _(coming soon)_
 - **[salesforce](syncs/salesforce/)**: One-way sync from Salesforce records into a Notion database _(coming soon)_
-- **[linear](syncs/linear/)**: One-way sync from Linear issues into a Notion database _(coming soon)_
+- **[linear](syncs/linear/)**: One-way sync from Linear issues into a Notion database
 
 ## Tools
 
