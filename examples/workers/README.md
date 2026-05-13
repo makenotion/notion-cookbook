@@ -15,4 +15,4 @@ The [syncs](syncs/) directory includes one-way sync examples that bring data fro
 The [tools](tools/) directory includes agent tool examples that extend Notion agents with new capabilities:
 
 - **[snowflake-query](tools/snowflake-query/)**: Query Snowflake from a Notion agent and return results _(coming soon)_
-- **[spotify-control](tools/spotify-control/)**: Start and control Spotify playback from a Notion agent _(coming soon)_
+- **[spotify-control](tools/spotify-control/)**: Start and control Spotify playback from a Notion agent
