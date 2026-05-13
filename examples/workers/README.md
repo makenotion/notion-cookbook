@@ -7,7 +7,7 @@ This directory contains example [Notion workers](https://developers.notion.com/d
 The [syncs](syncs/) directory includes one-way sync examples that bring data from external systems into Notion databases:
 
 - **[zendesk](syncs/zendesk/)**: One-way sync from Zendesk tickets into a Notion database _(coming soon)_
-- **[salesforce](syncs/salesforce/)**: One-way sync from Salesforce records into a Notion database _(coming soon)_
+- **[salesforce](syncs/salesforce/)**: One-way sync from Salesforce Accounts and Opportunities into Notion databases with a two-way relation
 - **[linear](syncs/linear/)**: One-way sync from Linear issues into a Notion database _(coming soon)_
 
 ## Tools
