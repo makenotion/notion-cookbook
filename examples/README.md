@@ -14,6 +14,7 @@ The [javascript](javascript/) directory includes examples built with Notion's of
 - **[notion-github-sync](javascript/notion-github-sync/)**: Sync GitHub issues to a Notion database
 - **[notion-task-github-pr-sync](javascript/notion-task-github-pr-sync/)**: Connect Notion tasks to GitHub pull requests
 - **[parse-text-from-any-block-type](javascript/parse-text-from-any-block-type/)**: Extract text content from different block types
+- **[query-large-data-sources](javascript/query-large-data-sources/)**: Read every row of a database that exceeds the per-query limit
 - **[web-form-with-express](javascript/web-form-with-express/)**: Build a web form that submits data to Notion
 
 ### Workers
@@ -25,7 +26,6 @@ The [workers](workers/) directory includes examples built with the [Notion Worke
 - **[syncs/linear](workers/syncs/linear/)**: One-way sync from Linear issues into a Notion database _(coming soon)_
 - **[tools/snowflake-query](workers/tools/snowflake-query/)**: Query Snowflake from a Notion agent and return results _(coming soon)_
 - **[tools/spotify-control](workers/tools/spotify-control/)**: Start and control Spotify playback from a Notion agent _(coming soon)_
-
 
 ## Running an example
 

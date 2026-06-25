@@ -24,7 +24,8 @@ Examples demonstrating how to use Notion's JavaScript SDK to build integrations.
 
 ### Utilities
 
-**[parse-text-from-any-block-type](parse-text-from-any-block-type/)**: Extract text from various block types
+- **[parse-text-from-any-block-type](parse-text-from-any-block-type/)**: Extract text from various block types
+- **[query-large-data-sources](query-large-data-sources/)**: Read every row of a database that exceeds the per-query limit
 
 ## General setup
 
