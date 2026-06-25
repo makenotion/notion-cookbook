@@ -25,15 +25,24 @@ export function assertSelectOnly(sql: string): void {
     throw new Error("Only one SQL statement is allowed.")
   }
   // WITH ... SELECT parses as a select node with a .with clause.
-  if (list[0]?.type !== "select") {
+  const statement = list[0]
+  if (statement?.type !== "select") {
+    throw new Error("Only read-only SELECT queries are allowed.")
+  }
+  // `SELECT ... INTO <target>` parses as a select but writes; reject it.
+  // A normal select has `into: { position: null }`; an INTO clause sets `expr`.
+  const into = (statement as { into?: { expr?: unknown } }).into
+  if (into?.expr != null) {
     throw new Error("Only read-only SELECT queries are allowed.")
   }
 }
 
-// Cap the result set and grab one extra row to detect truncation.
+// Cap the result set and grab one extra row to detect truncation. The inner
+// query sits on its own line so a trailing line comment (-- ...) can't swallow
+// the closing paren and LIMIT.
 export function buildBoundedQuery(sql: string, maxRows: number): string {
   const inner = stripTrailingSemicolon(sql)
-  return `SELECT * FROM (${inner}) AS query_result LIMIT ${maxRows + 1}`
+  return `SELECT * FROM (\n${inner}\n) AS query_result LIMIT ${maxRows + 1}`
 }
 
 export function buildShowTables(input: {

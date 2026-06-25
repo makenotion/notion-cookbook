@@ -171,8 +171,10 @@ function normalizeValue(value: unknown): JsonValue {
 }
 
 function clamp(value: number | null, fallback: number, max: number): number {
-  if (value == null || !Number.isFinite(value) || value <= 0) return fallback
-  return Math.min(Math.floor(value), max)
+  if (value == null) return fallback
+  const n = Math.floor(value)
+  if (!Number.isFinite(n) || n <= 0) return fallback
+  return Math.min(n, max)
 }
 
 function readPositiveInt(name: string, fallback: number): number {
