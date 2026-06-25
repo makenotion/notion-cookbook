@@ -121,6 +121,9 @@ function executeSql(
   return new Promise((resolve, reject) => {
     conn.execute({
       sqlText,
+      // Rename duplicate column names (e.g. two `id`s from a join) instead of
+      // silently dropping one when rows are keyed by column name.
+      rowMode: "object_with_renamed_duplicated_columns",
       complete: (err, stmt, rows) => {
         if (err) {
           reject(err)

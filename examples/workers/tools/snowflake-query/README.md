@@ -138,6 +138,8 @@ ntn workers exec query --local -d '{"sql": "SELECT CURRENT_DATE() AS ds", "maxRo
 
 The row cap is applied with an outer `LIMIT`, which doesn't preserve a top-level `ORDER BY` on its own. If order matters, have the query sort and bound its own rows (`ORDER BY ... LIMIT`), or sort the returned rows in the agent.
 
+The read-only check uses `node-sql-parser`'s Snowflake dialect, which fails closed: it rejects anything it can't parse as a single `SELECT`. That's safe, but it also means a few valid read-only queries it doesn't fully support yet (e.g. `SAMPLE`) get bounced. The authoritative guardrail is still the read-only role, so you can loosen the parser check if your use case needs those.
+
 ## Learn more
 
 - [Notion Workers documentation](https://developers.notion.com/docs/workers)
