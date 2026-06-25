@@ -83,9 +83,9 @@ Inline markdown formatting is preserved: `**bold**` renders as bold and `*italic
 
 Two approaches are included in `notion.ts`:
 
-| Approach | Functions | How it works |
-|---|---|---|
-| **Markdown API** (active) | `getPageMarkdown` + `groupMarkdownIntoSlides` | Single API call, parses markdown string |
-| **Block API** (available) | `getAllBlocks` + `groupBlocksIntoSlides` | Paginated block fetching, switches on block types |
+| Approach                  | Functions                                     | How it works                                      |
+| ------------------------- | --------------------------------------------- | ------------------------------------------------- |
+| **Markdown API** (active) | `getPageMarkdown` + `groupMarkdownIntoSlides` | Single API call, parses markdown string           |
+| **Block API** (available) | `getAllBlocks` + `groupBlocksIntoSlides`      | Paginated block fetching, switches on block types |
 
 Switch between them by changing the imports in `index.ts`.
