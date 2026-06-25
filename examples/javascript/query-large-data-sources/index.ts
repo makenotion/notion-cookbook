@@ -1,7 +1,7 @@
 import {
   Client,
   collectPaginatedAPI,
-  isFullPage,
+  isFullPageOrDataSource,
   iteratePaginatedAPI,
 } from "@notionhq/client"
 import type { QueryDataSourceResponse } from "@notionhq/client"
@@ -99,8 +99,9 @@ async function queryAllRows(): Promise<DataSourceRow[]> {
 
       for (const row of response.results) {
         rowsById.set(row.id, row)
-        // created_time lives on full page objects only.
-        if (isFullPage(row)) {
+        // Pages and child data sources (wikis) both carry created_time, and
+        // either can be the window's last row, so advance on either.
+        if (isFullPageOrDataSource(row)) {
           lastCreatedTime = row.created_time
         }
       }
