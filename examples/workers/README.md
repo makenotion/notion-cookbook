@@ -14,6 +14,7 @@ The [syncs](syncs/) directory includes one-way sync examples that bring data fro
 
 The [tools](tools/) directory includes agent tool examples that extend Notion agents with new capabilities:
 
+- **[airflow](tools/airflow/)**: Query Airflow DAGs, runs, tasks, and logs from a Notion agent
 - **[chart-generator](tools/chart-generator/)**: Render a Vega-Lite chart to an image and embed it in a Notion page
 - **[snowflake-query](tools/snowflake-query/)**: Query Snowflake from a Notion agent and return results
 - **[spotify-control](tools/spotify-control/)**: Start and control Spotify playback from a Notion agent _(coming soon)_
