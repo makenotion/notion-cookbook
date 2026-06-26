@@ -20,6 +20,7 @@ The [tools](tools/) directory includes agent tool examples that extend Notion ag
 - **[postgres-query](tools/postgres-query/)**: Query a PostgreSQL database from a Notion agent and return results
 - **[snowflake-query](tools/snowflake-query/)**: Query Snowflake from a Notion agent and return results
 - **[spotify-control](tools/spotify-control/)**: Start and control Spotify playback from a Notion agent _(coming soon)_
+- **[sqlite-demo](tools/sqlite-demo/)**: Query a self-contained in-memory SQLite database seeded with sample data — no setup required
 
 ## Webhooks
 
