@@ -6,6 +6,7 @@ This directory contains example [Notion workers](https://developers.notion.com/d
 
 The [syncs](syncs/) directory includes one-way sync examples that bring data from external systems into Notion databases:
 
+- **[duckdb-sync-demo](syncs/duckdb-sync-demo/)**: Sync a self-contained in-memory DuckDB into a managed Notion database — no setup required
 - **[salesforce](syncs/salesforce/)**: One-way sync from Salesforce records into a Notion database _(coming soon)_
 - **[linear](syncs/linear/)**: One-way sync from Linear issues into a Notion database _(coming soon)_
 
