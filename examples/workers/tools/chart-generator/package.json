@@ -1,0 +1,25 @@
+{
+  "name": "chart-generator",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc && cp -r src/fonts dist/fonts",
+    "check": "tsc --noEmit",
+    "test": "tsx test.ts"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.9.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.8.0"
+  },
+  "dependencies": {
+    "@notionhq/workers": ">=0.0.0",
+    "@resvg/resvg-js": "^2.6.2",
+    "vega": "^6.2.0",
+    "vega-lite": "^6.4.2"
+  }
+}

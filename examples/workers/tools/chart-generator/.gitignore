@@ -1,0 +1,7 @@
+# Secrets — never commit these
+.env
+workers.json
+
+# Build output and dependencies
+dist/
+node_modules/
