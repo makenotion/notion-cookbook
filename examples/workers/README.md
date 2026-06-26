@@ -6,7 +6,6 @@ This directory contains example [Notion workers](https://developers.notion.com/d
 
 The [syncs](syncs/) directory includes one-way sync examples that bring data from external systems into Notion databases:
 
-- **[zendesk](syncs/zendesk/)**: One-way sync from Zendesk tickets into a Notion database _(coming soon)_
 - **[salesforce](syncs/salesforce/)**: One-way sync from Salesforce records into a Notion database _(coming soon)_
 - **[linear](syncs/linear/)**: One-way sync from Linear issues into a Notion database _(coming soon)_
 
@@ -19,3 +18,9 @@ The [tools](tools/) directory includes agent tool examples that extend Notion ag
 - **[cloudwatch-logs](tools/cloudwatch-logs/)**: Query AWS CloudWatch log groups, streams, and events from a Notion agent
 - **[snowflake-query](tools/snowflake-query/)**: Query Snowflake from a Notion agent and return results
 - **[spotify-control](tools/spotify-control/)**: Start and control Spotify playback from a Notion agent _(coming soon)_
+
+## Webhooks
+
+The [webhooks](webhooks/) directory includes webhook examples that push events from external systems into Notion in real time:
+
+- **[zendesk](webhooks/zendesk/)**: Verify Zendesk ticket webhooks and upsert them into a Notion database
