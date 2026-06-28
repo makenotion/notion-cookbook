@@ -23,6 +23,20 @@ export const companySchema: Schema.Schema<typeof PRIMARY_KEY> = {
 
     Owner: Schema.richText(),
 
+    "Open Deals": Schema.number(),
+
+    "Total Revenue": Schema.number(),
+
+    "Lifecycle Stage": Schema.select([
+      { name: "Subscriber" },
+      { name: "Lead" },
+      { name: "Marketing Qualified Lead" },
+      { name: "Sales Qualified Lead" },
+      { name: "Opportunity" },
+      { name: "Customer" },
+      { name: "Evangelist" },
+    ]),
+
     Type: Schema.select([
       { name: "Prospect" },
       { name: "Partner" },
@@ -37,12 +51,24 @@ export const companySchema: Schema.Schema<typeof PRIMARY_KEY> = {
 
     Phone: Schema.richText(),
 
+    Updated: Schema.date(),
+
     Created: Schema.date(),
 
     "Company Link": Schema.url(),
 
     "Company ID": Schema.richText(),
   },
+}
+
+const LIFECYCLE_LABELS: Record<string, string> = {
+  subscriber: "Subscriber",
+  lead: "Lead",
+  marketingqualifiedlead: "Marketing Qualified Lead",
+  salesqualifiedlead: "Sales Qualified Lead",
+  opportunity: "Opportunity",
+  customer: "Customer",
+  evangelist: "Evangelist",
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -62,17 +88,25 @@ export function companyToChange(
 ) {
   const owner = ownerName(owners, company.hubspot_owner_id)
   const companyType = TYPE_LABELS[company.type?.toUpperCase() ?? ""]
+  const lifecycle = LIFECYCLE_LABELS[company.lifecyclestage ?? ""]
   const employees = company.numberofemployees
     ? Number(company.numberofemployees)
     : null
   const revenue = company.annualrevenue
     ? Number(company.annualrevenue)
     : null
+  const openDeals = company.hs_num_open_deals
+    ? Number(company.hs_num_open_deals)
+    : null
+  const totalRevenue = company.total_revenue
+    ? Number(company.total_revenue)
+    : null
 
   return {
     type: "upsert" as const,
     key: id,
     upstreamUpdatedAt: updatedAt,
+    pageContentMarkdown: company.description ?? "",
     properties: {
       Name: Builder.title(company.name ?? ""),
       ...(company.industry
@@ -88,6 +122,15 @@ export function companyToChange(
         ? { "Number of Employees": Builder.number(employees) }
         : {}),
       ...(owner ? { Owner: Builder.richText(owner) } : {}),
+      ...(openDeals != null && !isNaN(openDeals)
+        ? { "Open Deals": Builder.number(openDeals) }
+        : {}),
+      ...(totalRevenue != null && !isNaN(totalRevenue)
+        ? { "Total Revenue": Builder.number(totalRevenue) }
+        : {}),
+      ...(lifecycle
+        ? { "Lifecycle Stage": Builder.select(lifecycle) }
+        : {}),
       ...(companyType ? { Type: Builder.select(companyType) } : {}),
       ...(company.city
         ? { City: Builder.richText(company.city) }
@@ -98,6 +141,7 @@ export function companyToChange(
       ...(company.phone
         ? { Phone: Builder.richText(company.phone) }
         : {}),
+      Updated: Builder.date(dateOnly(updatedAt)),
       ...(company.createdate
         ? { Created: Builder.date(dateOnly(company.createdate)) }
         : {}),

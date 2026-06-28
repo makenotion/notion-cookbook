@@ -36,11 +36,17 @@ export const contactSchema: Schema.Schema<typeof PRIMARY_KEY> = {
 
     "Last Activity": Schema.date(),
 
-    Owner: Schema.richText(),
-
     "Job Title": Schema.richText(),
 
+    Owner: Schema.richText(),
+
     Phone: Schema.richText(),
+
+    "Associated Deals": Schema.number(),
+
+    "Recent Deal Amount": Schema.number(),
+
+    Updated: Schema.date(),
 
     Created: Schema.date(),
 
@@ -82,6 +88,12 @@ export function contactToChange(
   const lifecycle = LIFECYCLE_LABELS[contact.lifecyclestage ?? ""]
   const leadStatus = LEAD_STATUS_LABELS[contact.hs_lead_status ?? ""]
   const owner = ownerName(owners, contact.hubspot_owner_id)
+  const numDeals = contact.num_associated_deals
+    ? Number(contact.num_associated_deals)
+    : null
+  const recentDeal = contact.recent_deal_amount
+    ? Number(contact.recent_deal_amount)
+    : null
 
   return {
     type: "upsert" as const,
@@ -101,16 +113,23 @@ export function contactToChange(
       ...(contact.company
         ? { Company: Builder.richText(contact.company) }
         : {}),
-      ...(contact.notes_last_updated
-        ? { "Last Activity": Builder.date(dateOnly(contact.notes_last_updated)) }
+      ...(contact.hs_last_sales_activity_timestamp
+        ? { "Last Activity": Builder.date(dateOnly(contact.hs_last_sales_activity_timestamp)) }
         : {}),
-      ...(owner ? { Owner: Builder.richText(owner) } : {}),
       ...(contact.jobtitle
         ? { "Job Title": Builder.richText(contact.jobtitle) }
         : {}),
+      ...(owner ? { Owner: Builder.richText(owner) } : {}),
       ...(contact.phone
         ? { Phone: Builder.richText(contact.phone) }
         : {}),
+      ...(numDeals != null && !isNaN(numDeals)
+        ? { "Associated Deals": Builder.number(numDeals) }
+        : {}),
+      ...(recentDeal != null && !isNaN(recentDeal)
+        ? { "Recent Deal Amount": Builder.number(recentDeal) }
+        : {}),
+      Updated: Builder.date(dateOnly(updatedAt)),
       ...(contact.createdate
         ? { Created: Builder.date(dateOnly(contact.createdate)) }
         : {}),

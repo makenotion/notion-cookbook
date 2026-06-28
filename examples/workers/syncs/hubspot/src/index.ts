@@ -3,21 +3,25 @@
 //
 // Three databases are created:
 //   1. Contacts   — lifecycle stage, lead status, owner (every 5 min)
-//   2. Deals      — pipeline stage, amount, close date, owner (every 5 min)
-//   3. Companies  — industry, revenue, employees, owner (every 5 min)
+//   2. Deals      — pipeline stage, amount, associations, forecast (every 5 min)
+//   3. Companies  — industry, revenue, employees, open deals (every 5 min)
 //
-// Owner IDs are resolved to names by fetching all owners once per sync cycle.
+// Owner IDs and pipeline/stage IDs are resolved to human-readable names by
+// fetching lookup data once at the start of each sync cycle.
+// Deal associations (company/contact) are resolved per-page using batch reads.
 
 import { Worker } from "@notionhq/workers"
 
 import {
   getPortalId,
   fetchAllOwners,
+  fetchDealPipelines,
   fetchContactsPage,
   fetchDealsPage,
   fetchCompaniesPage,
+  batchReadNames,
 } from "./hubspot.js"
-import type { OwnerLookup } from "./hubspot.js"
+import type { OwnerLookup, PipelineLookup } from "./hubspot.js"
 import {
   INITIAL_TITLE as CONTACTS_TITLE,
   PRIMARY_KEY as CONTACTS_PK,
@@ -30,6 +34,7 @@ import {
   dealSchema,
   dealToChange,
 } from "./deals.js"
+import type { DealContext } from "./deals.js"
 import {
   INITIAL_TITLE as COMPANIES_TITLE,
   PRIMARY_KEY as COMPANIES_PK,
@@ -49,15 +54,11 @@ const pacer = worker.pacer("hubspot", {
   intervalMs: 10_000,
 })
 
-// Owners are fetched once per sync cycle and shared across all transforms.
-let cachedOwners: OwnerLookup | undefined
-
-async function getOwners(): Promise<OwnerLookup> {
-  if (!cachedOwners) {
-    cachedOwners = await fetchAllOwners()
-  }
-  return cachedOwners
-}
+// Per-cycle caches cleared when the last page completes.
+let contactOwners: OwnerLookup | undefined
+let companyOwners: OwnerLookup | undefined
+let dealOwners: OwnerLookup | undefined
+let dealPipelines: PipelineLookup | undefined
 
 // ---------------------------------------------------------------------------
 // Contacts
@@ -77,11 +78,14 @@ worker.sync("contactsSync", {
   execute: async (state: SyncState | undefined) => {
     await pacer.wait()
     const portalId = getPortalId()
-    const owners = await getOwners()
+
+    if (!contactOwners) {
+      contactOwners = await fetchAllOwners()
+    }
 
     const page = await fetchContactsPage(state?.cursor)
     const changes = page.contacts.map((c) =>
-      contactToChange(c.id, c.properties, c.updatedAt, portalId, owners)
+      contactToChange(c.id, c.properties, c.updatedAt, portalId, contactOwners!)
     )
 
     if (page.nextCursor) {
@@ -92,13 +96,13 @@ worker.sync("contactsSync", {
       }
     }
 
-    cachedOwners = undefined
+    contactOwners = undefined
     return { changes, hasMore: false }
   },
 })
 
 // ---------------------------------------------------------------------------
-// Deals
+// Deals — resolves stage/pipeline IDs and association IDs to names
 // ---------------------------------------------------------------------------
 
 const deals = worker.database("deals", {
@@ -111,15 +115,50 @@ const deals = worker.database("deals", {
 worker.sync("dealsSync", {
   database: deals,
   mode: "replace",
-  schedule: "5m",
+  schedule: "2m",
   execute: async (state: SyncState | undefined) => {
     await pacer.wait()
     const portalId = getPortalId()
-    const owners = await getOwners()
+
+    if (!dealOwners) {
+      const [owners, pipelines] = await Promise.all([
+        fetchAllOwners(),
+        fetchDealPipelines(),
+      ])
+      dealOwners = owners
+      dealPipelines = pipelines
+    }
 
     const page = await fetchDealsPage(state?.cursor)
+
+    const companyIds: string[] = []
+    const contactIds: string[] = []
+    for (const d of page.deals) {
+      const cid = d.associations["companies"]?.[0]
+      const tid = d.associations["contacts"]?.[0]
+      if (cid) companyIds.push(cid)
+      if (tid) contactIds.push(tid)
+    }
+
+    await pacer.wait()
+    const [companyNames, contactNames] = await Promise.all([
+      batchReadNames("companies", companyIds, ["name"]),
+      batchReadNames("contacts", contactIds, ["firstname", "lastname"], (props) => {
+        const name = `${props.firstname ?? ""} ${props.lastname ?? ""}`.trim()
+        return name || null
+      }),
+    ])
+
+    const ctx: DealContext = {
+      portalId,
+      owners: dealOwners!,
+      pipelines: dealPipelines!,
+      companyNames,
+      contactNames,
+    }
+
     const changes = page.deals.map((d) =>
-      dealToChange(d.id, d.properties, d.updatedAt, portalId, owners)
+      dealToChange(d.id, d.properties, d.updatedAt, d.associations, ctx)
     )
 
     if (page.nextCursor) {
@@ -130,7 +169,8 @@ worker.sync("dealsSync", {
       }
     }
 
-    cachedOwners = undefined
+    dealOwners = undefined
+    dealPipelines = undefined
     return { changes, hasMore: false }
   },
 })
@@ -153,11 +193,14 @@ worker.sync("companiesSync", {
   execute: async (state: SyncState | undefined) => {
     await pacer.wait()
     const portalId = getPortalId()
-    const owners = await getOwners()
+
+    if (!companyOwners) {
+      companyOwners = await fetchAllOwners()
+    }
 
     const page = await fetchCompaniesPage(state?.cursor)
     const changes = page.companies.map((c) =>
-      companyToChange(c.id, c.properties, c.updatedAt, portalId, owners)
+      companyToChange(c.id, c.properties, c.updatedAt, portalId, companyOwners!)
     )
 
     if (page.nextCursor) {
@@ -168,7 +211,7 @@ worker.sync("companiesSync", {
       }
     }
 
-    cachedOwners = undefined
+    companyOwners = undefined
     return { changes, hasMore: false }
   },
 })
