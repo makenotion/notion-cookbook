@@ -1,5 +1,5 @@
 // GitHub REST API client. Handles authentication and paginated fetching
-// for issues and pull requests across multiple repositories.
+// for issues, pull requests, reviews, and check runs.
 //
 // To add a new resource (e.g. releases, actions runs):
 //   1. Add a type for the API response shape
@@ -117,7 +117,7 @@ export type GitHubPullRequest = {
   labels: { name: string }[]
   milestone: { title: string } | null
   base: { ref: string }
-  head: { ref: string }
+  head: { ref: string; sha: string }
   merged_by: { login: string } | null
   html_url: string
   closed_at: string | null
@@ -128,13 +128,78 @@ export type GitHubPullRequest = {
 
 export async function fetchPullRequestsPage(
   repo: string,
-  page?: number
+  page?: number,
+  state?: string
 ): Promise<{ pullRequests: GitHubPullRequest[]; hasMore: boolean }> {
   const { items, hasMore } = await fetchPage<GitHubPullRequest>(
     `/repos/${repo}/pulls`,
-    { state: "all", sort: "updated", direction: "desc" },
+    { state: state ?? "all", sort: "updated", direction: "desc" },
     page
   )
 
   return { pullRequests: items, hasMore }
+}
+
+// ---------------------------------------------------------------------------
+// Pull Request Reviews
+// https://docs.github.com/en/rest/pulls/reviews#list-reviews-for-a-pull-request
+// ---------------------------------------------------------------------------
+
+export type GitHubReview = {
+  id: number
+  state: string
+  user: { login: string } | null
+  submitted_at: string | null
+}
+
+export async function fetchReviews(
+  repo: string,
+  prNumber: number
+): Promise<GitHubReview[]> {
+  const { items } = await fetchPage<GitHubReview>(
+    `/repos/${repo}/pulls/${prNumber}/reviews`
+  )
+  return items
+}
+
+// ---------------------------------------------------------------------------
+// Check Runs (CI status)
+// https://docs.github.com/en/rest/checks/runs#list-check-runs-for-a-git-reference
+// ---------------------------------------------------------------------------
+
+export type GitHubCheckRun = {
+  name: string
+  status: string
+  conclusion: string | null
+}
+
+type CheckRunsResponse = {
+  total_count: number
+  check_runs: GitHubCheckRun[]
+}
+
+export async function fetchCheckRuns(
+  repo: string,
+  sha: string
+): Promise<GitHubCheckRun[]> {
+  const token = requireEnv("GITHUB_TOKEN")
+  const url = `https://api.github.com/repos/${repo}/commits/${sha}/check-runs`
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+  })
+
+  const text = await response.text()
+  if (!response.ok) {
+    throw new Error(
+      `GitHub API error (${response.status}): ${text || "No response body"}`
+    )
+  }
+
+  const body = JSON.parse(text) as CheckRunsResponse
+  return body.check_runs
 }

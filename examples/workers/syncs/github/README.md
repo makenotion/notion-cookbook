@@ -2,8 +2,8 @@
 
 Syncs GitHub issues and pull requests from one or more repositories into
 Notion databases that stay up to date automatically. Once deployed, the worker
-checks GitHub every 5 minutes and creates or updates a Notion page for each
-issue and PR.
+creates three databases covering issues, all pull requests, and a focused view
+of open PRs with review and CI status.
 
 You don't need to create the Notion databases yourself. The worker declares the
 schemas and Notion creates and manages each database for you (these are called
@@ -14,7 +14,8 @@ schemas and Notion creates and manages each database for you (these are called
 | Database | GitHub resource | Schedule |
 | --- | --- | --- |
 | **GitHub Issues** | Issues | Every 5 min |
-| **GitHub Pull Requests** | Pull Requests | Every 5 min |
+| **GitHub Pull Requests** | Pull Requests (all states) | Every 5 min |
+| **GitHub Open PRs** | Open PRs + reviews + CI | Every 2 min |
 
 ### GitHub Issues
 
@@ -38,7 +39,7 @@ schemas and Notion creates and manages each database for you (these are called
 
 Each page body contains the issue body (markdown).
 
-### GitHub Pull Requests
+### GitHub Pull Requests (all states)
 
 | Notion property | GitHub field | Type |
 | --- | --- | --- |
@@ -64,34 +65,66 @@ Each page body contains the issue body (markdown).
 Each page body contains the PR description (markdown). State is "Merged" when
 `merged_at` is set, regardless of the `state` field.
 
-> **Per-PR stats (additions, deletions, changed files)** are not included
-> because GitHub's list endpoint does not return them. To add them, fetch each
-> PR individually via `GET /repos/{owner}/{repo}/pulls/{number}` or use the
-> [GraphQL API](https://docs.github.com/en/graphql) to get all fields in a
-> single query.
+### GitHub Open PRs
+
+A focused view of currently open pull requests, enriched with review decisions
+and CI status from per-PR API calls. Because only open PRs are fetched, the
+extra calls stay well within rate limits.
+
+| Notion property | GitHub field | Type |
+| --- | --- | --- |
+| Title | `title` | title |
+| PR Key | `owner/repo#number` | richText |
+| PR Link | `html_url` | url |
+| Draft | `draft` | checkbox |
+| Review State | Aggregate of PR reviews | select |
+| CI Status | Aggregate of check runs | select |
+| Author | `user.login` | richText |
+| Assignees | `assignees[].login` | multiSelect |
+| Reviewers | `requested_reviewers[].login` | multiSelect |
+| Labels | `labels[].name` | multiSelect |
+| Milestone | `milestone.title` | richText |
+| Base Branch | `base.ref` | richText |
+| Head Branch | `head.ref` | richText |
+| Repository | `owner/repo` | richText |
+| Created | `created_at` | date |
+| Updated | `updated_at` | date |
+
+**Review State** is computed from individual review decisions. Each reviewer's
+latest non-comment review is used: if any reviewer has requested changes, the
+state is "Changes Requested"; if all actionable reviews are approvals, it's
+"Approved". Dismissed reviews are excluded.
+
+**CI Status** is computed from check runs on the PR's head commit: "Success"
+when all checks pass, "Failure" if any check fails, "Pending" if any are still
+running.
 
 ## Project structure
 
 ```text
 src/
-├── index.ts          — registers both databases and syncs
-├── github.ts         — API client (auth, pagination, types)
-├── issues.ts         — issue schema + transform
-├── pull-requests.ts  — PR schema + transform
-└── helpers.ts        — shared utilities (dateOnly)
+├── index.ts              — registers all databases and syncs
+├── github.ts             — API client (auth, pagination, types)
+├── issues.ts             — issue schema + transform
+├── pull-requests.ts      — all-PRs schema + transform
+├── open-pull-requests.ts — open-PRs schema + transform (reviews, CI)
+└── helpers.ts            — shared utilities (dateOnly)
 ```
 
 ## How it works
 
-1. Every 5 minutes, the worker iterates through each repository listed in
-   `GITHUB_REPOS`, fetching issues and PRs with page-based pagination (100
-   per page).
+1. The worker runs three syncs across all repositories listed in `GITHUB_REPOS`:
+   - **Issues** and **All PRs** use the list endpoints (1 API call per 100
+     records) and sync every 5 minutes.
+   - **Open PRs** fetches only open pull requests, then makes two additional
+     API calls per PR (reviews and check runs) to get review state and CI
+     status. It syncs every 2 minutes.
 2. Each record is converted to an `upsert` keyed by `owner/repo#number`, so
    the same issue or PR is never duplicated — even across multiple repos.
-3. The platform applies the changes to the managed database and loops until
-   all repos and pages have been fetched.
-4. Because both syncs use `mode: "replace"`, issues or PRs deleted from GitHub
-   are automatically removed from the Notion database on the next full sync.
+3. All three syncs share a single rate-limit pacer (4800 requests/hour) to
+   stay within GitHub's 5000/hour limit.
+4. Because all syncs use `mode: "replace"`, records deleted or closed in
+   GitHub are automatically removed from the corresponding database.
 
 ## Prerequisites
 
@@ -106,6 +139,10 @@ src/
    to sync (Issues and Pull Requests permissions), or a **classic token**
    with the `repo` scope
 3. Copy the token — you'll need it for `GITHUB_TOKEN`
+
+> **Production use:** For higher rate limits (15 000+ requests/hour) and
+> org-level permissions, consider using a
+> [GitHub App](https://docs.github.com/en/apps) instead of a personal token.
 
 ## Environment variables
 
@@ -164,18 +201,19 @@ automatically.
 
    ```sh
    ntn workers sync trigger issuesSync --preview
-   ntn workers sync trigger pullRequestsSync --preview
+   ntn workers sync trigger openPullRequestsSync --preview
    ```
 
 8. Run a real sync:
 
    ```sh
    ntn workers sync trigger issuesSync
-   ntn workers sync trigger pullRequestsSync
+   ntn workers sync trigger allPullRequestsSync
+   ntn workers sync trigger openPullRequestsSync
    ```
 
-Once deployed, both syncs run automatically every 5 minutes. Two databases will
-appear in your Notion workspace after the first run.
+Once deployed, all three syncs run automatically. Three databases will appear
+in your Notion workspace after the first run.
 
 ## Adapting the schema
 
@@ -184,7 +222,8 @@ Each resource has its own file with a schema and transform function:
 | Resource | File |
 | --- | --- |
 | Issues | `src/issues.ts` |
-| Pull Requests | `src/pull-requests.ts` |
+| All Pull Requests | `src/pull-requests.ts` |
+| Open Pull Requests | `src/open-pull-requests.ts` |
 
 To add a new GitHub field:
 
@@ -211,4 +250,6 @@ ntn workers exec issuesSync --local
 - [Notion Workers documentation](https://developers.notion.com/docs/workers)
 - [GitHub REST API — Issues](https://docs.github.com/en/rest/issues/issues)
 - [GitHub REST API — Pull Requests](https://docs.github.com/en/rest/pulls/pulls)
+- [GitHub REST API — Reviews](https://docs.github.com/en/rest/pulls/reviews)
+- [GitHub REST API — Check Runs](https://docs.github.com/en/rest/checks/runs)
 - [Contributing guide](../../../../CONTRIBUTING.md)

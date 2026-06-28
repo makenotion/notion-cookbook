@@ -3,10 +3,20 @@
 // Run: npm test  (or: npx tsx test.ts)
 
 import { issueToChange } from "./src/issues.js"
-import { pullRequestToChange } from "./src/pull-requests.js"
+import { pullRequestToChange } from "./src/all-pull-requests.js"
+import {
+  openPullRequestToChange,
+  reviewState,
+  ciStatus,
+} from "./src/open-pull-requests.js"
 import { dateOnly } from "./src/helpers.js"
 import { getRepos } from "./src/github.js"
-import type { GitHubIssue, GitHubPullRequest } from "./src/github.js"
+import type {
+  GitHubIssue,
+  GitHubPullRequest,
+  GitHubReview,
+  GitHubCheckRun,
+} from "./src/github.js"
 
 let passed = 0
 let failed = 0
@@ -208,7 +218,7 @@ const standardPR: GitHubPullRequest = {
   labels: [{ name: "enhancement" }],
   milestone: { title: "v2.0" },
   base: { ref: "main" },
-  head: { ref: "feature/mobile" },
+  head: { ref: "feature/mobile", sha: "abc123" },
   merged_by: null,
   html_url: "https://github.com/acme/widgets/pull/123",
   closed_at: null,
@@ -321,7 +331,7 @@ const minimalPR: GitHubPullRequest = {
   labels: [],
   milestone: null,
   base: { ref: "main" },
-  head: { ref: "fix" },
+  head: { ref: "fix", sha: "def456" },
   merged_by: null,
   html_url: "https://github.com/acme/widgets/pull/1",
   closed_at: null,
@@ -338,6 +348,119 @@ ok("empty reviewers omits Reviewers", minimalPRChange.properties.Reviewers === u
 ok("empty labels omits Labels", minimalPRChange.properties.Labels === undefined)
 ok("null milestone omits Milestone", minimalPRChange.properties.Milestone === undefined)
 ok("null body gives empty pageContentMarkdown", minimalPRChange.pageContentMarkdown === "")
+
+// ---------------------------------------------------------------------------
+// reviewState — aggregates review decisions
+// ---------------------------------------------------------------------------
+
+console.log("reviewState:")
+
+ok("empty reviews returns undefined", reviewState([]) === undefined)
+
+ok(
+  "single approval",
+  reviewState([
+    { id: 1, state: "APPROVED", user: { login: "alice" }, submitted_at: null },
+  ]) === "Approved"
+)
+
+ok(
+  "changes requested wins over approval from different authors",
+  reviewState([
+    { id: 1, state: "APPROVED", user: { login: "alice" }, submitted_at: null },
+    { id: 2, state: "CHANGES_REQUESTED", user: { login: "bob" }, submitted_at: null },
+  ]) === "Changes Requested"
+)
+
+ok(
+  "later approval from same author overrides changes requested",
+  reviewState([
+    { id: 1, state: "CHANGES_REQUESTED", user: { login: "alice" }, submitted_at: null },
+    { id: 2, state: "APPROVED", user: { login: "alice" }, submitted_at: null },
+  ]) === "Approved"
+)
+
+ok(
+  "COMMENTED reviews are ignored",
+  reviewState([
+    { id: 1, state: "COMMENTED", user: { login: "alice" }, submitted_at: null },
+  ]) === undefined
+)
+
+ok(
+  "DISMISSED review removes that author's vote",
+  reviewState([
+    { id: 1, state: "APPROVED", user: { login: "alice" }, submitted_at: null },
+    { id: 2, state: "DISMISSED", user: { login: "alice" }, submitted_at: null },
+  ]) === undefined
+)
+
+// ---------------------------------------------------------------------------
+// ciStatus — aggregates check run results
+// ---------------------------------------------------------------------------
+
+console.log("ciStatus:")
+
+ok("empty check runs returns undefined", ciStatus([]) === undefined)
+
+ok(
+  "all success",
+  ciStatus([
+    { name: "lint", status: "completed", conclusion: "success" },
+    { name: "test", status: "completed", conclusion: "success" },
+  ]) === "Success"
+)
+
+ok(
+  "any failure",
+  ciStatus([
+    { name: "lint", status: "completed", conclusion: "success" },
+    { name: "test", status: "completed", conclusion: "failure" },
+  ]) === "Failure"
+)
+
+ok(
+  "in-progress means pending",
+  ciStatus([
+    { name: "lint", status: "completed", conclusion: "success" },
+    { name: "test", status: "in_progress", conclusion: null },
+  ]) === "Pending"
+)
+
+// ---------------------------------------------------------------------------
+// openPullRequestToChange — enriched open PR
+// ---------------------------------------------------------------------------
+
+console.log("openPullRequestToChange — with reviews and checks:")
+
+const reviews: GitHubReview[] = [
+  { id: 1, state: "APPROVED", user: { login: "carol" }, submitted_at: "2024-06-16T12:00:00Z" },
+]
+const checks: GitHubCheckRun[] = [
+  { name: "CI", status: "completed", conclusion: "success" },
+]
+
+const openChange = openPullRequestToChange(standardPR, REPO, reviews, checks)
+
+ok(
+  "Review State is Approved",
+  JSON.stringify(openChange.properties["Review State"]).includes("Approved")
+)
+ok(
+  "CI Status is Success",
+  JSON.stringify(openChange.properties["CI Status"]).includes("Success")
+)
+ok(
+  "PR Key is set",
+  JSON.stringify(openChange.properties["PR Key"]).includes("acme/widgets#123")
+)
+
+console.log("openPullRequestToChange — no reviews or checks:")
+
+const bareChange = openPullRequestToChange(standardPR, REPO, [], [])
+
+ok("no reviews omits Review State", bareChange.properties["Review State"] === undefined)
+ok("no checks omits CI Status", bareChange.properties["CI Status"] === undefined)
 
 // ---------------------------------------------------------------------------
 // dateOnly

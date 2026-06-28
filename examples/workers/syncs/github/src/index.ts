@@ -1,8 +1,10 @@
 // Entry point — syncs GitHub issues and pull requests from one or more
 // repositories into managed Notion databases.
 //
-// Each resource has its own schema + transform file. This file registers the
-// managed databases and sync schedules.
+// Three databases are created:
+//   1. Issues        — all issues, synced every 5 min
+//   2. All PRs       — all pull requests (basic fields), synced every 5 min
+//   3. Open PRs      — open PRs enriched with review + CI status, synced every 2 min
 
 import { Worker } from "@notionhq/workers"
 
@@ -10,6 +12,8 @@ import {
   getRepos,
   fetchIssuesPage,
   fetchPullRequestsPage,
+  fetchReviews,
+  fetchCheckRuns,
 } from "./github.js"
 import {
   INITIAL_TITLE as ISSUES_TITLE,
@@ -22,9 +26,14 @@ import {
   PRIMARY_KEY as PRS_PK,
   pullRequestSchema,
   pullRequestToChange,
-} from "./pull-requests.js"
+} from "./all-pull-requests.js"
+import {
+  INITIAL_TITLE as OPEN_PRS_TITLE,
+  PRIMARY_KEY as OPEN_PRS_PK,
+  openPullRequestSchema,
+  openPullRequestToChange,
+} from "./open-pull-requests.js"
 
-// Tracks position across multiple repos and pages.
 type SyncState = {
   repoIndex: number
   page: number
@@ -90,18 +99,18 @@ worker.sync("issuesSync", {
 })
 
 // ---------------------------------------------------------------------------
-// Pull Requests
+// All Pull Requests — basic fields, all states
 // ---------------------------------------------------------------------------
 
-const pullRequests = worker.database("pullRequests", {
+const allPullRequests = worker.database("allPullRequests", {
   type: "managed",
   initialTitle: PRS_TITLE,
   primaryKeyProperty: PRS_PK,
   schema: pullRequestSchema,
 })
 
-worker.sync("pullRequestsSync", {
-  database: pullRequests,
+worker.sync("allPullRequestsSync", {
+  database: allPullRequests,
   mode: "replace",
   schedule: "5m",
   execute: async (state: SyncState | undefined) => {
@@ -120,6 +129,65 @@ worker.sync("pullRequestsSync", {
     const changes = result.pullRequests.map((pr) =>
       pullRequestToChange(pr, repo)
     )
+
+    if (result.hasMore) {
+      return {
+        changes,
+        hasMore: true,
+        nextState: { repoIndex, page: page + 1 },
+      }
+    }
+
+    const nextRepo = repoIndex + 1
+    if (nextRepo < repos.length) {
+      return {
+        changes,
+        hasMore: true,
+        nextState: { repoIndex: nextRepo, page: 1 },
+      }
+    }
+
+    return { changes, hasMore: false }
+  },
+})
+
+// ---------------------------------------------------------------------------
+// Open Pull Requests — enriched with review state and CI status
+// ---------------------------------------------------------------------------
+
+const openPullRequests = worker.database("openPullRequests", {
+  type: "managed",
+  initialTitle: OPEN_PRS_TITLE,
+  primaryKeyProperty: OPEN_PRS_PK,
+  schema: openPullRequestSchema,
+})
+
+worker.sync("openPullRequestsSync", {
+  database: openPullRequests,
+  mode: "replace",
+  schedule: "2m",
+  execute: async (state: SyncState | undefined) => {
+    await pacer.wait()
+
+    const repos = getRepos()
+    const repoIndex = state?.repoIndex ?? 0
+    const page = state?.page ?? 1
+    const repo = repos[repoIndex]
+
+    if (!repo) {
+      return { changes: [], hasMore: false }
+    }
+
+    const result = await fetchPullRequestsPage(repo, page, "open")
+    const changes = []
+
+    for (const pr of result.pullRequests) {
+      await pacer.wait()
+      const reviews = await fetchReviews(repo, pr.number)
+      await pacer.wait()
+      const checkRuns = await fetchCheckRuns(repo, pr.head.sha)
+      changes.push(openPullRequestToChange(pr, repo, reviews, checkRuns))
+    }
 
     if (result.hasMore) {
       return {
