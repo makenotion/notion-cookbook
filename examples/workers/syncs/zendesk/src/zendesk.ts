@@ -124,6 +124,8 @@ export type ZendeskTicket = {
   priority: string | null
   assignee_id: number | null
   requester_id: number
+  group_id: number | null
+  organization_id: number | null
   tags: string[]
   satisfaction_rating: { score: string } | null
   via: { channel: string }
@@ -137,11 +139,25 @@ export type ZendeskUser = {
   email: string
 }
 
+export type ZendeskGroup = {
+  id: number
+  name: string
+}
+
+export type ZendeskOrganizationRef = {
+  id: number
+  name: string
+}
+
 export type UserLookup = Map<number, ZendeskUser>
+export type GroupLookup = Map<number, ZendeskGroup>
+export type OrgLookup = Map<number, ZendeskOrganizationRef>
 
 type ListTicketsResponse = {
   tickets: ZendeskTicket[]
   users: ZendeskUser[]
+  groups: ZendeskGroup[]
+  organizations: ZendeskOrganizationRef[]
 }
 
 // Kept for backward compatibility with tests.
@@ -160,11 +176,13 @@ export function buildTicketsUrl(
   return `${base}?${params.toString()}`
 }
 
-// Sideloading (include=users) embeds user objects in the ticket response so
-// we can resolve assignee/requester IDs to names without extra API calls.
+// Sideloading embeds related objects in the ticket response so we can
+// resolve IDs to names without extra API calls.
 export async function fetchTicketsPage(cursor?: string): Promise<{
   tickets: ZendeskTicket[]
   users: UserLookup
+  groups: GroupLookup
+  orgs: OrgLookup
   hasMore: boolean
   nextCursor: string | undefined
 }> {
@@ -172,7 +190,7 @@ export async function fetchTicketsPage(cursor?: string): Promise<{
   const { data, hasMore, nextCursor } = await fetchPage<ListTicketsResponse>(
     subdomain,
     "/api/v2/tickets.json",
-    { include: "users" },
+    { include: "users,groups,organizations" },
     cursor
   )
 
@@ -181,7 +199,17 @@ export async function fetchTicketsPage(cursor?: string): Promise<{
     users.set(user.id, user)
   }
 
-  return { tickets: data.tickets, users, hasMore, nextCursor }
+  const groups: GroupLookup = new Map()
+  for (const group of data.groups ?? []) {
+    groups.set(group.id, group)
+  }
+
+  const orgs: OrgLookup = new Map()
+  for (const org of data.organizations ?? []) {
+    orgs.set(org.id, org)
+  }
+
+  return { tickets: data.tickets, users, groups, orgs, hasMore, nextCursor }
 }
 
 // ---------------------------------------------------------------------------
@@ -310,9 +338,13 @@ export type ZendeskTicketMetric = {
   ticket_id: number
   reopens: number
   replies: number
+  assignee_stations: number
+  group_stations: number
+  solved_at: string | null
   reply_time_in_minutes: { calendar: number; business: number }
   first_resolution_time_in_minutes: { calendar: number; business: number }
   full_resolution_time_in_minutes: { calendar: number; business: number }
+  on_hold_time_in_minutes: { calendar: number; business: number }
   agent_wait_time_in_minutes: { calendar: number; business: number }
   requester_wait_time_in_minutes: { calendar: number; business: number }
   created_at: string

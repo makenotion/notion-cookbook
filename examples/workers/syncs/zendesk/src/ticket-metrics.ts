@@ -25,15 +25,23 @@ export const ticketMetricSchema: Schema.Schema<typeof PRIMARY_KEY> = {
 
     Reopens: Schema.number(),
 
-    Replies: Schema.number(),
+    "Agents Touched": Schema.number(),
 
-    "Updated at": Schema.date(),
+    "Groups Touched": Schema.number(),
+
+    "Solved at": Schema.date(),
 
     "First Resolution (min)": Schema.number(),
+
+    Replies: Schema.number(),
+
+    "On Hold (min)": Schema.number(),
 
     "Agent Wait (min)": Schema.number(),
 
     "Requester Wait (min)": Schema.number(),
+
+    "Updated at": Schema.date(),
 
     "Created at": Schema.date(),
   },
@@ -62,9 +70,17 @@ export function ticketMetricToChange(metric: ZendeskTicketMetric) {
         metric.requester_wait_time_in_minutes.calendar
       ),
       Reopens: Builder.number(metric.reopens),
+      "Agents Touched": Builder.number(metric.assignee_stations),
+      "Groups Touched": Builder.number(metric.group_stations),
+      ...(metric.solved_at
+        ? { "Solved at": Builder.date(dateOnly(metric.solved_at)) }
+        : {}),
       Replies: Builder.number(metric.replies),
-      "Created at": Builder.date(dateOnly(metric.created_at)),
+      "On Hold (min)": Builder.number(
+        metric.on_hold_time_in_minutes.calendar
+      ),
       "Updated at": Builder.date(dateOnly(metric.updated_at)),
+      "Created at": Builder.date(dateOnly(metric.created_at)),
     },
   }
 }

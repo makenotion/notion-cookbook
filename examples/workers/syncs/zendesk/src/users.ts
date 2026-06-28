@@ -30,11 +30,13 @@ export const userSchema: Schema.Schema<typeof PRIMARY_KEY> = {
 
     "Updated at": Schema.date(),
 
-    "User ID": Schema.richText(),
+    "Organization ID": Schema.richText(),
 
     Phone: Schema.richText(),
 
     Suspended: Schema.checkbox(),
+
+    "User ID": Schema.richText(),
 
     "Created at": Schema.date(),
   },
@@ -50,6 +52,9 @@ export function userToChange(user: ZendeskFullUser) {
       "User ID": Builder.richText(String(user.id)),
       ...(user.email ? { Email: Builder.email(user.email) } : {}),
       Role: Builder.select(formatLabel(user.role ?? "end-user")),
+      ...(user.organization_id
+        ? { "Organization ID": Builder.richText(String(user.organization_id)) }
+        : {}),
       ...(user.phone ? { Phone: Builder.richText(user.phone) } : {}),
       ...(user.tags.length > 0
         ? { Tags: Builder.multiSelect(...user.tags) }

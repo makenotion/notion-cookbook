@@ -10,7 +10,7 @@
 // clean and avoids overwriting user edits with blanks.
 
 import * as Builder from "@notionhq/workers/builder"
-import type { ZendeskTicket, UserLookup } from "./zendesk.js"
+import type { ZendeskTicket, UserLookup, GroupLookup, OrgLookup } from "./zendesk.js"
 
 // Use explicit label maps when Zendesk's raw values don't match what users
 // expect to see in Notion. For values not in the map, formatLabel() is used
@@ -33,7 +33,9 @@ const CHANNEL_LABELS: Record<string, string> = {
 export function ticketToChange(
   ticket: ZendeskTicket,
   subdomain: string,
-  users: UserLookup
+  users: UserLookup,
+  groups: GroupLookup,
+  orgs: OrgLookup
 ) {
   const csatLabel = CSAT_LABELS[ticket.satisfaction_rating?.score ?? ""]
 
@@ -42,37 +44,43 @@ export function ticketToChange(
     : null
   const requesterName =
     users.get(ticket.requester_id)?.name ?? String(ticket.requester_id)
+  const groupName = ticket.group_id
+    ? groups.get(ticket.group_id)?.name ?? String(ticket.group_id)
+    : null
+  const orgName = ticket.organization_id
+    ? orgs.get(ticket.organization_id)?.name ?? null
+    : null
 
   return {
     type: "upsert" as const,
-    // key must match the PRIMARY_KEY property value — the platform uses this
-    // to find the existing page to update, or creates a new one if not found.
     key: String(ticket.id),
     upstreamUpdatedAt: ticket.updated_at,
     pageContentMarkdown: ticket.description ?? "",
     properties: {
       Subject: Builder.title(ticket.subject ?? ""),
-      "Ticket ID": Builder.richText(String(ticket.id)),
-      "Ticket link": Builder.url(ticketUrl(subdomain, ticket.id)),
-      ...(ticket.type
-        ? { Type: Builder.select(formatLabel(ticket.type)) }
-        : {}),
       Status: Builder.select(formatLabel(ticket.status ?? "new")),
       ...(ticket.priority
         ? { Priority: Builder.select(formatLabel(ticket.priority)) }
         : {}),
-      ...(csatLabel ? { "CSAT score": Builder.select(csatLabel) } : {}),
-      ...(ticket.tags.length > 0
-        ? { Tags: Builder.multiSelect(...ticket.tags) }
+      ...(assigneeName ? { Assignee: Builder.richText(assigneeName) } : {}),
+      ...(groupName ? { Group: Builder.richText(groupName) } : {}),
+      "Ticket link": Builder.url(ticketUrl(subdomain, ticket.id)),
+      "Updated at": Builder.date(dateOnly(ticket.updated_at)),
+      Requester: Builder.richText(requesterName),
+      ...(orgName ? { Organization: Builder.richText(orgName) } : {}),
+      ...(ticket.type
+        ? { Type: Builder.select(formatLabel(ticket.type)) }
         : {}),
       Channel: Builder.select(
         CHANNEL_LABELS[ticket.via?.channel ?? "web"] ??
           formatLabel(ticket.via?.channel ?? "web")
       ),
-      ...(assigneeName ? { Assignee: Builder.richText(assigneeName) } : {}),
-      Requester: Builder.richText(requesterName),
+      ...(ticket.tags.length > 0
+        ? { Tags: Builder.multiSelect(...ticket.tags) }
+        : {}),
+      ...(csatLabel ? { "CSAT score": Builder.select(csatLabel) } : {}),
       "Created at": Builder.date(dateOnly(ticket.created_at)),
-      "Updated at": Builder.date(dateOnly(ticket.updated_at)),
+      "Ticket ID": Builder.richText(String(ticket.id)),
     },
   }
 }

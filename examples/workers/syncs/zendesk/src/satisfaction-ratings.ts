@@ -1,9 +1,5 @@
 // Satisfaction Ratings sync — tracks CSAT responses with customer comments.
 // Requires Zendesk Professional+ plan (CSAT is a paid feature).
-//
-// Requester and assignee are stored as numeric IDs. Cross-reference with the
-// Users sync for names, or extend fetchSatisfactionRatingsPage to sideload
-// users if your Zendesk plan supports it.
 
 import * as Schema from "@notionhq/workers/schema"
 import * as Builder from "@notionhq/workers/builder"
@@ -38,10 +34,6 @@ export const satisfactionRatingSchema: Schema.Schema<typeof PRIMARY_KEY> = {
     "Created at": Schema.date(),
 
     "Rating ID": Schema.richText(),
-
-    "Requester ID": Schema.richText(),
-
-    "Assignee ID": Schema.richText(),
   },
 }
 
@@ -60,8 +52,6 @@ export function satisfactionRatingToChange(rating: ZendeskSatisfactionRating) {
       ...(rating.reason
         ? { Reason: Builder.richText(rating.reason) }
         : {}),
-      "Requester ID": Builder.richText(String(rating.requester_id)),
-      "Assignee ID": Builder.richText(String(rating.assignee_id)),
       "Created at": Builder.date(dateOnly(rating.created_at)),
     },
   }

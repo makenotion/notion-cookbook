@@ -54,13 +54,15 @@ export const ticketSchema: Schema.Schema<typeof PRIMARY_KEY> = {
 
     Assignee: Schema.richText(),
 
-    Requester: Schema.richText(),
+    Group: Schema.richText(),
+
+    "Ticket link": Schema.url(),
 
     "Updated at": Schema.date(),
 
-    "Ticket ID": Schema.richText(),
+    Requester: Schema.richText(),
 
-    "Ticket link": Schema.url(),
+    Organization: Schema.richText(),
 
     Type: Schema.select([
       { name: "Problem" },
@@ -68,16 +70,6 @@ export const ticketSchema: Schema.Schema<typeof PRIMARY_KEY> = {
       { name: "Question" },
       { name: "Task" },
     ]),
-
-    "CSAT score": Schema.select([
-      { name: "Satisfied" },
-      { name: "Not satisfied" },
-      { name: "Pending" },
-    ]),
-
-    // Options are created automatically from your Zendesk tags — no need to
-    // list them here. Add seed values if you want them pre-created.
-    Tags: Schema.multiSelect([]),
 
     // Common channels are seeded below. If your Zendesk uses additional
     // channels (e.g. "Mobile SDK"), the select option is created automatically.
@@ -89,6 +81,18 @@ export const ticketSchema: Schema.Schema<typeof PRIMARY_KEY> = {
       { name: "Mobile" },
     ]),
 
+    // Options are created automatically from your Zendesk tags — no need to
+    // list them here. Add seed values if you want them pre-created.
+    Tags: Schema.multiSelect([]),
+
+    "CSAT score": Schema.select([
+      { name: "Satisfied" },
+      { name: "Not satisfied" },
+      { name: "Pending" },
+    ]),
+
     "Created at": Schema.date(),
+
+    "Ticket ID": Schema.richText(),
   },
 }
