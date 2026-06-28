@@ -5,19 +5,17 @@
 
 import * as Schema from "@notionhq/workers/schema"
 import * as Builder from "@notionhq/workers/builder"
+import { notionIcon } from "@notionhq/workers"
 import type { GitHubPullRequest } from "./github.js"
 import { dateOnly } from "./helpers.js"
 
-export const INITIAL_TITLE = "GitHub Pull Requests"
+export const INITIAL_TITLE = "All GitHub PRs"
 export const PRIMARY_KEY = "PR Key"
 
 export const pullRequestSchema: Schema.Schema<typeof PRIMARY_KEY> = {
+  databaseIcon: notionIcon("git"),
   properties: {
     Title: Schema.title(),
-
-    "PR Key": Schema.richText(),
-
-    "PR Link": Schema.url(),
 
     State: Schema.select([
       { name: "Open" },
@@ -25,13 +23,21 @@ export const pullRequestSchema: Schema.Schema<typeof PRIMARY_KEY> = {
       { name: "Merged" },
     ]),
 
-    Draft: Schema.checkbox(),
-
     Author: Schema.richText(),
 
-    Assignees: Schema.multiSelect([]),
-
     Reviewers: Schema.multiSelect([]),
+
+    Updated: Schema.date(),
+
+    Repository: Schema.richText(),
+
+    "PR Key": Schema.richText(),
+
+    "PR Link": Schema.url(),
+
+    Draft: Schema.checkbox(),
+
+    Assignees: Schema.multiSelect([]),
 
     Labels: Schema.multiSelect([]),
 
@@ -41,11 +47,7 @@ export const pullRequestSchema: Schema.Schema<typeof PRIMARY_KEY> = {
 
     "Head Branch": Schema.richText(),
 
-    Repository: Schema.richText(),
-
     Created: Schema.date(),
-
-    Updated: Schema.date(),
 
     Closed: Schema.date(),
 

@@ -7,21 +7,17 @@
 
 import * as Schema from "@notionhq/workers/schema"
 import * as Builder from "@notionhq/workers/builder"
+import { notionIcon } from "@notionhq/workers"
 import type { GitHubPullRequest, GitHubReview, GitHubCheckRun } from "./github.js"
 import { dateOnly } from "./helpers.js"
 
-export const INITIAL_TITLE = "GitHub Open PRs"
+export const INITIAL_TITLE = "Open GitHub PRs"
 export const PRIMARY_KEY = "PR Key"
 
 export const openPullRequestSchema: Schema.Schema<typeof PRIMARY_KEY> = {
+  databaseIcon: notionIcon("pull-request"),
   properties: {
     Title: Schema.title(),
-
-    "PR Key": Schema.richText(),
-
-    "PR Link": Schema.url(),
-
-    Draft: Schema.checkbox(),
 
     "Review State": Schema.select([
       { name: "Approved" },
@@ -36,9 +32,17 @@ export const openPullRequestSchema: Schema.Schema<typeof PRIMARY_KEY> = {
 
     Author: Schema.richText(),
 
-    Assignees: Schema.multiSelect([]),
-
     Reviewers: Schema.multiSelect([]),
+
+    Updated: Schema.date(),
+
+    "PR Key": Schema.richText(),
+
+    "PR Link": Schema.url(),
+
+    Draft: Schema.checkbox(),
+
+    Assignees: Schema.multiSelect([]),
 
     Labels: Schema.multiSelect([]),
 
@@ -51,8 +55,6 @@ export const openPullRequestSchema: Schema.Schema<typeof PRIMARY_KEY> = {
     Repository: Schema.richText(),
 
     Created: Schema.date(),
-
-    Updated: Schema.date(),
   },
 }
 

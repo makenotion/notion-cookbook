@@ -5,6 +5,7 @@
 
 import * as Schema from "@notionhq/workers/schema"
 import * as Builder from "@notionhq/workers/builder"
+import { notionIcon } from "@notionhq/workers"
 import type { GitHubIssue } from "./github.js"
 import { dateOnly } from "./helpers.js"
 
@@ -12,26 +13,29 @@ export const INITIAL_TITLE = "GitHub Issues"
 export const PRIMARY_KEY = "Issue Key"
 
 export const issueSchema: Schema.Schema<typeof PRIMARY_KEY> = {
+  databaseIcon: notionIcon("bug"),
   properties: {
     Title: Schema.title(),
 
-    "Issue Key": Schema.richText(),
-
-    "Issue Link": Schema.url(),
-
     State: Schema.select([{ name: "Open" }, { name: "Closed" }]),
-
-    "State Reason": Schema.select([
-      { name: "Completed" },
-      { name: "Not planned" },
-      { name: "Reopened" },
-    ]),
 
     Author: Schema.richText(),
 
     Assignees: Schema.multiSelect([]),
 
     Labels: Schema.multiSelect([]),
+
+    Updated: Schema.date(),
+
+    "Issue Key": Schema.richText(),
+
+    "Issue Link": Schema.url(),
+
+    "State Reason": Schema.select([
+      { name: "Completed" },
+      { name: "Not planned" },
+      { name: "Reopened" },
+    ]),
 
     Milestone: Schema.richText(),
 
@@ -42,8 +46,6 @@ export const issueSchema: Schema.Schema<typeof PRIMARY_KEY> = {
     Repository: Schema.richText(),
 
     Created: Schema.date(),
-
-    Updated: Schema.date(),
 
     Closed: Schema.date(),
   },
