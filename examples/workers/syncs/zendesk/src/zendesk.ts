@@ -14,10 +14,19 @@ export type ZendeskTicket = {
   updated_at: string
 }
 
+export type ZendeskUser = {
+  id: number
+  name: string
+  email: string
+}
+
 type ListTicketsResponse = {
   tickets: ZendeskTicket[]
+  users: ZendeskUser[]
   meta: { has_more: boolean; after_cursor: string }
 }
+
+export type UserLookup = Map<number, ZendeskUser>
 
 const PAGE_SIZE = 100
 
@@ -52,7 +61,10 @@ export function buildTicketsUrl(
   cursor?: string
 ): string {
   const base = `https://${subdomain}.zendesk.com/api/v2/tickets.json`
-  const params = new URLSearchParams({ "page[size]": String(PAGE_SIZE) })
+  const params = new URLSearchParams({
+    "page[size]": String(PAGE_SIZE),
+    include: "users",
+  })
   if (cursor) {
     params.set("page[after]", cursor)
   }
@@ -65,6 +77,7 @@ export function requireSubdomain(): string {
 
 export async function fetchTicketsPage(cursor?: string): Promise<{
   tickets: ZendeskTicket[]
+  users: UserLookup
   hasMore: boolean
   nextCursor: string | undefined
 }> {
@@ -86,8 +99,14 @@ export async function fetchTicketsPage(cursor?: string): Promise<{
 
   const data = JSON.parse(text) as ListTicketsResponse
 
+  const users: UserLookup = new Map()
+  for (const user of data.users ?? []) {
+    users.set(user.id, user)
+  }
+
   return {
     tickets: data.tickets,
+    users,
     hasMore: data.meta.has_more,
     nextCursor: data.meta.has_more ? data.meta.after_cursor : undefined,
   }

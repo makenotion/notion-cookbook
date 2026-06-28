@@ -1,10 +1,20 @@
 import * as Builder from "@notionhq/workers/builder"
-import type { ZendeskTicket } from "./zendesk.js"
+import type { ZendeskTicket, UserLookup } from "./zendesk.js"
 
-export function ticketToChange(ticket: ZendeskTicket, subdomain: string) {
+export function ticketToChange(
+  ticket: ZendeskTicket,
+  subdomain: string,
+  users: UserLookup
+) {
   const csatScore = ticket.satisfaction_rating?.score
   const hasKnownCsat =
     csatScore === "good" || csatScore === "bad" || csatScore === "offered"
+
+  const assigneeName = ticket.assignee_id
+    ? users.get(ticket.assignee_id)?.name ?? String(ticket.assignee_id)
+    : null
+  const requesterName =
+    users.get(ticket.requester_id)?.name ?? String(ticket.requester_id)
 
   return {
     type: "upsert" as const,
@@ -29,10 +39,10 @@ export function ticketToChange(ticket: ZendeskTicket, subdomain: string) {
         ? { "Feature tags": Builder.multiSelect(...ticket.tags) }
         : {}),
       Channel: Builder.select(capitalize(ticket.via?.channel ?? "web")),
-      ...(ticket.assignee_id
-        ? { "Assignee ID": Builder.richText(String(ticket.assignee_id)) }
+      ...(assigneeName
+        ? { Assignee: Builder.richText(assigneeName) }
         : {}),
-      "Requester ID": Builder.richText(String(ticket.requester_id)),
+      Requester: Builder.richText(requesterName),
       "Created at": Builder.date(dateOnly(ticket.created_at)),
     },
   }

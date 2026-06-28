@@ -58,9 +58,9 @@ export const ticketSchema: Schema.Schema<typeof PRIMARY_KEY> = {
       { name: "Mobile" },
     ]),
 
-    "Assignee ID": Schema.richText(),
+    Assignee: Schema.richText(),
 
-    "Requester ID": Schema.richText(),
+    Requester: Schema.richText(),
 
     "Created at": Schema.date(),
   },

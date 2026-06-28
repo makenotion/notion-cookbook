@@ -123,19 +123,19 @@ The example syncs these properties:
 | CSAT score      | `satisfaction_rating.score` | select      |
 | Feature tags    | `tags`                      | multiSelect |
 | Channel         | `via.channel`               | select      |
-| Assignee ID     | `assignee_id`               | richText    |
-| Requester ID    | `requester_id`              | richText    |
+| Assignee        | `assignee_id` (resolved)    | richText    |
+| Requester       | `requester_id` (resolved)   | richText    |
 | Created at      | `created_at`                | date        |
 
 Each Notion page body is populated with the ticket `description` via
 `pageContentMarkdown`, and `upstreamUpdatedAt` is set from `updated_at` for
 conflict resolution.
 
-Assignee ID and Requester ID are synced as numeric IDs. To display agent and
-requester names instead, extend `fetchTicketsPage` to use Zendesk's sideloading
-(`?include=users`) and resolve the IDs in `ticketToChange`. See the
-[Zendesk sideloading docs](https://developer.zendesk.com/api-reference/introduction/side-loading/)
-for details.
+Assignee and Requester names are resolved via Zendesk's
+[sideloading](https://developer.zendesk.com/api-reference/introduction/side-loading/)
+(`?include=users`), which returns user objects alongside tickets in the same API
+call with no extra requests. If a user ID is missing from the sideloaded data,
+the numeric ID is used as a fallback.
 
 To change the schema, edit two files:
 

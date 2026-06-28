@@ -4,7 +4,7 @@
 
 import { ticketToChange, ticketUrl, dateOnly } from "./src/transform.js"
 import { buildTicketsUrl, getAuthorizationHeader } from "./src/zendesk.js"
-import type { ZendeskTicket } from "./src/zendesk.js"
+import type { ZendeskTicket, UserLookup } from "./src/zendesk.js"
 
 let passed = 0
 let failed = 0
@@ -27,6 +27,12 @@ console.log("ticketToChange — standard ticket:")
 
 const SUBDOMAIN = "acme"
 
+const users: UserLookup = new Map([
+  [1001, { id: 1001, name: "Jane Smith", email: "jane@acme.com" }],
+  [2001, { id: 2001, name: "Bob Customer", email: "bob@example.com" }],
+  [3001, { id: 3001, name: "Alice Requester", email: "alice@example.com" }],
+])
+
 const standardTicket: ZendeskTicket = {
   id: 42,
   subject: "Cannot log in to my account",
@@ -43,7 +49,7 @@ const standardTicket: ZendeskTicket = {
   updated_at: "2024-06-16T14:00:00Z",
 }
 
-const change = ticketToChange(standardTicket, SUBDOMAIN)
+const change = ticketToChange(standardTicket, SUBDOMAIN, users)
 
 ok("type is upsert", change.type === "upsert")
 ok("key is ticket id as string", change.key === "42")
@@ -96,12 +102,12 @@ ok(
   JSON.stringify(change.properties.Channel).includes("Email")
 )
 ok(
-  "Assignee ID is set",
-  JSON.stringify(change.properties["Assignee ID"]).includes("1001")
+  "Assignee resolved to name",
+  JSON.stringify(change.properties.Assignee).includes("Jane Smith")
 )
 ok(
-  "Requester ID is set",
-  JSON.stringify(change.properties["Requester ID"]).includes("2001")
+  "Requester resolved to name",
+  JSON.stringify(change.properties.Requester).includes("Bob Customer")
 )
 ok(
   "Created at contains date",
@@ -130,7 +136,7 @@ const minimalTicket: ZendeskTicket = {
   updated_at: "2024-01-01",
 }
 
-const minimalChange = ticketToChange(minimalTicket, SUBDOMAIN)
+const minimalChange = ticketToChange(minimalTicket, SUBDOMAIN, users)
 
 ok("key is ticket id", minimalChange.key === "99")
 ok(
@@ -150,12 +156,12 @@ ok(
   minimalChange.properties.Type === undefined
 )
 ok(
-  "null assignee_id omits Assignee ID",
-  minimalChange.properties["Assignee ID"] === undefined
+  "null assignee_id omits Assignee",
+  minimalChange.properties.Assignee === undefined
 )
 ok(
-  "requester_id is always set",
-  JSON.stringify(minimalChange.properties["Requester ID"]).includes("3001")
+  "requester resolved to name",
+  JSON.stringify(minimalChange.properties.Requester).includes("Alice Requester")
 )
 
 // ---------------------------------------------------------------------------
@@ -170,11 +176,29 @@ const unofferedTicket: ZendeskTicket = {
   satisfaction_rating: { score: "unoffered" },
 }
 
-const unofferedChange = ticketToChange(unofferedTicket, SUBDOMAIN)
+const unofferedChange = ticketToChange(unofferedTicket, SUBDOMAIN, users)
 
 ok(
   "unoffered CSAT score is omitted",
   unofferedChange.properties["CSAT score"] === undefined
+)
+
+// ---------------------------------------------------------------------------
+// ticketToChange — user ID fallback when not in lookup
+// ---------------------------------------------------------------------------
+
+console.log("ticketToChange — unknown user ID falls back to numeric string:")
+
+const emptyUsers: UserLookup = new Map()
+const fallbackChange = ticketToChange(standardTicket, SUBDOMAIN, emptyUsers)
+
+ok(
+  "assignee falls back to numeric ID",
+  JSON.stringify(fallbackChange.properties.Assignee).includes("1001")
+)
+ok(
+  "requester falls back to numeric ID",
+  JSON.stringify(fallbackChange.properties.Requester).includes("2001")
 )
 
 // ---------------------------------------------------------------------------
@@ -210,13 +234,13 @@ console.log("buildTicketsUrl:")
 ok(
   "builds URL without cursor",
   buildTicketsUrl("acme") ===
-    "https://acme.zendesk.com/api/v2/tickets.json?page%5Bsize%5D=100"
+    "https://acme.zendesk.com/api/v2/tickets.json?page%5Bsize%5D=100&include=users"
 )
 
 ok(
   "builds URL with cursor",
   buildTicketsUrl("acme", "abc123") ===
-    "https://acme.zendesk.com/api/v2/tickets.json?page%5Bsize%5D=100&page%5Bafter%5D=abc123"
+    "https://acme.zendesk.com/api/v2/tickets.json?page%5Bsize%5D=100&include=users&page%5Bafter%5D=abc123"
 )
 
 // ---------------------------------------------------------------------------

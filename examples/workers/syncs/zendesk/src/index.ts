@@ -33,7 +33,9 @@ worker.sync("ticketsSync", {
     const subdomain = requireSubdomain()
     const page = await fetchTicketsPage(state?.cursor)
 
-    const changes = page.tickets.map((t) => ticketToChange(t, subdomain))
+    const changes = page.tickets.map((t) =>
+      ticketToChange(t, subdomain, page.users)
+    )
 
     return {
       changes,
