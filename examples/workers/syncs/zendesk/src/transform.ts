@@ -15,6 +15,9 @@ export function ticketToChange(ticket: ZendeskTicket, subdomain: string) {
       Tickets: Builder.title(ticket.subject ?? ""),
       "Ticket ID": Builder.richText(String(ticket.id)),
       "Ticket link": Builder.url(ticketUrl(subdomain, ticket.id)),
+      ...(ticket.type
+        ? { Type: Builder.select(capitalize(ticket.type)) }
+        : {}),
       Status: Builder.select(capitalize(ticket.status ?? "new")),
       ...(ticket.priority
         ? { Priority: Builder.select(capitalize(ticket.priority)) }
@@ -25,6 +28,11 @@ export function ticketToChange(ticket: ZendeskTicket, subdomain: string) {
       ...(ticket.tags.length > 0
         ? { "Feature tags": Builder.multiSelect(...ticket.tags) }
         : {}),
+      Channel: Builder.select(capitalize(ticket.via?.channel ?? "web")),
+      ...(ticket.assignee_id
+        ? { "Assignee ID": Builder.richText(String(ticket.assignee_id)) }
+        : {}),
+      "Requester ID": Builder.richText(String(ticket.requester_id)),
       "Created at": Builder.date(dateOnly(ticket.created_at)),
     },
   }

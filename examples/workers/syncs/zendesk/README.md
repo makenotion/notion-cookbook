@@ -112,20 +112,30 @@ Once deployed, tickets sync automatically every 5 minutes.
 
 The example syncs these properties:
 
-| Notion property | Zendesk field              | Type        |
-| --------------- | -------------------------- | ----------- |
-| Tickets         | `subject`                  | title       |
-| Ticket ID       | `id`                       | richText    |
-| Ticket link     | `id` (derived URL)         | url         |
-| Status          | `status`                   | select      |
-| Priority        | `priority`                 | select      |
+| Notion property | Zendesk field               | Type        |
+| --------------- | --------------------------- | ----------- |
+| Tickets         | `subject`                   | title       |
+| Ticket ID       | `id`                        | richText    |
+| Ticket link     | `id` (derived URL)          | url         |
+| Type            | `type`                      | select      |
+| Status          | `status`                    | select      |
+| Priority        | `priority`                  | select      |
 | CSAT score      | `satisfaction_rating.score` | select      |
-| Feature tags    | `tags`                     | multiSelect |
-| Created at      | `created_at`               | date        |
+| Feature tags    | `tags`                      | multiSelect |
+| Channel         | `via.channel`               | select      |
+| Assignee ID     | `assignee_id`               | richText    |
+| Requester ID    | `requester_id`              | richText    |
+| Created at      | `created_at`                | date        |
 
 Each Notion page body is populated with the ticket `description` via
 `pageContentMarkdown`, and `upstreamUpdatedAt` is set from `updated_at` for
 conflict resolution.
+
+Assignee ID and Requester ID are synced as numeric IDs. To display agent and
+requester names instead, extend `fetchTicketsPage` to use Zendesk's sideloading
+(`?include=users`) and resolve the IDs in `ticketToChange`. See the
+[Zendesk sideloading docs](https://developer.zendesk.com/api-reference/introduction/side-loading/)
+for details.
 
 To change the schema, edit two files:
 

@@ -2,10 +2,14 @@ export type ZendeskTicket = {
   id: number
   subject: string
   description: string
+  type: string | null
   status: string
   priority: string | null
+  assignee_id: number | null
+  requester_id: number
   tags: string[]
   satisfaction_rating: { score: string } | null
+  via: { channel: string }
   created_at: string
   updated_at: string
 }

@@ -13,6 +13,13 @@ export const ticketSchema: Schema.Schema<typeof PRIMARY_KEY> = {
 
     "Ticket link": Schema.url(),
 
+    Type: Schema.select([
+      { name: "Problem" },
+      { name: "Incident" },
+      { name: "Question" },
+      { name: "Task" },
+    ]),
+
     Status: Schema.select([
       { name: "New" },
       { name: "Open" },
@@ -42,6 +49,18 @@ export const ticketSchema: Schema.Schema<typeof PRIMARY_KEY> = {
       { name: "Feature request" },
       { name: "Integration" },
     ]),
+
+    Channel: Schema.select([
+      { name: "Web" },
+      { name: "Email" },
+      { name: "Chat" },
+      { name: "Api" },
+      { name: "Mobile" },
+    ]),
+
+    "Assignee ID": Schema.richText(),
+
+    "Requester ID": Schema.richText(),
 
     "Created at": Schema.date(),
   },

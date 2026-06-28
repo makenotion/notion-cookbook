@@ -31,10 +31,14 @@ const standardTicket: ZendeskTicket = {
   id: 42,
   subject: "Cannot log in to my account",
   description: "I keep getting a 403 error when I try to log in.",
+  type: "problem",
   status: "open",
   priority: "high",
+  assignee_id: 1001,
+  requester_id: 2001,
   tags: ["account_access", "login"],
   satisfaction_rating: { score: "good" },
+  via: { channel: "email" },
   created_at: "2024-06-15T10:30:00Z",
   updated_at: "2024-06-16T14:00:00Z",
 }
@@ -84,6 +88,22 @@ ok(
   change.pageContentMarkdown.includes("403 error")
 )
 ok(
+  "Type is capitalized",
+  JSON.stringify(change.properties.Type).includes("Problem")
+)
+ok(
+  "Channel is capitalized",
+  JSON.stringify(change.properties.Channel).includes("Email")
+)
+ok(
+  "Assignee ID is set",
+  JSON.stringify(change.properties["Assignee ID"]).includes("1001")
+)
+ok(
+  "Requester ID is set",
+  JSON.stringify(change.properties["Requester ID"]).includes("2001")
+)
+ok(
   "Created at contains date",
   JSON.stringify(change.properties["Created at"]).includes("2024-06-15")
 )
@@ -98,10 +118,14 @@ const minimalTicket: ZendeskTicket = {
   id: 99,
   subject: "Quick question",
   description: "",
+  type: null,
   status: "new",
   priority: null,
+  assignee_id: null,
+  requester_id: 3001,
   tags: [],
   satisfaction_rating: null,
+  via: { channel: "web" },
   created_at: "2024-01-01",
   updated_at: "2024-01-01",
 }
@@ -120,6 +144,18 @@ ok(
 ok(
   "empty tags omits Feature tags",
   minimalChange.properties["Feature tags"] === undefined
+)
+ok(
+  "null type omits Type property",
+  minimalChange.properties.Type === undefined
+)
+ok(
+  "null assignee_id omits Assignee ID",
+  minimalChange.properties["Assignee ID"] === undefined
+)
+ok(
+  "requester_id is always set",
+  JSON.stringify(minimalChange.properties["Requester ID"]).includes("3001")
 )
 
 // ---------------------------------------------------------------------------
