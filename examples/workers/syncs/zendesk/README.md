@@ -1,17 +1,25 @@
 # Worker sync: Zendesk
 
-Syncs your Zendesk support tickets into a Notion database that stays
-up to date automatically. Once deployed, the worker checks Zendesk every 5
-minutes and creates or updates a Notion page for each ticket — with the
-subject, status, priority, assignee, tags, CSAT score, and more.
+Syncs your Zendesk data into Notion databases that stay up to date
+automatically. One deploy gives you six synced databases covering tickets,
+organizations, users, CSAT ratings, ticket metrics, and SLA policies.
 
-You don't need to create the Notion database yourself. The worker declares the
-schema and Notion creates and manages the database for you (this is called a
-"managed database").
+You don't need to create the Notion databases yourself. The worker declares the
+schemas and Notion creates and manages each database for you (these are called
+"managed databases").
 
 ## What you get
 
-A Notion database with one page per Zendesk ticket, including:
+| Database | Zendesk resource | Schedule | Plan |
+| --- | --- | --- | --- |
+| **Support Tickets** | Tickets | Every 5 min | All |
+| **Zendesk Organizations** | Organizations | Every 1 hr | All |
+| **Zendesk Users** | Users (agents + end-users) | Every 1 hr | All |
+| **Zendesk CSAT Ratings** | Satisfaction Ratings | Every 30 min | Professional+ |
+| **Zendesk Ticket Metrics** | Ticket Metrics | Every 30 min | All |
+| **Zendesk SLA Policies** | SLA Policies | Manual trigger | Professional+ |
+
+### Support Tickets
 
 | Notion property | Zendesk field               | Type        |
 | --------------- | --------------------------- | ----------- |
@@ -32,35 +40,122 @@ A Notion database with one page per Zendesk ticket, including:
 Each page body contains the ticket description. Assignee and requester show
 real names (resolved via Zendesk's
 [sideloading](https://developer.zendesk.com/api-reference/introduction/side-loading/),
-with no extra API calls). Tags are synced as-is from Zendesk — the multiSelect
-options are created automatically as new tags appear.
+with no extra API calls).
+
+### Zendesk Organizations
+
+| Notion property | Zendesk field   | Type        |
+| --------------- | --------------- | ----------- |
+| Name            | `name`          | title       |
+| Org ID          | `id`            | richText    |
+| Domains         | `domain_names`  | richText    |
+| Tags            | `tags`          | multiSelect |
+| Details         | `details`       | richText    |
+| Created at      | `created_at`    | date        |
+| Updated at      | `updated_at`    | date        |
+
+Page body contains the organization's `notes` field.
+
+### Zendesk Users
+
+| Notion property | Zendesk field   | Type       |
+| --------------- | --------------- | ---------- |
+| Name            | `name`          | title      |
+| User ID         | `id`            | richText   |
+| Email           | `email`         | email      |
+| Role            | `role`          | select     |
+| Phone           | `phone`         | richText   |
+| Tags            | `tags`          | multiSelect |
+| Suspended       | `suspended`     | checkbox   |
+| Last login      | `last_login_at` | date       |
+| Created at      | `created_at`    | date       |
+| Updated at      | `updated_at`    | date       |
+
+### Zendesk CSAT Ratings
+
+| Notion property | Zendesk field   | Type     |
+| --------------- | --------------- | -------- |
+| Comment         | `comment`       | title    |
+| Rating ID       | `id`            | richText |
+| Ticket ID       | `ticket_id`     | richText |
+| Score           | `score`         | select   |
+| Reason          | `reason`        | richText |
+| Requester ID    | `requester_id`  | richText |
+| Assignee ID     | `assignee_id`   | richText |
+| Created at      | `created_at`    | date     |
+
+Requester and assignee are numeric IDs — cross-reference with the Users
+database for names.
+
+### Zendesk Ticket Metrics
+
+| Notion property        | Zendesk field                          | Type   |
+| ---------------------- | -------------------------------------- | ------ |
+| Ticket ID              | `ticket_id`                            | title  |
+| First Reply (min)      | `reply_time_in_minutes.calendar`       | number |
+| First Resolution (min) | `first_resolution_time_in_minutes`     | number |
+| Full Resolution (min)  | `full_resolution_time_in_minutes`      | number |
+| Agent Wait (min)       | `agent_wait_time_in_minutes.calendar`  | number |
+| Requester Wait (min)   | `requester_wait_time_in_minutes`       | number |
+| Reopens                | `reopens`                              | number |
+| Replies                | `replies`                              | number |
+| Created at             | `created_at`                           | date   |
+| Updated at             | `updated_at`                           | date   |
+
+Times use calendar minutes by default. To switch to business hours, change
+`.calendar` to `.business` in `src/ticket-metrics.ts`.
+
+### Zendesk SLA Policies
+
+| Notion property | Zendesk field | Type     |
+| --------------- | ------------- | -------- |
+| Title           | `title`       | title    |
+| Policy ID       | `id`          | richText |
+| Position        | `position`    | number   |
+| Created at      | `created_at`  | date     |
+| Updated at      | `updated_at`  | date     |
+
+Page body contains the policy description and a table of SLA targets per
+priority and metric.
 
 ## Project structure
 
 ```text
 src/
-├── index.ts       — worker entry point; registers the database and sync
-├── schema.ts      — Notion database schema (property names and types)
-├── transform.ts   — maps a Zendesk ticket to a sync upsert change
-└── zendesk.ts     — Zendesk API client (auth, pagination, types)
+├── index.ts                 — registers all databases and syncs
+├── zendesk.ts               — API client (auth, pagination, types for all resources)
+├── schema.ts                — ticket schema
+├── transform.ts             — ticket transform + shared helpers (dateOnly, formatLabel)
+├── organizations.ts         — organization schema + transform
+├── users.ts                 — user schema + transform
+├── satisfaction-ratings.ts  — CSAT rating schema + transform
+├── ticket-metrics.ts        — ticket metric schema + transform
+└── sla-policies.ts          — SLA policy schema + transform
 ```
 
 ## How it works
 
-1. Every 5 minutes (or on manual trigger), the worker calls the Zendesk List
-   Tickets API with cursor-based pagination (100 tickets per page).
-2. Each ticket is converted to an `upsert` — a create-or-update operation keyed
-   by ticket ID, so the same ticket is never duplicated.
+1. On each sync run, the worker calls the appropriate Zendesk API endpoint
+   with cursor-based pagination (100 records per page).
+2. Each record is converted to an `upsert` — a create-or-update operation keyed
+   by the resource ID, so the same record is never duplicated.
 3. The platform applies the changes to the managed database and loops until all
    pages have been fetched.
-4. Because the sync uses `mode: "replace"`, tickets deleted from Zendesk are
+4. Because all syncs use `mode: "replace"`, records deleted from Zendesk are
    automatically removed from the Notion database on the next full sync.
+
+All syncs share a single rate limiter (`worker.pacer`) to stay within Zendesk's
+API limits (400 requests per minute on most plans).
 
 ## Prerequisites
 
 - Node >= 22, npm >= 10.9.2
 - A Zendesk account with API access enabled
 - The `ntn` CLI installed and authenticated (`ntn auth login`)
+
+Satisfaction Ratings and SLA Policies require a Zendesk Professional+ plan.
+If your plan doesn't include these features, those syncs will return errors
+from the API — you can remove them from `src/index.ts` if needed.
 
 ### Getting a Zendesk API token
 
@@ -84,7 +179,7 @@ src/
 
 | Variable                 | Default              | Description                                   |
 | ------------------------ | -------------------- | --------------------------------------------- |
-| `ZENDESK_SYNC_DB_TITLE`  | `"Support Tickets"`  | Title of the auto-provisioned Notion database |
+| `ZENDESK_SYNC_DB_TITLE`  | `"Support Tickets"`  | Title of the tickets Notion database          |
 
 Alternatively, you can set `ZENDESK_BASIC_AUTH_TOKEN` (a base64-encoded
 `email:password` string) instead of `ZENDESK_API_TOKEN` + `ZENDESK_API_USER_EMAIL`.
@@ -138,6 +233,8 @@ automatically.
 
    ```sh
    ntn workers sync trigger ticketsSync --preview
+   ntn workers sync trigger organizationsSync --preview
+   ntn workers sync trigger usersSync --preview
    ```
 
 8. Run a real sync:
@@ -146,28 +243,49 @@ automatically.
    ntn workers sync trigger ticketsSync
    ```
 
-Once deployed, tickets sync automatically every 5 minutes. A "Support Tickets"
-database will appear in your Notion workspace after the first sync.
+Once deployed, syncs run automatically on their configured schedules. Six
+databases will appear in your Notion workspace after the first run.
+
+## Triggering syncs manually
+
+```sh
+ntn workers sync trigger ticketsSync
+ntn workers sync trigger organizationsSync
+ntn workers sync trigger usersSync
+ntn workers sync trigger satisfactionRatingsSync
+ntn workers sync trigger ticketMetricsSync
+ntn workers sync trigger slaPoliciesSync
+```
+
+SLA Policies only runs on manual trigger (it's a small, rarely-changing
+dataset).
 
 ## Adapting the schema
 
-To change which fields are synced, edit two files:
+Each resource has its own file with a schema and transform function. To change
+which fields are synced for a resource, edit that resource's file:
 
-**`src/schema.ts`** — declares the Notion database properties. Each key is a
-property name; the value is a Schema factory call (`Schema.title()`,
-`Schema.richText()`, `Schema.select([...])`, `Schema.multiSelect([...])`,
-`Schema.date()`, `Schema.number()`, `Schema.url()`, `Schema.email()`,
-`Schema.checkbox()`). The `PRIMARY_KEY` property is used by the platform to
-match incoming data to existing pages — don't remove it.
+| Resource | File |
+| --- | --- |
+| Tickets | `src/schema.ts` + `src/transform.ts` |
+| Organizations | `src/organizations.ts` |
+| Users | `src/users.ts` |
+| CSAT Ratings | `src/satisfaction-ratings.ts` |
+| Ticket Metrics | `src/ticket-metrics.ts` |
+| SLA Policies | `src/sla-policies.ts` |
 
-**`src/transform.ts`** — maps a Zendesk ticket object to a sync change. Add or
-remove `Builder.*` calls to match your schema. Optional properties should be
-spread conditionally so they are omitted (not set to empty) when the source
-field is absent.
+To add a new Zendesk field to any resource:
+
+1. Add the field to the resource's type in `src/zendesk.ts`
+2. Add a property to the schema with the appropriate `Schema.*` type
+3. Add a `Builder.*` call in the transform function
+
+The `PRIMARY_KEY` property is used by the platform to match incoming data to
+existing pages — don't remove it.
 
 ## Incremental syncs for large instances
 
-`mode: "replace"` re-syncs all tickets on every run. For large Zendesk
+`mode: "replace"` re-syncs all records on every run. For large Zendesk
 instances, switch to `mode: "incremental"` and filter by `updated_at`:
 
 ```ts
@@ -182,8 +300,8 @@ return {
 }
 ```
 
-Incremental mode also supports `type: "delete"` changes for tickets that have
-been permanently deleted from Zendesk.
+Incremental mode also supports `type: "delete"` changes for records removed
+from the source.
 
 ## Local testing
 
@@ -193,14 +311,20 @@ Run offline tests (no Zendesk connection needed):
 npm test
 ```
 
-Test the worker locally against a real Zendesk instance:
+Test a specific sync locally against a real Zendesk instance:
 
 ```sh
 ntn workers exec ticketsSync --local
+ntn workers exec organizationsSync --local
 ```
 
 ## Learn more
 
 - [Notion Workers documentation](https://developers.notion.com/docs/workers)
-- [Zendesk API — List Tickets](https://developer.zendesk.com/api-reference/ticketing/tickets/tickets/#list-tickets)
+- [Zendesk API — Tickets](https://developer.zendesk.com/api-reference/ticketing/tickets/tickets/)
+- [Zendesk API — Organizations](https://developer.zendesk.com/api-reference/ticketing/organizations/organizations/)
+- [Zendesk API — Users](https://developer.zendesk.com/api-reference/ticketing/users/users/)
+- [Zendesk API — Satisfaction Ratings](https://developer.zendesk.com/api-reference/ticketing/ticket-management/satisfaction_ratings/)
+- [Zendesk API — Ticket Metrics](https://developer.zendesk.com/api-reference/ticketing/tickets/ticket_metrics/)
+- [Zendesk API — SLA Policies](https://developer.zendesk.com/api-reference/ticketing/business-rules/sla_policies/)
 - [Contributing guide](../../../../CONTRIBUTING.md)
