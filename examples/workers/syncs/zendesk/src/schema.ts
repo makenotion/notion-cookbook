@@ -21,6 +21,7 @@
 //   Schema.checkbox()         — boolean
 
 import * as Schema from "@notionhq/workers/schema"
+import { notionIcon } from "@notionhq/workers"
 
 export const INITIAL_TITLE =
   process.env.ZENDESK_SYNC_DB_TITLE ?? "Support Tickets"
@@ -31,19 +32,9 @@ export const INITIAL_TITLE =
 export const PRIMARY_KEY = "Ticket ID"
 
 export const ticketSchema: Schema.Schema<typeof PRIMARY_KEY> = {
+  databaseIcon: notionIcon("ticket"),
   properties: {
     Subject: Schema.title(),
-
-    "Ticket ID": Schema.richText(),
-
-    "Ticket link": Schema.url(),
-
-    Type: Schema.select([
-      { name: "Problem" },
-      { name: "Incident" },
-      { name: "Question" },
-      { name: "Task" },
-    ]),
 
     Status: Schema.select([
       { name: "New" },
@@ -59,6 +50,23 @@ export const ticketSchema: Schema.Schema<typeof PRIMARY_KEY> = {
       { name: "High" },
       { name: "Normal" },
       { name: "Low" },
+    ]),
+
+    Assignee: Schema.richText(),
+
+    Requester: Schema.richText(),
+
+    "Updated at": Schema.date(),
+
+    "Ticket ID": Schema.richText(),
+
+    "Ticket link": Schema.url(),
+
+    Type: Schema.select([
+      { name: "Problem" },
+      { name: "Incident" },
+      { name: "Question" },
+      { name: "Task" },
     ]),
 
     "CSAT score": Schema.select([
@@ -81,12 +89,6 @@ export const ticketSchema: Schema.Schema<typeof PRIMARY_KEY> = {
       { name: "Mobile" },
     ]),
 
-    Assignee: Schema.richText(),
-
-    Requester: Schema.richText(),
-
     "Created at": Schema.date(),
-
-    "Updated at": Schema.date(),
   },
 }

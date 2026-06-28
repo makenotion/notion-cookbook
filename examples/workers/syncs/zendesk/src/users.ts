@@ -4,6 +4,7 @@
 
 import * as Schema from "@notionhq/workers/schema"
 import * as Builder from "@notionhq/workers/builder"
+import { notionIcon } from "@notionhq/workers"
 import type { ZendeskFullUser } from "./zendesk.js"
 import { formatLabel, dateOnly } from "./transform.js"
 
@@ -11,12 +12,9 @@ export const INITIAL_TITLE = "Zendesk Users"
 export const PRIMARY_KEY = "User ID"
 
 export const userSchema: Schema.Schema<typeof PRIMARY_KEY> = {
+  databaseIcon: notionIcon("people"),
   properties: {
     Name: Schema.title(),
-
-    "User ID": Schema.richText(),
-
-    Email: Schema.email(),
 
     Role: Schema.select([
       { name: "End-user" },
@@ -24,17 +22,21 @@ export const userSchema: Schema.Schema<typeof PRIMARY_KEY> = {
       { name: "Admin" },
     ]),
 
-    Phone: Schema.richText(),
-
-    Tags: Schema.multiSelect([]),
-
-    Suspended: Schema.checkbox(),
+    Email: Schema.email(),
 
     "Last login": Schema.date(),
 
-    "Created at": Schema.date(),
+    Tags: Schema.multiSelect([]),
 
     "Updated at": Schema.date(),
+
+    "User ID": Schema.richText(),
+
+    Phone: Schema.richText(),
+
+    Suspended: Schema.checkbox(),
+
+    "Created at": Schema.date(),
   },
 }
 

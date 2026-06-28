@@ -6,6 +6,7 @@
 
 import * as Schema from "@notionhq/workers/schema"
 import * as Builder from "@notionhq/workers/builder"
+import { notionIcon } from "@notionhq/workers"
 import type { ZendeskSlaPolicy, ZendeskSlaPolicyMetric } from "./zendesk.js"
 import { dateOnly } from "./transform.js"
 
@@ -13,16 +14,17 @@ export const INITIAL_TITLE = "Zendesk SLA Policies"
 export const PRIMARY_KEY = "Policy ID"
 
 export const slaPolicySchema: Schema.Schema<typeof PRIMARY_KEY> = {
+  databaseIcon: notionIcon("shield"),
   properties: {
     Title: Schema.title(),
 
-    "Policy ID": Schema.richText(),
-
     Position: Schema.number(),
 
-    "Created at": Schema.date(),
-
     "Updated at": Schema.date(),
+
+    "Policy ID": Schema.richText(),
+
+    "Created at": Schema.date(),
   },
 }
 

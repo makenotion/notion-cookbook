@@ -6,6 +6,7 @@
 
 import * as Schema from "@notionhq/workers/schema"
 import * as Builder from "@notionhq/workers/builder"
+import { notionIcon } from "@notionhq/workers"
 import type { ZendeskOrganization } from "./zendesk.js"
 import { dateOnly } from "./transform.js"
 
@@ -13,10 +14,9 @@ export const INITIAL_TITLE = "Zendesk Organizations"
 export const PRIMARY_KEY = "Org ID"
 
 export const organizationSchema: Schema.Schema<typeof PRIMARY_KEY> = {
+  databaseIcon: notionIcon("briefcase"),
   properties: {
     Name: Schema.title(),
-
-    "Org ID": Schema.richText(),
 
     Domains: Schema.richText(),
 
@@ -24,9 +24,11 @@ export const organizationSchema: Schema.Schema<typeof PRIMARY_KEY> = {
 
     Details: Schema.richText(),
 
-    "Created at": Schema.date(),
-
     "Updated at": Schema.date(),
+
+    "Org ID": Schema.richText(),
+
+    "Created at": Schema.date(),
   },
 }
 

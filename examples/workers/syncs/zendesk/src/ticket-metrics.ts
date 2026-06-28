@@ -7,6 +7,7 @@
 
 import * as Schema from "@notionhq/workers/schema"
 import * as Builder from "@notionhq/workers/builder"
+import { notionIcon } from "@notionhq/workers"
 import type { ZendeskTicketMetric } from "./zendesk.js"
 import { dateOnly } from "./transform.js"
 
@@ -14,26 +15,27 @@ export const INITIAL_TITLE = "Zendesk Ticket Metrics"
 export const PRIMARY_KEY = "Ticket ID"
 
 export const ticketMetricSchema: Schema.Schema<typeof PRIMARY_KEY> = {
+  databaseIcon: notionIcon("stopwatch"),
   properties: {
     "Ticket ID": Schema.title(),
 
     "First Reply (min)": Schema.number(),
 
-    "First Resolution (min)": Schema.number(),
-
     "Full Resolution (min)": Schema.number(),
-
-    "Agent Wait (min)": Schema.number(),
-
-    "Requester Wait (min)": Schema.number(),
 
     Reopens: Schema.number(),
 
     Replies: Schema.number(),
 
-    "Created at": Schema.date(),
-
     "Updated at": Schema.date(),
+
+    "First Resolution (min)": Schema.number(),
+
+    "Agent Wait (min)": Schema.number(),
+
+    "Requester Wait (min)": Schema.number(),
+
+    "Created at": Schema.date(),
   },
 }
 

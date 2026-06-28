@@ -7,6 +7,7 @@
 
 import * as Schema from "@notionhq/workers/schema"
 import * as Builder from "@notionhq/workers/builder"
+import { notionIcon } from "@notionhq/workers"
 import type { ZendeskSatisfactionRating } from "./zendesk.js"
 import { dateOnly } from "./transform.js"
 
@@ -20,12 +21,9 @@ export const INITIAL_TITLE = "Zendesk CSAT Ratings"
 export const PRIMARY_KEY = "Rating ID"
 
 export const satisfactionRatingSchema: Schema.Schema<typeof PRIMARY_KEY> = {
+  databaseIcon: notionIcon("thumbs-up"),
   properties: {
     Comment: Schema.title(),
-
-    "Rating ID": Schema.richText(),
-
-    "Ticket ID": Schema.richText(),
 
     Score: Schema.select([
       { name: "Satisfied" },
@@ -33,13 +31,17 @@ export const satisfactionRatingSchema: Schema.Schema<typeof PRIMARY_KEY> = {
       { name: "Pending" },
     ]),
 
+    "Ticket ID": Schema.richText(),
+
     Reason: Schema.richText(),
+
+    "Created at": Schema.date(),
+
+    "Rating ID": Schema.richText(),
 
     "Requester ID": Schema.richText(),
 
     "Assignee ID": Schema.richText(),
-
-    "Created at": Schema.date(),
   },
 }
 
