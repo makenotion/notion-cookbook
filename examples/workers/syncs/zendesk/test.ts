@@ -2,7 +2,12 @@
 // No Zendesk connection is made — all assertions run against pure functions.
 // Run: npm test  (or: npx tsx test.ts)
 
-import { ticketToChange, ticketUrl, dateOnly } from "./src/transform.js"
+import {
+  ticketToChange,
+  ticketUrl,
+  formatLabel,
+  dateOnly,
+} from "./src/transform.js"
 import { buildTicketsUrl, getAuthorizationHeader } from "./src/zendesk.js"
 import type { ZendeskTicket, UserLookup } from "./src/zendesk.js"
 
@@ -54,8 +59,8 @@ const change = ticketToChange(standardTicket, SUBDOMAIN, users)
 ok("type is upsert", change.type === "upsert")
 ok("key is ticket id as string", change.key === "42")
 ok(
-  "Tickets contains subject",
-  JSON.stringify(change.properties.Tickets).includes(
+  "Subject contains ticket subject",
+  JSON.stringify(change.properties.Subject).includes(
     "Cannot log in to my account"
   )
 )
@@ -64,41 +69,27 @@ ok(
   JSON.stringify(change.properties["Ticket ID"]).includes("42")
 )
 ok(
-  "Status is capitalized",
-  JSON.stringify(change.properties.Status).includes("Open")
-)
-ok(
-  "Priority is capitalized",
-  JSON.stringify(change.properties.Priority).includes("High")
-)
-ok(
-  "CSAT score is capitalized",
-  JSON.stringify(change.properties["CSAT score"]).includes("Good")
-)
-ok(
-  "Feature tags contains tags",
-  JSON.stringify(change.properties["Feature tags"]).includes("account_access")
-)
-ok(
   "Ticket link contains URL",
   JSON.stringify(change.properties["Ticket link"]).includes(
     "https://acme.zendesk.com/agent/tickets/42"
   )
 )
+ok("Type is formatted", JSON.stringify(change.properties.Type).includes("Problem"))
+ok("Status is formatted", JSON.stringify(change.properties.Status).includes("Open"))
 ok(
-  "upstreamUpdatedAt is set",
-  change.upstreamUpdatedAt === "2024-06-16T14:00:00Z"
+  "Priority is formatted",
+  JSON.stringify(change.properties.Priority).includes("High")
 )
 ok(
-  "pageContentMarkdown contains description",
-  change.pageContentMarkdown.includes("403 error")
+  "CSAT maps good to Satisfied",
+  JSON.stringify(change.properties["CSAT score"]).includes("Satisfied")
 )
 ok(
-  "Type is capitalized",
-  JSON.stringify(change.properties.Type).includes("Problem")
+  "Tags contains raw tag values",
+  JSON.stringify(change.properties.Tags).includes("account_access")
 )
 ok(
-  "Channel is capitalized",
+  "Channel maps email to Email",
   JSON.stringify(change.properties.Channel).includes("Email")
 )
 ok(
@@ -112,6 +103,18 @@ ok(
 ok(
   "Created at contains date",
   JSON.stringify(change.properties["Created at"]).includes("2024-06-15")
+)
+ok(
+  "Updated at contains date",
+  JSON.stringify(change.properties["Updated at"]).includes("2024-06-16")
+)
+ok(
+  "upstreamUpdatedAt is set",
+  change.upstreamUpdatedAt === "2024-06-16T14:00:00Z"
+)
+ok(
+  "pageContentMarkdown contains description",
+  change.pageContentMarkdown.includes("403 error")
 )
 
 // ---------------------------------------------------------------------------
@@ -139,48 +142,54 @@ const minimalTicket: ZendeskTicket = {
 const minimalChange = ticketToChange(minimalTicket, SUBDOMAIN, users)
 
 ok("key is ticket id", minimalChange.key === "99")
-ok(
-  "null priority omits Priority property",
-  minimalChange.properties.Priority === undefined
-)
+ok("null type omits Type", minimalChange.properties.Type === undefined)
+ok("null priority omits Priority", minimalChange.properties.Priority === undefined)
 ok(
   "null satisfaction_rating omits CSAT score",
   minimalChange.properties["CSAT score"] === undefined
 )
-ok(
-  "empty tags omits Feature tags",
-  minimalChange.properties["Feature tags"] === undefined
-)
-ok(
-  "null type omits Type property",
-  minimalChange.properties.Type === undefined
-)
-ok(
-  "null assignee_id omits Assignee",
-  minimalChange.properties.Assignee === undefined
-)
+ok("empty tags omits Tags", minimalChange.properties.Tags === undefined)
+ok("null assignee_id omits Assignee", minimalChange.properties.Assignee === undefined)
 ok(
   "requester resolved to name",
   JSON.stringify(minimalChange.properties.Requester).includes("Alice Requester")
 )
 
 // ---------------------------------------------------------------------------
-// ticketToChange — unknown CSAT score is omitted
+// ticketToChange — CSAT score mapping
 // ---------------------------------------------------------------------------
 
-console.log("ticketToChange — unknown CSAT score:")
+console.log("ticketToChange — CSAT score mapping:")
 
-const unofferedTicket: ZendeskTicket = {
-  ...standardTicket,
-  id: 50,
-  satisfaction_rating: { score: "unoffered" },
+function csatChange(score: string) {
+  const t: ZendeskTicket = {
+    ...standardTicket,
+    satisfaction_rating: { score },
+  }
+  return ticketToChange(t, SUBDOMAIN, users)
 }
 
-const unofferedChange = ticketToChange(unofferedTicket, SUBDOMAIN, users)
-
 ok(
-  "unoffered CSAT score is omitted",
-  unofferedChange.properties["CSAT score"] === undefined
+  "good maps to Satisfied",
+  JSON.stringify(csatChange("good").properties["CSAT score"]).includes(
+    "Satisfied"
+  )
+)
+ok(
+  "bad maps to Not satisfied",
+  JSON.stringify(csatChange("bad").properties["CSAT score"]).includes(
+    "Not satisfied"
+  )
+)
+ok(
+  "offered maps to Pending",
+  JSON.stringify(csatChange("offered").properties["CSAT score"]).includes(
+    "Pending"
+  )
+)
+ok(
+  "unoffered is omitted",
+  csatChange("unoffered").properties["CSAT score"] === undefined
 )
 
 // ---------------------------------------------------------------------------
@@ -200,6 +209,17 @@ ok(
   "requester falls back to numeric ID",
   JSON.stringify(fallbackChange.properties.Requester).includes("2001")
 )
+
+// ---------------------------------------------------------------------------
+// formatLabel — handles underscores and capitalization
+// ---------------------------------------------------------------------------
+
+console.log("formatLabel:")
+
+ok("simple word", formatLabel("open") === "Open")
+ok("underscore separated", formatLabel("mobile_sdk") === "Mobile Sdk")
+ok("single letter", formatLabel("a") === "A")
+ok("empty string", formatLabel("") === "")
 
 // ---------------------------------------------------------------------------
 // dateOnly — extracts YYYY-MM-DD from various formats
@@ -226,10 +246,15 @@ ok(
 )
 
 // ---------------------------------------------------------------------------
-// buildTicketsUrl — constructs Zendesk API URL
+// buildTicketsUrl — constructs Zendesk API URL with sideloading
 // ---------------------------------------------------------------------------
 
 console.log("buildTicketsUrl:")
+
+ok(
+  "includes users sideload",
+  buildTicketsUrl("acme").includes("include=users")
+)
 
 ok(
   "builds URL without cursor",

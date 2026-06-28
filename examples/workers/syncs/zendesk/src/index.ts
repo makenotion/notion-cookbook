@@ -1,3 +1,8 @@
+// Entry point — wires together the database schema, Zendesk API client, and
+// sync schedule. Most customization happens in schema.ts and transform.ts;
+// this file rarely needs changes unless you're adjusting the sync mode,
+// schedule, or pagination strategy.
+
 import { Worker } from "@notionhq/workers"
 
 import { fetchTicketsPage, requireSubdomain } from "./zendesk.js"
@@ -25,7 +30,10 @@ const tickets = worker.database("tickets", {
 
 worker.sync("ticketsSync", {
   database: tickets,
+  // "replace" re-syncs all tickets each run and auto-deletes removed ones.
+  // Switch to "incremental" for large instances — see README.
   mode: "replace",
+  // How often the sync runs. Options: "manual", "5m", "15m", "30m", "1h", "1d".
   schedule: "5m",
   execute: async (state: SyncState | undefined) => {
     await pacer.wait()
@@ -37,6 +45,8 @@ worker.sync("ticketsSync", {
       ticketToChange(t, subdomain, page.users)
     )
 
+    // The platform calls execute() repeatedly while hasMore is true,
+    // passing nextState back as the state parameter on the next call.
     return {
       changes,
       hasMore: page.hasMore,

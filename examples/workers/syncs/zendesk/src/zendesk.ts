@@ -1,3 +1,14 @@
+// Zendesk API client. Handles authentication and paginated ticket fetching.
+//
+// To sync additional related data (e.g. group names, organization names),
+// add them to the `include` parameter in buildTicketsUrl:
+//   include: "users,groups,organizations"
+// Then add the corresponding types and extend the return value of
+// fetchTicketsPage to include the new lookup maps.
+
+// Add fields here when extending the sync — the Zendesk Tickets API returns
+// many more fields than we use. See:
+// https://developer.zendesk.com/api-reference/ticketing/tickets/tickets/#json-format
 export type ZendeskTicket = {
   id: number
   subject: string
@@ -38,6 +49,7 @@ function requireEnv(name: string): string {
   return value
 }
 
+// Zendesk API tokens use Basic auth as email/token:apitoken (not Bearer).
 export function getAuthorizationHeader(): string {
   const apiToken = process.env.ZENDESK_API_TOKEN?.trim()
   if (apiToken) {
@@ -56,6 +68,8 @@ export function getAuthorizationHeader(): string {
   )
 }
 
+// Sideloading (include=users) embeds user objects in the ticket response so
+// we can resolve assignee/requester IDs to names without extra API calls.
 export function buildTicketsUrl(
   subdomain: string,
   cursor?: string
