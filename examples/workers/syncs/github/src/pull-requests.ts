@@ -41,19 +41,17 @@ export const pullRequestSchema: Schema.Schema<typeof PRIMARY_KEY> = {
 
     "Head Branch": Schema.richText(),
 
-    Additions: Schema.number(),
-
-    Deletions: Schema.number(),
-
-    Comments: Schema.number(),
-
     Repository: Schema.richText(),
 
     Created: Schema.date(),
 
     Updated: Schema.date(),
 
+    Closed: Schema.date(),
+
     Merged: Schema.date(),
+
+    "Merged By": Schema.richText(),
   },
 }
 
@@ -97,14 +95,17 @@ export function pullRequestToChange(pr: GitHubPullRequest, repo: string) {
         : {}),
       "Base Branch": Builder.richText(pr.base.ref),
       "Head Branch": Builder.richText(pr.head.ref),
-      Additions: Builder.number(pr.additions),
-      Deletions: Builder.number(pr.deletions),
-      Comments: Builder.number(pr.review_comments + pr.comments),
       Repository: Builder.richText(repo),
       Created: Builder.date(dateOnly(pr.created_at)),
       Updated: Builder.date(dateOnly(pr.updated_at)),
+      ...(pr.closed_at
+        ? { Closed: Builder.date(dateOnly(pr.closed_at)) }
+        : {}),
       ...(pr.merged_at
         ? { Merged: Builder.date(dateOnly(pr.merged_at)) }
+        : {}),
+      ...(pr.merged_by
+        ? { "Merged By": Builder.richText(pr.merged_by.login) }
         : {}),
     },
   }

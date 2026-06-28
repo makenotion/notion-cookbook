@@ -118,11 +118,9 @@ export type GitHubPullRequest = {
   milestone: { title: string } | null
   base: { ref: string }
   head: { ref: string }
-  additions: number
-  deletions: number
-  review_comments: number
-  comments: number
+  merged_by: { login: string } | null
   html_url: string
+  closed_at: string | null
   merged_at: string | null
   created_at: string
   updated_at: string

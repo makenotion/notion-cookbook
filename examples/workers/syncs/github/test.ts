@@ -209,11 +209,9 @@ const standardPR: GitHubPullRequest = {
   milestone: { title: "v2.0" },
   base: { ref: "main" },
   head: { ref: "feature/mobile" },
-  additions: 150,
-  deletions: 20,
-  review_comments: 3,
-  comments: 2,
+  merged_by: null,
   html_url: "https://github.com/acme/widgets/pull/123",
+  closed_at: null,
   merged_at: null,
   created_at: "2024-06-15T10:30:00Z",
   updated_at: "2024-06-16T14:00:00Z",
@@ -227,7 +225,7 @@ ok(
   JSON.stringify(prChange.properties["PR Key"]).includes("acme/widgets#123")
 )
 ok("State is Open", JSON.stringify(prChange.properties.State).includes("Open"))
-ok("Draft is false", JSON.stringify(prChange.properties.Draft).includes("false"))
+ok("Draft is false", JSON.stringify(prChange.properties.Draft).includes("No"))
 ok(
   "Reviewers contains both",
   JSON.stringify(prChange.properties.Reviewers).includes("carol") &&
@@ -241,19 +239,9 @@ ok(
   "Head Branch is feature/mobile",
   JSON.stringify(prChange.properties["Head Branch"]).includes("feature/mobile")
 )
-ok(
-  "Additions is 150",
-  JSON.stringify(prChange.properties.Additions).includes("150")
-)
-ok(
-  "Deletions is 20",
-  JSON.stringify(prChange.properties.Deletions).includes("20")
-)
-ok(
-  "Comments combines review + issue comments",
-  JSON.stringify(prChange.properties.Comments).includes("5")
-)
+ok("null closed_at omits Closed", prChange.properties.Closed === undefined)
 ok("null merged_at omits Merged", prChange.properties.Merged === undefined)
+ok("null merged_by omits Merged By", prChange.properties["Merged By"] === undefined)
 
 // ---------------------------------------------------------------------------
 // pullRequestToChange — merged PR
@@ -264,7 +252,9 @@ console.log("pullRequestToChange — merged PR:")
 const mergedPR: GitHubPullRequest = {
   ...standardPR,
   state: "closed",
+  closed_at: "2024-06-17T12:00:00Z",
   merged_at: "2024-06-17T12:00:00Z",
+  merged_by: { login: "eve" },
 }
 
 const mergedChange = pullRequestToChange(mergedPR, REPO)
@@ -274,9 +264,80 @@ ok(
   JSON.stringify(mergedChange.properties.State).includes("Merged")
 )
 ok(
+  "Closed date is set",
+  JSON.stringify(mergedChange.properties.Closed).includes("2024-06-17")
+)
+ok(
   "Merged date is set",
   JSON.stringify(mergedChange.properties.Merged).includes("2024-06-17")
 )
+ok(
+  "Merged By is set",
+  JSON.stringify(mergedChange.properties["Merged By"]).includes("eve")
+)
+
+// ---------------------------------------------------------------------------
+// pullRequestToChange — closed but not merged
+// ---------------------------------------------------------------------------
+
+console.log("pullRequestToChange — closed not merged:")
+
+const closedPR: GitHubPullRequest = {
+  ...standardPR,
+  state: "closed",
+  closed_at: "2024-06-18T09:00:00Z",
+  merged_at: null,
+  merged_by: null,
+}
+
+const closedPRChange = pullRequestToChange(closedPR, REPO)
+
+ok(
+  "State is Closed when not merged",
+  JSON.stringify(closedPRChange.properties.State).includes("Closed")
+)
+ok(
+  "Closed date is set",
+  JSON.stringify(closedPRChange.properties.Closed).includes("2024-06-18")
+)
+ok("null merged_at omits Merged", closedPRChange.properties.Merged === undefined)
+ok("null merged_by omits Merged By", closedPRChange.properties["Merged By"] === undefined)
+
+// ---------------------------------------------------------------------------
+// pullRequestToChange — minimal PR (all optional fields null/empty)
+// ---------------------------------------------------------------------------
+
+console.log("pullRequestToChange — minimal PR:")
+
+const minimalPR: GitHubPullRequest = {
+  number: 1,
+  title: "First PR",
+  body: null,
+  state: "open",
+  draft: false,
+  user: null,
+  assignees: [],
+  requested_reviewers: [],
+  labels: [],
+  milestone: null,
+  base: { ref: "main" },
+  head: { ref: "fix" },
+  merged_by: null,
+  html_url: "https://github.com/acme/widgets/pull/1",
+  closed_at: null,
+  merged_at: null,
+  created_at: "2024-01-01",
+  updated_at: "2024-01-01",
+}
+
+const minimalPRChange = pullRequestToChange(minimalPR, REPO)
+
+ok("null user omits Author", minimalPRChange.properties.Author === undefined)
+ok("empty assignees omits Assignees", minimalPRChange.properties.Assignees === undefined)
+ok("empty reviewers omits Reviewers", minimalPRChange.properties.Reviewers === undefined)
+ok("empty labels omits Labels", minimalPRChange.properties.Labels === undefined)
+ok("null milestone omits Milestone", minimalPRChange.properties.Milestone === undefined)
+ok("null body gives empty pageContentMarkdown", minimalPRChange.pageContentMarkdown === "")
 
 // ---------------------------------------------------------------------------
 // dateOnly

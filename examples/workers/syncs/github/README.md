@@ -54,16 +54,21 @@ Each page body contains the issue body (markdown).
 | Milestone | `milestone.title` | richText |
 | Base Branch | `base.ref` | richText |
 | Head Branch | `head.ref` | richText |
-| Additions | `additions` | number |
-| Deletions | `deletions` | number |
-| Comments | review + issue comments | number |
 | Repository | `owner/repo` | richText |
 | Created | `created_at` | date |
 | Updated | `updated_at` | date |
+| Closed | `closed_at` | date |
 | Merged | `merged_at` | date |
+| Merged By | `merged_by.login` | richText |
 
 Each page body contains the PR description (markdown). State is "Merged" when
 `merged_at` is set, regardless of the `state` field.
+
+> **Per-PR stats (additions, deletions, changed files)** are not included
+> because GitHub's list endpoint does not return them. To add them, fetch each
+> PR individually via `GET /repos/{owner}/{repo}/pulls/{number}` or use the
+> [GraphQL API](https://docs.github.com/en/graphql) to get all fields in a
+> single query.
 
 ## Project structure
 
