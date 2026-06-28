@@ -9,7 +9,7 @@ import {
   dateOnly,
 } from "./src/transform.js"
 import { buildTicketsUrl, getAuthorizationHeader } from "./src/zendesk.js"
-import type { ZendeskTicket, UserLookup } from "./src/zendesk.js"
+import type { ZendeskTicket, UserLookup, GroupLookup, OrgLookup } from "./src/zendesk.js"
 
 let passed = 0
 let failed = 0
@@ -38,6 +38,14 @@ const users: UserLookup = new Map([
   [3001, { id: 3001, name: "Alice Requester", email: "alice@example.com" }],
 ])
 
+const groups: GroupLookup = new Map([
+  [100, { id: 100, name: "Billing Support" }],
+])
+
+const orgs: OrgLookup = new Map([
+  [500, { id: 500, name: "Acme Corp" }],
+])
+
 const standardTicket: ZendeskTicket = {
   id: 42,
   subject: "Cannot log in to my account",
@@ -47,6 +55,8 @@ const standardTicket: ZendeskTicket = {
   priority: "high",
   assignee_id: 1001,
   requester_id: 2001,
+  group_id: 100,
+  organization_id: 500,
   tags: ["account_access", "login"],
   satisfaction_rating: { score: "good" },
   via: { channel: "email" },
@@ -54,7 +64,7 @@ const standardTicket: ZendeskTicket = {
   updated_at: "2024-06-16T14:00:00Z",
 }
 
-const change = ticketToChange(standardTicket, SUBDOMAIN, users)
+const change = ticketToChange(standardTicket, SUBDOMAIN, users, groups, orgs)
 
 ok("type is upsert", change.type === "upsert")
 ok("key is ticket id as string", change.key === "42")
@@ -97,8 +107,16 @@ ok(
   JSON.stringify(change.properties.Assignee).includes("Jane Smith")
 )
 ok(
+  "Group resolved to name",
+  JSON.stringify(change.properties.Group).includes("Billing Support")
+)
+ok(
   "Requester resolved to name",
   JSON.stringify(change.properties.Requester).includes("Bob Customer")
+)
+ok(
+  "Organization resolved to name",
+  JSON.stringify(change.properties.Organization).includes("Acme Corp")
 )
 ok(
   "Created at contains date",
@@ -132,6 +150,8 @@ const minimalTicket: ZendeskTicket = {
   priority: null,
   assignee_id: null,
   requester_id: 3001,
+  group_id: null,
+  organization_id: null,
   tags: [],
   satisfaction_rating: null,
   via: { channel: "web" },
@@ -139,7 +159,7 @@ const minimalTicket: ZendeskTicket = {
   updated_at: "2024-01-01",
 }
 
-const minimalChange = ticketToChange(minimalTicket, SUBDOMAIN, users)
+const minimalChange = ticketToChange(minimalTicket, SUBDOMAIN, users, groups, orgs)
 
 ok("key is ticket id", minimalChange.key === "99")
 ok("null type omits Type", minimalChange.properties.Type === undefined)
@@ -150,6 +170,8 @@ ok(
 )
 ok("empty tags omits Tags", minimalChange.properties.Tags === undefined)
 ok("null assignee_id omits Assignee", minimalChange.properties.Assignee === undefined)
+ok("null group_id omits Group", minimalChange.properties.Group === undefined)
+ok("null organization_id omits Organization", minimalChange.properties.Organization === undefined)
 ok(
   "requester resolved to name",
   JSON.stringify(minimalChange.properties.Requester).includes("Alice Requester")
@@ -166,7 +188,7 @@ function csatChange(score: string) {
     ...standardTicket,
     satisfaction_rating: { score },
   }
-  return ticketToChange(t, SUBDOMAIN, users)
+  return ticketToChange(t, SUBDOMAIN, users, groups, orgs)
 }
 
 ok(
@@ -199,7 +221,9 @@ ok(
 console.log("ticketToChange — unknown user ID falls back to numeric string:")
 
 const emptyUsers: UserLookup = new Map()
-const fallbackChange = ticketToChange(standardTicket, SUBDOMAIN, emptyUsers)
+const emptyGroups: GroupLookup = new Map()
+const emptyOrgs: OrgLookup = new Map()
+const fallbackChange = ticketToChange(standardTicket, SUBDOMAIN, emptyUsers, emptyGroups, emptyOrgs)
 
 ok(
   "assignee falls back to numeric ID",
@@ -208,6 +232,14 @@ ok(
 ok(
   "requester falls back to numeric ID",
   JSON.stringify(fallbackChange.properties.Requester).includes("2001")
+)
+ok(
+  "group falls back to numeric ID",
+  JSON.stringify(fallbackChange.properties.Group).includes("100")
+)
+ok(
+  "unknown org omits Organization",
+  fallbackChange.properties.Organization === undefined
 )
 
 // ---------------------------------------------------------------------------

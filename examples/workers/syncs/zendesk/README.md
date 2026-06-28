@@ -12,11 +12,11 @@ schemas and Notion creates and manages each database for you (these are called
 
 | Database | Zendesk resource | Schedule | Plan |
 | --- | --- | --- | --- |
-| **Support Tickets** | Tickets | Every 5 min | All |
-| **Zendesk Organizations** | Organizations | Every 1 hr | All |
-| **Zendesk Users** | Users (agents + end-users) | Every 1 hr | All |
-| **Zendesk CSAT Ratings** | Satisfaction Ratings | Every 30 min | Professional+ |
-| **Zendesk Ticket Metrics** | Ticket Metrics | Every 30 min | All |
+| **Support Tickets** | Tickets | Every 2 min | All |
+| **Zendesk Organizations** | Organizations | Every 5 min | All |
+| **Zendesk Users** | Users (agents + end-users) | Every 5 min | All |
+| **Zendesk CSAT Ratings** | Satisfaction Ratings | Every 5 min | Professional+ |
+| **Zendesk Ticket Metrics** | Ticket Metrics | Every 5 min | All |
 | **Zendesk SLA Policies** | SLA Policies | Manual trigger | Professional+ |
 
 ### Support Tickets
@@ -24,21 +24,23 @@ schemas and Notion creates and manages each database for you (these are called
 | Notion property | Zendesk field               | Type        |
 | --------------- | --------------------------- | ----------- |
 | Subject         | `subject`                   | title       |
-| Ticket ID       | `id`                        | richText    |
-| Ticket link     | clickable link to ticket    | url         |
-| Type            | `type`                      | select      |
 | Status          | `status`                    | select      |
 | Priority        | `priority`                  | select      |
-| CSAT score      | `satisfaction_rating.score` | select      |
-| Tags            | `tags`                      | multiSelect |
-| Channel         | `via.channel`               | select      |
 | Assignee        | agent name (resolved)       | richText    |
-| Requester       | requester name (resolved)   | richText    |
-| Created at      | `created_at`                | date        |
+| Group           | group name (resolved)       | richText    |
+| Ticket link     | clickable link to ticket    | url         |
 | Updated at      | `updated_at`                | date        |
+| Requester       | requester name (resolved)   | richText    |
+| Organization    | org name (resolved)         | richText    |
+| Type            | `type`                      | select      |
+| Channel         | `via.channel`               | select      |
+| Tags            | `tags`                      | multiSelect |
+| CSAT score      | `satisfaction_rating.score` | select      |
+| Created at      | `created_at`                | date        |
+| Ticket ID       | `id`                        | richText    |
 
-Each page body contains the ticket description. Assignee and requester show
-real names (resolved via Zendesk's
+Each page body contains the ticket description. Assignee, requester, group,
+and organization show real names (resolved via Zendesk's
 [sideloading](https://developer.zendesk.com/api-reference/introduction/side-loading/),
 with no extra API calls).
 
@@ -47,76 +49,85 @@ with no extra API calls).
 | Notion property | Zendesk field   | Type        |
 | --------------- | --------------- | ----------- |
 | Name            | `name`          | title       |
-| Org ID          | `id`            | richText    |
 | Domains         | `domain_names`  | richText    |
 | Tags            | `tags`          | multiSelect |
 | Details         | `details`       | richText    |
-| Created at      | `created_at`    | date        |
 | Updated at      | `updated_at`    | date        |
+| Org ID          | `id`            | richText    |
+| Created at      | `created_at`    | date        |
 
 Page body contains the organization's `notes` field.
 
 ### Zendesk Users
 
-| Notion property | Zendesk field   | Type       |
-| --------------- | --------------- | ---------- |
-| Name            | `name`          | title      |
-| User ID         | `id`            | richText   |
-| Email           | `email`         | email      |
-| Role            | `role`          | select     |
-| Phone           | `phone`         | richText   |
-| Tags            | `tags`          | multiSelect |
-| Suspended       | `suspended`     | checkbox   |
-| Last login      | `last_login_at` | date       |
-| Created at      | `created_at`    | date       |
-| Updated at      | `updated_at`    | date       |
+| Notion property  | Zendesk field      | Type        |
+| ---------------- | ------------------ | ----------- |
+| Name             | `name`             | title       |
+| Role             | `role`             | select      |
+| Email            | `email`            | email       |
+| Last login       | `last_login_at`    | date        |
+| Tags             | `tags`             | multiSelect |
+| Updated at       | `updated_at`       | date        |
+| Organization ID  | `organization_id`  | richText    |
+| Phone            | `phone`            | richText    |
+| Suspended        | `suspended`        | checkbox    |
+| User ID          | `id`               | richText    |
+| Created at       | `created_at`       | date        |
 
 ### Zendesk CSAT Ratings
 
 | Notion property | Zendesk field   | Type     |
 | --------------- | --------------- | -------- |
 | Comment         | `comment`       | title    |
-| Rating ID       | `id`            | richText |
-| Ticket ID       | `ticket_id`     | richText |
 | Score           | `score`         | select   |
+| Ticket ID       | `ticket_id`     | richText |
 | Reason          | `reason`        | richText |
-| Requester ID    | `requester_id`  | richText |
-| Assignee ID     | `assignee_id`   | richText |
 | Created at      | `created_at`    | date     |
-
-Requester and assignee are numeric IDs — cross-reference with the Users
-database for names.
+| Rating ID       | `id`            | richText |
 
 ### Zendesk Ticket Metrics
 
-| Notion property        | Zendesk field                          | Type   |
-| ---------------------- | -------------------------------------- | ------ |
-| Ticket ID              | `ticket_id`                            | title  |
-| First Reply (min)      | `reply_time_in_minutes.calendar`       | number |
-| First Resolution (min) | `first_resolution_time_in_minutes`     | number |
-| Full Resolution (min)  | `full_resolution_time_in_minutes`      | number |
-| Agent Wait (min)       | `agent_wait_time_in_minutes.calendar`  | number |
-| Requester Wait (min)   | `requester_wait_time_in_minutes`       | number |
-| Reopens                | `reopens`                              | number |
-| Replies                | `replies`                              | number |
-| Created at             | `created_at`                           | date   |
-| Updated at             | `updated_at`                           | date   |
+| Notion property        | Zendesk field                            | Type   |
+| ---------------------- | ---------------------------------------- | ------ |
+| Ticket ID              | `ticket_id`                              | title  |
+| First Reply (min)      | `reply_time_in_minutes.calendar`         | number |
+| Full Resolution (min)  | `full_resolution_time_in_minutes`        | number |
+| Reopens                | `reopens`                                | number |
+| Agents Touched         | `assignee_stations`                      | number |
+| Groups Touched         | `group_stations`                         | number |
+| Solved at              | `solved_at`                              | date   |
+| First Resolution (min) | `first_resolution_time_in_minutes`       | number |
+| Replies                | `replies`                                | number |
+| On Hold (min)          | `on_hold_time_in_minutes.calendar`       | number |
+| Agent Wait (min)       | `agent_wait_time_in_minutes.calendar`    | number |
+| Requester Wait (min)   | `requester_wait_time_in_minutes`         | number |
+| Updated at             | `updated_at`                             | date   |
+| Created at             | `created_at`                             | date   |
 
 Times use calendar minutes by default. To switch to business hours, change
 `.calendar` to `.business` in `src/ticket-metrics.ts`.
 
 ### Zendesk SLA Policies
 
-| Notion property | Zendesk field | Type     |
-| --------------- | ------------- | -------- |
-| Title           | `title`       | title    |
-| Policy ID       | `id`          | richText |
-| Position        | `position`    | number   |
-| Created at      | `created_at`  | date     |
-| Updated at      | `updated_at`  | date     |
+| Notion property              | Zendesk field                  | Type     |
+| ---------------------------- | ------------------------------ | -------- |
+| Title                        | `title`                        | title    |
+| Urgent First Reply (min)     | `policy_metrics` (flattened)   | number   |
+| High First Reply (min)       | `policy_metrics` (flattened)   | number   |
+| Normal First Reply (min)     | `policy_metrics` (flattened)   | number   |
+| Low First Reply (min)        | `policy_metrics` (flattened)   | number   |
+| Position                     | `position`                     | number   |
+| Urgent Resolution (min)      | `policy_metrics` (flattened)   | number   |
+| High Resolution (min)        | `policy_metrics` (flattened)   | number   |
+| Normal Resolution (min)      | `policy_metrics` (flattened)   | number   |
+| Low Resolution (min)         | `policy_metrics` (flattened)   | number   |
+| Policy ID                    | `id`                           | richText |
+| Updated at                   | `updated_at`                   | date     |
+| Created at                   | `created_at`                   | date     |
 
-Page body contains the policy description and a table of SLA targets per
-priority and metric.
+SLA targets are flattened from the `policy_metrics` array into individual
+columns by priority level, so managers can compare targets at a glance.
+Page body contains the policy description.
 
 ## Project structure
 

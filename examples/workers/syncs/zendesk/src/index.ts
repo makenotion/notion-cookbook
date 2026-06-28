@@ -77,7 +77,7 @@ const tickets = worker.database("tickets", {
 worker.sync("ticketsSync", {
   database: tickets,
   mode: "replace",
-  schedule: "5m",
+  schedule: "2m",
   execute: async (state: SyncState | undefined) => {
     await pacer.wait()
     const subdomain = requireSubdomain()
@@ -107,7 +107,7 @@ const organizations = worker.database("organizations", {
 worker.sync("organizationsSync", {
   database: organizations,
   mode: "replace",
-  schedule: "1h",
+  schedule: "5m",
   execute: async (state: SyncState | undefined) => {
     await pacer.wait()
     const page = await fetchOrganizationsPage(state?.cursor)
@@ -134,7 +134,7 @@ const users = worker.database("users", {
 worker.sync("usersSync", {
   database: users,
   mode: "replace",
-  schedule: "1h",
+  schedule: "5m",
   execute: async (state: SyncState | undefined) => {
     await pacer.wait()
     const page = await fetchUsersPage(state?.cursor)
@@ -161,7 +161,7 @@ const satisfactionRatings = worker.database("satisfactionRatings", {
 worker.sync("satisfactionRatingsSync", {
   database: satisfactionRatings,
   mode: "replace",
-  schedule: "30m",
+  schedule: "5m",
   execute: async (state: SyncState | undefined) => {
     await pacer.wait()
     const page = await fetchSatisfactionRatingsPage(state?.cursor)
@@ -188,7 +188,7 @@ const ticketMetrics = worker.database("ticketMetrics", {
 worker.sync("ticketMetricsSync", {
   database: ticketMetrics,
   mode: "replace",
-  schedule: "30m",
+  schedule: "5m",
   execute: async (state: SyncState | undefined) => {
     await pacer.wait()
     const page = await fetchTicketMetricsPage(state?.cursor)
@@ -216,7 +216,7 @@ const slaPolicies = worker.database("slaPolicies", {
 worker.sync("slaPoliciesSync", {
   database: slaPolicies,
   mode: "replace",
-  schedule: "manual",
+  schedule: "1d",
   execute: async () => {
     await pacer.wait()
     const policies = await fetchSlaPolicies()
