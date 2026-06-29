@@ -7,6 +7,7 @@
 //   3. Wire it into index.ts
 
 const PER_PAGE = 100
+const ASSOCIATION_BATCH_SIZE = 100
 const API_ROOT = "https://api.hubapi.com"
 
 export type BeforeRequest = () => Promise<void>
@@ -29,15 +30,18 @@ function getToken(): string {
 
 async function fetchJson<T>(
   url: string,
-  beforeRequest: BeforeRequest
+  beforeRequest: BeforeRequest,
+  init?: RequestInit
 ): Promise<T> {
   const token = getToken()
+  const headers = new Headers(init?.headers)
+  headers.set("Authorization", `Bearer ${token}`)
+  headers.set("Accept", "application/json")
+
   await beforeRequest()
   const response = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json",
-    },
+    ...init,
+    headers,
   })
 
   const text = await response.text()
@@ -55,7 +59,6 @@ type CrmListResponse<T> = {
   results: {
     id: string
     properties: T
-    associations?: Record<string, { results: { id: string }[] }>
     createdAt: string
     updatedAt: string
     archived: boolean
@@ -73,19 +76,89 @@ export type CrmRecord<T> = {
   updatedAt: string
 }
 
+type AssociationBatchInput = {
+  id: string
+  after?: string
+}
+
+type AssociationBatchResponse = {
+  results: {
+    from: { id: string }
+    to: { toObjectId: string }[]
+    paging?: { next?: { after: string } }
+  }[]
+}
+
+async function fetchAllAssociations(
+  fromObjectType: string,
+  toObjectType: string,
+  recordIds: string[],
+  beforeRequest: BeforeRequest
+): Promise<Map<string, string[]>> {
+  const uniqueIds = [...new Set(recordIds)]
+  const associations = new Map<string, Set<string>>(
+    uniqueIds.map((id) => [id, new Set<string>()])
+  )
+  const seenCursors = new Set<string>()
+  let pending: AssociationBatchInput[] = uniqueIds.map((id) => ({ id }))
+
+  while (pending.length > 0) {
+    const next: AssociationBatchInput[] = []
+
+    for (
+      let index = 0;
+      index < pending.length;
+      index += ASSOCIATION_BATCH_SIZE
+    ) {
+      const inputs = pending.slice(index, index + ASSOCIATION_BATCH_SIZE)
+      const body = await fetchJson<AssociationBatchResponse>(
+        `${API_ROOT}/crm/associations/2026-03/${fromObjectType}/${toObjectType}/batch/read`,
+        beforeRequest,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ inputs }),
+        }
+      )
+
+      for (const result of body.results) {
+        const ids = associations.get(result.from.id) ?? new Set<string>()
+        for (const association of result.to) {
+          ids.add(association.toObjectId)
+        }
+        associations.set(result.from.id, ids)
+
+        const after = result.paging?.next?.after
+        if (after) {
+          const cursorKey = `${result.from.id}:${after}`
+          if (seenCursors.has(cursorKey)) {
+            throw new Error(
+              `HubSpot repeated association cursor for ${fromObjectType} ${result.from.id}`
+            )
+          }
+          seenCursors.add(cursorKey)
+          next.push({ id: result.from.id, after })
+        }
+      }
+    }
+
+    pending = next
+  }
+
+  return new Map(
+    [...associations].map(([recordId, ids]) => [recordId, [...ids]])
+  )
+}
+
 async function fetchCrmPage<T>(
   objectType: string,
   properties: string[],
   beforeRequest: BeforeRequest,
-  cursor?: string,
-  associations?: string[]
+  cursor?: string
 ): Promise<{ records: CrmRecord<T>[]; nextCursor: string | undefined }> {
   const url = new URL(`${API_ROOT}/crm/objects/2026-03/${objectType}`)
   url.searchParams.set("limit", String(PER_PAGE))
   url.searchParams.set("properties", properties.join(","))
-  if (associations?.length) {
-    url.searchParams.set("associations", associations.join(","))
-  }
   if (cursor) {
     url.searchParams.set("after", cursor)
   }
@@ -96,21 +169,13 @@ async function fetchCrmPage<T>(
   )
   const records = body.results
     .filter((r) => !r.archived)
-    .map((r) => {
-      const assoc: Record<string, string[]> = {}
-      if (r.associations) {
-        for (const [key, val] of Object.entries(r.associations)) {
-          assoc[key] = val.results.map((a) => a.id)
-        }
-      }
-      return {
-        id: r.id,
-        properties: r.properties,
-        associations: assoc,
-        createdAt: r.createdAt,
-        updatedAt: r.updatedAt,
-      }
-    })
+    .map((r) => ({
+      id: r.id,
+      properties: r.properties,
+      associations: {},
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+    }))
 
   return {
     records,
@@ -318,10 +383,24 @@ export async function fetchDealsPage(
     "deals",
     DEAL_PROPERTIES,
     beforeRequest,
-    cursor,
-    ["companies", "contacts"]
+    cursor
   )
-  return { deals: records, nextCursor }
+
+  const dealIds = records.map((deal) => deal.id)
+  const [companies, contacts] = await Promise.all([
+    fetchAllAssociations("deals", "companies", dealIds, beforeRequest),
+    fetchAllAssociations("deals", "contacts", dealIds, beforeRequest),
+  ])
+  const deals = records.map((deal) => ({
+    ...deal,
+    associations: {
+      ...deal.associations,
+      companies: companies.get(deal.id) ?? [],
+      contacts: contacts.get(deal.id) ?? [],
+    },
+  }))
+
+  return { deals, nextCursor }
 }
 
 // ---------------------------------------------------------------------------

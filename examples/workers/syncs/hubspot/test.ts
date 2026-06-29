@@ -6,7 +6,12 @@ import { contactSchema, contactToChange } from "./src/contacts.js"
 import { dealToChange } from "./src/deals.js"
 import type { DealContext } from "./src/deals.js"
 import { companySchema, companyToChange } from "./src/companies.js"
-import { fetchAllOwners, fetchContactsPage, ownerName } from "./src/hubspot.js"
+import {
+  fetchAllOwners,
+  fetchContactsPage,
+  fetchDealsPage,
+  ownerName,
+} from "./src/hubspot.js"
 import { dateOnly } from "./src/helpers.js"
 import type {
   HubSpotContact,
@@ -769,7 +774,7 @@ ok("plain date passes through", dateOnly("2024-03-15") === "2024-03-15")
 ok("empty string returns empty", dateOnly("") === "")
 
 // ---------------------------------------------------------------------------
-// HubSpot client — request pacing, owner pagination, and API version
+// HubSpot client — request pacing, owner and association pagination, API version
 // ---------------------------------------------------------------------------
 
 async function testHubSpotClient() {
@@ -778,10 +783,15 @@ async function testHubSpotClient() {
   const originalFetch = globalThis.fetch
   const originalToken = process.env.HUBSPOT_ACCESS_TOKEN
   const requestedUrls: string[] = []
+  const associationRequests: {
+    objectType: string
+    method: string | undefined
+    inputs: { id: string; after?: string }[]
+  }[] = []
   let waits = 0
 
   process.env.HUBSPOT_ACCESS_TOKEN = "test-token"
-  globalThis.fetch = async (input) => {
+  globalThis.fetch = async (input, init) => {
     const rawUrl =
       typeof input === "string"
         ? input
@@ -815,6 +825,99 @@ async function testHubSpotClient() {
       return Response.json({ results: [] })
     }
 
+    if (url.pathname === "/crm/objects/2026-03/deals") {
+      return Response.json({
+        results: [
+          {
+            id: "deal-1",
+            properties: minimalDeal,
+            createdAt: "2026-06-01T00:00:00.000Z",
+            updatedAt: "2026-06-02T00:00:00.000Z",
+            archived: false,
+          },
+          {
+            id: "deal-2",
+            properties: minimalDeal,
+            createdAt: "2026-06-03T00:00:00.000Z",
+            updatedAt: "2026-06-04T00:00:00.000Z",
+            archived: false,
+          },
+        ],
+        paging: { next: { after: "next-deal-page" } },
+      })
+    }
+
+    if (
+      url.pathname === "/crm/associations/2026-03/deals/companies/batch/read" ||
+      url.pathname === "/crm/associations/2026-03/deals/contacts/batch/read"
+    ) {
+      const objectType = url.pathname.includes("/companies/")
+        ? "companies"
+        : "contacts"
+      const body = JSON.parse(String(init?.body)) as {
+        inputs: { id: string; after?: string }[]
+      }
+      associationRequests.push({
+        objectType,
+        method: init?.method,
+        inputs: body.inputs,
+      })
+
+      if (objectType === "contacts") {
+        const after = body.inputs[0]?.after
+        if (after === "contact-page-2") {
+          return Response.json({
+            results: [
+              {
+                from: { id: "deal-2" },
+                to: [{ toObjectId: "610" }, { toObjectId: "611" }],
+              },
+            ],
+          })
+        }
+        return Response.json({
+          results: [
+            {
+              from: { id: "deal-1" },
+              to: [{ toObjectId: "600" }],
+            },
+            {
+              from: { id: "deal-2" },
+              to: [{ toObjectId: "610" }],
+              paging: { next: { after: "contact-page-2" } },
+            },
+          ],
+        })
+      }
+
+      const after = body.inputs[0]?.after
+      if (!after) {
+        return Response.json({
+          results: [
+            {
+              from: { id: "deal-1" },
+              to: [{ toObjectId: "500" }, { toObjectId: "501" }],
+              paging: { next: { after: "company-page-2" } },
+            },
+            {
+              from: { id: "deal-2" },
+              to: [{ toObjectId: "510" }],
+            },
+          ],
+        })
+      }
+      if (after === "company-page-2") {
+        return Response.json({
+          results: [
+            {
+              from: { id: "deal-1" },
+              to: [{ toObjectId: "501" }, { toObjectId: "502" }],
+            },
+          ],
+        })
+      }
+    }
+
     return new Response("Unexpected test URL", { status: 500 })
   }
 
@@ -824,6 +927,7 @@ async function testHubSpotClient() {
     }
     const fetchedOwners = await fetchAllOwners(beforeRequest)
     await fetchContactsPage(beforeRequest)
+    const dealsPage = await fetchDealsPage(beforeRequest, "deal-page")
 
     ok(
       "every HTTP request consumes a pacer slot",
@@ -834,6 +938,56 @@ async function testHubSpotClient() {
     ok(
       "client uses HubSpot's current date-versioned API",
       requestedUrls.every((url) => url.includes("/2026-03"))
+    )
+    ok(
+      "deal object pages propagate both cursors",
+      new URL(
+        requestedUrls.find((url) => url.includes("/objects/2026-03/deals")) ??
+          "https://invalid"
+      ).searchParams.get("after") === "deal-page" &&
+        dealsPage.nextCursor === "next-deal-page"
+    )
+    ok(
+      "deal company associations are fully paginated and deduplicated",
+      dealsPage.deals[0]?.associations.companies?.join(",") === "500,501,502" &&
+        dealsPage.deals[1]?.associations.companies?.join(",") === "510"
+    )
+    ok(
+      "association cursors are independent by type and deal",
+      dealsPage.deals[0]?.associations.contacts?.join(",") === "600" &&
+        dealsPage.deals[1]?.associations.contacts?.join(",") === "610,611"
+    )
+    ok(
+      "association IDs and page cursors are sent in batch request bodies",
+      associationRequests.every((request) => request.method === "POST") &&
+        associationRequests.some(
+          (request) =>
+            request.objectType === "companies" &&
+            request.inputs.map((input) => input.id).join(",") ===
+              "deal-1,deal-2" &&
+            request.inputs.every((input) => input.after === undefined)
+        ) &&
+        associationRequests.some(
+          (request) =>
+            request.objectType === "contacts" &&
+            request.inputs.map((input) => input.id).join(",") ===
+              "deal-1,deal-2" &&
+            request.inputs.every((input) => input.after === undefined)
+        ) &&
+        associationRequests.some(
+          (request) =>
+            request.objectType === "companies" &&
+            request.inputs.length === 1 &&
+            request.inputs[0]?.id === "deal-1" &&
+            request.inputs[0]?.after === "company-page-2"
+        ) &&
+        associationRequests.some(
+          (request) =>
+            request.objectType === "contacts" &&
+            request.inputs.length === 1 &&
+            request.inputs[0]?.id === "deal-2" &&
+            request.inputs[0]?.after === "contact-page-2"
+        )
     )
 
     const contactsUrl = new URL(

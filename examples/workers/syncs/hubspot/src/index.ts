@@ -100,7 +100,7 @@ worker.sync("contactsSync", {
 })
 
 // ---------------------------------------------------------------------------
-// Deals — resolves stage/pipeline IDs and association IDs to names
+// Deals — resolves stage/pipeline IDs and maps association IDs to relations
 // ---------------------------------------------------------------------------
 
 const deals = worker.database("deals", {

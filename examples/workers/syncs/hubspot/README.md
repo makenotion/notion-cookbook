@@ -107,8 +107,10 @@ src/
    list endpoint with cursor-based pagination (100 records per page).
 2. Owner IDs are resolved to names by fetching active and deactivated owners.
    Deal pipeline and stage IDs are resolved from HubSpot's pipeline definitions.
-3. Deal associations become relations to the managed contacts and companies
-   databases, preserving multiple associated records without extra name lookups.
+3. Deal association IDs are batch-read and followed through each per-deal
+   association cursor before becoming relations to the managed contacts and
+   companies databases. This preserves every associated record without extra
+   name lookups.
 4. Each record is converted to an `upsert` keyed by HubSpot's record ID, so
    records are never duplicated.
 5. Every HubSpot request uses a shared rate-limit pacer (90 requests per 10
