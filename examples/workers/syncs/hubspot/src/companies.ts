@@ -35,6 +35,7 @@ export const companySchema: Schema.Schema<typeof PRIMARY_KEY> = {
       { name: "Opportunity" },
       { name: "Customer" },
       { name: "Evangelist" },
+      { name: "Other" },
     ]),
 
     Type: Schema.select([
@@ -49,7 +50,7 @@ export const companySchema: Schema.Schema<typeof PRIMARY_KEY> = {
 
     Country: Schema.richText(),
 
-    Phone: Schema.richText(),
+    Phone: Schema.phoneNumber(),
 
     Updated: Schema.date(),
 
@@ -69,6 +70,7 @@ const LIFECYCLE_LABELS: Record<string, string> = {
   opportunity: "Opportunity",
   customer: "Customer",
   evangelist: "Evangelist",
+  other: "Other",
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -87,14 +89,18 @@ export function companyToChange(
   owners: OwnerLookup
 ) {
   const owner = ownerName(owners, company.hubspot_owner_id)
-  const companyType = TYPE_LABELS[company.type?.toUpperCase() ?? ""]
-  const lifecycle = LIFECYCLE_LABELS[company.lifecyclestage ?? ""]
+  const companyTypeValue = company.type?.trim()
+  const lifecycleValue = company.lifecyclestage?.trim()
+  const companyType = companyTypeValue
+    ? TYPE_LABELS[companyTypeValue.toUpperCase()] ?? companyTypeValue
+    : null
+  const lifecycle = lifecycleValue
+    ? LIFECYCLE_LABELS[lifecycleValue] ?? lifecycleValue
+    : null
   const employees = company.numberofemployees
     ? Number(company.numberofemployees)
     : null
-  const revenue = company.annualrevenue
-    ? Number(company.annualrevenue)
-    : null
+  const revenue = company.annualrevenue ? Number(company.annualrevenue) : null
   const openDeals = company.hs_num_open_deals
     ? Number(company.hs_num_open_deals)
     : null
@@ -128,19 +134,13 @@ export function companyToChange(
       ...(totalRevenue != null && !isNaN(totalRevenue)
         ? { "Total Revenue": Builder.number(totalRevenue) }
         : {}),
-      ...(lifecycle
-        ? { "Lifecycle Stage": Builder.select(lifecycle) }
-        : {}),
+      ...(lifecycle ? { "Lifecycle Stage": Builder.select(lifecycle) } : {}),
       ...(companyType ? { Type: Builder.select(companyType) } : {}),
-      ...(company.city
-        ? { City: Builder.richText(company.city) }
-        : {}),
+      ...(company.city ? { City: Builder.richText(company.city) } : {}),
       ...(company.country
         ? { Country: Builder.richText(company.country) }
         : {}),
-      ...(company.phone
-        ? { Phone: Builder.richText(company.phone) }
-        : {}),
+      ...(company.phone ? { Phone: Builder.phoneNumber(company.phone) } : {}),
       Updated: Builder.date(dateOnly(updatedAt)),
       ...(company.createdate
         ? { Created: Builder.date(dateOnly(company.createdate)) }

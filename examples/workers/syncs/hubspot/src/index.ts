@@ -8,7 +8,7 @@
 //
 // Owner IDs and pipeline/stage IDs are resolved to human-readable names by
 // fetching lookup data once at the start of each sync cycle.
-// Deal associations (company/contact) are resolved per-page using batch reads.
+// Deal associations become relations to the managed company/contact databases.
 
 import { Worker } from "@notionhq/workers"
 
@@ -19,7 +19,6 @@ import {
   fetchContactsPage,
   fetchDealsPage,
   fetchCompaniesPage,
-  batchReadNames,
 } from "./hubspot.js"
 import type { OwnerLookup, PipelineLookup } from "./hubspot.js"
 import {
@@ -53,6 +52,7 @@ const pacer = worker.pacer("hubspot", {
   allowedRequests: 90,
   intervalMs: 10_000,
 })
+const beforeHubSpotRequest = () => pacer.wait()
 
 // Per-cycle caches cleared when the last page completes.
 let contactOwners: OwnerLookup | undefined
@@ -76,16 +76,14 @@ worker.sync("contactsSync", {
   mode: "replace",
   schedule: "5m",
   execute: async (state: SyncState | undefined) => {
-    await pacer.wait()
     const portalId = getPortalId()
 
-    if (!contactOwners) {
-      contactOwners = await fetchAllOwners()
-    }
+    const owners = contactOwners ?? (await fetchAllOwners(beforeHubSpotRequest))
+    contactOwners = owners
 
-    const page = await fetchContactsPage(state?.cursor)
+    const page = await fetchContactsPage(beforeHubSpotRequest, state?.cursor)
     const changes = page.contacts.map((c) =>
-      contactToChange(c.id, c.properties, c.updatedAt, portalId, contactOwners!)
+      contactToChange(c.id, c.properties, c.updatedAt, portalId, owners)
     )
 
     if (page.nextCursor) {
@@ -96,7 +94,7 @@ worker.sync("contactsSync", {
       }
     }
 
-    contactOwners = undefined
+    if (contactOwners === owners) contactOwners = undefined
     return { changes, hasMore: false }
   },
 })
@@ -115,46 +113,29 @@ const deals = worker.database("deals", {
 worker.sync("dealsSync", {
   database: deals,
   mode: "replace",
-  schedule: "2m",
+  schedule: "5m",
   execute: async (state: SyncState | undefined) => {
-    await pacer.wait()
     const portalId = getPortalId()
 
-    if (!dealOwners) {
-      const [owners, pipelines] = await Promise.all([
-        fetchAllOwners(),
-        fetchDealPipelines(),
+    let owners = dealOwners
+    let pipelines = dealPipelines
+    if (!owners || !pipelines) {
+      const lookups = await Promise.all([
+        fetchAllOwners(beforeHubSpotRequest),
+        fetchDealPipelines(beforeHubSpotRequest),
       ])
+      owners = lookups[0]
+      pipelines = lookups[1]
       dealOwners = owners
       dealPipelines = pipelines
     }
 
-    const page = await fetchDealsPage(state?.cursor)
-
-    const companyIds: string[] = []
-    const contactIds: string[] = []
-    for (const d of page.deals) {
-      const cid = d.associations["companies"]?.[0]
-      const tid = d.associations["contacts"]?.[0]
-      if (cid) companyIds.push(cid)
-      if (tid) contactIds.push(tid)
-    }
-
-    await pacer.wait()
-    const [companyNames, contactNames] = await Promise.all([
-      batchReadNames("companies", companyIds, ["name"]),
-      batchReadNames("contacts", contactIds, ["firstname", "lastname"], (props) => {
-        const name = `${props.firstname ?? ""} ${props.lastname ?? ""}`.trim()
-        return name || null
-      }),
-    ])
+    const page = await fetchDealsPage(beforeHubSpotRequest, state?.cursor)
 
     const ctx: DealContext = {
       portalId,
-      owners: dealOwners!,
-      pipelines: dealPipelines!,
-      companyNames,
-      contactNames,
+      owners,
+      pipelines,
     }
 
     const changes = page.deals.map((d) =>
@@ -169,8 +150,8 @@ worker.sync("dealsSync", {
       }
     }
 
-    dealOwners = undefined
-    dealPipelines = undefined
+    if (dealOwners === owners) dealOwners = undefined
+    if (dealPipelines === pipelines) dealPipelines = undefined
     return { changes, hasMore: false }
   },
 })
@@ -191,16 +172,14 @@ worker.sync("companiesSync", {
   mode: "replace",
   schedule: "5m",
   execute: async (state: SyncState | undefined) => {
-    await pacer.wait()
     const portalId = getPortalId()
 
-    if (!companyOwners) {
-      companyOwners = await fetchAllOwners()
-    }
+    const owners = companyOwners ?? (await fetchAllOwners(beforeHubSpotRequest))
+    companyOwners = owners
 
-    const page = await fetchCompaniesPage(state?.cursor)
+    const page = await fetchCompaniesPage(beforeHubSpotRequest, state?.cursor)
     const changes = page.companies.map((c) =>
-      companyToChange(c.id, c.properties, c.updatedAt, portalId, companyOwners!)
+      companyToChange(c.id, c.properties, c.updatedAt, portalId, owners)
     )
 
     if (page.nextCursor) {
@@ -211,7 +190,7 @@ worker.sync("companiesSync", {
       }
     }
 
-    companyOwners = undefined
+    if (companyOwners === owners) companyOwners = undefined
     return { changes, hasMore: false }
   },
 })

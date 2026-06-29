@@ -1,12 +1,12 @@
 // Offline tests for the hubspot sync worker.
-// No HubSpot connection is made — all assertions run against pure functions.
+// No HubSpot connection is made — API assertions use a mocked fetch.
 // Run: npm test  (or: npx tsx test.ts)
 
-import { contactToChange } from "./src/contacts.js"
+import { contactSchema, contactToChange } from "./src/contacts.js"
 import { dealToChange } from "./src/deals.js"
 import type { DealContext } from "./src/deals.js"
-import { companyToChange } from "./src/companies.js"
-import { ownerName } from "./src/hubspot.js"
+import { companySchema, companyToChange } from "./src/companies.js"
+import { fetchAllOwners, fetchContactsPage, ownerName } from "./src/hubspot.js"
 import { dateOnly } from "./src/helpers.js"
 import type {
   HubSpotContact,
@@ -32,12 +32,18 @@ function ok(name: string, cond: boolean) {
 const PORTAL_ID = "12345"
 
 const owners: OwnerLookup = new Map([
-  ["101", { id: "101", firstName: "Jane", lastName: "Smith", email: "jane@acme.com" }],
+  [
+    "101",
+    { id: "101", firstName: "Jane", lastName: "Smith", email: "jane@acme.com" },
+  ],
   ["202", { id: "202", firstName: "", lastName: "", email: "sales@acme.com" }],
+  ["303", { id: "303", email: "queue@acme.com" }],
+  ["404", { id: "404" }],
 ])
 
 const pipelines: PipelineLookup = {
-  pipelineName: (id) => ({ default: "Sales Pipeline", enterprise: "Enterprise" })[id] ?? null,
+  pipelineName: (id) =>
+    ({ default: "Sales Pipeline", enterprise: "Enterprise" })[id] ?? null,
   stageName: (id) =>
     ({
       appointmentscheduled: "Appointment Scheduled",
@@ -52,8 +58,6 @@ const dealCtx: DealContext = {
   portalId: PORTAL_ID,
   owners,
   pipelines,
-  companyNames: new Map([["500", "Acme Corp"]]),
-  contactNames: new Map([["600", "Alice Johnson"]]),
 }
 
 // ---------------------------------------------------------------------------
@@ -72,13 +76,19 @@ const standardContact: HubSpotContact = {
   lifecyclestage: "salesqualifiedlead",
   hs_lead_status: "OPEN",
   hubspot_owner_id: "101",
-  hs_last_sales_activity_timestamp: "2024-06-16T14:00:00Z",
+  notes_last_updated: "2024-06-16T14:00:00Z",
   num_associated_deals: "3",
   recent_deal_amount: "50000",
   createdate: "2024-06-01T10:00:00Z",
 }
 
-const contactChange = contactToChange("42", standardContact, "2024-06-16T14:00:00Z", PORTAL_ID, owners)
+const contactChange = contactToChange(
+  "42",
+  standardContact,
+  "2024-06-16T14:00:00Z",
+  PORTAL_ID,
+  owners
+)
 
 ok("type is upsert", contactChange.type === "upsert")
 ok("key is contact id", contactChange.key === "42")
@@ -88,7 +98,9 @@ ok(
 )
 ok(
   "Lifecycle Stage maps to label",
-  JSON.stringify(contactChange.properties["Lifecycle Stage"]).includes("Sales Qualified Lead")
+  JSON.stringify(contactChange.properties["Lifecycle Stage"]).includes(
+    "Sales Qualified Lead"
+  )
 )
 ok(
   "Lead Status maps to label",
@@ -103,12 +115,16 @@ ok(
   JSON.stringify(contactChange.properties.Company).includes("Acme Corp")
 )
 ok(
-  "Last Activity from sales activity timestamp",
-  JSON.stringify(contactChange.properties["Last Activity"]).includes("2024-06-16")
+  "Last Activity uses HubSpot's Last Activity Date",
+  JSON.stringify(contactChange.properties["Last Activity"]).includes(
+    "2024-06-16"
+  )
 )
 ok(
   "Job Title is set",
-  JSON.stringify(contactChange.properties["Job Title"]).includes("VP of Engineering")
+  JSON.stringify(contactChange.properties["Job Title"]).includes(
+    "VP of Engineering"
+  )
 )
 ok(
   "Owner resolved to name",
@@ -120,7 +136,9 @@ ok(
 )
 ok(
   "Recent Deal Amount is 50000",
-  JSON.stringify(contactChange.properties["Recent Deal Amount"]).includes("50000")
+  JSON.stringify(contactChange.properties["Recent Deal Amount"]).includes(
+    "50000"
+  )
 )
 ok(
   "Updated is set from updatedAt",
@@ -128,7 +146,9 @@ ok(
 )
 ok(
   "Contact Link contains portal ID and contact ID",
-  JSON.stringify(contactChange.properties["Contact Link"]).includes("12345/contact/42")
+  JSON.stringify(contactChange.properties["Contact Link"]).includes(
+    "12345/contact/42"
+  )
 )
 ok(
   "Contact ID is last",
@@ -151,27 +171,115 @@ const minimalContact: HubSpotContact = {
   lifecyclestage: null,
   hs_lead_status: null,
   hubspot_owner_id: null,
-  hs_last_sales_activity_timestamp: null,
+  notes_last_updated: null,
   num_associated_deals: null,
   recent_deal_amount: null,
   createdate: null,
 }
 
-const minimalContactChange = contactToChange("1", minimalContact, "2024-01-01", PORTAL_ID, owners)
+const minimalContactChange = contactToChange(
+  "1",
+  minimalContact,
+  "2024-01-01",
+  PORTAL_ID,
+  owners
+)
 
 ok(
   "null names gives (no name)",
   JSON.stringify(minimalContactChange.properties.Name).includes("(no name)")
 )
-ok("null lifecycle omits Lifecycle Stage", minimalContactChange.properties["Lifecycle Stage"] === undefined)
-ok("null lead status omits Lead Status", minimalContactChange.properties["Lead Status"] === undefined)
-ok("null email omits Email", minimalContactChange.properties.Email === undefined)
-ok("null company omits Company", minimalContactChange.properties.Company === undefined)
-ok("null owner omits Owner", minimalContactChange.properties.Owner === undefined)
-ok("null jobtitle omits Job Title", minimalContactChange.properties["Job Title"] === undefined)
-ok("null phone omits Phone", minimalContactChange.properties.Phone === undefined)
-ok("null deals omits Associated Deals", minimalContactChange.properties["Associated Deals"] === undefined)
-ok("null deal amount omits Recent Deal Amount", minimalContactChange.properties["Recent Deal Amount"] === undefined)
+ok(
+  "null lifecycle omits Lifecycle Stage",
+  minimalContactChange.properties["Lifecycle Stage"] === undefined
+)
+ok(
+  "null lead status omits Lead Status",
+  minimalContactChange.properties["Lead Status"] === undefined
+)
+ok(
+  "null email omits Email",
+  minimalContactChange.properties.Email === undefined
+)
+ok(
+  "null company omits Company",
+  minimalContactChange.properties.Company === undefined
+)
+ok(
+  "null owner omits Owner",
+  minimalContactChange.properties.Owner === undefined
+)
+ok(
+  "null jobtitle omits Job Title",
+  minimalContactChange.properties["Job Title"] === undefined
+)
+ok(
+  "null phone omits Phone",
+  minimalContactChange.properties.Phone === undefined
+)
+ok(
+  "null deals omits Associated Deals",
+  minimalContactChange.properties["Associated Deals"] === undefined
+)
+ok(
+  "null deal amount omits Recent Deal Amount",
+  minimalContactChange.properties["Recent Deal Amount"] === undefined
+)
+
+// ---------------------------------------------------------------------------
+// contactToChange — complete and custom enumerations
+// ---------------------------------------------------------------------------
+
+console.log("contactToChange — enumeration coverage:")
+
+const leadStatuses: Record<string, string> = {
+  OPEN_DEAL: "Open Deal",
+  ATTEMPTED_TO_CONTACT: "Attempted to Contact",
+  CONNECTED: "Connected",
+  BAD_TIMING: "Bad Timing",
+}
+
+for (const [value, label] of Object.entries(leadStatuses)) {
+  const change = contactToChange(
+    value,
+    { ...minimalContact, hs_lead_status: value },
+    "2024-01-01",
+    PORTAL_ID,
+    owners
+  )
+  ok(
+    `${value} maps to ${label}`,
+    JSON.stringify(change.properties["Lead Status"]).includes(label)
+  )
+}
+
+const customContactChange = contactToChange(
+  "custom",
+  {
+    ...minimalContact,
+    lifecyclestage: "productqualifiedlead",
+    hs_lead_status: "NURTURING",
+  },
+  "2024-01-01",
+  PORTAL_ID,
+  owners
+)
+ok(
+  "custom lifecycle stage is preserved",
+  JSON.stringify(customContactChange.properties["Lifecycle Stage"]).includes(
+    "productqualifiedlead"
+  )
+)
+ok(
+  "custom lead status is preserved",
+  JSON.stringify(customContactChange.properties["Lead Status"]).includes(
+    "NURTURING"
+  )
+)
+ok(
+  "contact phone uses the phone number schema",
+  contactSchema.properties.Phone.type === "phone_number"
+)
 
 // ---------------------------------------------------------------------------
 // dealToChange — standard deal
@@ -190,20 +298,29 @@ const standardDeal: HubSpotDeal = {
   hs_forecast_amount: "40000",
   hs_forecast_category: "commit",
   hs_is_closed_won: "false",
+  description: "Enterprise license renewal details.",
   createdate: "2024-06-01T10:00:00Z",
 }
 
 const dealAssociations = {
-  companies: ["500"],
-  contacts: ["600"],
+  companies: ["500", "501"],
+  contacts: ["600", "601"],
 }
 
-const dealChange = dealToChange("99", standardDeal, "2024-06-16T14:00:00Z", dealAssociations, dealCtx)
+const dealChange = dealToChange(
+  "99",
+  standardDeal,
+  "2024-06-16T14:00:00Z",
+  dealAssociations,
+  dealCtx
+)
 
 ok("key is deal id", dealChange.key === "99")
 ok(
   "Deal Name is set",
-  JSON.stringify(dealChange.properties["Deal Name"]).includes("Enterprise License")
+  JSON.stringify(dealChange.properties["Deal Name"]).includes(
+    "Enterprise License"
+  )
 )
 ok(
   "Stage resolved to label",
@@ -226,12 +343,20 @@ ok(
   JSON.stringify(dealChange.properties.Owner).includes("Jane Smith")
 )
 ok(
-  "Company resolved from association",
-  JSON.stringify(dealChange.properties.Company).includes("Acme Corp")
+  "all companies become relations",
+  dealChange.properties.Company.length === 2 &&
+    dealChange.properties.Company[0]?.value === "500" &&
+    dealChange.properties.Company[1]?.value === "501"
 )
 ok(
-  "Contact resolved from association",
-  JSON.stringify(dealChange.properties.Contact).includes("Alice Johnson")
+  "all contacts become relations",
+  dealChange.properties.Contact.length === 2 &&
+    dealChange.properties.Contact[0]?.value === "600" &&
+    dealChange.properties.Contact[1]?.value === "601"
+)
+ok(
+  "pageContentMarkdown contains description",
+  dealChange.pageContentMarkdown.includes("renewal details")
 )
 ok(
   "Forecast Amount is 40000",
@@ -280,9 +405,16 @@ const unknownStageDeal: HubSpotDeal = {
   ...standardDeal,
   dealstage: "custom_stage_123",
   pipeline: "custom_pipeline_456",
+  dealtype: "partner_sale",
 }
 
-const unknownChange = dealToChange("100", unknownStageDeal, "2024-06-16T14:00:00Z", {}, dealCtx)
+const unknownChange = dealToChange(
+  "100",
+  unknownStageDeal,
+  "2024-06-16T14:00:00Z",
+  {},
+  dealCtx
+)
 
 ok(
   "unknown stage falls back to raw ID",
@@ -290,7 +422,13 @@ ok(
 )
 ok(
   "unknown pipeline falls back to raw ID",
-  JSON.stringify(unknownChange.properties.Pipeline).includes("custom_pipeline_456")
+  JSON.stringify(unknownChange.properties.Pipeline).includes(
+    "custom_pipeline_456"
+  )
+)
+ok(
+  "custom deal type is preserved",
+  JSON.stringify(unknownChange.properties["Deal Type"]).includes("partner_sale")
 )
 
 // ---------------------------------------------------------------------------
@@ -310,23 +448,60 @@ const minimalDeal: HubSpotDeal = {
   hs_forecast_amount: null,
   hs_forecast_category: null,
   hs_is_closed_won: null,
+  description: null,
   createdate: null,
 }
 
-const minimalDealChange = dealToChange("1", minimalDeal, "2024-01-01", {}, dealCtx)
+const minimalDealChange = dealToChange(
+  "1",
+  minimalDeal,
+  "2024-01-01",
+  {},
+  dealCtx
+)
 
 ok("null stage omits Stage", minimalDealChange.properties.Stage === undefined)
-ok("null amount omits Amount", minimalDealChange.properties.Amount === undefined)
-ok("null closedate omits Close Date", minimalDealChange.properties["Close Date"] === undefined)
-ok("null pipeline omits Pipeline", minimalDealChange.properties.Pipeline === undefined)
+ok(
+  "null amount omits Amount",
+  minimalDealChange.properties.Amount === undefined
+)
+ok(
+  "null closedate omits Close Date",
+  minimalDealChange.properties["Close Date"] === undefined
+)
+ok(
+  "null pipeline omits Pipeline",
+  minimalDealChange.properties.Pipeline === undefined
+)
 ok("null owner omits Owner", minimalDealChange.properties.Owner === undefined)
-ok("no associations omits Company", minimalDealChange.properties.Company === undefined)
-ok("no associations omits Contact", minimalDealChange.properties.Contact === undefined)
-ok("null forecast omits Forecast Amount", minimalDealChange.properties["Forecast Amount"] === undefined)
-ok("null forecast category omits Forecast Category", minimalDealChange.properties["Forecast Category"] === undefined)
-ok("null dealtype omits Deal Type", minimalDealChange.properties["Deal Type"] === undefined)
-ok("null stage omits Stage ID", minimalDealChange.properties["Stage ID"] === undefined)
-ok("null pipeline omits Pipeline ID", minimalDealChange.properties["Pipeline ID"] === undefined)
+ok(
+  "no associations clears Company",
+  minimalDealChange.properties.Company.length === 0
+)
+ok(
+  "no associations clears Contact",
+  minimalDealChange.properties.Contact.length === 0
+)
+ok(
+  "null forecast omits Forecast Amount",
+  minimalDealChange.properties["Forecast Amount"] === undefined
+)
+ok(
+  "null forecast category omits Forecast Category",
+  minimalDealChange.properties["Forecast Category"] === undefined
+)
+ok(
+  "null dealtype omits Deal Type",
+  minimalDealChange.properties["Deal Type"] === undefined
+)
+ok(
+  "null stage omits Stage ID",
+  minimalDealChange.properties["Stage ID"] === undefined
+)
+ok(
+  "null pipeline omits Pipeline ID",
+  minimalDealChange.properties["Pipeline ID"] === undefined
+)
 
 // ---------------------------------------------------------------------------
 // dealToChange — closed won deal
@@ -340,7 +515,13 @@ const closedWonDeal: HubSpotDeal = {
   hs_is_closed_won: "true",
 }
 
-const closedWonChange = dealToChange("200", closedWonDeal, "2024-07-15", dealAssociations, dealCtx)
+const closedWonChange = dealToChange(
+  "200",
+  closedWonDeal,
+  "2024-07-15",
+  dealAssociations,
+  dealCtx
+)
 
 ok(
   "Stage is Closed Won",
@@ -375,7 +556,13 @@ const standardCompany: HubSpotCompany = {
   createdate: "2024-01-15T10:00:00Z",
 }
 
-const companyChange = companyToChange("77", standardCompany, "2024-06-16T14:00:00Z", PORTAL_ID, owners)
+const companyChange = companyToChange(
+  "77",
+  standardCompany,
+  "2024-06-16T14:00:00Z",
+  PORTAL_ID,
+  owners
+)
 
 ok("key is company id", companyChange.key === "77")
 ok(
@@ -392,11 +579,15 @@ ok(
 )
 ok(
   "Annual Revenue is numeric",
-  JSON.stringify(companyChange.properties["Annual Revenue"]).includes("10000000")
+  JSON.stringify(companyChange.properties["Annual Revenue"]).includes(
+    "10000000"
+  )
 )
 ok(
   "Number of Employees is numeric",
-  JSON.stringify(companyChange.properties["Number of Employees"]).includes("250")
+  JSON.stringify(companyChange.properties["Number of Employees"]).includes(
+    "250"
+  )
 )
 ok(
   "Owner resolved to name",
@@ -412,7 +603,9 @@ ok(
 )
 ok(
   "Lifecycle Stage maps to label",
-  JSON.stringify(companyChange.properties["Lifecycle Stage"]).includes("Customer")
+  JSON.stringify(companyChange.properties["Lifecycle Stage"]).includes(
+    "Customer"
+  )
 )
 ok(
   "Type maps to label",
@@ -432,7 +625,9 @@ ok(
 )
 ok(
   "Company Link contains portal ID",
-  JSON.stringify(companyChange.properties["Company Link"]).includes("12345/company/77")
+  JSON.stringify(companyChange.properties["Company Link"]).includes(
+    "12345/company/77"
+  )
 )
 ok(
   "Company ID is set",
@@ -463,19 +658,80 @@ const minimalCompany: HubSpotCompany = {
   createdate: null,
 }
 
-const minimalCompanyChange = companyToChange("1", minimalCompany, "2024-01-01", PORTAL_ID, owners)
+const minimalCompanyChange = companyToChange(
+  "1",
+  minimalCompany,
+  "2024-01-01",
+  PORTAL_ID,
+  owners
+)
 
-ok("null industry omits Industry", minimalCompanyChange.properties.Industry === undefined)
-ok("null domain omits Domain", minimalCompanyChange.properties.Domain === undefined)
-ok("null revenue omits Annual Revenue", minimalCompanyChange.properties["Annual Revenue"] === undefined)
-ok("null employees omits Number of Employees", minimalCompanyChange.properties["Number of Employees"] === undefined)
-ok("null owner omits Owner", minimalCompanyChange.properties.Owner === undefined)
-ok("null open deals omits Open Deals", minimalCompanyChange.properties["Open Deals"] === undefined)
-ok("null total revenue omits Total Revenue", minimalCompanyChange.properties["Total Revenue"] === undefined)
-ok("null lifecycle omits Lifecycle Stage", minimalCompanyChange.properties["Lifecycle Stage"] === undefined)
+ok(
+  "null industry omits Industry",
+  minimalCompanyChange.properties.Industry === undefined
+)
+ok(
+  "null domain omits Domain",
+  minimalCompanyChange.properties.Domain === undefined
+)
+ok(
+  "null revenue omits Annual Revenue",
+  minimalCompanyChange.properties["Annual Revenue"] === undefined
+)
+ok(
+  "null employees omits Number of Employees",
+  minimalCompanyChange.properties["Number of Employees"] === undefined
+)
+ok(
+  "null owner omits Owner",
+  minimalCompanyChange.properties.Owner === undefined
+)
+ok(
+  "null open deals omits Open Deals",
+  minimalCompanyChange.properties["Open Deals"] === undefined
+)
+ok(
+  "null total revenue omits Total Revenue",
+  minimalCompanyChange.properties["Total Revenue"] === undefined
+)
+ok(
+  "null lifecycle omits Lifecycle Stage",
+  minimalCompanyChange.properties["Lifecycle Stage"] === undefined
+)
 ok("null type omits Type", minimalCompanyChange.properties.Type === undefined)
 ok("null city omits City", minimalCompanyChange.properties.City === undefined)
-ok("null description gives empty pageContentMarkdown", minimalCompanyChange.pageContentMarkdown === "")
+ok(
+  "null description gives empty pageContentMarkdown",
+  minimalCompanyChange.pageContentMarkdown === ""
+)
+
+const customCompanyChange = companyToChange(
+  "custom",
+  {
+    ...minimalCompany,
+    lifecyclestage: "productqualifiedlead",
+    type: "STRATEGIC_PARTNER",
+  },
+  "2024-01-01",
+  PORTAL_ID,
+  owners
+)
+ok(
+  "custom company lifecycle stage is preserved",
+  JSON.stringify(customCompanyChange.properties["Lifecycle Stage"]).includes(
+    "productqualifiedlead"
+  )
+)
+ok(
+  "custom company type is preserved",
+  JSON.stringify(customCompanyChange.properties.Type).includes(
+    "STRATEGIC_PARTNER"
+  )
+)
+ok(
+  "company phone uses the phone number schema",
+  companySchema.properties.Phone.type === "phone_number"
+)
 
 // ---------------------------------------------------------------------------
 // ownerName — resolves owner IDs
@@ -484,7 +740,18 @@ ok("null description gives empty pageContentMarkdown", minimalCompanyChange.page
 console.log("ownerName:")
 
 ok("resolves known owner", ownerName(owners, "101") === "Jane Smith")
-ok("falls back to email when no name", ownerName(owners, "202") === "sales@acme.com")
+ok(
+  "falls back to email when no name",
+  ownerName(owners, "202") === "sales@acme.com"
+)
+ok(
+  "handles an owner with omitted name fields",
+  ownerName(owners, "303") === "queue@acme.com"
+)
+ok(
+  "does not render missing fields as undefined",
+  ownerName(owners, "404") === null
+)
 ok("null id returns null", ownerName(owners, null) === null)
 ok("unknown id returns null", ownerName(owners, "999") === null)
 
@@ -494,9 +761,107 @@ ok("unknown id returns null", ownerName(owners, "999") === null)
 
 console.log("dateOnly:")
 
-ok("ISO timestamp returns date part", dateOnly("2024-03-15T12:00:00Z") === "2024-03-15")
+ok(
+  "ISO timestamp returns date part",
+  dateOnly("2024-03-15T12:00:00Z") === "2024-03-15"
+)
 ok("plain date passes through", dateOnly("2024-03-15") === "2024-03-15")
 ok("empty string returns empty", dateOnly("") === "")
 
-console.log(`\n${passed} passed, ${failed} failed`)
-if (failed > 0) process.exit(1)
+// ---------------------------------------------------------------------------
+// HubSpot client — request pacing, owner pagination, and API version
+// ---------------------------------------------------------------------------
+
+async function testHubSpotClient() {
+  console.log("HubSpot client:")
+
+  const originalFetch = globalThis.fetch
+  const originalToken = process.env.HUBSPOT_ACCESS_TOKEN
+  const requestedUrls: string[] = []
+  let waits = 0
+
+  process.env.HUBSPOT_ACCESS_TOKEN = "test-token"
+  globalThis.fetch = async (input) => {
+    const rawUrl =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url
+    const url = new URL(rawUrl)
+    requestedUrls.push(url.toString())
+
+    if (url.pathname === "/crm/owners/2026-03") {
+      const archived = url.searchParams.get("archived") === "true"
+      const after = url.searchParams.get("after")
+
+      if (!archived && !after) {
+        return Response.json({
+          results: [{ id: "active", firstName: "Active", lastName: "Owner" }],
+          paging: { next: { after: "next-owner" } },
+        })
+      }
+      if (!archived) {
+        return Response.json({
+          results: [{ id: "active-2", email: "two@example.com" }],
+        })
+      }
+      return Response.json({
+        results: [{ id: "archived", email: "former@example.com" }],
+      })
+    }
+
+    if (url.pathname === "/crm/objects/2026-03/contacts") {
+      return Response.json({ results: [] })
+    }
+
+    return new Response("Unexpected test URL", { status: 500 })
+  }
+
+  try {
+    const beforeRequest = async () => {
+      waits++
+    }
+    const fetchedOwners = await fetchAllOwners(beforeRequest)
+    await fetchContactsPage(beforeRequest)
+
+    ok(
+      "every HTTP request consumes a pacer slot",
+      waits === requestedUrls.length
+    )
+    ok("active owner pages are fully paginated", fetchedOwners.has("active-2"))
+    ok("archived owners are included", fetchedOwners.has("archived"))
+    ok(
+      "client uses HubSpot's current date-versioned API",
+      requestedUrls.every((url) => url.includes("/2026-03"))
+    )
+
+    const contactsUrl = new URL(
+      requestedUrls.find((url) => url.includes("/contacts")) ??
+        "https://invalid"
+    )
+    const requestedProperties = contactsUrl.searchParams.get("properties") ?? ""
+    ok(
+      "contacts request HubSpot's Last Activity Date",
+      requestedProperties.includes("notes_last_updated") &&
+        !requestedProperties.includes("hs_last_sales_activity_timestamp")
+    )
+  } finally {
+    globalThis.fetch = originalFetch
+    if (originalToken === undefined) {
+      delete process.env.HUBSPOT_ACCESS_TOKEN
+    } else {
+      process.env.HUBSPOT_ACCESS_TOKEN = originalToken
+    }
+  }
+}
+
+testHubSpotClient()
+  .catch((error: unknown) => {
+    failed++
+    console.error("  FAIL HubSpot client tests", error)
+  })
+  .finally(() => {
+    console.log(`\n${passed} passed, ${failed} failed`)
+    if (failed > 0) process.exitCode = 1
+  })

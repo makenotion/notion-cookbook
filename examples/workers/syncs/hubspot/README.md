@@ -10,71 +10,91 @@ schemas and Notion creates and manages each database for you (these are called
 
 ## What you get
 
-| Database | HubSpot resource | Schedule |
-| --- | --- | --- |
-| **HubSpot Contacts** | Contacts | Every 5 min |
-| **HubSpot Deals** | Deals | Every 5 min |
-| **HubSpot Companies** | Companies | Every 5 min |
+| Database              | HubSpot resource | Schedule    |
+| --------------------- | ---------------- | ----------- |
+| **HubSpot Contacts**  | Contacts         | Every 5 min |
+| **HubSpot Deals**     | Deals            | Every 5 min |
+| **HubSpot Companies** | Companies        | Every 5 min |
 
 ### HubSpot Contacts
 
-| Notion property | HubSpot field | Type |
-| --- | --- | --- |
-| Name | `firstname` + `lastname` | title |
-| Lifecycle Stage | `lifecyclestage` | select |
-| Lead Status | `hs_lead_status` | select |
-| Email | `email` | email |
-| Company | `company` | richText |
-| Last Activity | `notes_last_updated` | date |
-| Owner | `hubspot_owner_id` (resolved) | richText |
-| Job Title | `jobtitle` | richText |
-| Phone | `phone` | richText |
-| Created | `createdate` | date |
-| Contact Link | link to HubSpot record | url |
-| Contact ID | `hs_object_id` | richText |
+| Notion property    | HubSpot field                 | Type        |
+| ------------------ | ----------------------------- | ----------- |
+| Name               | `firstname` + `lastname`      | title       |
+| Lifecycle Stage    | `lifecyclestage`              | select      |
+| Lead Status        | `hs_lead_status`              | select      |
+| Email              | `email`                       | email       |
+| Company            | `company`                     | richText    |
+| Last Activity      | `notes_last_updated`          | date        |
+| Job Title          | `jobtitle`                    | richText    |
+| Owner              | `hubspot_owner_id` (resolved) | richText    |
+| Phone              | `phone`                       | phoneNumber |
+| Associated Deals   | `num_associated_deals`        | number      |
+| Recent Deal Amount | `recent_deal_amount`          | number      |
+| Updated            | HubSpot record `updatedAt`    | date        |
+| Created            | `createdate`                  | date        |
+| Contact Link       | link to HubSpot record        | url         |
+| Contact ID         | `hs_object_id`                | richText    |
 
 ### HubSpot Deals
 
-| Notion property | HubSpot field | Type |
-| --- | --- | --- |
-| Deal Name | `dealname` | title |
-| Stage | `dealstage` | select |
-| Amount | `amount` | number |
-| Close Date | `closedate` | date |
-| Owner | `hubspot_owner_id` (resolved) | richText |
-| Deal Link | link to HubSpot record | url |
-| Pipeline | `pipeline` | richText |
-| Deal Type | `dealtype` | select |
-| Created | `createdate` | date |
-| Deal ID | `hs_object_id` | richText |
+| Notion property   | HubSpot field                 | Type     |
+| ----------------- | ----------------------------- | -------- |
+| Deal Name         | `dealname`                    | title    |
+| Stage             | `dealstage`                   | select   |
+| Amount            | `amount`                      | number   |
+| Close Date        | `closedate`                   | date     |
+| Pipeline          | `pipeline` (resolved)         | richText |
+| Owner             | `hubspot_owner_id` (resolved) | richText |
+| Company           | associated company IDs        | relation |
+| Contact           | associated contact IDs        | relation |
+| Forecast Amount   | `hs_forecast_amount`          | number   |
+| Forecast Category | `hs_forecast_category`        | select   |
+| Closed Won        | `hs_is_closed_won`            | checkbox |
+| Deal Type         | `dealtype`                    | select   |
+| Updated           | HubSpot record `updatedAt`    | date     |
+| Created           | `createdate`                  | date     |
+| Deal Link         | link to HubSpot record        | url      |
+| Stage ID          | `dealstage`                   | richText |
+| Pipeline ID       | `pipeline`                    | richText |
+| Deal ID           | `hs_object_id`                | richText |
+
+Each deal page body contains the HubSpot deal description. Company and contact
+associations are Notion relations, so multiple associated records are retained
+and renames stay in sync with the related managed database.
 
 ### HubSpot Companies
 
-| Notion property | HubSpot field | Type |
-| --- | --- | --- |
-| Name | `name` | title |
-| Industry | `industry` | select |
-| Domain | `domain` | url |
-| Annual Revenue | `annualrevenue` | number |
-| Number of Employees | `numberofemployees` | number |
-| Owner | `hubspot_owner_id` (resolved) | richText |
-| Type | `type` | select |
-| City | `city` | richText |
-| Country | `country` | richText |
-| Phone | `phone` | richText |
-| Created | `createdate` | date |
-| Company Link | link to HubSpot record | url |
-| Company ID | `hs_object_id` | richText |
+| Notion property     | HubSpot field                 | Type        |
+| ------------------- | ----------------------------- | ----------- |
+| Name                | `name`                        | title       |
+| Industry            | `industry`                    | select      |
+| Domain              | `domain`                      | url         |
+| Annual Revenue      | `annualrevenue`               | number      |
+| Number of Employees | `numberofemployees`           | number      |
+| Owner               | `hubspot_owner_id` (resolved) | richText    |
+| Open Deals          | `hs_num_open_deals`           | number      |
+| Total Revenue       | `total_revenue`               | number      |
+| Lifecycle Stage     | `lifecyclestage`              | select      |
+| Type                | `type`                        | select      |
+| City                | `city`                        | richText    |
+| Country             | `country`                     | richText    |
+| Phone               | `phone`                       | phoneNumber |
+| Updated             | HubSpot record `updatedAt`    | date        |
+| Created             | `createdate`                  | date        |
+| Company Link        | link to HubSpot record        | url         |
+| Company ID          | `hs_object_id`                | richText    |
 
-Owner IDs are resolved to names by fetching all HubSpot owners once per sync
-cycle — no extra API call per record.
+Each company page body contains the HubSpot company description. Owner IDs are
+resolved to names by fetching active and deactivated HubSpot owners once per
+sync cycle — no extra API call per record.
 
 ## Project structure
 
 ```text
 src/
 ├── index.ts       — registers all databases and syncs
-├── hubspot.ts     — API client (auth, pagination, types, owner resolution)
+├── hubspot.ts     — API client (auth, pacing, pagination, owner resolution)
 ├── contacts.ts    — contact schema + transform
 ├── deals.ts       — deal schema + transform
 ├── companies.ts   — company schema + transform
@@ -85,25 +105,27 @@ src/
 
 1. Every 5 minutes, the worker fetches each CRM object type using HubSpot's
    list endpoint with cursor-based pagination (100 records per page).
-2. Owner IDs are resolved to names by fetching all owners once at the start
-   of each sync cycle and building a lookup map.
-3. Each record is converted to an `upsert` keyed by HubSpot's record ID, so
+2. Owner IDs are resolved to names by fetching active and deactivated owners.
+   Deal pipeline and stage IDs are resolved from HubSpot's pipeline definitions.
+3. Deal associations become relations to the managed contacts and companies
+   databases, preserving multiple associated records without extra name lookups.
+4. Each record is converted to an `upsert` keyed by HubSpot's record ID, so
    records are never duplicated.
-4. All three syncs share a single rate-limit pacer (90 requests per 10 seconds)
-   to stay within HubSpot's 100/10s limit on Free/Starter plans.
-5. Because all syncs use `mode: "replace"`, records deleted in HubSpot are
+5. Every HubSpot request uses a shared rate-limit pacer (90 requests per 10
+   seconds) to stay within HubSpot's 100/10s limit on Free/Starter plans.
+6. Because all syncs use `mode: "replace"`, records deleted in HubSpot are
    automatically removed from the Notion database on the next full sync.
 
 ## Prerequisites
 
 - Node >= 22, npm >= 10.9.2
-- A HubSpot account with CRM data
-- The `ntn` CLI installed and authenticated (`ntn auth login`)
+- A HubSpot account with CRM data and super-admin access
+- The `ntn` CLI installed and authenticated (`ntn login`)
 
 ### Getting a HubSpot access token
 
-1. Go to **Settings > Integrations > Private Apps**
-2. Click **Create a private app**
+1. In HubSpot, go to **Development > Legacy apps**
+2. Click **Create legacy app**, then select **Private**
 3. Under **Scopes**, add:
    - `crm.objects.contacts.read`
    - `crm.objects.deals.read`
@@ -120,20 +142,20 @@ when logged into HubSpot: `app.hubspot.com/contacts/{portalId}`.
 
 ### Required
 
-| Variable | Description |
-| --- | --- |
+| Variable               | Description                                   |
+| ---------------------- | --------------------------------------------- |
 | `HUBSPOT_ACCESS_TOKEN` | Private app access token with CRM read scopes |
-| `HUBSPOT_PORTAL_ID` | Your HubSpot account (portal) ID |
+| `HUBSPOT_PORTAL_ID`    | Your HubSpot account (portal) ID              |
 
 No `NOTION_API_TOKEN` is needed — the platform handles Notion credentials
 automatically.
 
 ## Setup and deploy
 
-1. Install the Notion Workers CLI:
+1. Install the Notion CLI:
 
    ```sh
-   npm install -g @notionhq/ntn
+   curl -fsSL https://ntn.dev | bash
    ```
 
 2. Clone and install:
@@ -153,7 +175,7 @@ automatically.
 4. Log in to Notion:
 
    ```sh
-   ntn auth login
+   ntn login
    ```
 
 5. Deploy the worker:
@@ -192,10 +214,10 @@ databases will appear in your Notion workspace after the first run.
 
 Each resource has its own file with a schema and transform function:
 
-| Resource | File |
-| --- | --- |
-| Contacts | `src/contacts.ts` |
-| Deals | `src/deals.ts` |
+| Resource  | File               |
+| --------- | ------------------ |
+| Contacts  | `src/contacts.ts`  |
+| Deals     | `src/deals.ts`     |
 | Companies | `src/companies.ts` |
 
 To add a new HubSpot property:
@@ -224,9 +246,9 @@ ntn workers exec contactsSync --local
 
 ## Learn more
 
-- [Notion Workers documentation](https://developers.notion.com/docs/workers)
-- [HubSpot CRM API — Contacts](https://developers.hubspot.com/docs/api/crm/contacts)
-- [HubSpot CRM API — Deals](https://developers.hubspot.com/docs/api/crm/deals)
-- [HubSpot CRM API — Companies](https://developers.hubspot.com/docs/api/crm/companies)
-- [HubSpot Private Apps](https://developers.hubspot.com/docs/api/private-apps)
+- [Notion Workers documentation](https://developers.notion.com/workers/get-started/overview)
+- [HubSpot CRM API — Contacts](https://developers.hubspot.com/docs/api-reference/latest/crm/objects/contacts/guide)
+- [HubSpot CRM API — Deals](https://developers.hubspot.com/docs/api-reference/latest/crm/objects/deals/guide)
+- [HubSpot CRM API — Companies](https://developers.hubspot.com/docs/api-reference/latest/crm/objects/companies/guide)
+- [HubSpot Private Apps](https://developers.hubspot.com/docs/apps/legacy-apps/private-apps/overview)
 - [Contributing guide](../../../../CONTRIBUTING.md)

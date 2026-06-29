@@ -23,9 +23,9 @@ export const dealSchema: Schema.Schema<typeof PRIMARY_KEY> = {
 
     Owner: Schema.richText(),
 
-    Company: Schema.richText(),
+    Company: Schema.relation("companies"),
 
-    Contact: Schema.richText(),
+    Contact: Schema.relation("contacts"),
 
     "Forecast Amount": Schema.number(),
 
@@ -61,8 +61,6 @@ export type DealContext = {
   portalId: string
   owners: OwnerLookup
   pipelines: PipelineLookup
-  companyNames: Map<string, string>
-  contactNames: Map<string, string>
 }
 
 export function dealToChange(
@@ -73,7 +71,10 @@ export function dealToChange(
   ctx: DealContext
 ) {
   const owner = ownerName(ctx.owners, deal.hubspot_owner_id)
-  const dealType = DEAL_TYPE_LABELS[deal.dealtype ?? ""]
+  const dealTypeValue = deal.dealtype?.trim()
+  const dealType = dealTypeValue
+    ? DEAL_TYPE_LABELS[dealTypeValue] ?? dealTypeValue
+    : null
   const amount = deal.amount ? Number(deal.amount) : null
   const forecastAmount = deal.hs_forecast_amount
     ? Number(deal.hs_forecast_amount)
@@ -83,10 +84,8 @@ export function dealToChange(
   const stageName = ctx.pipelines.stageName(deal.dealstage ?? "")
   const pipelineName = ctx.pipelines.pipelineName(deal.pipeline ?? "")
 
-  const companyId = associations["companies"]?.[0]
-  const contactId = associations["contacts"]?.[0]
-  const companyName = companyId ? ctx.companyNames.get(companyId) ?? null : null
-  const contactName = contactId ? ctx.contactNames.get(contactId) ?? null : null
+  const companyIds = [...new Set(associations["companies"] ?? [])]
+  const contactIds = [...new Set(associations["contacts"] ?? [])]
 
   return {
     type: "upsert" as const,
@@ -112,12 +111,8 @@ export function dealToChange(
           ? { Pipeline: Builder.richText(deal.pipeline) }
           : {}),
       ...(owner ? { Owner: Builder.richText(owner) } : {}),
-      ...(companyName
-        ? { Company: Builder.richText(companyName) }
-        : {}),
-      ...(contactName
-        ? { Contact: Builder.richText(contactName) }
-        : {}),
+      Company: companyIds.map((companyId) => Builder.relation(companyId)),
+      Contact: contactIds.map((contactId) => Builder.relation(contactId)),
       ...(forecastAmount != null && !isNaN(forecastAmount)
         ? { "Forecast Amount": Builder.number(forecastAmount) }
         : {}),
@@ -125,9 +120,7 @@ export function dealToChange(
         ? { "Forecast Category": Builder.select(deal.hs_forecast_category) }
         : {}),
       "Closed Won": Builder.checkbox(closedWon),
-      ...(dealType
-        ? { "Deal Type": Builder.select(dealType) }
-        : {}),
+      ...(dealType ? { "Deal Type": Builder.select(dealType) } : {}),
       Updated: Builder.date(dateOnly(updatedAt)),
       ...(deal.createdate
         ? { Created: Builder.date(dateOnly(deal.createdate)) }

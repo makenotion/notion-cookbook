@@ -21,13 +21,18 @@ export const contactSchema: Schema.Schema<typeof PRIMARY_KEY> = {
       { name: "Opportunity" },
       { name: "Customer" },
       { name: "Evangelist" },
+      { name: "Other" },
     ]),
 
     "Lead Status": Schema.select([
       { name: "New" },
       { name: "Open" },
       { name: "In Progress" },
+      { name: "Open Deal" },
       { name: "Unqualified" },
+      { name: "Attempted to Contact" },
+      { name: "Connected" },
+      { name: "Bad Timing" },
     ]),
 
     Email: Schema.email(),
@@ -40,7 +45,7 @@ export const contactSchema: Schema.Schema<typeof PRIMARY_KEY> = {
 
     Owner: Schema.richText(),
 
-    Phone: Schema.richText(),
+    Phone: Schema.phoneNumber(),
 
     "Associated Deals": Schema.number(),
 
@@ -64,13 +69,18 @@ const LIFECYCLE_LABELS: Record<string, string> = {
   opportunity: "Opportunity",
   customer: "Customer",
   evangelist: "Evangelist",
+  other: "Other",
 }
 
 const LEAD_STATUS_LABELS: Record<string, string> = {
   NEW: "New",
   OPEN: "Open",
   IN_PROGRESS: "In Progress",
+  OPEN_DEAL: "Open Deal",
   UNQUALIFIED: "Unqualified",
+  ATTEMPTED_TO_CONTACT: "Attempted to Contact",
+  CONNECTED: "Connected",
+  BAD_TIMING: "Bad Timing",
 }
 
 function contactName(contact: HubSpotContact): string {
@@ -85,8 +95,14 @@ export function contactToChange(
   portalId: string,
   owners: OwnerLookup
 ) {
-  const lifecycle = LIFECYCLE_LABELS[contact.lifecyclestage ?? ""]
-  const leadStatus = LEAD_STATUS_LABELS[contact.hs_lead_status ?? ""]
+  const lifecycleValue = contact.lifecyclestage?.trim()
+  const leadStatusValue = contact.hs_lead_status?.trim()
+  const lifecycle = lifecycleValue
+    ? LIFECYCLE_LABELS[lifecycleValue] ?? lifecycleValue
+    : null
+  const leadStatus = leadStatusValue
+    ? LEAD_STATUS_LABELS[leadStatusValue] ?? leadStatusValue
+    : null
   const owner = ownerName(owners, contact.hubspot_owner_id)
   const numDeals = contact.num_associated_deals
     ? Number(contact.num_associated_deals)
@@ -101,28 +117,22 @@ export function contactToChange(
     upstreamUpdatedAt: updatedAt,
     properties: {
       Name: Builder.title(contactName(contact)),
-      ...(lifecycle
-        ? { "Lifecycle Stage": Builder.select(lifecycle) }
-        : {}),
-      ...(leadStatus
-        ? { "Lead Status": Builder.select(leadStatus) }
-        : {}),
-      ...(contact.email
-        ? { Email: Builder.email(contact.email) }
-        : {}),
+      ...(lifecycle ? { "Lifecycle Stage": Builder.select(lifecycle) } : {}),
+      ...(leadStatus ? { "Lead Status": Builder.select(leadStatus) } : {}),
+      ...(contact.email ? { Email: Builder.email(contact.email) } : {}),
       ...(contact.company
         ? { Company: Builder.richText(contact.company) }
         : {}),
-      ...(contact.hs_last_sales_activity_timestamp
-        ? { "Last Activity": Builder.date(dateOnly(contact.hs_last_sales_activity_timestamp)) }
+      ...(contact.notes_last_updated
+        ? {
+            "Last Activity": Builder.date(dateOnly(contact.notes_last_updated)),
+          }
         : {}),
       ...(contact.jobtitle
         ? { "Job Title": Builder.richText(contact.jobtitle) }
         : {}),
       ...(owner ? { Owner: Builder.richText(owner) } : {}),
-      ...(contact.phone
-        ? { Phone: Builder.richText(contact.phone) }
-        : {}),
+      ...(contact.phone ? { Phone: Builder.phoneNumber(contact.phone) } : {}),
       ...(numDeals != null && !isNaN(numDeals)
         ? { "Associated Deals": Builder.number(numDeals) }
         : {}),
