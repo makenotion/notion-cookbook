@@ -15,6 +15,7 @@ import {
   personDisplay,
   priorityLabel,
   projectStatusLabel,
+  resourcePageContent,
 } from "./helpers.js"
 
 export const INITIAL_TITLE = "Linear Projects"
@@ -115,7 +116,12 @@ export function projectToChange(project: LinearProject) {
     type: "upsert" as const,
     key: project.id,
     upstreamUpdatedAt,
-    pageContentMarkdown: longFormContent(project.content, project.description),
+    pageContentMarkdown: resourcePageContent({
+      overview: longFormContent(project.content, project.description),
+      overviewHeading: "Project overview",
+      resourceUrl: url ?? "",
+      latestUpdate: project.lastUpdate,
+    }),
     properties: {
       Name: Builder.title(project.name),
       ...(status ? { Status: Builder.select(status) } : {}),

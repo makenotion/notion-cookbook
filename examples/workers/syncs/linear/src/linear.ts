@@ -6,7 +6,11 @@ import { RateLimitError } from "@notionhq/workers"
 
 const API_URL = "https://api.linear.app/graphql"
 const PAGE_SIZE = 50
+// Initiative rows embed the first 50 contributing projects. A smaller outer
+// page keeps the worst-case query comfortably below Linear's complexity cap.
+const INITIATIVE_PAGE_SIZE = 20
 const MAX_NESTED_LABEL_REQUESTS_PER_PAGE = 20
+export const MAX_NESTED_INITIATIVE_PROJECT_REQUESTS_PER_PAGE = 20
 
 export type BeforeRequest = () => Promise<void>
 
@@ -32,8 +36,11 @@ export type LinearUser = {
 }
 
 export type LinearStatusUpdate = {
+  body: string
+  createdAt: string
   updatedAt: string
   url: string
+  user: LinearUser | null
 }
 
 export type LinearProjectStatus = {
@@ -109,15 +116,23 @@ export type LinearInitiative = {
   health: string | null
   lastUpdate: LinearStatusUpdate | null
   owner: LinearUser | null
-  priority: number | null
+  projects: LinearConnection<LinearInitiativeProject>
   targetDate: string | null
   startedAt: string | null
   completedAt: string | null
-  canceledAt: string | null
   createdAt: string
   updatedAt: string
   description: string | null
   content: string | null
+  archivedAt: string | null
+  trashed: boolean | null
+}
+
+export type LinearInitiativeProject = {
+  id: string
+  name: string
+  url: string
+  updatedAt: string
   archivedAt: string | null
   trashed: boolean | null
 }
@@ -371,8 +386,14 @@ const PROJECTS_QUERY = /* GraphQL */ `
         }
         health
         lastUpdate {
+          body
+          createdAt
           updatedAt
           url
+          user {
+            name
+            displayName
+          }
         }
         lead {
           name
@@ -635,7 +656,7 @@ export async function fetchIssuesPage(
 const INITIATIVES_QUERY = /* GraphQL */ `
   query Initiatives($after: String) {
     initiatives(
-      first: ${PAGE_SIZE}
+      first: ${INITIATIVE_PAGE_SIZE}
       after: $after
       orderBy: createdAt
       includeArchived: true
@@ -648,18 +669,41 @@ const INITIATIVES_QUERY = /* GraphQL */ `
         status
         health
         lastUpdate {
+          body
+          createdAt
           updatedAt
           url
+          user {
+            name
+            displayName
+          }
         }
         owner {
           name
           displayName
         }
-        priority
+        projects(
+          first: ${PAGE_SIZE}
+          orderBy: createdAt
+          includeArchived: true
+          includeSubInitiatives: true
+        ) {
+          nodes {
+            id
+            name
+            url
+            updatedAt
+            archivedAt
+            trashed
+          }
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
+        }
         targetDate
         startedAt
         completedAt
-        canceledAt
         createdAt
         updatedAt
         description
@@ -675,6 +719,149 @@ const INITIATIVES_QUERY = /* GraphQL */ `
   }
 `
 
+const INITIATIVE_PROJECTS_QUERY = /* GraphQL */ `
+  query InitiativeProjects($initiativeId: String!, $after: String!) {
+    initiative(id: $initiativeId) {
+      projects(
+        first: ${PAGE_SIZE}
+        after: $after
+        orderBy: createdAt
+        includeArchived: true
+        includeSubInitiatives: true
+      ) {
+        nodes {
+          id
+          name
+          url
+          updatedAt
+          archivedAt
+          trashed
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+  }
+`
+
+function assertInitiativeProjectsConnection(
+  projects: LinearConnection<LinearInitiativeProject>,
+  initiativeId: string
+): void {
+  if (!projects || !Array.isArray(projects.nodes) || !projects.pageInfo) {
+    throw new Error(
+      `Linear initiative ${initiativeId} has an invalid projects connection`
+    )
+  }
+  if (typeof projects.pageInfo.hasNextPage !== "boolean") {
+    throw new Error(
+      `Linear initiative ${initiativeId} projects response is missing hasNextPage`
+    )
+  }
+  if (projects.pageInfo.hasNextPage && !projects.pageInfo.endCursor) {
+    throw new Error(
+      `Linear initiative ${initiativeId} projects pagination is missing endCursor`
+    )
+  }
+}
+
+function dedupeInitiativeProjects(
+  projects: LinearInitiativeProject[]
+): LinearInitiativeProject[] {
+  const projectsById = new Map<string, LinearInitiativeProject>()
+  for (const project of projects) {
+    const existing = projectsById.get(project.id)
+    const projectUpdatedAt = Date.parse(project.updatedAt)
+    const existingUpdatedAt = existing
+      ? Date.parse(existing.updatedAt)
+      : Number.NaN
+    if (
+      !existing ||
+      (Number.isFinite(projectUpdatedAt) &&
+        (!Number.isFinite(existingUpdatedAt) ||
+          projectUpdatedAt > existingUpdatedAt)) ||
+      (projectUpdatedAt === existingUpdatedAt &&
+        Boolean(existing.trashed) &&
+        !project.trashed)
+    ) {
+      projectsById.set(project.id, project)
+    }
+  }
+  return [...projectsById.values()]
+}
+
+async function fetchAllInitiativeProjects(
+  initiative: LinearInitiative,
+  beforeRequest: BeforeRequest,
+  requestBudget: { remaining: number }
+): Promise<LinearInitiative> {
+  assertInitiativeProjectsConnection(initiative.projects, initiative.id)
+  if (!initiative.projects.pageInfo.hasNextPage) {
+    return {
+      ...initiative,
+      projects: {
+        ...initiative.projects,
+        nodes: dedupeInitiativeProjects(initiative.projects.nodes),
+      },
+    }
+  }
+
+  const projects = [...initiative.projects.nodes]
+  const seenCursors = new Set<string>()
+  let pageInfo = initiative.projects.pageInfo
+
+  while (pageInfo.hasNextPage) {
+    if (requestBudget.remaining <= 0) {
+      throw new Error(
+        `Linear initiative projects exceeded ${MAX_NESTED_INITIATIVE_PROJECT_REQUESTS_PER_PAGE} follow-up requests for one initiative page`
+      )
+    }
+
+    const after = pageInfo.endCursor
+    if (!after) {
+      throw new Error(
+        `Linear initiative ${initiative.id} projects pagination is missing endCursor`
+      )
+    }
+    if (seenCursors.has(after)) {
+      throw new Error(
+        `Linear initiative ${initiative.id} projects pagination repeated cursor`
+      )
+    }
+    seenCursors.add(after)
+    requestBudget.remaining -= 1
+
+    const data = await graphql<{
+      initiative: {
+        projects: LinearConnection<LinearInitiativeProject>
+      } | null
+    }>(
+      INITIATIVE_PROJECTS_QUERY,
+      { initiativeId: initiative.id, after },
+      beforeRequest
+    )
+    if (!data.initiative) {
+      throw new Error(
+        `Linear initiative ${initiative.id} disappeared while paginating projects`
+      )
+    }
+
+    assertInitiativeProjectsConnection(data.initiative.projects, initiative.id)
+    projects.push(...data.initiative.projects.nodes)
+    pageInfo = data.initiative.projects.pageInfo
+  }
+
+  return {
+    ...initiative,
+    projects: {
+      nodes: dedupeInitiativeProjects(projects),
+      pageInfo,
+    },
+  }
+}
+
 export async function fetchInitiativesPage(
   beforeRequest: BeforeRequest,
   after?: string
@@ -682,6 +869,20 @@ export async function fetchInitiativesPage(
   const data = await graphql<{
     initiatives: LinearConnection<LinearInitiative>
   }>(INITIATIVES_QUERY, after ? { after } : {}, beforeRequest)
+  const page = connectionToPage(data.initiatives, after, "initiatives")
+  const nestedRequestBudget = {
+    remaining: MAX_NESTED_INITIATIVE_PROJECT_REQUESTS_PER_PAGE,
+  }
+  const resources: LinearInitiative[] = []
+  for (const initiative of page.resources) {
+    resources.push(
+      await fetchAllInitiativeProjects(
+        initiative,
+        beforeRequest,
+        nestedRequestBudget
+      )
+    )
+  }
 
-  return connectionToPage(data.initiatives, after, "initiatives")
+  return { ...page, resources }
 }

@@ -7,6 +7,8 @@ import { afterEach, test } from "node:test"
 import { RateLimitError } from "@notionhq/workers"
 
 import {
+  MAX_PAGE_SECTION_CHARACTERS,
+  MAX_RENDERED_CONTRIBUTING_PROJECTS,
   cycleDisplay,
   dateOnly,
   dateTime,
@@ -17,12 +19,14 @@ import {
   personDisplay,
   priorityLabel,
   projectStatusLabel,
+  resourcePageContent,
   workflowCategoryLabel,
 } from "./src/helpers.js"
 import worker from "./src/index.js"
 import { initiativeToChange } from "./src/initiatives.js"
 import { issueToChange, issueToSyncChange } from "./src/issues.js"
 import {
+  MAX_NESTED_INITIATIVE_PROJECT_REQUESTS_PER_PAGE,
   fetchInitiativesPage,
   fetchIssuesPage,
   fetchProjectsPage,
@@ -31,6 +35,7 @@ import {
 } from "./src/linear.js"
 import type {
   LinearInitiative,
+  LinearInitiativeProject,
   LinearIssue,
   LinearProject,
 } from "./src/linear.js"
@@ -77,8 +82,11 @@ const fullProject: LinearProject = {
   status: { name: "Custom delivery name", type: "started" },
   health: "atRisk",
   lastUpdate: {
+    body: "Enterprise launch remains on track after the security review.",
+    createdAt: "2026-07-01T15:16:17.654Z",
     updatedAt: "2026-07-01T16:17:18.654Z",
     url: "https://linear.app/acme/project/launch-enterprise-42/updates/last",
+    user: { name: "Ada Lovelace", displayName: "Ada" },
   },
   lead: { name: "Ada Lovelace", displayName: "Ada" },
   priority: 2,
@@ -186,15 +194,53 @@ const fullInitiative: LinearInitiative = {
   status: "Active",
   health: "offTrack",
   lastUpdate: {
+    body: "The remaining enterprise blockers now have committed owners.",
+    createdAt: "2026-07-02T17:18:19.321Z",
     updatedAt: "2026-07-02T18:19:20.321Z",
     url: "https://linear.app/acme/initiative/enterprise-readiness-2026/updates/last",
+    user: { name: "Nan Yu", displayName: "Nan" },
   },
   owner: { name: "Katherine Johnson", displayName: "Katherine" },
-  priority: 3,
+  projects: {
+    nodes: [
+      {
+        id: "project-mobile",
+        name: "Mobile Reliability",
+        url: "https://linear.app/acme/project/mobile-reliability",
+        updatedAt: "2026-06-29T10:00:00Z",
+        archivedAt: null,
+        trashed: false,
+      },
+      {
+        id: "project-api",
+        name: "API Foundations",
+        url: "https://linear.app/acme/project/api-foundations",
+        updatedAt: "2026-06-28T10:00:00Z",
+        archivedAt: "2026-06-30T00:00:00Z",
+        trashed: false,
+      },
+      {
+        id: "project-api",
+        name: "Duplicate API Foundations",
+        url: "https://linear.app/acme/project/api-foundations",
+        updatedAt: "2026-06-28T10:00:00Z",
+        archivedAt: null,
+        trashed: false,
+      },
+      {
+        id: "project-trashed",
+        name: "Discarded experiment",
+        url: "https://linear.app/acme/project/discarded",
+        updatedAt: "2026-07-03T10:00:00Z",
+        archivedAt: null,
+        trashed: true,
+      },
+    ],
+    pageInfo: { hasNextPage: false, endCursor: null },
+  },
   targetDate: "2026-12-31",
   startedAt: "2026-01-15T11:12:13.456Z",
   completedAt: "2026-12-20T14:15:16.789Z",
-  canceledAt: "2026-12-21T10:11:12.345Z",
   createdAt: "2025-11-01T17:18:19.123Z",
   updatedAt: "2026-06-30T20:21:22.987Z",
   description: "Fallback initiative description",
@@ -212,11 +258,13 @@ const minimalInitiative: LinearInitiative = {
   health: null,
   lastUpdate: null,
   owner: null,
-  priority: null,
+  projects: {
+    nodes: [],
+    pageInfo: { hasNextPage: false, endCursor: null },
+  },
   targetDate: null,
   startedAt: null,
   completedAt: null,
-  canceledAt: null,
   createdAt: "2026-01-01T00:00:00Z",
   updatedAt: "2026-01-02T00:00:00Z",
   description: null,
@@ -293,11 +341,17 @@ test("worker manifest preserves databases, sync schedules, and shared pacing", (
           "Health",
           "Owner",
           "Initiative Link",
-          "Updated",
+          "Project Count",
         ],
       },
     ]
   )
+
+  const initiativeProperties =
+    worker.manifest.databases.find((database) => database.key === "initiatives")
+      ?.config.schema.properties ?? {}
+  assert.equal("Priority" in initiativeProperties, false)
+  assert.equal("Canceled" in initiativeProperties, false)
 
   type SyncManifestConfig = {
     databaseKey: string
@@ -422,6 +476,70 @@ test("content, person, cycle, and date helpers preserve useful values", () => {
   )
 })
 
+test("page content keeps Unicode update excerpts bounded without splitting characters", () => {
+  const rocket = "🚀"
+  const content = resourcePageContent({
+    overview: "",
+    overviewHeading: "Project overview",
+    resourceUrl: "https://linear.app/acme/project/unicode",
+    latestUpdate: {
+      body: rocket.repeat(MAX_PAGE_SECTION_CHARACTERS + 1),
+    },
+  })
+  const [heading, notice, excerpt] = content.split("\n\n")
+
+  assert.equal(heading, "## Latest update")
+  assert.equal(Array.from(excerpt ?? "").length, MAX_PAGE_SECTION_CHARACTERS)
+  assert.ok(
+    Array.from(excerpt ?? "").every((character) => character === rocket)
+  )
+  assert.match(notice ?? "", /shortened in Notion/)
+})
+
+test("truncated Markdown cannot swallow later page-content sections", () => {
+  const content = resourcePageContent({
+    overview: "The overview remains visible.",
+    overviewHeading: "Initiative overview",
+    resourceUrl: "https://linear.app/acme/initiative/safe-markdown",
+    latestUpdate: {
+      body: `\`\`\`ts\n${"const value = 1\n".repeat(MAX_PAGE_SECTION_CHARACTERS)}`,
+      url: "https://linear.app/acme/update/safe-markdown",
+    },
+    contributingProjects: [],
+  })
+
+  assert.match(content, /This latest update was shortened in Notion/)
+  assert.doesNotMatch(content, /```/)
+  assert.match(content, /## Contributing projects \(0\)/)
+  assert.match(content, /## Initiative overview/)
+  assert.match(content, /The overview remains visible\./)
+})
+
+test("page content bounds long contributing-project lists with an explicit link", () => {
+  const projects = Array.from(
+    { length: MAX_RENDERED_CONTRIBUTING_PROJECTS + 2 },
+    (_, index) => ({
+      id: `project-${index}`,
+      name: `Project ${String(index).padStart(3, "0")}`,
+      url: `https://linear.app/acme/project/${index}`,
+    })
+  )
+  const content = resourcePageContent({
+    overview: "",
+    overviewHeading: "Initiative overview",
+    resourceUrl: "https://linear.app/acme/initiative/roadmap",
+    contributingProjects: projects,
+  })
+
+  assert.match(content, /## Contributing projects \(102\)/)
+  assert.equal(
+    content.match(/^- \[Project /gm)?.length,
+    MAX_RENDERED_CONTRIBUTING_PROJECTS
+  )
+  assert.match(content, /…and 2 more/)
+  assert.match(content, /View all projects in Linear/)
+})
+
 test("retry helpers handle delta seconds, dates, and exhausted Linear budgets", () => {
   const now = Date.parse("2026-06-30T12:00:00Z")
   assert.equal(parseRetryAfterSeconds("3.2", now), 4)
@@ -440,7 +558,7 @@ test("retry helpers handle delta seconds, dates, and exhausted Linear budgets", 
   assert.equal(rateLimitRetryAfterSeconds(new Headers(), now), undefined)
 })
 
-test("project transform emits a complete strategic record", () => {
+test("project transform leads with its latest update and retains the overview", () => {
   const change = projectToChange(fullProject)
 
   assert.equal(change.type, "upsert")
@@ -450,7 +568,19 @@ test("project transform emits a complete strategic record", () => {
     "the immutable Linear UUID is the key"
   )
   assert.equal(change.upstreamUpdatedAt, fullProject.lastUpdate?.updatedAt)
-  assert.equal(change.pageContentMarkdown, fullProject.content)
+  assert.match(change.pageContentMarkdown, /^## Latest update/)
+  assert.match(change.pageContentMarkdown, /Updated by Ada · 2026-07-01/)
+  assert.match(
+    change.pageContentMarkdown,
+    /Enterprise launch remains on track after the security review\./
+  )
+  assert.match(change.pageContentMarkdown, /Open update in Linear/)
+  assert.match(change.pageContentMarkdown, /## Project overview/)
+  assert.match(change.pageContentMarkdown, /Full project brief\./)
+  assert.ok(
+    change.pageContentMarkdown.indexOf("## Latest update") <
+      change.pageContentMarkdown.indexOf("## Project overview")
+  )
   assertPropertyContains(change.properties.Name, fullProject.name)
   assertPropertyContains(change.properties.Status, "Custom delivery name")
   assertPropertyContains(change.properties["Status Category"], "Started")
@@ -638,7 +768,7 @@ test("cursor state rejects missing, immediate, and longer repeated cursors", () 
   )
 })
 
-test("initiative transform emits status, health, slug, content, and timestamps", () => {
+test("initiative transform surfaces its update and contributing projects", () => {
   const change = initiativeToChange(fullInitiative)
 
   assert.equal(change.type, "upsert")
@@ -647,8 +777,29 @@ test("initiative transform emits status, health, slug, content, and timestamps",
     fullInitiative.id,
     "the immutable Linear UUID is the key"
   )
-  assert.equal(change.upstreamUpdatedAt, fullInitiative.lastUpdate?.updatedAt)
-  assert.equal(change.pageContentMarkdown, fullInitiative.content)
+  assert.equal(
+    "upstreamUpdatedAt" in change,
+    false,
+    "derived project membership is always refreshed by the hourly replacement"
+  )
+  assert.match(change.pageContentMarkdown, /^## Latest update/)
+  assert.match(change.pageContentMarkdown, /Updated by Nan · 2026-07-02/)
+  assert.match(
+    change.pageContentMarkdown,
+    /The remaining enterprise blockers now have committed owners\./
+  )
+  assert.match(change.pageContentMarkdown, /## Contributing projects \(2\)/)
+  assert.match(change.pageContentMarkdown, /API Foundations.*\(archived\)/)
+  assert.match(change.pageContentMarkdown, /Mobile Reliability/)
+  assert.doesNotMatch(change.pageContentMarkdown, /Duplicate API Foundations/)
+  assert.doesNotMatch(change.pageContentMarkdown, /Discarded experiment/)
+  assert.match(change.pageContentMarkdown, /## Initiative overview/)
+  assert.ok(
+    change.pageContentMarkdown.indexOf("## Latest update") <
+      change.pageContentMarkdown.indexOf("## Contributing projects") &&
+      change.pageContentMarkdown.indexOf("## Contributing projects") <
+        change.pageContentMarkdown.indexOf("## Initiative overview")
+  )
   assertPropertyContains(change.properties.Name, fullInitiative.name)
   assertPropertyContains(change.properties.Status, "Active")
   assertPropertyContains(change.properties.Health, "Off Track")
@@ -664,10 +815,9 @@ test("initiative transform emits status, health, slug, content, and timestamps",
     change.properties["Last Update Link"],
     fullInitiative.lastUpdate?.url ?? ""
   )
-  assertPropertyContains(change.properties.Priority, "Medium")
+  assertPropertyContains(change.properties["Project Count"], "2")
   assertPropertyContains(change.properties.Started, "11:12")
   assertPropertyContains(change.properties.Completed, "14:15")
-  assertPropertyContains(change.properties.Canceled, "10:11")
   assertPropertyContains(change.properties["Target Date"], "2026-12-31")
   assertPropertyContains(change.properties["Slug ID"], fullInitiative.slugId)
   assertPropertyContains(
@@ -681,18 +831,21 @@ test("initiative transform omits absent optional values", () => {
   const change = initiativeToChange(minimalInitiative)
 
   assert.equal(change.key, minimalInitiative.id)
-  assert.equal(change.upstreamUpdatedAt, minimalInitiative.updatedAt)
-  assert.equal(change.pageContentMarkdown, "")
+  assert.equal("upstreamUpdatedAt" in change, false)
+  assert.match(change.pageContentMarkdown, /^## Contributing projects \(0\)/)
+  assert.match(
+    change.pageContentMarkdown,
+    /No contributing projects visible to this Linear API key\./
+  )
   assert.equal(change.properties.Status, undefined)
   assert.equal(change.properties.Health, undefined)
   assert.equal(change.properties.Owner, undefined)
-  assert.equal(change.properties.Priority, undefined)
+  assertPropertyContains(change.properties["Project Count"], "0")
   assert.equal(change.properties["Last Update At"], undefined)
   assert.equal(change.properties["Last Update Link"], undefined)
   assert.equal(change.properties["Target Date"], undefined)
   assert.equal(change.properties.Started, undefined)
   assert.equal(change.properties.Completed, undefined)
-  assert.equal(change.properties.Canceled, undefined)
   assert.equal(change.properties["Slug ID"], undefined)
   assertPropertyContains(change.properties.Archived, "No")
 })
@@ -757,6 +910,36 @@ function initiativeConnection(
   })
 }
 
+function initiativeProjectsConnection(
+  nodes: LinearInitiativeProject[],
+  hasNextPage: boolean,
+  endCursor: string | null
+): Response {
+  return Response.json({
+    data: {
+      initiative: {
+        projects: { nodes, pageInfo: { hasNextPage, endCursor } },
+      },
+    },
+  })
+}
+
+function initiativeProject(
+  id: string,
+  name: string,
+  overrides: Partial<LinearInitiativeProject> = {}
+): LinearInitiativeProject {
+  return {
+    id,
+    name,
+    url: `https://linear.app/acme/project/${id}`,
+    updatedAt: "2026-06-30T00:00:00Z",
+    archivedAt: null,
+    trashed: false,
+    ...overrides,
+  }
+}
+
 function issueConnection(
   nodes: LinearIssue[],
   hasNextPage: boolean,
@@ -786,8 +969,13 @@ test("GraphQL client uses the endpoint, POST body, and direct API-key authorizat
   assert.equal(calls[0]?.accept, "application/json")
   assert.equal(calls[0]?.contentType, "application/json")
   assert.equal(calls[0]?.redirect, "error")
-  assert.match(calls[0]?.request.query ?? "", /query Projects/)
-  assert.match(calls[0]?.request.query ?? "", /orderBy: createdAt/)
+  const projectQuery = calls[0]?.request.query ?? ""
+  assert.match(projectQuery, /query Projects/)
+  assert.match(projectQuery, /orderBy: createdAt/)
+  assert.match(
+    projectQuery,
+    /lastUpdate\s*{[\s\S]*?body[\s\S]*?createdAt[\s\S]*?updatedAt[\s\S]*?url[\s\S]*?user\s*{[\s\S]*?name[\s\S]*?displayName/
+  )
   assert.deepEqual(calls[0]?.request.variables, {})
 })
 
@@ -825,11 +1013,13 @@ test("project and initiative connections expose durable cursor pages", async () 
     hasMore: false,
     nextCursor: undefined,
   })
-  assert.deepEqual(firstInitiatives, {
-    resources: [fullInitiative],
-    hasMore: true,
-    nextCursor: "initiative-page-2",
-  })
+  assert.equal(firstInitiatives.resources[0]?.id, fullInitiative.id)
+  assert.deepEqual(
+    firstInitiatives.resources[0]?.projects.nodes.map((project) => project.id),
+    ["project-mobile", "project-api", "project-trashed"]
+  )
+  assert.equal(firstInitiatives.hasMore, true)
+  assert.equal(firstInitiatives.nextCursor, "initiative-page-2")
   assert.deepEqual(finalInitiatives, {
     resources: [minimalInitiative],
     hasMore: false,
@@ -840,7 +1030,160 @@ test("project and initiative connections expose durable cursor pages", async () 
     [{}, { after: "project-page-2" }, {}, { after: "initiative-page-2" }]
   )
   assert.match(calls[0]?.request.query ?? "", /orderBy: createdAt/)
-  assert.match(calls[2]?.request.query ?? "", /orderBy: createdAt/)
+  const initiativeQuery = calls[2]?.request.query ?? ""
+  assert.match(initiativeQuery, /orderBy: createdAt/)
+  assert.match(initiativeQuery, /initiatives\([\s\S]*?first: 20/)
+  assert.match(
+    initiativeQuery,
+    /lastUpdate\s*{[\s\S]*?body[\s\S]*?user\s*{[\s\S]*?name[\s\S]*?displayName/
+  )
+  assert.match(
+    initiativeQuery,
+    /projects\([\s\S]*?first: 50[\s\S]*?includeArchived: true[\s\S]*?includeSubInitiatives: true/
+  )
+  assert.doesNotMatch(initiativeQuery, /\bpriority\b/)
+  assert.doesNotMatch(initiativeQuery, /\bcanceledAt\b/)
+})
+
+test("initiative projects paginate completely, dedupe by ID, and pace every request", async () => {
+  process.env.LINEAR_API_KEY = "test-key"
+  const calls: FetchCall[] = []
+  let pacingCount = 0
+  const alpha = initiativeProject("alpha", "Alpha")
+  const beta = initiativeProject("beta", "Beta")
+  const gamma = initiativeProject("gamma", "Gamma")
+  const initiative: LinearInitiative = {
+    ...minimalInitiative,
+    projects: {
+      nodes: [alpha],
+      pageInfo: { hasNextPage: true, endCursor: "project-page-2" },
+    },
+  }
+
+  installQueuedGraphQLFetch(
+    [
+      initiativeConnection([initiative], false, null),
+      initiativeProjectsConnection(
+        [beta, { ...alpha, name: "Duplicate Alpha" }],
+        true,
+        "project-page-3"
+      ),
+      initiativeProjectsConnection([gamma], false, null),
+    ],
+    calls
+  )
+
+  const page = await fetchInitiativesPage(async () => {
+    pacingCount++
+  })
+
+  assert.equal(pacingCount, 3)
+  assert.deepEqual(
+    page.resources[0]?.projects.nodes.map((project) => project.id),
+    ["alpha", "beta", "gamma"]
+  )
+  assert.deepEqual(
+    calls.map((call) => call.request.variables),
+    [
+      {},
+      { initiativeId: initiative.id, after: "project-page-2" },
+      { initiativeId: initiative.id, after: "project-page-3" },
+    ]
+  )
+  assert.match(calls[1]?.request.query ?? "", /query InitiativeProjects/)
+  assert.match(
+    calls[1]?.request.query ?? "",
+    /includeArchived: true[\s\S]*includeSubInitiatives: true/
+  )
+})
+
+test("initiative project pagination rejects missing and repeated cursors", async (t) => {
+  process.env.LINEAR_API_KEY = "test-key"
+  const project = initiativeProject("alpha", "Alpha")
+
+  await t.test("missing cursor", async () => {
+    process.env.LINEAR_API_KEY = "test-key"
+    const initiative: LinearInitiative = {
+      ...minimalInitiative,
+      projects: {
+        nodes: [project],
+        pageInfo: { hasNextPage: true, endCursor: null },
+      },
+    }
+    installQueuedGraphQLFetch(
+      [initiativeConnection([initiative], false, null)],
+      []
+    )
+
+    await assert.rejects(
+      () => fetchInitiativesPage(noPacing),
+      /projects pagination is missing endCursor/
+    )
+  })
+
+  await t.test("repeated cursor", async () => {
+    process.env.LINEAR_API_KEY = "test-key"
+    let pacingCount = 0
+    const initiative: LinearInitiative = {
+      ...minimalInitiative,
+      projects: {
+        nodes: [project],
+        pageInfo: { hasNextPage: true, endCursor: "project-page-2" },
+      },
+    }
+    installQueuedGraphQLFetch(
+      [
+        initiativeConnection([initiative], false, null),
+        initiativeProjectsConnection([], true, "project-page-2"),
+      ],
+      []
+    )
+
+    await assert.rejects(
+      () =>
+        fetchInitiativesPage(async () => {
+          pacingCount++
+        }),
+      /projects pagination repeated cursor/
+    )
+    assert.equal(pacingCount, 2)
+  })
+})
+
+test("nested initiative project safety bound rejects incomplete snapshots", async () => {
+  process.env.LINEAR_API_KEY = "test-key"
+  let pacingCount = 0
+  const initiative: LinearInitiative = {
+    ...minimalInitiative,
+    projects: {
+      nodes: [],
+      pageInfo: { hasNextPage: true, endCursor: "project-page-1" },
+    },
+  }
+  const followUpPages = Array.from(
+    { length: MAX_NESTED_INITIATIVE_PROJECT_REQUESTS_PER_PAGE },
+    (_, index) =>
+      initiativeProjectsConnection(
+        [initiativeProject(`project-${index + 1}`, `Project ${index + 1}`)],
+        true,
+        `project-page-${index + 2}`
+      )
+  )
+  installQueuedGraphQLFetch(
+    [initiativeConnection([initiative], false, null), ...followUpPages],
+    []
+  )
+
+  await assert.rejects(
+    () =>
+      fetchInitiativesPage(async () => {
+        pacingCount++
+      }),
+    new RegExp(
+      `exceeded ${MAX_NESTED_INITIATIVE_PROJECT_REQUESTS_PER_PAGE} follow-up requests`
+    )
+  )
+  assert.equal(pacingCount, 1 + MAX_NESTED_INITIATIVE_PROJECT_REQUESTS_PER_PAGE)
 })
 
 test("issue requests pin the incremental updatedAt window in GraphQL variables", async () => {

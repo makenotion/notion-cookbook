@@ -24,6 +24,9 @@ const PRIORITY_LABELS: Record<number, string> = {
   4: "Low",
 }
 
+export const MAX_PAGE_SECTION_CHARACTERS = 20_000
+export const MAX_RENDERED_CONTRIBUTING_PROJECTS = 100
+
 function normalizedKey(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "")
 }
@@ -129,17 +132,24 @@ export function dateTime(value: string | null | undefined): string | null {
 /** Include related status-update edits in the record freshness watermark. */
 export function latestTimestamp(
   primary: string,
-  candidate: string | null | undefined
+  ...candidates: Array<string | null | undefined>
 ): string {
-  const candidateValue = candidate?.trim()
-  if (!candidateValue) return primary
+  let latest = primary
+  let latestTime = Date.parse(primary)
 
-  const primaryTime = Date.parse(primary)
-  const candidateTime = Date.parse(candidateValue)
-  if (!Number.isFinite(candidateTime)) return primary
-  return !Number.isFinite(primaryTime) || candidateTime > primaryTime
-    ? candidateValue
-    : primary
+  for (const candidate of candidates) {
+    const candidateValue = candidate?.trim()
+    if (!candidateValue) continue
+
+    const candidateTime = Date.parse(candidateValue)
+    if (!Number.isFinite(candidateTime)) continue
+    if (!Number.isFinite(latestTime) || candidateTime > latestTime) {
+      latest = candidateValue
+      latestTime = candidateTime
+    }
+  }
+
+  return latest
 }
 
 export type LinearPersonDisplay = {
@@ -158,4 +168,158 @@ export function personDisplay(
     person?.email?.trim() ||
     null
   )
+}
+
+export type LinearStatusUpdateContent = {
+  body?: string | null
+  createdAt?: string | null
+  url?: string | null
+  user?: LinearPersonDisplay | null
+}
+
+export type LinearContributingProjectContent = {
+  id: string
+  name: string
+  url?: string | null
+  archivedAt?: string | null
+  trashed?: boolean | null
+}
+
+function escapeMarkdownText(value: string): string {
+  return value.replace(/([\\`*_[\]<>])/g, "\\$1")
+}
+
+function escapeMarkdownExcerpt(value: string): string {
+  return value.replace(/([\\`*_[\]{}()#+\-.!>|<>])/g, "\\$1")
+}
+
+function truncateMarkdownSection(
+  value: string,
+  fullContentUrl: string | null | undefined,
+  sectionLabel: string
+): string {
+  const content = value.trim()
+  const characters = Array.from(content)
+  if (characters.length <= MAX_PAGE_SECTION_CHARACTERS) return content
+
+  const initialExcerpt = characters
+    .slice(0, MAX_PAGE_SECTION_CHARACTERS)
+    .join("")
+  const earliestPreferredBreak = Math.floor(initialExcerpt.length * 0.6)
+  const breakCandidates = [
+    initialExcerpt.lastIndexOf("\n\n"),
+    initialExcerpt.lastIndexOf("\n"),
+    initialExcerpt.lastIndexOf(" "),
+  ]
+  const preferredBreak = breakCandidates.find(
+    (index) => index >= earliestPreferredBreak
+  )
+  const excerpt = initialExcerpt
+    .slice(0, preferredBreak ?? initialExcerpt.length)
+    .trimEnd()
+  const url = fullContentUrl?.trim()
+  const destination = url
+    ? ` [Read the full ${sectionLabel} in Linear](${url}).`
+    : " Open the source record in Linear to read the full text."
+
+  return `> This ${sectionLabel} was shortened in Notion.${destination}\n\n${escapeMarkdownExcerpt(excerpt)}`
+}
+
+function latestUpdateSection(
+  update: LinearStatusUpdateContent | null | undefined
+): string | null {
+  if (!update) return null
+
+  const author = personDisplay(update.user)
+  const postedOn = dateOnly(update.createdAt)
+  const url = update.url?.trim()
+  const metadata = [
+    author ? `Updated by ${escapeMarkdownText(author)}` : null,
+    postedOn,
+    url ? `[Open update in Linear](${url})` : null,
+  ].filter((value): value is string => Boolean(value))
+  const body = truncateMarkdownSection(update.body ?? "", url, "latest update")
+  const parts = [
+    "## Latest update",
+    metadata.length > 0 ? `_${metadata.join(" · ")}_` : null,
+    body || null,
+  ].filter((value): value is string => Boolean(value))
+
+  return parts.join("\n\n")
+}
+
+export function uniqueVisibleProjects<
+  T extends LinearContributingProjectContent,
+>(projects: T[]): T[] {
+  const seenIds = new Set<string>()
+  return projects.filter((project) => {
+    if (project.trashed || seenIds.has(project.id)) return false
+    seenIds.add(project.id)
+    return true
+  })
+}
+
+function contributingProjectsSection(
+  projects: LinearContributingProjectContent[],
+  initiativeUrl: string
+): string | null {
+  if (projects.length === 0) {
+    return "## Contributing projects (0)\n\nNo contributing projects visible to this Linear API key."
+  }
+
+  const sortedProjects = [...projects].sort(
+    (left, right) =>
+      left.name.localeCompare(right.name) || left.id.localeCompare(right.id)
+  )
+  const renderedProjects = sortedProjects.slice(
+    0,
+    MAX_RENDERED_CONTRIBUTING_PROJECTS
+  )
+  const bullets = renderedProjects.map((project) => {
+    const name = escapeMarkdownText(project.name.trim() || "Untitled project")
+    const url = project.url?.trim()
+    const label = url ? `[${name}](${url})` : name
+    return `- ${label}${project.archivedAt ? " _(archived)_" : ""}`
+  })
+  const remaining = sortedProjects.length - renderedProjects.length
+  if (remaining > 0) {
+    const url = initiativeUrl.trim()
+    const suffix = url
+      ? `[View all projects in Linear](${url}).`
+      : "Open the Initiative in Linear to view them."
+    bullets.push(`- _…and ${remaining} more. ${suffix}_`)
+  }
+
+  return `## Contributing projects (${projects.length})\n\n${bullets.join("\n")}`
+}
+
+export function resourcePageContent(options: {
+  overview: string
+  overviewHeading: "Project overview" | "Initiative overview"
+  resourceUrl: string
+  latestUpdate?: LinearStatusUpdateContent | null
+  contributingProjects?: LinearContributingProjectContent[]
+}): string {
+  const sections: string[] = []
+  const update = latestUpdateSection(options.latestUpdate)
+  if (update) sections.push(update)
+
+  if (options.contributingProjects) {
+    const projects = contributingProjectsSection(
+      options.contributingProjects,
+      options.resourceUrl
+    )
+    if (projects) sections.push(projects)
+  }
+
+  const overview = truncateMarkdownSection(
+    options.overview,
+    options.resourceUrl,
+    options.overviewHeading.toLowerCase()
+  )
+  if (overview) {
+    sections.push(`## ${options.overviewHeading}\n\n${overview}`)
+  }
+
+  return sections.join("\n\n")
 }

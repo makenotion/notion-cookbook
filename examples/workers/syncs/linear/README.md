@@ -54,12 +54,11 @@ different schedules, or are archived and deleted in a different order.
 | Slug ID           | `slugId`                               | richText |
 | Linear Project ID | `id`                                   | richText |
 
-Each project page body contains Linear's richer `content` field, falling back
-to `description` when no content is present. **Status** preserves the team's
-custom name, while **Status Category** provides a stable cross-project rollup.
-The latest status-update timestamp and link show how fresh the current health
-signal is without copying a potentially long update body into a table cell.
-Edits to that update also participate in the sync freshness watermark.
+Each project page body starts with the latest status-update narrative, author,
+date, and source link, followed by Linear's richer `content` field (or
+`description` fallback). **Status** preserves the team's custom name, while
+**Status Category** provides a stable cross-project rollup. Update edits also
+participate in the sync freshness watermark.
 
 **Linear Project ID**, the immutable UUID, is the primary key. **Slug ID**
 remains visible for recognition and cross-referencing but is not used for
@@ -108,27 +107,31 @@ teams, so it is not safe as a sync key.
 | Health               | `health`                      | select   |
 | Owner                | `owner.displayName` or `name` | richText |
 | Initiative Link      | `url`                         | url      |
-| Updated              | `updatedAt`                   | date     |
+| Project Count        | all contributing `projects`   | number   |
+| Target Date          | `targetDate`                  | date     |
 | Last Update At       | `lastUpdate.updatedAt`        | date     |
 | Last Update Link     | `lastUpdate.url`              | url      |
-| Priority             | `priority`                    | select   |
-| Target Date          | `targetDate`                  | date     |
+| Updated              | `updatedAt`                   | date     |
 | Started              | `startedAt`                   | date     |
 | Completed            | `completedAt`                 | date     |
-| Canceled             | `canceledAt`                  | date     |
 | Created              | `createdAt`                   | date     |
 | Archived             | whether `archivedAt` is set   | checkbox |
 | Slug ID              | `slugId`                      | richText |
 | Linear Initiative ID | `id`                          | richText |
 
-Each initiative page body contains `content`, falling back to `description`.
+Each initiative page body starts with its latest update narrative and then
+lists the projects contributing directly or through sub-initiatives, followed
+by the Initiative overview. **Project Count** is exact for projects visible to
+the API key and includes inherited and archived projects. The body renders up
+to 100 alphabetized project links and directs readers to Linear when more
+exist. Archived projects are annotated, while trashed projects are excluded.
+
 **Linear Initiative ID**, the immutable UUID, is the primary key, while
 **Slug ID** is retained as the readable identifier.
 
-The full project and initiative update bodies are intentionally omitted from
-the base example: they can contain long Markdown, authenticated assets, and
-mentions. If your audience needs them, append `lastUpdate.body` to page content
-with an explicit asset and truncation policy.
+Latest-update and overview source-text excerpts are each limited to 20,000
+characters. When text is shortened, the page shows an explicit link to its
+complete version in Linear rather than truncating silently.
 
 Initiatives are also subject to the authenticated user's Linear plan and
 permissions. If the API reports that the feature is unavailable, the
@@ -163,16 +166,25 @@ src/
    stable `createdAt` order. The replacement run compares the complete key set
    and removes hard-deleted issues that incremental polling cannot discover.
 4. **Initiatives** use a cursor-paginated replacement sweep every hour in
-   stable `createdAt` order.
+   stable `createdAt` order. Their rows intentionally refresh each sweep
+   because contributing-project membership is derived data without a safe
+   monotonic timestamp for removals.
 5. All top-level collections use Linear's Relay-style GraphQL pagination with
-   `first: 50`, `after`, `pageInfo.hasNextPage`, and `pageInfo.endCursor`. The
-   client rejects a missing cursor, and persisted cursor history detects both
-   immediate repeats and longer cursor cycles instead of looping forever.
+   `after`, `pageInfo.hasNextPage`, and `pageInfo.endCursor`. Projects and
+   Issues request 50 records per page; Initiatives request 20 to leave
+   headroom in Linear's query-complexity budget for their nested project
+   summaries. The client rejects a missing cursor, and persisted cursor
+   history detects both immediate repeats and longer cursor cycles instead of
+   looping forever.
 6. Issue labels are a nested connection. The first 50 arrive with the issue;
    only issues with more labels make follow-up GraphQL requests. Those pages
    share the same pacing and cursor safeguards, and duplicate label names are
    removed. A top-level issue page may make at most 20 label follow-up requests;
    exceeding the bound fails the page instead of committing truncated labels.
+7. Initiative projects are also independently cursor-paginated, including
+   projects inherited through sub-initiatives. Their shared 20-request bound
+   fails the Initiative page instead of returning a false count or incomplete
+   project list.
 
 All list queries pass `includeArchived: true`. Archived resources therefore
 remain available for history and are marked with the **Archived** checkbox.
@@ -192,23 +204,25 @@ issue no longer appears in the full collection.
 - **Unassigned work:** filter Assignee empty and Workflow Category not Completed
   or Canceled; sort by Priority.
 - **Leadership initiatives:** filter Archived off, group by Health, and sort by
-  Priority and Target Date.
+  Target Date. Use Project Count to find strategic goals with no associated
+  projects visible to the API key.
 - **History:** filter Archived on in any database rather than mixing historical
   records into its default active view.
 
 ### Rate limits and query complexity
 
-Every GraphQL request from all four syncs, including follow-up label pages,
-shares one pacer set to **2,000 requests per hour**. Linear's current API-key
-request-limit table lists 2,500 requests per authenticated user per hour, so
-the pacer leaves meaningful headroom for incidental traffic. Multiple keys
-belonging to the same user share that quota.
+Every GraphQL request from all four syncs, including follow-up label and
+Initiative-project pages, shares one pacer set to **2,000 requests per hour**.
+Linear's current API-key request-limit table lists 2,500 requests per
+authenticated user per hour, so the pacer leaves meaningful headroom for
+incidental traffic. Multiple keys belonging to the same user share that quota.
 
 Linear also applies a separate hourly query-complexity budget and rejects an
 individual query above its maximum complexity. The example requests only the
-fields it maps, uses explicit 50-record connection limits, and paginates nested
-labels separately. This keeps connection multiplication predictable instead
-of hiding a large nested query in one request.
+fields it maps, uses explicit 20- or 50-record connection limits, and paginates
+nested labels and Initiative projects separately. This keeps connection
+multiplication predictable instead of hiding a large nested query in one
+request.
 
 The client treats both HTTP 429 responses and GraphQL `RATELIMITED` errors as
 rate limits. It reads `Retry-After` and Linear's request, endpoint, and
@@ -222,6 +236,10 @@ cannot silently become incomplete Notion pages.
 - A Linear workspace and a user who can read the resources to sync
 - A Linear personal API key
 - The `ntn` CLI installed and authenticated (`ntn login`)
+
+The key's Linear visibility defines what the worker can copy, including update
+narratives. Once synced, that content follows the destination Notion
+database's sharing permissions. Review both audiences before deployment.
 
 ### Getting a Linear personal API key
 
@@ -372,4 +390,6 @@ cross-database relation lifecycle.
 - [Linear GraphQL API — Rate limiting](https://linear.app/developers/rate-limiting)
 - [Linear documentation — Delete and archive issues](https://linear.app/docs/delete-archive-issues)
 - [Linear documentation — Initiatives](https://linear.app/docs/initiatives)
+- [Linear documentation — Initiative and Project updates](https://linear.app/docs/initiative-and-project-updates)
+- [Linear documentation — Sub-initiatives](https://linear.app/docs/sub-initiatives)
 - [Contributing guide](../../../../CONTRIBUTING.md)
