@@ -2,8 +2,16 @@
 // No GitHub connection is made — API assertions use mocked fetch responses.
 // Run: npm test  (or: npx tsx test.ts)
 
-import { RateLimitError } from "@notionhq/workers"
+import {
+  RateLimitError,
+  type UserManagedOAuthConfiguration,
+} from "@notionhq/workers"
 import worker from "./src/index.js"
+import {
+  createGitHubAccessTokenProvider,
+  GITHUB_OAUTH_CAPABILITY_KEY,
+  getGitHubAuthMode,
+} from "./src/auth.js"
 import { issueToChange } from "./src/issues.js"
 import { pullRequestToChange } from "./src/all-pull-requests.js"
 import {
@@ -12,13 +20,7 @@ import {
   ciStatus,
 } from "./src/open-pull-requests.js"
 import { dateOnly } from "./src/helpers.js"
-import {
-  fetchCheckRuns,
-  fetchCombinedStatus,
-  fetchIssuesPage,
-  fetchReviews,
-  getRepos,
-} from "./src/github.js"
+import { createGitHubClient, getRepos } from "./src/github.js"
 import type {
   GitHubCombinedStatus,
   GitHubIssue,
@@ -611,6 +613,159 @@ if (origRepos) process.env.GITHUB_REPOS = origRepos
 else delete process.env.GITHUB_REPOS
 
 // ---------------------------------------------------------------------------
+// GitHub authentication modes
+// ---------------------------------------------------------------------------
+
+type OAuthRegistration = {
+  key: string
+  config: UserManagedOAuthConfiguration
+}
+
+function fakeOAuthWorker(accessToken = "github-user-token") {
+  const registrations: OAuthRegistration[] = []
+  return {
+    registrations,
+    worker: {
+      oauth(key: string, config: UserManagedOAuthConfiguration) {
+        registrations.push({ key, config })
+        return { accessToken: async () => accessToken }
+      },
+    },
+  }
+}
+
+async function runAuthTests() {
+  console.log("GitHub authentication:")
+
+  ok(
+    "PAT remains the backwards-compatible default",
+    getGitHubAuthMode({}) === "pat"
+  )
+  ok(
+    "auth mode is normalized",
+    getGitHubAuthMode({ GITHUB_AUTH_MODE: " Installation " }) === "installation"
+  )
+
+  let invalidModeThrew = false
+  try {
+    getGitHubAuthMode({ GITHUB_AUTH_MODE: "oauth-app" })
+  } catch {
+    invalidModeThrew = true
+  }
+  ok("rejects an unknown auth mode", invalidModeThrew)
+
+  const patOAuth = fakeOAuthWorker()
+  const patToken = createGitHubAccessTokenProvider(patOAuth.worker, {
+    env: { GITHUB_AUTH_MODE: "pat", GITHUB_TOKEN: " github_pat_test " },
+  })
+  ok(
+    "PAT mode returns the configured token",
+    (await patToken(REPO)) === "github_pat_test"
+  )
+  ok(
+    "OAuth is registered even before app credentials exist",
+    patOAuth.registrations.length === 1 &&
+      patOAuth.registrations[0].config.clientId === "" &&
+      patOAuth.registrations[0].config.clientSecret === ""
+  )
+
+  const userOAuth = fakeOAuthWorker("github-user-token")
+  const userToken = createGitHubAccessTokenProvider(userOAuth.worker, {
+    env: {
+      GITHUB_AUTH_MODE: "user",
+      GITHUB_APP_CLIENT_ID: "Iv1.client-id",
+      GITHUB_APP_CLIENT_SECRET: "client-secret",
+    },
+  })
+  const userRegistration = userOAuth.registrations[0]
+  ok(
+    "user mode reads the Workers-managed OAuth token",
+    (await userToken(REPO)) === "github-user-token"
+  )
+  ok(
+    "user mode registers GitHub App OAuth without legacy scopes",
+    userRegistration.key === GITHUB_OAUTH_CAPABILITY_KEY &&
+      userRegistration.config.clientId === "Iv1.client-id" &&
+      userRegistration.config.clientSecret === "client-secret" &&
+      userRegistration.config.scope === "" &&
+      userRegistration.config.authorizationEndpoint ===
+        "https://github.com/login/oauth/authorize" &&
+      userRegistration.config.tokenEndpoint ===
+        "https://github.com/login/oauth/access_token"
+  )
+
+  const privateKey = [
+    "-----BEGIN RSA PRIVATE KEY-----",
+    "test-key",
+    "-----END RSA PRIVATE KEY-----",
+  ].join("\n")
+  let installationOptions:
+    { appId: string; privateKey: string; installationId: number } | undefined
+  let installationFactoryCalls = 0
+  let installationTokenRequests = 0
+  const installationOAuth = fakeOAuthWorker()
+  const installationToken = createGitHubAccessTokenProvider(
+    installationOAuth.worker,
+    {
+      env: {
+        GITHUB_AUTH_MODE: "installation",
+        GITHUB_APP_CLIENT_ID: "Iv1.client-id",
+        GITHUB_APP_PRIVATE_KEY_BASE64:
+          Buffer.from(privateKey).toString("base64"),
+        GITHUB_APP_INSTALLATION_ID: "123456",
+      },
+      createInstallationToken: (options) => {
+        installationFactoryCalls++
+        installationOptions = options
+        return async () => {
+          installationTokenRequests++
+          return "github-installation-token"
+        }
+      },
+    }
+  )
+  ok(
+    "installation secrets stay lazy so the first deployment can succeed",
+    installationOptions === undefined
+  )
+  const firstInstallationToken = await installationToken(REPO)
+  const secondInstallationToken = await installationToken(REPO)
+  ok(
+    "installation mode returns app tokens from one reusable strategy",
+    firstInstallationToken === "github-installation-token" &&
+      secondInstallationToken === "github-installation-token" &&
+      installationFactoryCalls === 1 &&
+      installationTokenRequests === 2
+  )
+  ok(
+    "installation mode decodes and validates its app configuration",
+    installationOptions?.appId === "Iv1.client-id" &&
+      installationOptions.privateKey === privateKey &&
+      installationOptions.installationId === 123456
+  )
+
+  let invalidInstallationThrew = false
+  try {
+    const invalidInstallationToken = createGitHubAccessTokenProvider(
+      fakeOAuthWorker().worker,
+      {
+        env: {
+          GITHUB_AUTH_MODE: "installation",
+          GITHUB_APP_CLIENT_ID: "Iv1.client-id",
+          GITHUB_APP_PRIVATE_KEY_BASE64:
+            Buffer.from(privateKey).toString("base64"),
+          GITHUB_APP_INSTALLATION_ID: "not-an-id",
+        },
+      }
+    )
+    await invalidInstallationToken(REPO)
+  } catch {
+    invalidInstallationThrew = true
+  }
+  ok("rejects an invalid installation ID", invalidInstallationThrew)
+}
+
+// ---------------------------------------------------------------------------
 // API client and Worker contracts — mocked HTTP only
 // ---------------------------------------------------------------------------
 
@@ -651,6 +806,15 @@ async function runApiClientTests() {
       })
   )
 
+  const oauthCapability = worker.manifest.capabilities.find(
+    (capability) => capability._tag === "oauth"
+  )
+  ok(
+    "the GitHub user OAuth capability is available before credentials exist",
+    oauthCapability?.key === GITHUB_OAUTH_CAPABILITY_KEY &&
+      (oauthCapability.config as { scope?: string }).scope === ""
+  )
+
   const originalFetch = globalThis.fetch
   const originalToken = process.env.GITHUB_TOKEN
   const originalRepos = process.env.GITHUB_REPOS
@@ -661,6 +825,16 @@ async function runApiClientTests() {
   try {
     const requests: Request[] = []
     let waits = 0
+    const tokenRepos: string[] = []
+    const github = createGitHubClient({
+      beforeRequest: async () => {
+        waits++
+      },
+      getAccessToken: async (repo) => {
+        tokenRepos.push(repo)
+        return "github-provider-token"
+      },
+    })
     globalThis.fetch = (async (input, init) => {
       const request = new Request(input, init)
       requests.push(request)
@@ -678,9 +852,7 @@ async function runApiClientTests() {
       )
     }) as typeof fetch
 
-    const issuePage = await fetchIssuesPage(REPO, 1, async () => {
-      waits++
-    })
+    const issuePage = await github.fetchIssuesPage(REPO, 1)
     const issueRequest = requests[0]
     const issueUrl = new URL(issueRequest.url)
     ok(
@@ -693,12 +865,14 @@ async function runApiClientTests() {
     )
     ok(
       "requests use current GitHub headers",
-      issueRequest.headers.get("Authorization") === "Bearer github_pat_test" &&
+      issueRequest.headers.get("Authorization") ===
+        "Bearer github-provider-token" &&
         issueRequest.headers.get("Accept") === "application/vnd.github+json" &&
         issueRequest.headers.get("X-GitHub-Api-Version") === "2026-03-10" &&
         issueRequest.headers.get("User-Agent") ===
           "notion-cookbook-github-sync" &&
-        waits === 1
+        waits === 1 &&
+        tokenRepos[0] === REPO
     )
 
     const paginatedRequests: Request[] = []
@@ -724,9 +898,7 @@ async function runApiClientTests() {
       })
     }) as typeof fetch
 
-    const allReviews = await fetchReviews(REPO, 123, async () => {
-      waits++
-    })
+    const allReviews = await github.fetchReviews(REPO, 123)
     ok(
       "fetchReviews follows every next link",
       allReviews.length === 2 &&
@@ -763,9 +935,7 @@ async function runApiClientTests() {
       )
     }) as typeof fetch
 
-    const allCheckRuns = await fetchCheckRuns(REPO, "abc123", async () => {
-      waits++
-    })
+    const allCheckRuns = await github.fetchCheckRuns(REPO, "abc123")
     ok(
       "fetchCheckRuns follows every next link and paces each request",
       allCheckRuns.length === 2 && paginatedRequests.length === 2 && waits === 2
@@ -780,11 +950,7 @@ async function runApiClientTests() {
         }),
         { status: 200 }
       )) as typeof fetch
-    const combinedStatus = await fetchCombinedStatus(
-      REPO,
-      "abc123",
-      async () => {}
-    )
+    const combinedStatus = await github.fetchCombinedStatus(REPO, "abc123")
     ok(
       "fetchCombinedStatus returns the aggregate classic status",
       combinedStatus.state === "failure" && combinedStatus.total_count === 2
@@ -797,7 +963,7 @@ async function runApiClientTests() {
       })) as typeof fetch
     let rateLimitError: unknown
     try {
-      await fetchIssuesPage(REPO, 1, async () => {})
+      await github.fetchIssuesPage(REPO, 1)
     } catch (error) {
       rateLimitError = error
     }
@@ -813,7 +979,7 @@ async function runApiClientTests() {
       })) as typeof fetch
     let secondaryRateLimitError: unknown
     try {
-      await fetchIssuesPage(REPO, 1, async () => {})
+      await github.fetchIssuesPage(REPO, 1)
     } catch (error) {
       secondaryRateLimitError = error
     }
@@ -830,7 +996,7 @@ async function runApiClientTests() {
       })) as typeof fetch
     let missingResetError: unknown
     try {
-      await fetchIssuesPage(REPO, 1, async () => {})
+      await github.fetchIssuesPage(REPO, 1)
     } catch (error) {
       missingResetError = error
     }
@@ -847,7 +1013,7 @@ async function runApiClientTests() {
       })) as typeof fetch
     let permissionError: unknown
     try {
-      await fetchIssuesPage(REPO, 1, async () => {})
+      await github.fetchIssuesPage(REPO, 1)
     } catch (error) {
       permissionError = error
     }
@@ -928,7 +1094,8 @@ async function runApiClientTests() {
   }
 }
 
-runApiClientTests()
+runAuthTests()
+  .then(runApiClientTests)
   .then(() => {
     console.log(`\n${passed} passed, ${failed} failed`)
     if (failed > 0) process.exit(1)

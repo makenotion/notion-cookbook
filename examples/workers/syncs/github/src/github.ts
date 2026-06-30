@@ -1,4 +1,4 @@
-// GitHub REST API client. Handles authentication and paginated fetching
+// GitHub REST API client. Handles authenticated requests and pagination
 // for issues, pull requests, reviews, check runs, and commit statuses.
 //
 // To add a new resource (e.g. releases, actions runs):
@@ -8,11 +8,18 @@
 
 import { RateLimitError } from "@notionhq/workers"
 
+import type { GetAccessToken } from "./auth.js"
+
 const API_BASE_URL = "https://api.github.com"
 const API_VERSION = "2026-03-10"
 const PER_PAGE = 100
 
 export type BeforeRequest = () => Promise<void>
+
+export type GitHubClientOptions = {
+  beforeRequest: BeforeRequest
+  getAccessToken: GetAccessToken
+}
 
 function requireEnv(name: string): string {
   const value = process.env[name]?.trim()
@@ -60,6 +67,24 @@ export function getRepos(): string[] {
   }
 
   return repos
+}
+
+export function createGitHubClient(options: GitHubClientOptions) {
+  return {
+    fetchIssuesPage: (repo: string, page: number | undefined) =>
+      fetchIssuesPage(repo, page, options),
+    fetchPullRequestsPage: (
+      repo: string,
+      page: number | undefined,
+      state: string | undefined
+    ) => fetchPullRequestsPage(repo, page, state, options),
+    fetchReviews: (repo: string, prNumber: number) =>
+      fetchReviews(repo, prNumber, options),
+    fetchCheckRuns: (repo: string, sha: string) =>
+      fetchCheckRuns(repo, sha, options),
+    fetchCombinedStatus: (repo: string, sha: string) =>
+      fetchCombinedStatus(repo, sha, options),
+  }
 }
 
 function parseRetryAfter(value: string | null): number | undefined {
@@ -112,13 +137,15 @@ type JsonResponse<T> = {
 
 async function fetchJson<T>(
   url: URL,
-  beforeRequest: BeforeRequest
+  repo: string,
+  options: GitHubClientOptions
 ): Promise<JsonResponse<T>> {
-  await beforeRequest()
+  await options.beforeRequest()
+  const accessToken = await options.getAccessToken(repo)
 
   const response = await fetch(url, {
     headers: {
-      Authorization: `Bearer ${requireEnv("GITHUB_TOKEN")}`,
+      Authorization: `Bearer ${accessToken}`,
       Accept: "application/vnd.github+json",
       "X-GitHub-Api-Version": API_VERSION,
       "User-Agent": "notion-cookbook-github-sync",
@@ -163,10 +190,11 @@ function nextPageFromLink(link: string | null): number | undefined {
 // Generic paginated fetch for GitHub endpoints whose response is a JSON array.
 // GitHub's Link header is authoritative; a full final page has no next link.
 async function fetchPage<T>(
+  repo: string,
   path: string,
   params: Record<string, string> | undefined,
   page: number | undefined,
-  beforeRequest: BeforeRequest
+  options: GitHubClientOptions
 ): Promise<{ items: T[]; nextPage: number | undefined }> {
   const url = new URL(path, API_BASE_URL)
   if (params) {
@@ -177,7 +205,7 @@ async function fetchPage<T>(
   url.searchParams.set("per_page", String(PER_PAGE))
   url.searchParams.set("page", String(page ?? 1))
 
-  const { data, headers } = await fetchJson<T[]>(url, beforeRequest)
+  const { data, headers } = await fetchJson<T[]>(url, repo, options)
   return {
     items: data,
     nextPage: nextPageFromLink(headers.get("Link")),
@@ -209,16 +237,17 @@ export type GitHubIssue = {
 }
 
 // The /issues endpoint returns both issues and PRs. We filter out PRs here.
-export async function fetchIssuesPage(
+async function fetchIssuesPage(
   repo: string,
   page: number | undefined,
-  beforeRequest: BeforeRequest
+  options: GitHubClientOptions
 ): Promise<{ issues: GitHubIssue[]; nextPage: number | undefined }> {
   const { items, nextPage } = await fetchPage<GitHubIssue>(
+    repo,
     `/repos/${repo}/issues`,
     { state: "all", sort: "created", direction: "asc" },
     page,
-    beforeRequest
+    options
   )
 
   const issues = items.filter((issue) => !issue.pull_request)
@@ -250,20 +279,21 @@ export type GitHubPullRequest = {
   updated_at: string
 }
 
-export async function fetchPullRequestsPage(
+async function fetchPullRequestsPage(
   repo: string,
   page: number | undefined,
   state: string | undefined,
-  beforeRequest: BeforeRequest
+  options: GitHubClientOptions
 ): Promise<{
   pullRequests: GitHubPullRequest[]
   nextPage: number | undefined
 }> {
   const { items, nextPage } = await fetchPage<GitHubPullRequest>(
+    repo,
     `/repos/${repo}/pulls`,
     { state: state ?? "all", sort: "created", direction: "asc" },
     page,
-    beforeRequest
+    options
   )
 
   return { pullRequests: items, nextPage }
@@ -281,10 +311,10 @@ export type GitHubReview = {
   submitted_at: string | null
 }
 
-export async function fetchReviews(
+async function fetchReviews(
   repo: string,
   prNumber: number,
-  beforeRequest: BeforeRequest
+  options: GitHubClientOptions
 ): Promise<GitHubReview[]> {
   const reviews: GitHubReview[] = []
   let page: number | undefined = 1
@@ -294,10 +324,11 @@ export async function fetchReviews(
       items: GitHubReview[]
       nextPage: number | undefined
     } = await fetchPage<GitHubReview>(
+      repo,
       `/repos/${repo}/pulls/${prNumber}/reviews`,
       undefined,
       page,
-      beforeRequest
+      options
     )
     reviews.push(...result.items)
     page = result.nextPage
@@ -322,10 +353,10 @@ type CheckRunsResponse = {
   check_runs: GitHubCheckRun[]
 }
 
-export async function fetchCheckRuns(
+async function fetchCheckRuns(
   repo: string,
   sha: string,
-  beforeRequest: BeforeRequest
+  options: GitHubClientOptions
 ): Promise<GitHubCheckRun[]> {
   const checkRuns: GitHubCheckRun[] = []
   let page: number | undefined = 1
@@ -340,7 +371,8 @@ export async function fetchCheckRuns(
 
     const { data, headers } = await fetchJson<CheckRunsResponse>(
       url,
-      beforeRequest
+      repo,
+      options
     )
     checkRuns.push(...data.check_runs)
     page = nextPageFromLink(headers.get("Link"))
@@ -363,14 +395,14 @@ type CombinedStatusResponse = GitHubCombinedStatus & {
   statuses: unknown[]
 }
 
-export async function fetchCombinedStatus(
+async function fetchCombinedStatus(
   repo: string,
   sha: string,
-  beforeRequest: BeforeRequest
+  options: GitHubClientOptions
 ): Promise<GitHubCombinedStatus> {
   const url = new URL(`/repos/${repo}/commits/${sha}/status`, API_BASE_URL)
   url.searchParams.set("per_page", String(PER_PAGE))
 
-  const { data } = await fetchJson<CombinedStatusResponse>(url, beforeRequest)
+  const { data } = await fetchJson<CombinedStatusResponse>(url, repo, options)
   return { state: data.state, total_count: data.total_count }
 }

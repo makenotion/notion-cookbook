@@ -8,14 +8,8 @@
 
 import { Worker } from "@notionhq/workers"
 
-import {
-  getRepos,
-  fetchIssuesPage,
-  fetchPullRequestsPage,
-  fetchReviews,
-  fetchCheckRuns,
-  fetchCombinedStatus,
-} from "./github.js"
+import { createGitHubAccessTokenProvider } from "./auth.js"
+import { createGitHubClient, getRepos } from "./github.js"
 import {
   INITIAL_TITLE as ISSUES_TITLE,
   PRIMARY_KEY as ISSUES_PK,
@@ -49,6 +43,10 @@ const pacer = worker.pacer("github", {
 })
 
 const beforeGitHubRequest = () => pacer.wait()
+const github = createGitHubClient({
+  beforeRequest: beforeGitHubRequest,
+  getAccessToken: createGitHubAccessTokenProvider(worker),
+})
 
 // ---------------------------------------------------------------------------
 // Issues
@@ -75,7 +73,7 @@ worker.sync("issuesSync", {
       return { changes: [], hasMore: false }
     }
 
-    const result = await fetchIssuesPage(repo, page, beforeGitHubRequest)
+    const result = await github.fetchIssuesPage(repo, page)
     const changes = result.issues.map((i) => issueToChange(i, repo))
 
     if (result.nextPage !== undefined) {
@@ -124,12 +122,7 @@ worker.sync("allPullRequestsSync", {
       return { changes: [], hasMore: false }
     }
 
-    const result = await fetchPullRequestsPage(
-      repo,
-      page,
-      "all",
-      beforeGitHubRequest
-    )
+    const result = await github.fetchPullRequestsPage(repo, page, "all")
     const changes = result.pullRequests.map((pr) =>
       pullRequestToChange(pr, repo)
     )
@@ -183,26 +176,13 @@ worker.sync("openPullRequestsSync", {
     // Scan all PRs in stable created order so a PR closing during a replace
     // cycle cannot shift the membership of later pages. Only open PRs are
     // emitted, so closed PRs are still swept from this database.
-    const result = await fetchPullRequestsPage(
-      repo,
-      page,
-      "all",
-      beforeGitHubRequest
-    )
+    const result = await github.fetchPullRequestsPage(repo, page, "all")
     const changes = []
 
     for (const pr of result.pullRequests.filter((pr) => pr.state === "open")) {
-      const reviews = await fetchReviews(repo, pr.number, beforeGitHubRequest)
-      const checkRuns = await fetchCheckRuns(
-        repo,
-        pr.head.sha,
-        beforeGitHubRequest
-      )
-      const combinedStatus = await fetchCombinedStatus(
-        repo,
-        pr.head.sha,
-        beforeGitHubRequest
-      )
+      const reviews = await github.fetchReviews(repo, pr.number)
+      const checkRuns = await github.fetchCheckRuns(repo, pr.head.sha)
+      const combinedStatus = await github.fetchCombinedStatus(repo, pr.head.sha)
       changes.push(
         openPullRequestToChange(pr, repo, reviews, checkRuns, combinedStatus)
       )
