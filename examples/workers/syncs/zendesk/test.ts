@@ -4,12 +4,8 @@
 
 import { RateLimitError } from "@notionhq/workers"
 import worker from "./src/index.js"
-import {
-  ticketToChange,
-  ticketUrl,
-  formatLabel,
-  dateOnly,
-} from "./src/transform.js"
+import { ticketToChange, ticketUrl } from "./src/tickets.js"
+import { formatLabel, dateOnly } from "./src/formatters.js"
 import { userToChange } from "./src/users.js"
 import { ticketMetricToChange } from "./src/ticket-metrics.js"
 import { slaPolicyToChange } from "./src/sla-policies.js"

@@ -155,8 +155,8 @@ Page body contains the policy description.
 src/
 ├── index.ts                 — registers all databases and syncs
 ├── zendesk.ts               — API client (auth, pagination, types for all resources)
-├── schema.ts                — ticket schema
-├── transform.ts             — ticket transform + shared helpers (dateOnly, formatLabel)
+├── tickets.ts               — ticket schema + transform
+├── formatters.ts            — shared date and label formatting helpers
 ├── organizations.ts         — organization schema + transform
 ├── users.ts                 — user schema + transform
 ├── survey-responses.ts      — current CSAT response schema + transform
@@ -302,17 +302,17 @@ policy change.
 
 ## Adapting the schema
 
-Each resource has its own file with a schema and transform function. To change
-which fields are synced for a resource, edit that resource's file:
+Each synced resource has a file containing its schema and transform function.
+To change which fields are synced for a resource, edit that resource's file:
 
-| Resource              | File                                 |
-| --------------------- | ------------------------------------ |
-| Tickets               | `src/schema.ts` + `src/transform.ts` |
-| Organizations         | `src/organizations.ts`               |
-| Users                 | `src/users.ts`                       |
-| CSAT Survey Responses | `src/survey-responses.ts`            |
-| Ticket Metrics        | `src/ticket-metrics.ts`              |
-| SLA Policies          | `src/sla-policies.ts`                |
+| Resource              | File                      |
+| --------------------- | ------------------------- |
+| Tickets               | `src/tickets.ts`          |
+| Organizations         | `src/organizations.ts`    |
+| Users                 | `src/users.ts`            |
+| CSAT Survey Responses | `src/survey-responses.ts` |
+| Ticket Metrics        | `src/ticket-metrics.ts`   |
+| SLA Policies          | `src/sla-policies.ts`     |
 
 To add a new Zendesk field to any resource:
 

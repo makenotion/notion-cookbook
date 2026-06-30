@@ -5,7 +5,7 @@ import * as Schema from "@notionhq/workers/schema"
 import * as Builder from "@notionhq/workers/builder"
 import { notionIcon } from "@notionhq/workers"
 import type { ZendeskSurveyAnswer, ZendeskSurveyResponse } from "./zendesk.js"
-import { dateOnly, formatLabel } from "./transform.js"
+import { dateOnly, formatLabel } from "./formatters.js"
 
 export const INITIAL_TITLE = "Zendesk CSAT Survey Responses"
 export const PRIMARY_KEY = "Response ID"
