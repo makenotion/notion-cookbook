@@ -9,7 +9,7 @@ import * as Schema from "@notionhq/workers/schema"
 import * as Builder from "@notionhq/workers/builder"
 import { notionIcon } from "@notionhq/workers"
 import type { ZendeskSlaPolicy, ZendeskSlaPolicyMetric } from "./zendesk.js"
-import { dateOnly } from "./transform.js"
+import { dateOnly } from "./formatters.js"
 
 export const INITIAL_TITLE = "Zendesk SLA Policies"
 export const PRIMARY_KEY = "Policy ID"

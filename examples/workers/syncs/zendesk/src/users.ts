@@ -6,7 +6,7 @@ import * as Schema from "@notionhq/workers/schema"
 import * as Builder from "@notionhq/workers/builder"
 import { notionIcon } from "@notionhq/workers"
 import type { ZendeskFullUser } from "./zendesk.js"
-import { formatLabel, dateOnly } from "./transform.js"
+import { formatLabel, dateOnly } from "./formatters.js"
 
 export const INITIAL_TITLE = "Zendesk Users"
 export const PRIMARY_KEY = "User ID"

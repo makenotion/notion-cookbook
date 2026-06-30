@@ -1,9 +1,9 @@
 // Entry point — wires together all synced resources: tickets, organizations,
 // users, CSAT survey responses, ticket metrics, and SLA policies.
 //
-// Each resource has its own schema + transform file. This file registers the
+// Each resource module owns its schema and transform. This file registers the
 // managed databases and sync schedules. Most customization happens in those
-// per-resource files; this file rarely needs changes unless you're adjusting
+// resource files; this file rarely needs changes unless you're adjusting
 // sync modes, schedules, or adding a new resource.
 
 import { Worker } from "@notionhq/workers"
@@ -18,8 +18,12 @@ import {
   isDeletedTicket,
   requireSubdomain,
 } from "./zendesk.js"
-import { INITIAL_TITLE, PRIMARY_KEY, ticketSchema } from "./schema.js"
-import { ticketToChange } from "./transform.js"
+import {
+  INITIAL_TITLE,
+  PRIMARY_KEY,
+  ticketSchema,
+  ticketToChange,
+} from "./tickets.js"
 import {
   INITIAL_TITLE as ORGS_TITLE,
   PRIMARY_KEY as ORGS_PK,

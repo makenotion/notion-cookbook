@@ -1,14 +1,11 @@
 // Organizations sync — tracks the companies in your Zendesk instance.
 // Useful for B2B support teams to see accounts, domains, and tags in Notion.
-//
-// Schema and transform follow the same pattern as tickets — see schema.ts
-// and transform.ts for the conventions.
 
 import * as Schema from "@notionhq/workers/schema"
 import * as Builder from "@notionhq/workers/builder"
 import { notionIcon } from "@notionhq/workers"
 import type { ZendeskOrganization } from "./zendesk.js"
-import { dateOnly } from "./transform.js"
+import { dateOnly } from "./formatters.js"
 
 export const INITIAL_TITLE = "Zendesk Organizations"
 export const PRIMARY_KEY = "Org ID"
@@ -47,9 +44,7 @@ export function organizationToChange(org: ZendeskOrganization) {
       ...(org.tags.length > 0
         ? { Tags: Builder.multiSelect(...org.tags) }
         : {}),
-      ...(org.details
-        ? { Details: Builder.richText(org.details) }
-        : {}),
+      ...(org.details ? { Details: Builder.richText(org.details) } : {}),
       "Created at": Builder.date(dateOnly(org.created_at)),
       "Updated at": Builder.date(dateOnly(org.updated_at)),
     },
