@@ -52,8 +52,6 @@ export const pullRequestSchema: Schema.Schema<typeof PRIMARY_KEY> = {
     Closed: Schema.date(),
 
     Merged: Schema.date(),
-
-    "Merged By": Schema.richText(),
   },
 }
 
@@ -77,9 +75,7 @@ export function pullRequestToChange(pr: GitHubPullRequest, repo: string) {
       ...(pr.user ? { Author: Builder.richText(pr.user.login) } : {}),
       ...(pr.assignees.length > 0
         ? {
-            Assignees: Builder.multiSelect(
-              ...pr.assignees.map((a) => a.login)
-            ),
+            Assignees: Builder.multiSelect(...pr.assignees.map((a) => a.login)),
           }
         : {}),
       ...(pr.requested_reviewers.length > 0
@@ -100,15 +96,8 @@ export function pullRequestToChange(pr: GitHubPullRequest, repo: string) {
       Repository: Builder.richText(repo),
       Created: Builder.date(dateOnly(pr.created_at)),
       Updated: Builder.date(dateOnly(pr.updated_at)),
-      ...(pr.closed_at
-        ? { Closed: Builder.date(dateOnly(pr.closed_at)) }
-        : {}),
-      ...(pr.merged_at
-        ? { Merged: Builder.date(dateOnly(pr.merged_at)) }
-        : {}),
-      ...(pr.merged_by
-        ? { "Merged By": Builder.richText(pr.merged_by.login) }
-        : {}),
+      ...(pr.closed_at ? { Closed: Builder.date(dateOnly(pr.closed_at)) } : {}),
+      ...(pr.merged_at ? { Merged: Builder.date(dateOnly(pr.merged_at)) } : {}),
     },
   }
 }

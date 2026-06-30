@@ -23,3 +23,24 @@ jobs:
         run: ./scripts/install-examples.sh
       - name: Typecheck JavaScript examples
         run: ./scripts/typecheck-examples.sh
+
+  test-github-worker:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: examples/workers/syncs/github
+
+    steps:
+      # v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Use Node.js 22.x
+        # v4.1.0
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af
+        with:
+          node-version: 22.x
+      - name: Install dependencies
+        run: npm install
+      - name: Typecheck
+        run: npm run check
+      - name: Test
+        run: npm test

@@ -4,7 +4,7 @@
 // Three databases are created:
 //   1. Issues        — all issues, synced every 5 min
 //   2. All PRs       — all pull requests (basic fields), synced every 5 min
-//   3. Open PRs      — open PRs enriched with review + CI status, synced every 2 min
+//   3. Open PRs      — open PRs enriched with review + CI status, synced every 5 min
 
 import { Worker } from "@notionhq/workers"
 
@@ -14,6 +14,7 @@ import {
   fetchPullRequestsPage,
   fetchReviews,
   fetchCheckRuns,
+  fetchCombinedStatus,
 } from "./github.js"
 import {
   INITIAL_TITLE as ISSUES_TITLE,
@@ -47,6 +48,8 @@ const pacer = worker.pacer("github", {
   intervalMs: 3_600_000,
 })
 
+const beforeGitHubRequest = () => pacer.wait()
+
 // ---------------------------------------------------------------------------
 // Issues
 // ---------------------------------------------------------------------------
@@ -63,8 +66,6 @@ worker.sync("issuesSync", {
   mode: "replace",
   schedule: "5m",
   execute: async (state: SyncState | undefined) => {
-    await pacer.wait()
-
     const repos = getRepos()
     const repoIndex = state?.repoIndex ?? 0
     const page = state?.page ?? 1
@@ -74,14 +75,14 @@ worker.sync("issuesSync", {
       return { changes: [], hasMore: false }
     }
 
-    const result = await fetchIssuesPage(repo, page)
+    const result = await fetchIssuesPage(repo, page, beforeGitHubRequest)
     const changes = result.issues.map((i) => issueToChange(i, repo))
 
-    if (result.hasMore) {
+    if (result.nextPage !== undefined) {
       return {
         changes,
         hasMore: true,
-        nextState: { repoIndex, page: page + 1 },
+        nextState: { repoIndex, page: result.nextPage },
       }
     }
 
@@ -114,8 +115,6 @@ worker.sync("allPullRequestsSync", {
   mode: "replace",
   schedule: "5m",
   execute: async (state: SyncState | undefined) => {
-    await pacer.wait()
-
     const repos = getRepos()
     const repoIndex = state?.repoIndex ?? 0
     const page = state?.page ?? 1
@@ -125,16 +124,21 @@ worker.sync("allPullRequestsSync", {
       return { changes: [], hasMore: false }
     }
 
-    const result = await fetchPullRequestsPage(repo, page)
+    const result = await fetchPullRequestsPage(
+      repo,
+      page,
+      "all",
+      beforeGitHubRequest
+    )
     const changes = result.pullRequests.map((pr) =>
       pullRequestToChange(pr, repo)
     )
 
-    if (result.hasMore) {
+    if (result.nextPage !== undefined) {
       return {
         changes,
         hasMore: true,
-        nextState: { repoIndex, page: page + 1 },
+        nextState: { repoIndex, page: result.nextPage },
       }
     }
 
@@ -165,10 +169,8 @@ const openPullRequests = worker.database("openPullRequests", {
 worker.sync("openPullRequestsSync", {
   database: openPullRequests,
   mode: "replace",
-  schedule: "2m",
+  schedule: "5m",
   execute: async (state: SyncState | undefined) => {
-    await pacer.wait()
-
     const repos = getRepos()
     const repoIndex = state?.repoIndex ?? 0
     const page = state?.page ?? 1
@@ -178,22 +180,39 @@ worker.sync("openPullRequestsSync", {
       return { changes: [], hasMore: false }
     }
 
-    const result = await fetchPullRequestsPage(repo, page, "open")
+    // Scan all PRs in stable created order so a PR closing during a replace
+    // cycle cannot shift the membership of later pages. Only open PRs are
+    // emitted, so closed PRs are still swept from this database.
+    const result = await fetchPullRequestsPage(
+      repo,
+      page,
+      "all",
+      beforeGitHubRequest
+    )
     const changes = []
 
-    for (const pr of result.pullRequests) {
-      await pacer.wait()
-      const reviews = await fetchReviews(repo, pr.number)
-      await pacer.wait()
-      const checkRuns = await fetchCheckRuns(repo, pr.head.sha)
-      changes.push(openPullRequestToChange(pr, repo, reviews, checkRuns))
+    for (const pr of result.pullRequests.filter((pr) => pr.state === "open")) {
+      const reviews = await fetchReviews(repo, pr.number, beforeGitHubRequest)
+      const checkRuns = await fetchCheckRuns(
+        repo,
+        pr.head.sha,
+        beforeGitHubRequest
+      )
+      const combinedStatus = await fetchCombinedStatus(
+        repo,
+        pr.head.sha,
+        beforeGitHubRequest
+      )
+      changes.push(
+        openPullRequestToChange(pr, repo, reviews, checkRuns, combinedStatus)
+      )
     }
 
-    if (result.hasMore) {
+    if (result.nextPage !== undefined) {
       return {
         changes,
         hasMore: true,
-        nextState: { repoIndex, page: page + 1 },
+        nextState: { repoIndex, page: result.nextPage },
       }
     }
 
