@@ -2,13 +2,11 @@
 // No Salesforce connection is made — HTTP assertions use mocked responses.
 // Run: npm test  (or: npx tsx test.ts)
 
-import { RateLimitError } from "@notionhq/workers"
+import { RateLimitError, type SyncChangeUpsert } from "@notionhq/workers"
+import type { PropertySchema } from "@notionhq/workers/schema"
 
 import worker from "./src/index.js"
-import {
-  accountToChange,
-  type SalesforceAccount,
-} from "./src/accounts.js"
+import { accountToChange, type SalesforceAccount } from "./src/accounts.js"
 import {
   opportunityToChange,
   type SalesforceOpportunity,
@@ -16,10 +14,11 @@ import {
 import {
   SALESFORCE_API_VERSION,
   createSalesforceClient,
-  getSalesforceInstanceUrl,
-  getSalesforceLoginUrl,
+  createSalesforceSessionProvider,
+  getSalesforceOrgUrl,
   type SalesforceClient,
   type SalesforceQueryPage,
+  type SalesforceSessionProvider,
 } from "./src/salesforce.js"
 import {
   incrementalSoql,
@@ -45,6 +44,10 @@ function ok(name: string, condition: boolean) {
 
 function contains(value: unknown, expected: string | number): boolean {
   return JSON.stringify(value).includes(String(expected))
+}
+
+function isEmptyProperty(value: unknown): boolean {
+  return Array.isArray(value) && value.length === 0
 }
 
 async function captureError(action: () => unknown | Promise<unknown>) {
@@ -155,16 +158,24 @@ const nullAccountChange = accountToChange(
   "https://acme.my.salesforce.com"
 )
 ok(
-  "null account fields are omitted",
-  nullAccountChange.properties.Industry === undefined &&
-    nullAccountChange.properties.Type === undefined &&
-    nullAccountChange.properties.Website === undefined &&
-    nullAccountChange.properties.Phone === undefined &&
-    nullAccountChange.properties["Billing City"] === undefined &&
-    nullAccountChange.properties["Billing Country"] === undefined &&
-    nullAccountChange.properties["Annual Revenue"] === undefined &&
-    nullAccountChange.properties.Employees === undefined &&
-    nullAccountChange.properties.Owner === undefined
+  "null account fields explicitly clear previous Notion values",
+  isEmptyProperty(nullAccountChange.properties.Industry) &&
+    isEmptyProperty(nullAccountChange.properties.Type) &&
+    isEmptyProperty(nullAccountChange.properties.Website) &&
+    isEmptyProperty(nullAccountChange.properties.Phone) &&
+    isEmptyProperty(nullAccountChange.properties["Billing City"]) &&
+    isEmptyProperty(nullAccountChange.properties["Billing Country"]) &&
+    isEmptyProperty(nullAccountChange.properties["Annual Revenue"]) &&
+    isEmptyProperty(nullAccountChange.properties.Employees) &&
+    isEmptyProperty(nullAccountChange.properties.Owner)
+)
+const invalidWebsiteChange = accountToChange(
+  { ...fullAccount, Website: "javascript:alert(1)" },
+  "https://acme.my.salesforce.com"
+)
+ok(
+  "invalid account websites clear a previous Notion URL",
+  isEmptyProperty(invalidWebsiteChange.properties.Website)
 )
 ok(
   "null account description becomes an empty body",
@@ -249,10 +260,7 @@ ok(
   "opportunity maps dates and its ID",
   contains(opportunityChange.properties.Created, "2024-02-03") &&
     contains(opportunityChange.properties.Updated, "2024-07-03") &&
-    contains(
-      opportunityChange.properties["Opportunity ID"],
-      fullOpportunity.Id
-    )
+    contains(opportunityChange.properties["Opportunity ID"], fullOpportunity.Id)
 )
 
 const zeroOpportunityChange = opportunityToChange(
@@ -280,15 +288,14 @@ const nullOpportunityChange = opportunityToChange(
   "https://acme.my.salesforce.com"
 )
 ok(
-  "null opportunity fields are omitted and its relation is cleared",
-  nullOpportunityChange.properties.Amount === undefined &&
-    nullOpportunityChange.properties.Probability === undefined &&
-    nullOpportunityChange.properties.Type === undefined &&
-    nullOpportunityChange.properties["Lead Source"] === undefined &&
-    nullOpportunityChange.properties["Forecast Category"] === undefined &&
-    nullOpportunityChange.properties.Owner === undefined &&
-    Array.isArray(nullOpportunityChange.properties.Account) &&
-    nullOpportunityChange.properties.Account.length === 0
+  "null opportunity fields explicitly clear previous Notion values",
+  isEmptyProperty(nullOpportunityChange.properties.Amount) &&
+    isEmptyProperty(nullOpportunityChange.properties.Probability) &&
+    isEmptyProperty(nullOpportunityChange.properties.Type) &&
+    isEmptyProperty(nullOpportunityChange.properties["Lead Source"]) &&
+    isEmptyProperty(nullOpportunityChange.properties["Forecast Category"]) &&
+    isEmptyProperty(nullOpportunityChange.properties.Owner) &&
+    isEmptyProperty(nullOpportunityChange.properties.Account)
 )
 ok(
   "null opportunity description becomes an empty body",
@@ -302,33 +309,19 @@ ok(
 function runUrlConfigurationTests() {
   console.log("Salesforce URL configuration:")
 
-  const originalLoginUrl = process.env.SALESFORCE_LOGIN_URL
-  const originalInstanceUrl = process.env.SALESFORCE_INSTANCE_URL
+  const originalOrgUrl = process.env.SALESFORCE_ORG_URL
 
   try {
-    delete process.env.SALESFORCE_LOGIN_URL
+    process.env.SALESFORCE_ORG_URL = " https://acme.my.salesforce.com/ "
     ok(
-      "login URL defaults to Salesforce production",
-      getSalesforceLoginUrl() === "https://login.salesforce.com"
+      "org URL is normalized to its HTTPS origin",
+      getSalesforceOrgUrl() === "https://acme.my.salesforce.com"
     )
 
-    process.env.SALESFORCE_LOGIN_URL = " https://test.salesforce.com/ "
+    delete process.env.SALESFORCE_ORG_URL
     ok(
-      "login URL accepts a configured HTTPS origin",
-      getSalesforceLoginUrl() === "https://test.salesforce.com"
-    )
-
-    process.env.SALESFORCE_INSTANCE_URL =
-      " https://acme.my.salesforce.com/ "
-    ok(
-      "instance URL is normalized to its origin",
-      getSalesforceInstanceUrl() === "https://acme.my.salesforce.com"
-    )
-
-    delete process.env.SALESFORCE_INSTANCE_URL
-    ok(
-      "instance URL is required",
-      captureSynchronousError(getSalesforceInstanceUrl) instanceof Error
+      "org URL is required",
+      captureSynchronousError(getSalesforceOrgUrl) instanceof Error
     )
 
     const invalidOrigins = [
@@ -340,18 +333,15 @@ function runUrlConfigurationTests() {
       "https://acme.my.salesforce.com#fragment",
     ]
     ok(
-      "instance URL rejects non-HTTPS values and URL components",
+      "org URL rejects non-HTTPS values and URL components",
       invalidOrigins.every((value) => {
-        process.env.SALESFORCE_INSTANCE_URL = value
-        return captureSynchronousError(getSalesforceInstanceUrl) instanceof Error
+        process.env.SALESFORCE_ORG_URL = value
+        return captureSynchronousError(getSalesforceOrgUrl) instanceof Error
       })
     )
   } finally {
-    if (originalLoginUrl === undefined) delete process.env.SALESFORCE_LOGIN_URL
-    else process.env.SALESFORCE_LOGIN_URL = originalLoginUrl
-    if (originalInstanceUrl === undefined)
-      delete process.env.SALESFORCE_INSTANCE_URL
-    else process.env.SALESFORCE_INSTANCE_URL = originalInstanceUrl
+    if (originalOrgUrl === undefined) delete process.env.SALESFORCE_ORG_URL
+    else process.env.SALESFORCE_ORG_URL = originalOrgUrl
   }
 }
 
@@ -365,6 +355,92 @@ function captureSynchronousError(action: () => unknown): unknown {
 }
 
 // ---------------------------------------------------------------------------
+// Salesforce client-credentials session — mocked HTTP only
+// ---------------------------------------------------------------------------
+
+async function runSessionProviderTests() {
+  console.log("Salesforce client credentials:")
+
+  const originalFetch = globalThis.fetch
+  const originalClientId = process.env.SALESFORCE_CLIENT_ID
+  const originalClientSecret = process.env.SALESFORCE_CLIENT_SECRET
+  const originalOrgUrl = process.env.SALESFORCE_ORG_URL
+  process.env.SALESFORCE_CLIENT_ID = "client-id"
+  process.env.SALESFORCE_CLIENT_SECRET = "client-secret"
+  process.env.SALESFORCE_ORG_URL = "https://acme.my.salesforce.com"
+
+  try {
+    const requests: Request[] = []
+    const tokenResponses = [
+      {
+        access_token: "access-token-1",
+        instance_url: "https://acme.my.salesforce.com/",
+        token_type: "Bearer",
+      },
+      {
+        access_token: "access-token-2",
+        instance_url: "https://acme.my.salesforce.com",
+        token_type: "Bearer",
+      },
+    ]
+    globalThis.fetch = (async (input, init) => {
+      requests.push(new Request(input, init))
+      return new Response(JSON.stringify(tokenResponses.shift()), {
+        status: 200,
+      })
+    }) as typeof fetch
+
+    const provider = createSalesforceSessionProvider()
+    const [firstSession, concurrentSession] = await Promise.all([
+      provider.getSession(),
+      provider.getSession(),
+    ])
+    const request = requests[0]
+    const body = new URLSearchParams(await request.text())
+    ok(
+      "client credentials use one concurrent token exchange",
+      requests.length === 1 &&
+        firstSession.accessToken === "access-token-1" &&
+        concurrentSession === firstSession
+    )
+    ok(
+      "token exchange uses the org My Domain and HTTP Basic authentication",
+      request.method === "POST" &&
+        new URL(request.url).pathname === "/services/oauth2/token" &&
+        request.headers.get("Authorization") ===
+          `Basic ${Buffer.from("client-id:client-secret").toString("base64")}` &&
+        request.headers
+          .get("Content-Type")
+          ?.startsWith("application/x-www-form-urlencoded") === true &&
+        body.get("grant_type") === "client_credentials" &&
+        body.size === 1
+    )
+    ok(
+      "Salesforce instance URL is normalized from the token response",
+      firstSession.instanceUrl === "https://acme.my.salesforce.com"
+    )
+
+    provider.invalidate("another-token")
+    await provider.getSession()
+    provider.invalidate(firstSession.accessToken)
+    const renewedSession = await provider.getSession()
+    ok(
+      "only the active token can invalidate the cached session",
+      requests.length === 2 && renewedSession.accessToken === "access-token-2"
+    )
+  } finally {
+    globalThis.fetch = originalFetch
+    if (originalClientId === undefined) delete process.env.SALESFORCE_CLIENT_ID
+    else process.env.SALESFORCE_CLIENT_ID = originalClientId
+    if (originalClientSecret === undefined)
+      delete process.env.SALESFORCE_CLIENT_SECRET
+    else process.env.SALESFORCE_CLIENT_SECRET = originalClientSecret
+    if (originalOrgUrl === undefined) delete process.env.SALESFORCE_ORG_URL
+    else process.env.SALESFORCE_ORG_URL = originalOrgUrl
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Salesforce API client — mocked HTTP only
 // ---------------------------------------------------------------------------
 
@@ -372,8 +448,8 @@ async function runApiClientTests() {
   console.log("Salesforce API client:")
 
   const originalFetch = globalThis.fetch
-  const originalInstanceUrl = process.env.SALESFORCE_INSTANCE_URL
-  process.env.SALESFORCE_INSTANCE_URL = "https://acme.my.salesforce.com"
+  const originalOrgUrl = process.env.SALESFORCE_ORG_URL
+  process.env.SALESFORCE_ORG_URL = "https://acme.my.salesforce.com"
 
   try {
     const requests: Request[] = []
@@ -396,18 +472,26 @@ async function runApiClientTests() {
       return new Response(JSON.stringify(response), { status: 200 })
     }) as typeof fetch
 
-    const client = createSalesforceClient(
-      async () => {
+    const sessionProvider: SalesforceSessionProvider = {
+      async getSession() {
         tokenRequests++
-        return "salesforce-access-token"
+        return {
+          accessToken: "salesforce-access-token",
+          instanceUrl: "https://acme.my.salesforce.com",
+        }
       },
-      async () => {
-        waits++
-      }
-    )
+      invalidate() {},
+    }
+    const client = createSalesforceClient(sessionProvider, async () => {
+      waits++
+    })
     const soql = "SELECT Id FROM Account WHERE Name = 'A&B'"
     const firstPage = await client.queryPage<{ Id: string }>(soql)
-    const queryAllPage = await client.queryPage<{ Id: string }>(soql, undefined, true)
+    const queryAllPage = await client.queryPage<{ Id: string }>(
+      soql,
+      undefined,
+      true
+    )
     const cursorPage = await client.queryPage<{ Id: string }>(
       "THIS QUERY IS IGNORED FOR A CURSOR",
       firstPage.nextCursor
@@ -433,15 +517,14 @@ async function runApiClientTests() {
     )
     ok(
       "pagination follows Salesforce's relative query cursor",
-      firstPage.nextCursor ===
-        "/services/data/v67.0/query/01g-next" &&
+      firstPage.nextCursor === "/services/data/v67.0/query/01g-next" &&
         cursorUrl.pathname === "/services/data/v67.0/query/01g-next" &&
         !cursorUrl.searchParams.has("q") &&
         cursorPage.records[0].Id === "001Next" &&
         cursorPage.nextCursor === undefined
     )
     ok(
-      "each request is paced and obtains a fresh access token",
+      "each request is paced and obtains the current Salesforce session",
       waits === 3 && tokenRequests === 3
     )
     ok(
@@ -473,10 +556,9 @@ async function runApiClientTests() {
     )
 
     globalThis.fetch = (async () =>
-      new Response(
-        JSON.stringify({ totalSize: 1, done: false, records: [] }),
-        { status: 200 }
-      )) as typeof fetch
+      new Response(JSON.stringify({ totalSize: 1, done: false, records: [] }), {
+        status: 200,
+      })) as typeof fetch
     const missingCursorError = await captureError(() =>
       client.queryPage("SELECT Id FROM Account")
     )
@@ -518,11 +600,52 @@ async function runApiClientTests() {
       requestLimitError instanceof RateLimitError &&
         requestLimitError.retryAfter === undefined
     )
+
+    let activeToken = "expired-token"
+    const invalidatedTokens: string[] = []
+    const authRequests: Request[] = []
+    const retryProvider: SalesforceSessionProvider = {
+      async getSession() {
+        return {
+          accessToken: activeToken,
+          instanceUrl: "https://acme.my.salesforce.com",
+        }
+      },
+      invalidate(accessToken) {
+        invalidatedTokens.push(accessToken)
+        if (accessToken === activeToken) activeToken = "renewed-token"
+      },
+    }
+    globalThis.fetch = (async (input, init) => {
+      const request = new Request(input, init)
+      authRequests.push(request)
+      if (request.headers.get("Authorization") === "Bearer expired-token") {
+        return new Response(
+          JSON.stringify([
+            { errorCode: "INVALID_SESSION_ID", message: "Session expired" },
+          ]),
+          { status: 401 }
+        )
+      }
+      return new Response(
+        JSON.stringify({ totalSize: 0, done: true, records: [] }),
+        { status: 200 }
+      )
+    }) as typeof fetch
+    const retryClient = createSalesforceClient(retryProvider, async () => {})
+    const retriedPage = await retryClient.queryPage("SELECT Id FROM Account")
+    ok(
+      "a 401 renews the client-credentials token and retries once",
+      retriedPage.done &&
+        authRequests.length === 2 &&
+        invalidatedTokens.length === 1 &&
+        invalidatedTokens[0] === "expired-token" &&
+        authRequests[1].headers.get("Authorization") === "Bearer renewed-token"
+    )
   } finally {
     globalThis.fetch = originalFetch
-    if (originalInstanceUrl === undefined)
-      delete process.env.SALESFORCE_INSTANCE_URL
-    else process.env.SALESFORCE_INSTANCE_URL = originalInstanceUrl
+    if (originalOrgUrl === undefined) delete process.env.SALESFORCE_ORG_URL
+    else process.env.SALESFORCE_ORG_URL = originalOrgUrl
   }
 }
 
@@ -532,7 +655,10 @@ async function runApiClientTests() {
 
 type TestRecord = SalesforceRecord & { Name: string }
 
-const testResource: SalesforceResource<TestRecord> = {
+const testResource: SalesforceResource<
+  TestRecord,
+  SyncChangeUpsert<string, PropertySchema<string>>
+> = {
   objectName: "Account",
   fields: ["Id", "IsDeleted", "Name", "SystemModstamp"],
   toChange: (record, instanceUrl) => ({
@@ -556,7 +682,11 @@ function fakeClient(
 ): SalesforceClient {
   return {
     instanceUrl: "https://acme.my.salesforce.com",
-    async queryPage<T>(soql: string, cursor?: string, includeDeleted?: boolean) {
+    async queryPage<T>(
+      soql: string,
+      cursor?: string,
+      includeDeleted?: boolean
+    ) {
       calls.push({ soql, cursor, includeDeleted })
       const page = pages.shift()
       if (!page) throw new Error("Fake Salesforce client ran out of pages.")
@@ -582,7 +712,12 @@ async function runSyncLifecycleTests() {
     {
       records: [
         record("001Changed", "Changed account", "2024-08-20T11:50:00.000Z"),
-        record("001Deleted", "Deleted account", "2024-08-20T11:51:00.000Z", true),
+        record(
+          "001Deleted",
+          "Deleted account",
+          "2024-08-20T11:51:00.000Z",
+          true
+        ),
       ],
       done: false,
       nextCursor: "/services/data/v67.0/query/incremental-next",
@@ -623,8 +758,7 @@ async function runSyncLifecycleTests() {
   ok(
     "incremental pagination persists the original window and cursor",
     firstIncrementalPage.hasMore &&
-      firstIncrementalPage.nextState.since ===
-        "1970-01-01T00:00:00.000Z" &&
+      firstIncrementalPage.nextState.since === "1970-01-01T00:00:00.000Z" &&
       firstIncrementalPage.nextState.until === firstWindowEnd.toISOString() &&
       firstIncrementalPage.nextState.nextCursor ===
         "/services/data/v67.0/query/incremental-next"
@@ -646,8 +780,7 @@ async function runSyncLifecycleTests() {
   ok(
     "terminal incremental page checkpoints with a two-minute overlap",
     !secondIncrementalPage.hasMore &&
-      secondIncrementalPage.nextState.since ===
-        "2024-08-20T11:58:00.000Z" &&
+      secondIncrementalPage.nextState.since === "2024-08-20T11:58:00.000Z" &&
       secondIncrementalPage.nextState.until === undefined &&
       secondIncrementalPage.nextState.nextCursor === undefined
   )
@@ -747,8 +880,9 @@ function runManifestTests() {
     (capability) => capability._tag === "sync"
   )
   const syncConfig = (key: string): SyncManifestConfig | undefined =>
-    syncCapabilities.find((capability) => capability.key === key)
-      ?.config as SyncManifestConfig | undefined
+    syncCapabilities.find((capability) => capability.key === key)?.config as
+      | SyncManifestConfig
+      | undefined
   const incrementalConfigs = [
     syncConfig("accountsSync"),
     syncConfig("opportunitiesSync"),
@@ -777,29 +911,10 @@ function runManifestTests() {
     )
   )
 
-  const oauthCapability = worker.manifest.capabilities.find(
-    (capability) => capability._tag === "oauth"
-  )
-  const oauthConfig = oauthCapability?.config as
-    | {
-        name?: string
-        authorizationEndpoint?: string
-        tokenEndpoint?: string
-        scope?: string
-        accessTokenExpireMs?: number
-      }
-    | undefined
   ok(
-    "Salesforce OAuth is registered in the manifest",
-    Boolean(
-      oauthCapability?.key === "salesforceAuth" &&
-        oauthConfig?.name === "salesforce" &&
-        oauthConfig.authorizationEndpoint?.endsWith(
-          "/services/oauth2/authorize"
-        ) &&
-        oauthConfig.tokenEndpoint?.endsWith("/services/oauth2/token") &&
-        oauthConfig.scope === "api refresh_token" &&
-        oauthConfig.accessTokenExpireMs === 60 * 60 * 1_000
+    "headless client credentials do not register interactive OAuth",
+    !worker.manifest.capabilities.some(
+      (capability) => capability._tag === "oauth"
     )
   )
 }
@@ -807,6 +922,7 @@ function runManifestTests() {
 async function main() {
   runUrlConfigurationTests()
   runManifestTests()
+  await runSessionProviderTests()
   await runApiClientTests()
   await runSyncLifecycleTests()
 

@@ -12,8 +12,9 @@ schemas and Notion creates and manages each database for you (these are called
 
 This example supports Salesforce production orgs and sandboxes with API access.
 It reads the standard **Account** and **Opportunity** objects and the standard
-fields listed below, using a Salesforce **External Client App** and OAuth. New
-deployments should not create a legacy Connected App.
+fields listed below. Authentication uses the OAuth client-credentials flow from
+a Salesforce **External Client App**, with a dedicated integration user as its
+**Run As** user. New deployments should not create a legacy Connected App.
 
 Custom objects, custom fields, Person Account-specific fields, and additional
 standard objects are not included by default. You can add them by extending the
@@ -22,29 +23,29 @@ schemas, field lists, and sync registrations as described in
 
 ## What you get
 
-| Database                    | Salesforce object | Incremental updates | Full reconciliation |
-| --------------------------- | ----------------- | ------------------- | ------------------- |
-| **Salesforce Accounts**     | Account           | Every 5 min         | Daily               |
+| Database                     | Salesforce object | Incremental updates | Full reconciliation |
+| ---------------------------- | ----------------- | ------------------- | ------------------- |
+| **Salesforce Accounts**      | Account           | Every 5 min         | Daily               |
 | **Salesforce Opportunities** | Opportunity       | Every 5 min         | Daily               |
 
 ### Salesforce Accounts
 
-| Notion property | Salesforce field     | Type        |
-| --------------- | -------------------- | ----------- |
-| Name            | `Name`               | title       |
-| Industry        | `Industry`           | select      |
-| Type            | `Type`               | select      |
-| Website         | `Website`            | url         |
-| Phone           | `Phone`              | phoneNumber |
-| Billing City    | `BillingCity`        | richText    |
-| Billing Country | `BillingCountry`     | richText    |
-| Annual Revenue  | `AnnualRevenue`      | number      |
-| Employees       | `NumberOfEmployees`  | number      |
-| Owner           | `Owner.Name`         | richText    |
-| Created         | `CreatedDate`        | date        |
-| Updated         | `LastModifiedDate`   | date        |
+| Notion property | Salesforce field      | Type        |
+| --------------- | --------------------- | ----------- |
+| Name            | `Name`                | title       |
+| Industry        | `Industry`            | select      |
+| Type            | `Type`                | select      |
+| Website         | `Website`             | url         |
+| Phone           | `Phone`               | phoneNumber |
+| Billing City    | `BillingCity`         | richText    |
+| Billing Country | `BillingCountry`      | richText    |
+| Annual Revenue  | `AnnualRevenue`       | number      |
+| Employees       | `NumberOfEmployees`   | number      |
+| Owner           | `Owner.Name`          | richText    |
+| Created         | `CreatedDate`         | date        |
+| Updated         | `LastModifiedDate`    | date        |
 | Account Link    | Salesforce record URL | url         |
-| Account ID      | `Id`                 | richText    |
+| Account ID      | `Id`                  | richText    |
 
 Each Account page body contains the Salesforce `Description` as markdown.
 `SystemModstamp` drives incremental sync checkpoints, while `Account ID` is the
@@ -52,24 +53,24 @@ stable Notion sync key.
 
 ### Salesforce Opportunities
 
-| Notion property  | Salesforce field       | Type     |
-| ---------------- | ---------------------- | -------- |
-| Name             | `Name`                 | title    |
-| Stage            | `StageName`            | select   |
-| Amount           | `Amount`               | number   |
-| Probability      | `Probability`          | number (percent) |
-| Close Date       | `CloseDate`            | date     |
-| Type             | `Type`                 | select   |
-| Lead Source      | `LeadSource`           | select   |
-| Forecast Category | `ForecastCategoryName` | select   |
-| Is Closed        | `IsClosed`             | checkbox |
-| Is Won           | `IsWon`                | checkbox |
-| Owner            | `Owner.Name`           | richText |
-| Account          | `AccountId`            | relation |
-| Created          | `CreatedDate`          | date     |
-| Updated          | `LastModifiedDate`     | date     |
-| Opportunity Link | Salesforce record URL  | url      |
-| Opportunity ID   | `Id`                   | richText |
+| Notion property   | Salesforce field       | Type             |
+| ----------------- | ---------------------- | ---------------- |
+| Name              | `Name`                 | title            |
+| Stage             | `StageName`            | select           |
+| Amount            | `Amount`               | number           |
+| Probability       | `Probability`          | number (percent) |
+| Close Date        | `CloseDate`            | date             |
+| Type              | `Type`                 | select           |
+| Lead Source       | `LeadSource`           | select           |
+| Forecast Category | `ForecastCategoryName` | select           |
+| Is Closed         | `IsClosed`             | checkbox         |
+| Is Won            | `IsWon`                | checkbox         |
+| Owner             | `Owner.Name`           | richText         |
+| Account           | `AccountId`            | relation         |
+| Created           | `CreatedDate`          | date             |
+| Updated           | `LastModifiedDate`     | date             |
+| Opportunity Link  | Salesforce record URL  | url              |
+| Opportunity ID    | `Id`                   | richText         |
 
 Each Opportunity page body contains the Salesforce `Description` as markdown.
 Salesforce percentages are converted to Notion's decimal percent format.
@@ -86,8 +87,8 @@ Account.
 
 ```text
 src/
-├── index.ts         — registers OAuth, databases, and all four syncs
-├── salesforce.ts    — REST client, authentication headers, and pagination
+├── index.ts         — registers the databases and all four syncs
+├── salesforce.ts    — client credentials, REST requests, and pagination
 ├── sync.ts          — incremental and replacement sync lifecycle
 ├── accounts.ts      — Account field list, schema, and transform
 └── opportunities.ts — Opportunity field list, schema, and transform
@@ -107,9 +108,10 @@ src/
    `replace` mode. They sweep every currently visible record and remove Notion
    pages that are absent after the complete sweep. This catches purged records,
    permission changes, and changes missed while the worker was unavailable.
-5. All data requests use Salesforce REST API **v67.0**. OAuth access tokens are
-   stored and refreshed by the Notion Workers runtime. Because Salesforce can
-   omit `expires_in`, the OAuth capability supplies a one-hour fallback expiry.
+5. All data requests use Salesforce REST API **v67.0**. The client exchanges
+   the External Client App credentials for one cached access token. If
+   Salesforce returns HTTP 401, it obtains a new token and retries once; the
+   client-credentials flow does not use a refresh token.
 6. The four syncs share a conservative request pacer. Salesforce API limits
    still depend on your org's edition and license count; limit responses are
    passed to the Workers runtime for retry and backoff.
@@ -133,13 +135,14 @@ increase latency.
 - Node >= 22 and npm >= 10.9.2
 - A Salesforce production org or sandbox with REST API access
 - Permission to create and manage a local External Client App
-- A dedicated Salesforce integration user that can authorize the app
+- A dedicated Salesforce integration user configured as the app's **Run As**
+  user
 - The `ntn` CLI installed and authenticated (`ntn login`)
 
 ### Configure least-privilege access
 
-Use one dedicated integration user for this worker instead of authorizing a
-human administrator's account. Where available, Salesforce recommends the
+Use one dedicated integration user for this worker instead of running the sync
+as a human administrator. Where available, Salesforce recommends the
 Salesforce Integration user license with the **Minimum Access - API Only
 Integrations** profile.
 
@@ -167,27 +170,24 @@ removes them from Notion.
 
 ## Environment variables
 
-| Variable                   | Required | Description |
-| -------------------------- | -------- | ----------- |
-| `SALESFORCE_CLIENT_ID`     | Yes      | External Client App consumer key (`client_id`) |
-| `SALESFORCE_CLIENT_SECRET` | Yes      | External Client App consumer secret |
-| `SALESFORCE_INSTANCE_URL`  | Yes      | Salesforce org origin, such as `https://acme.my.salesforce.com` |
-| `SALESFORCE_LOGIN_URL`     | No       | OAuth origin; defaults to `https://login.salesforce.com` |
+| Variable                   | Required | Description                                                                      |
+| -------------------------- | -------- | -------------------------------------------------------------------------------- |
+| `SALESFORCE_CLIENT_ID`     | Yes      | External Client App consumer key (`client_id`)                                   |
+| `SALESFORCE_CLIENT_SECRET` | Yes      | External Client App consumer secret                                              |
+| `SALESFORCE_ORG_URL`       | Yes      | Production or sandbox My Domain origin, such as `https://acme.my.salesforce.com` |
 
-Use `https://test.salesforce.com` for `SALESFORCE_LOGIN_URL` when connecting to
-a sandbox. If your org requires a My Domain login, use that HTTPS origin
-instead. Both URL variables must be origins only: don't include credentials,
-paths, query strings, or fragments.
+Use the specific org's My Domain URL, including for sandboxes—not the generic
+`login.salesforce.com` or `test.salesforce.com` host. The value must be an HTTPS
+origin without credentials, paths, query strings, or fragments.
 
 No `NOTION_API_TOKEN` is needed. The platform handles Notion credentials
 automatically.
 
 ## Setup and deploy
 
-The first deployment intentionally happens before Salesforce credentials are
-configured. It registers the worker and allocates the callback URL needed to
-create the External Client App. Sync execution still requires the environment
-variables and completed OAuth authorization.
+This server-to-server flow has no callback URL or interactive sign-in. The
+External Client App runs every request as the dedicated integration user chosen
+in its policy.
 
 1. Install the Notion Workers CLI:
 
@@ -209,22 +209,6 @@ variables and completed OAuth authorization.
    npm test
    ```
 
-4. Log in to Notion:
-
-   ```sh
-   ntn login
-   ```
-
-5. Register the worker with a name, then print its OAuth callback URL:
-
-   ```sh
-   ntn workers deploy --name salesforce-sync
-   ntn workers oauth show-redirect-url
-   ```
-
-   Use `--name` only for the first deployment. Later deployments update the
-   registered worker and use `ntn workers deploy` without `--name`.
-
 ### Create the Salesforce External Client App
 
 1. In Salesforce **Setup**, enter `External Client App` in Quick Find, open
@@ -232,52 +216,52 @@ variables and completed OAuth authorization.
 2. Enter the basic app information. Select **Local** for the distribution state
    because this app is used by one Salesforce org.
 3. Under **API (Enable OAuth Settings)**, enable OAuth.
-4. Paste the exact URL printed by
-   `ntn workers oauth show-redirect-url` into **Callback URL**.
-5. Under **Flow Enablement**, enable **Authorization Code and Credentials
-   Flow**. Do not enable Client Credentials Flow.
-6. Add only these OAuth scopes:
-   - **Manage user data via APIs** (`api`)
-   - **Perform requests at any time** (`refresh_token`, `offline_access`)
-7. Treat the worker as a confidential server-side client. Require the consumer
-   secret for the web server and refresh-token exchanges when those controls
-   are available in your org.
-8. Create the app. In its OAuth policies, select **Admin approved users are
-   pre-authorized**, then select a permission set assigned only to the dedicated
-   integration user.
+4. Enter `https://login.salesforce.com/services/oauth2/success` as the
+   **Callback URL**. Salesforce requires a value when OAuth is enabled, but the
+   client-credentials flow never redirects to or calls this URL.
+5. Under **Flow Enablement**, enable **Client Credentials Flow**. Leave
+   **Authorization Code and Credentials Flow** disabled for this example.
+6. Add only **Manage user data via APIs** (`api`) as an OAuth scope. Do not add
+   `refresh_token` or `offline_access`; client credentials obtains a new access
+   token instead of a refresh token.
+7. Create the app. In its policies, configure **Client Credentials** and select
+   the dedicated integration user as **Run As**.
+8. Set **Permitted Users** to **Admin approved users are pre-authorized** and
+   associate the dedicated permission set assigned to the integration user.
 9. From the app's **Settings** tab, open **Consumer Key and Secret** and copy the
-   consumer key and consumer secret. Store both as secrets.
+   consumer key and consumer secret.
 
-This example uses an External Client App, Salesforce's current app framework.
-Do not enable client credentials flow and do not create a legacy Connected App
-for this authorization-code flow. A newly created app can take several minutes
-to become available.
+This uses Salesforce's current External Client App framework, not a legacy
+Connected App. A newly created app can take several minutes to become
+available.
 
-### Configure and authorize the worker
+### Deploy and configure the worker
 
-1. Set the deployed worker's environment variables. For a production org:
+1. Log in to Notion:
+
+   ```sh
+   ntn login
+   ```
+
+2. Deploy the worker:
+
+   ```sh
+   ntn workers deploy --name salesforce-sync
+   ```
+
+   Use `--name` only when creating the worker. Later deployments update it with
+   `ntn workers deploy`.
+
+3. Store the External Client App credentials and your production or sandbox My
+   Domain URL on the deployed worker:
 
    ```sh
    ntn workers env set SALESFORCE_CLIENT_ID=your-consumer-key
    ntn workers env set SALESFORCE_CLIENT_SECRET=your-consumer-secret
-   ntn workers env set SALESFORCE_INSTANCE_URL=https://acme.my.salesforce.com
-   ntn workers env set SALESFORCE_LOGIN_URL=https://login.salesforce.com
+   ntn workers env set SALESFORCE_ORG_URL=https://acme.my.salesforce.com
    ```
 
-   For a sandbox, use the sandbox My Domain for `SALESFORCE_INSTANCE_URL` and
-   `https://test.salesforce.com` for `SALESFORCE_LOGIN_URL`.
-
-2. Redeploy without `--name` so the OAuth capability receives the credentials:
-
-   ```sh
-   ntn workers deploy
-   ```
-
-3. Start OAuth and sign in as the dedicated integration user:
-
-   ```sh
-   ntn workers oauth start salesforceAuth
-   ```
+   For a sandbox, use that sandbox's My Domain URL.
 
 ## Run the sync
 
@@ -313,10 +297,10 @@ ntn workers sync trigger opportunitiesReconciliation
 Each resource owns its field list, TypeScript type, managed database schema, and
 transform:
 
-| Resource      | File                       |
-| ------------- | -------------------------- |
-| Accounts      | `src/accounts.ts`          |
-| Opportunities | `src/opportunities.ts`     |
+| Resource      | File                   |
+| ------------- | ---------------------- |
+| Accounts      | `src/accounts.ts`      |
+| Opportunities | `src/opportunities.ts` |
 
 To add a field:
 
@@ -328,6 +312,9 @@ To add a field:
 
 Salesforce returns only fields included in the SOQL `SELECT` list. Adding a
 type or Notion property without updating the field list does not fetch data.
+Every upsert includes every declared Notion property. Map nullable Salesforce
+values to an empty property value (`[]`) so clearing a field upstream also
+clears its previous value in Notion.
 
 To add a custom object, create a resource module following the Account and
 Opportunity pattern, extend the `SalesforceResource` object-name type in
@@ -346,8 +333,8 @@ npm run check
 npm test
 ```
 
-To execute against the authorized Salesforce org locally, first complete the
-deployed OAuth flow, pull the worker's environment, and run one sync:
+To execute against the configured Salesforce org locally, pull the worker's
+environment and run one sync:
 
 ```sh
 ntn workers env pull
@@ -359,19 +346,18 @@ Use a sandbox rather than production while testing schema or query changes.
 
 ## Troubleshooting
 
-### OAuth callback mismatch
-
-Run `ntn workers oauth show-redirect-url` again and make sure the entire value
-exactly matches a callback URL on the External Client App. Confirm that
-`SALESFORCE_LOGIN_URL` points to the same production org, sandbox, or My Domain
-where the app was created.
-
-### `invalid_client_id` or OAuth authorization fails
+### `invalid_client`, `invalid_client_id`, or authentication fails
 
 Confirm that the consumer key and secret came from **Consumer Key and Secret**
-for the External Client App, then run `ntn workers deploy` after setting them.
-New apps can take several minutes to propagate. Also verify that the dedicated
-user has been approved for the app's permission-set policy.
+for the External Client App. Verify that **Client Credentials Flow** is enabled,
+the dedicated integration user is selected as **Run As**, and
+`SALESFORCE_ORG_URL` is that org's exact My Domain origin. New apps can take
+several minutes to propagate.
+
+The client caches the access token because Salesforce does not issue a refresh
+token for this flow. An HTTP 401 clears the cached token and retries once. If
+authentication still fails, verify that the Run As user remains active and has
+access to the app's permission set.
 
 ### `INVALID_FIELD` or insufficient access
 
@@ -382,10 +368,10 @@ field unavailable even when it is standard elsewhere.
 
 ### Records are missing or disappear after reconciliation
 
-Salesforce REST queries use the authorizing user's permissions and sharing
-rules. Grant **View All Records** separately on Account and Opportunity when the
-sync must cover the whole org. A completed daily replace sweep removes records
-that are no longer visible to that user.
+Salesforce REST queries use the **Run As** integration user's permissions and
+sharing rules. Grant **View All Records** separately on Account and Opportunity
+when the sync must cover the whole org. A completed daily replace sweep removes
+records that are no longer visible to that user.
 
 ### Opportunity Account relations are empty
 
@@ -403,9 +389,11 @@ been processed successfully.
 ## Learn more
 
 - [Notion Workers documentation](https://developers.notion.com/workers/get-started/overview)
-- [Notion Workers OAuth](https://developers.notion.com/workers/guides/oauth)
+- [Notion Workers secrets](https://developers.notion.com/workers/guides/secrets)
 - [Salesforce External Client Apps](https://help.salesforce.com/s/articleView?id=sf.external_client_apps.htm&language=en_US&type=5)
 - [Configure External Client App OAuth settings](https://help.salesforce.com/s/articleView?id=sf.configure_external_client_app_oauth_settings.htm&language=en_US&type=5)
+- [Salesforce OAuth client credentials flow](https://help.salesforce.com/s/articleView?id=xcloud.remoteaccess_oauth_client_credentials_flow.htm&type=5)
+- [Salesforce Integration user and client credentials](https://developer.salesforce.com/blogs/2024/02/invoke-rest-apis-with-the-salesforce-integration-user-and-oauth-client-credentials)
 - [Salesforce OAuth scope values](https://developer.salesforce.com/docs/platform/mobile-sdk/guide/oauth-scope-parameter-values.html)
 - [Give integration users API-only access](https://help.salesforce.com/s/articleView?id=User-Permission-for-API-Integration-User&language=en_US&type=1)
 - [View All Records permission](https://help.salesforce.com/s/articleView?id=platform.users_profiles_view_all_mod_all.htm&language=en_US&type=5)

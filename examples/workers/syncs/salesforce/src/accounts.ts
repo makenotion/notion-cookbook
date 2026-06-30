@@ -1,4 +1,4 @@
-import { notionIcon } from "@notionhq/workers"
+import { notionIcon, type SyncChangeUpsert } from "@notionhq/workers"
 import * as Builder from "@notionhq/workers/builder"
 import * as Schema from "@notionhq/workers/schema"
 
@@ -43,7 +43,7 @@ export type SalesforceAccount = {
   Description: string | null
 }
 
-export const accountSchema: Schema.Schema<typeof PRIMARY_KEY> = {
+export const accountSchema = {
   databaseIcon: notionIcon("briefcase"),
   properties: {
     Name: Schema.title(),
@@ -74,12 +74,12 @@ export const accountSchema: Schema.Schema<typeof PRIMARY_KEY> = {
 
     "Account ID": Schema.richText(),
   },
-}
+} satisfies Schema.Schema<typeof PRIMARY_KEY>
 
 export function accountToChange(
   account: SalesforceAccount,
   instanceUrl: string
-) {
+): SyncChangeUpsert<typeof PRIMARY_KEY, typeof accountSchema.properties> {
   const website = normalizeWebsite(account.Website)
 
   return {
@@ -89,31 +89,30 @@ export function accountToChange(
     pageContentMarkdown: account.Description ?? "",
     properties: {
       Name: Builder.title(account.Name),
-      ...(account.Industry != null
-        ? { Industry: Builder.select(account.Industry) }
-        : {}),
-      ...(account.Type != null ? { Type: Builder.select(account.Type) } : {}),
-      ...(website ? { Website: Builder.url(website) } : {}),
-      ...(account.Phone != null
-        ? { Phone: Builder.phoneNumber(account.Phone) }
-        : {}),
-      ...(account.BillingCity != null
-        ? { "Billing City": Builder.richText(account.BillingCity) }
-        : {}),
-      ...(account.BillingCountry != null
-        ? { "Billing Country": Builder.richText(account.BillingCountry) }
-        : {}),
-      ...(account.AnnualRevenue != null &&
-      Number.isFinite(account.AnnualRevenue)
-        ? { "Annual Revenue": Builder.number(account.AnnualRevenue) }
-        : {}),
-      ...(account.NumberOfEmployees != null &&
-      Number.isFinite(account.NumberOfEmployees)
-        ? { Employees: Builder.number(account.NumberOfEmployees) }
-        : {}),
-      ...(account.Owner?.Name != null
-        ? { Owner: Builder.richText(account.Owner.Name) }
-        : {}),
+      Industry:
+        account.Industry != null ? Builder.select(account.Industry) : [],
+      Type: account.Type != null ? Builder.select(account.Type) : [],
+      Website: website ? Builder.url(website) : [],
+      Phone: account.Phone != null ? Builder.phoneNumber(account.Phone) : [],
+      "Billing City":
+        account.BillingCity != null
+          ? Builder.richText(account.BillingCity)
+          : [],
+      "Billing Country":
+        account.BillingCountry != null
+          ? Builder.richText(account.BillingCountry)
+          : [],
+      "Annual Revenue":
+        account.AnnualRevenue != null && Number.isFinite(account.AnnualRevenue)
+          ? Builder.number(account.AnnualRevenue)
+          : [],
+      Employees:
+        account.NumberOfEmployees != null &&
+        Number.isFinite(account.NumberOfEmployees)
+          ? Builder.number(account.NumberOfEmployees)
+          : [],
+      Owner:
+        account.Owner?.Name != null ? Builder.richText(account.Owner.Name) : [],
       Created: Builder.dateTime(account.CreatedDate),
       Updated: Builder.dateTime(account.LastModifiedDate),
       "Account Link": Builder.url(

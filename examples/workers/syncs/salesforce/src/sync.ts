@@ -2,6 +2,9 @@
 // fixed SystemModstamp window; daily replacement syncs reconcile deletions and
 // any records missed while the worker was offline.
 
+import type { SyncChangeUpsert } from "@notionhq/workers"
+import type { PropertySchema } from "@notionhq/workers/schema"
+
 import type { SalesforceClient } from "./salesforce.js"
 
 const INITIAL_SYNC_START = "1970-01-01T00:00:00.000Z"
@@ -13,18 +16,15 @@ export type SalesforceRecord = {
   SystemModstamp: string
 }
 
-type SalesforceUpsert = {
-  type: "upsert"
-  key: string
-  upstreamUpdatedAt: string
-  properties: any
-  pageContentMarkdown?: string
-}
+type SalesforceUpsert = SyncChangeUpsert<string, PropertySchema<string>>
 
-export type SalesforceResource<T extends SalesforceRecord> = {
+export type SalesforceResource<
+  T extends SalesforceRecord,
+  TChange extends SalesforceUpsert,
+> = {
   objectName: "Account" | "Opportunity"
   fields: readonly string[]
-  toChange(record: T, instanceUrl: string): SalesforceUpsert
+  toChange(record: T, instanceUrl: string): TChange
 }
 
 export type IncrementalSyncState = {
@@ -55,11 +55,16 @@ export function toSoqlDateTime(value: string): string {
 function checkpointWithOverlap(until: string): string {
   const untilMs = new Date(until).getTime()
   const initialMs = new Date(INITIAL_SYNC_START).getTime()
-  return new Date(Math.max(initialMs, untilMs - CURSOR_OVERLAP_MS)).toISOString()
+  return new Date(
+    Math.max(initialMs, untilMs - CURSOR_OVERLAP_MS)
+  ).toISOString()
 }
 
-export function incrementalSoql<T extends SalesforceRecord>(
-  resource: SalesforceResource<T>,
+export function incrementalSoql<
+  T extends SalesforceRecord,
+  TChange extends SalesforceUpsert,
+>(
+  resource: SalesforceResource<T, TChange>,
   since: string,
   until: string
 ): string {
@@ -72,15 +77,19 @@ export function incrementalSoql<T extends SalesforceRecord>(
   ].join(" ")
 }
 
-export function reconciliationSoql<T extends SalesforceRecord>(
-  resource: SalesforceResource<T>
-): string {
+export function reconciliationSoql<
+  T extends SalesforceRecord,
+  TChange extends SalesforceUpsert,
+>(resource: SalesforceResource<T, TChange>): string {
   return `SELECT ${resource.fields.join(", ")} FROM ${resource.objectName} ORDER BY Id ASC`
 }
 
-export async function runIncrementalPage<T extends SalesforceRecord>(
+export async function runIncrementalPage<
+  T extends SalesforceRecord,
+  TChange extends SalesforceUpsert,
+>(
   client: SalesforceClient,
-  resource: SalesforceResource<T>,
+  resource: SalesforceResource<T, TChange>,
   state: IncrementalSyncState | undefined,
   now: () => Date = () => new Date()
 ) {
@@ -122,9 +131,12 @@ export async function runIncrementalPage<T extends SalesforceRecord>(
   }
 }
 
-export async function runReconciliationPage<T extends SalesforceRecord>(
+export async function runReconciliationPage<
+  T extends SalesforceRecord,
+  TChange extends SalesforceUpsert,
+>(
   client: SalesforceClient,
-  resource: SalesforceResource<T>,
+  resource: SalesforceResource<T, TChange>,
   state: ReconciliationSyncState | undefined
 ) {
   const page = await client.queryPage<T>(

@@ -1,4 +1,4 @@
-import { notionIcon } from "@notionhq/workers"
+import { notionIcon, type SyncChangeUpsert } from "@notionhq/workers"
 import * as Builder from "@notionhq/workers/builder"
 import * as Schema from "@notionhq/workers/schema"
 
@@ -47,7 +47,7 @@ export type SalesforceOpportunity = {
   Description: string | null
 }
 
-export const opportunitySchema: Schema.Schema<typeof PRIMARY_KEY> = {
+export const opportunitySchema = {
   databaseIcon: notionIcon("cash"),
   properties: {
     Name: Schema.title(),
@@ -85,12 +85,12 @@ export const opportunitySchema: Schema.Schema<typeof PRIMARY_KEY> = {
 
     "Opportunity ID": Schema.richText(),
   },
-}
+} satisfies Schema.Schema<typeof PRIMARY_KEY>
 
 export function opportunityToChange(
   opportunity: SalesforceOpportunity,
   instanceUrl: string
-) {
+): SyncChangeUpsert<typeof PRIMARY_KEY, typeof opportunitySchema.properties> {
   return {
     type: "upsert" as const,
     key: opportunity.Id,
@@ -99,32 +99,31 @@ export function opportunityToChange(
     properties: {
       Name: Builder.title(opportunity.Name),
       Stage: Builder.select(opportunity.StageName),
-      ...(opportunity.Amount != null && Number.isFinite(opportunity.Amount)
-        ? { Amount: Builder.number(opportunity.Amount) }
-        : {}),
-      ...(opportunity.Probability != null &&
-      Number.isFinite(opportunity.Probability)
-        ? { Probability: Builder.number(opportunity.Probability / 100) }
-        : {}),
+      Amount:
+        opportunity.Amount != null && Number.isFinite(opportunity.Amount)
+          ? Builder.number(opportunity.Amount)
+          : [],
+      Probability:
+        opportunity.Probability != null &&
+        Number.isFinite(opportunity.Probability)
+          ? Builder.number(opportunity.Probability / 100)
+          : [],
       "Close Date": Builder.date(opportunity.CloseDate),
-      ...(opportunity.Type != null
-        ? { Type: Builder.select(opportunity.Type) }
-        : {}),
-      ...(opportunity.LeadSource != null
-        ? { "Lead Source": Builder.select(opportunity.LeadSource) }
-        : {}),
-      ...(opportunity.ForecastCategoryName != null
-        ? {
-            "Forecast Category": Builder.select(
-              opportunity.ForecastCategoryName
-            ),
-          }
-        : {}),
+      Type: opportunity.Type != null ? Builder.select(opportunity.Type) : [],
+      "Lead Source":
+        opportunity.LeadSource != null
+          ? Builder.select(opportunity.LeadSource)
+          : [],
+      "Forecast Category":
+        opportunity.ForecastCategoryName != null
+          ? Builder.select(opportunity.ForecastCategoryName)
+          : [],
       "Is Closed": Builder.checkbox(opportunity.IsClosed),
       "Is Won": Builder.checkbox(opportunity.IsWon),
-      ...(opportunity.Owner?.Name != null
-        ? { Owner: Builder.richText(opportunity.Owner.Name) }
-        : {}),
+      Owner:
+        opportunity.Owner?.Name != null
+          ? Builder.richText(opportunity.Owner.Name)
+          : [],
       Account: opportunity.AccountId
         ? [Builder.relation(opportunity.AccountId)]
         : [],

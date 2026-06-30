@@ -1,5 +1,5 @@
 // Entry point — syncs Salesforce Accounts and Opportunities into two related
-// managed Notion databases.
+// managed Notion databases using a Salesforce External Client App.
 //
 // Each database has:
 //   - a 5-minute incremental sync for new and changed records (including
@@ -27,12 +27,9 @@ import {
 import type { SalesforceOpportunity } from "./opportunities.js"
 import {
   createSalesforceClient,
-  getSalesforceLoginUrl,
+  createSalesforceSessionProvider,
 } from "./salesforce.js"
-import {
-  runIncrementalPage,
-  runReconciliationPage,
-} from "./sync.js"
+import { runIncrementalPage, runReconciliationPage } from "./sync.js"
 import type {
   IncrementalSyncState,
   ReconciliationSyncState,
@@ -40,21 +37,6 @@ import type {
 } from "./sync.js"
 
 const worker = new Worker()
-
-// Register OAuth even before credentials exist so the first deployment can
-// allocate the callback URL used by the Salesforce External Client App.
-const loginUrl = getSalesforceLoginUrl()
-const salesforceAuth = worker.oauth("salesforceAuth", {
-  name: "salesforce",
-  authorizationEndpoint: `${loginUrl}/services/oauth2/authorize`,
-  tokenEndpoint: `${loginUrl}/services/oauth2/token`,
-  scope: "api refresh_token",
-  clientId: process.env.SALESFORCE_CLIENT_ID?.trim() ?? "",
-  clientSecret: process.env.SALESFORCE_CLIENT_SECRET?.trim() ?? "",
-  // Salesforce can omit expires_in. Give Workers a conservative fallback so
-  // it refreshes the access token instead of retaining it indefinitely.
-  accessTokenExpireMs: 60 * 60 * 1_000,
-})
 
 // Salesforce API quotas vary by edition and license count. This conservative
 // shared burst limit prevents all four syncs from issuing requests at once;
@@ -64,23 +46,27 @@ const pacer = worker.pacer("salesforce", {
   intervalMs: 1_000,
 })
 
+const salesforceSession = createSalesforceSessionProvider()
 const createClient = () =>
-  createSalesforceClient(
-    () => salesforceAuth.accessToken(),
-    () => pacer.wait()
-  )
+  createSalesforceClient(salesforceSession, () => pacer.wait())
 
-const accountResource: SalesforceResource<SalesforceAccount> = {
+const accountResource = {
   objectName: "Account",
   fields: ACCOUNT_FIELDS,
   toChange: accountToChange,
-}
+} satisfies SalesforceResource<
+  SalesforceAccount,
+  ReturnType<typeof accountToChange>
+>
 
-const opportunityResource: SalesforceResource<SalesforceOpportunity> = {
+const opportunityResource = {
   objectName: "Opportunity",
   fields: OPPORTUNITY_FIELDS,
   toChange: opportunityToChange,
-}
+} satisfies SalesforceResource<
+  SalesforceOpportunity,
+  ReturnType<typeof opportunityToChange>
+>
 
 // ---------------------------------------------------------------------------
 // Accounts
