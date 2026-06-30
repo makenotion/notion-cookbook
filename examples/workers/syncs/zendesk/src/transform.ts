@@ -10,17 +10,16 @@
 // clean and avoids overwriting user edits with blanks.
 
 import * as Builder from "@notionhq/workers/builder"
-import type { ZendeskTicket, UserLookup, GroupLookup, OrgLookup } from "./zendesk.js"
+import type {
+  ZendeskTicket,
+  UserLookup,
+  GroupLookup,
+  OrgLookup,
+} from "./zendesk.js"
 
 // Use explicit label maps when Zendesk's raw values don't match what users
 // expect to see in Notion. For values not in the map, formatLabel() is used
 // as a fallback (replaces underscores with spaces and title-cases each word).
-
-const CSAT_LABELS: Record<string, string> = {
-  good: "Satisfied",
-  bad: "Not satisfied",
-  offered: "Pending",
-}
 
 const CHANNEL_LABELS: Record<string, string> = {
   web: "Web",
@@ -37,8 +36,6 @@ export function ticketToChange(
   groups: GroupLookup,
   orgs: OrgLookup
 ) {
-  const csatLabel = CSAT_LABELS[ticket.satisfaction_rating?.score ?? ""]
-
   const assigneeName = ticket.assignee_id
     ? users.get(ticket.assignee_id)?.name ?? String(ticket.assignee_id)
     : null
@@ -78,7 +75,6 @@ export function ticketToChange(
       ...(ticket.tags.length > 0
         ? { Tags: Builder.multiSelect(...ticket.tags) }
         : {}),
-      ...(csatLabel ? { "CSAT score": Builder.select(csatLabel) } : {}),
       "Created at": Builder.date(dateOnly(ticket.created_at)),
       "Ticket ID": Builder.richText(String(ticket.id)),
     },
@@ -90,13 +86,11 @@ export function ticketUrl(subdomain: string, ticketId: number): string {
 }
 
 // Converts Zendesk API values (e.g. "mobile_sdk") to display labels
-// (e.g. "Mobile Sdk"). Use CHANNEL_LABELS or CSAT_LABELS instead when the
-// raw value needs a specific mapping (e.g. "api" → "API", not "Api").
+// (e.g. "Mobile Sdk"). Use CHANNEL_LABELS instead when the raw value needs a
+// specific mapping (e.g. "api" → "API", not "Api").
 export function formatLabel(s: string): string {
   if (!s) return s
-  return s
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase())
+  return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
 export function dateOnly(value: string): string {

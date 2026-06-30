@@ -47,40 +47,65 @@ export const ticketMetricSchema: Schema.Schema<typeof PRIMARY_KEY> = {
   },
 }
 
+function calendarMinutes(
+  metric: ZendeskTicketMetric["reply_time_in_minutes"]
+): number | null {
+  return metric?.calendar ?? null
+}
+
 export function ticketMetricToChange(metric: ZendeskTicketMetric) {
+  const firstReply = calendarMinutes(metric.reply_time_in_minutes)
+  const firstResolution = calendarMinutes(
+    metric.first_resolution_time_in_minutes
+  )
+  const fullResolution = calendarMinutes(metric.full_resolution_time_in_minutes)
+  const agentWait = calendarMinutes(metric.agent_wait_time_in_minutes)
+  const requesterWait = calendarMinutes(metric.requester_wait_time_in_minutes)
+  const onHold = calendarMinutes(metric.on_hold_time_in_minutes)
+
   return {
     type: "upsert" as const,
     key: String(metric.ticket_id),
-    upstreamUpdatedAt: metric.updated_at,
+    ...(metric.updated_at ? { upstreamUpdatedAt: metric.updated_at } : {}),
     properties: {
       "Ticket ID": Builder.title(String(metric.ticket_id)),
-      "First Reply (min)": Builder.number(
-        metric.reply_time_in_minutes.calendar
-      ),
-      "First Resolution (min)": Builder.number(
-        metric.first_resolution_time_in_minutes.calendar
-      ),
-      "Full Resolution (min)": Builder.number(
-        metric.full_resolution_time_in_minutes.calendar
-      ),
-      "Agent Wait (min)": Builder.number(
-        metric.agent_wait_time_in_minutes.calendar
-      ),
-      "Requester Wait (min)": Builder.number(
-        metric.requester_wait_time_in_minutes.calendar
-      ),
-      Reopens: Builder.number(metric.reopens),
-      "Agents Touched": Builder.number(metric.assignee_stations),
-      "Groups Touched": Builder.number(metric.group_stations),
+      ...(firstReply != null
+        ? { "First Reply (min)": Builder.number(firstReply) }
+        : {}),
+      ...(firstResolution != null
+        ? { "First Resolution (min)": Builder.number(firstResolution) }
+        : {}),
+      ...(fullResolution != null
+        ? { "Full Resolution (min)": Builder.number(fullResolution) }
+        : {}),
+      ...(agentWait != null
+        ? { "Agent Wait (min)": Builder.number(agentWait) }
+        : {}),
+      ...(requesterWait != null
+        ? { "Requester Wait (min)": Builder.number(requesterWait) }
+        : {}),
+      ...(metric.reopens != null
+        ? { Reopens: Builder.number(metric.reopens) }
+        : {}),
+      ...(metric.assignee_stations != null
+        ? { "Agents Touched": Builder.number(metric.assignee_stations) }
+        : {}),
+      ...(metric.group_stations != null
+        ? { "Groups Touched": Builder.number(metric.group_stations) }
+        : {}),
       ...(metric.solved_at
         ? { "Solved at": Builder.date(dateOnly(metric.solved_at)) }
         : {}),
-      Replies: Builder.number(metric.replies),
-      "On Hold (min)": Builder.number(
-        metric.on_hold_time_in_minutes.calendar
-      ),
-      "Updated at": Builder.date(dateOnly(metric.updated_at)),
-      "Created at": Builder.date(dateOnly(metric.created_at)),
+      ...(metric.replies != null
+        ? { Replies: Builder.number(metric.replies) }
+        : {}),
+      ...(onHold != null ? { "On Hold (min)": Builder.number(onHold) } : {}),
+      ...(metric.updated_at
+        ? { "Updated at": Builder.date(dateOnly(metric.updated_at)) }
+        : {}),
+      ...(metric.created_at
+        ? { "Created at": Builder.date(dateOnly(metric.created_at)) }
+        : {}),
     },
   }
 }
