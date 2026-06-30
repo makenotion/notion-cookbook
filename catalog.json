@@ -1,0 +1,446 @@
+{
+  "version": 1,
+  "recipes": [
+    {
+      "id": "database-email-update",
+      "title": "Database email update",
+      "summary": "Send an email through SendGrid when the status of a page in a Notion database changes.",
+      "path": "examples/database-email-update",
+      "kind": "api-example",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-api", "sendgrid"],
+      "entrypoints": ["index.ts"],
+      "commands": {
+        "install": "npm install",
+        "run": "npm run ts-run"
+      }
+    },
+    {
+      "id": "generate-random-data",
+      "title": "Generate random data",
+      "summary": "Inspect a Notion database schema and create correctly typed random rows for testing.",
+      "path": "examples/generate-random-data",
+      "kind": "api-example",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-api"],
+      "entrypoints": ["index.ts"],
+      "commands": {
+        "install": "npm install",
+        "run": "npm run ts-run"
+      }
+    },
+    {
+      "id": "intro-to-notion-api",
+      "title": "Introduction to the Notion API",
+      "summary": "Learn Notion API fundamentals through progressive examples for blocks, pages, databases, queries, templates, and file uploads.",
+      "path": "examples/intro-to-notion-api",
+      "kind": "api-example",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-api"],
+      "entrypoints": [
+        "basic/1-add-block.ts",
+        "basic/2-add-linked-block.ts",
+        "basic/3-add-styled-block.ts",
+        "intermediate/1-create-a-database.ts",
+        "intermediate/2-add-page-to-database.ts",
+        "intermediate/3-query-database.ts",
+        "intermediate/4-sort-database.ts",
+        "intermediate/5-upload-file.ts",
+        "intermediate/6-create-page-with-template.ts"
+      ],
+      "commands": {
+        "install": "npm install",
+        "run": "npm run basic:1"
+      }
+    },
+    {
+      "id": "notion-github-sync",
+      "title": "Notion–GitHub issue sync",
+      "summary": "Copy issues from a GitHub repository into a Notion database in a one-way local sync.",
+      "path": "examples/notion-github-sync",
+      "kind": "api-example",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-api", "github"],
+      "entrypoints": ["index.ts"],
+      "commands": {
+        "install": "npm install",
+        "run": "npm start"
+      }
+    },
+    {
+      "id": "notion-task-github-pr-sync",
+      "title": "Notion task–GitHub PR sync",
+      "summary": "Update Notion tasks when a linked GitHub pull request is closed or merged.",
+      "path": "examples/notion-task-github-pr-sync",
+      "kind": "api-example",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-api", "github"],
+      "entrypoints": ["index.ts"],
+      "commands": {
+        "install": "npm install",
+        "run": "npm start"
+      }
+    },
+    {
+      "id": "parse-text-from-any-block-type",
+      "title": "Parse text from any block type",
+      "summary": "Retrieve a Notion page's blocks and extract the available plain text from their different shapes.",
+      "path": "examples/parse-text-from-any-block-type",
+      "kind": "api-example",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-api"],
+      "entrypoints": ["index.ts"],
+      "commands": {
+        "install": "npm install",
+        "run": "npm start"
+      }
+    },
+    {
+      "id": "query-large-data-sources",
+      "title": "Query large data sources",
+      "summary": "Read all rows from a Notion data source beyond the 10,000-row per-query limit by splitting the query into time windows.",
+      "path": "examples/query-large-data-sources",
+      "kind": "api-example",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-api"],
+      "entrypoints": ["index.ts"],
+      "commands": {
+        "install": "npm install",
+        "run": "npm run ts-run"
+      }
+    },
+    {
+      "id": "web-form-with-express",
+      "title": "Web form with Express",
+      "summary": "Use browser forms and an Express server to create Notion databases, pages, blocks, and comments.",
+      "path": "examples/web-form-with-express",
+      "kind": "api-example",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-api", "express"],
+      "entrypoints": ["server.ts"],
+      "commands": {
+        "install": "npm install",
+        "run": "npm start"
+      }
+    },
+    {
+      "id": "airflow",
+      "title": "Airflow agent tool",
+      "summary": "Let a Notion agent inspect Airflow DAGs, runs, tasks, logs, and service health through the stable REST API.",
+      "path": "workers/airflow",
+      "kind": "worker-tool",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "airflow"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name airflow"
+      }
+    },
+    {
+      "id": "chart-generator",
+      "title": "Chart generator agent tool",
+      "summary": "Render a Vega-Lite specification to PNG and let a Notion agent insert the image into a page.",
+      "path": "workers/chart-generator",
+      "kind": "worker-tool",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "vega-lite"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name chart-generator"
+      }
+    },
+    {
+      "id": "cloudwatch-logs",
+      "title": "CloudWatch Logs agent tool",
+      "summary": "Let a Notion agent find AWS CloudWatch log groups and streams and read their events.",
+      "path": "workers/cloudwatch-logs",
+      "kind": "worker-tool",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "aws-cloudwatch"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name cloudwatch-logs"
+      }
+    },
+    {
+      "id": "duckdb-query",
+      "title": "DuckDB query agent tool",
+      "summary": "Learn the Worker tool pattern by querying a seeded, in-memory DuckDB sales database with no credentials.",
+      "path": "workers/duckdb-query",
+      "kind": "worker-tool",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "duckdb"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name duckdb-query"
+      }
+    },
+    {
+      "id": "duckdb-sync",
+      "title": "DuckDB sync",
+      "summary": "Learn the managed-database sync pattern by importing seeded, in-memory DuckDB customer data into Notion.",
+      "path": "workers/duckdb-sync",
+      "kind": "worker-sync",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "duckdb"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy"
+      }
+    },
+    {
+      "id": "github-sync",
+      "title": "GitHub sync",
+      "summary": "Sync GitHub issues and pull requests into managed Notion databases on a five-minute schedule.",
+      "path": "workers/github-sync",
+      "kind": "worker-sync",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "github"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name github-sync"
+      }
+    },
+    {
+      "id": "hubspot-sync",
+      "title": "HubSpot sync",
+      "summary": "Sync HubSpot CRM contacts, deals, and companies into managed Notion databases.",
+      "path": "workers/hubspot-sync",
+      "kind": "worker-sync",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "hubspot"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy"
+      }
+    },
+    {
+      "id": "jira-sync",
+      "title": "Jira sync",
+      "summary": "Sync Jira Cloud issues, current sprints, sprint analytics, and projects into managed Notion databases.",
+      "path": "workers/jira-sync",
+      "kind": "worker-sync",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "jira-cloud"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy"
+      }
+    },
+    {
+      "id": "linear-sync",
+      "title": "Linear sync",
+      "summary": "Sync Linear projects, issues, and initiatives into managed Notion databases on planning-friendly schedules.",
+      "path": "workers/linear-sync",
+      "kind": "worker-sync",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "linear"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy"
+      }
+    },
+    {
+      "id": "postgres-query",
+      "title": "Postgres query agent tool",
+      "summary": "Let a Notion agent discover PostgreSQL tables and execute bounded, read-only SQL queries.",
+      "path": "workers/postgres-query",
+      "kind": "worker-tool",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "postgresql"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name postgres-query"
+      }
+    },
+    {
+      "id": "ppt-creator",
+      "title": "PowerPoint creator agent tool",
+      "summary": "Turn a Notion page into a PowerPoint presentation and attach the generated file to the page.",
+      "path": "workers/ppt-creator",
+      "kind": "worker-tool",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "microsoft-powerpoint"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name ppt-creator"
+      }
+    },
+    {
+      "id": "snowflake-query",
+      "title": "Snowflake query agent tool",
+      "summary": "Let a Notion agent discover Snowflake tables and execute bounded, read-only SQL queries.",
+      "path": "workers/snowflake-query",
+      "kind": "worker-tool",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "snowflake"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name snowflake-query"
+      }
+    },
+    {
+      "id": "snowflake-sync",
+      "title": "Snowflake sync",
+      "summary": "Sync rows returned by a configurable Snowflake query into a managed Notion database.",
+      "path": "workers/snowflake-sync",
+      "kind": "worker-sync",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "snowflake"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy"
+      }
+    },
+    {
+      "id": "sqlite-query",
+      "title": "SQLite query agent tool",
+      "summary": "Learn the Worker tool pattern by querying a seeded, in-memory SQLite sales database with no credentials.",
+      "path": "workers/sqlite-query",
+      "kind": "worker-tool",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "sqlite"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name sqlite-query"
+      }
+    },
+    {
+      "id": "zendesk-sync",
+      "title": "Zendesk sync",
+      "summary": "Sync Zendesk tickets, organizations, users, CSAT responses, ticket metrics, and SLA policies into managed Notion databases.",
+      "path": "workers/zendesk-sync",
+      "kind": "worker-sync",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "zendesk"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy"
+      }
+    },
+    {
+      "id": "zendesk-webhook",
+      "title": "Zendesk webhook",
+      "summary": "Verify Zendesk ticket webhooks, enrich tickets with comments, and upsert them into a Notion database.",
+      "path": "workers/zendesk-webhook",
+      "kind": "worker-webhook",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "zendesk"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name zendesk-webhook"
+      }
+    }
+  ]
+}

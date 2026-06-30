@@ -1,0 +1,19 @@
+{
+  "name": "@notion-cookbook/query-large-data-sources",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Query a Notion data source that has more rows than the per-query limit",
+  "type": "module",
+  "scripts": {
+    "ts-run": "node --loader ts-node/esm index.ts"
+  },
+  "dependencies": {
+    "@notionhq/client": "^5.22.0",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "ts-node": "^10.8.2",
+    "typescript": "^4.7.4"
+  }
+}

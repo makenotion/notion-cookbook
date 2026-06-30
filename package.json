@@ -4,13 +4,15 @@
   "description": "A collection of guides, examples, and resources for building with Notion's developer platform",
   "private": true,
   "scripts": {
-    "examples:install": "./scripts/install-examples.sh",
-    "examples:typecheck": "./scripts/typecheck-examples.sh",
+    "projects:install": "./scripts/install-projects.sh",
+    "projects:typecheck": "./scripts/typecheck-projects.sh",
+    "projects:test": "./scripts/test-projects.sh",
+    "catalog:validate": "node scripts/validate-catalog.mjs",
     "lint:markdown": "markdownlint \"**/*.md\" --ignore node_modules --ignore \"**/node_modules/**\" --config .markdownlint.jsonc",
     "format": "prettier --write \"**/*.{md,json,yml,yaml}\"",
     "format:check": "prettier --check \"**/*.{md,json,yml,yaml}\"",
-    "verify": "npm run examples:typecheck && npm run lint:markdown && npm run format:check",
-    "verify:all": "npm run examples:install && npm run verify",
+    "verify": "npm run catalog:validate && npm run projects:typecheck && npm run projects:test && npm run lint:markdown && npm run format:check",
+    "verify:all": "npm run projects:install && npm run verify",
     "prepare": "husky"
   },
   "lint-staged": {
