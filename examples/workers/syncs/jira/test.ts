@@ -1,6 +1,6 @@
 // Offline tests for the jira sync worker.
 // No Jira connection is made — API assertions use mocked fetch responses.
-// Run: npm test  (or: npx tsx test.ts)
+// Run: npm test
 
 import { issueToChange } from "./src/issues.js"
 import { sprintToChange } from "./src/sprints.js"
@@ -8,8 +8,12 @@ import { projectToChange } from "./src/projects.js"
 import {
   browseUrl,
   extractTextFromAdf,
+  fetchBoardConfiguration,
+  fetchBulkChangelogsPage,
   fetchIssuesPage,
   fetchProjectsPage,
+  fetchSprintIssuesPage,
+  fetchSprintsForBoard,
   getEpicName,
   getSprintName,
   getStoryPoints,
@@ -844,6 +848,151 @@ async function runApiClientTests() {
       "rejects incomplete enhanced-search snapshots",
       incompleteSearchError instanceof Error &&
         incompleteSearchError.message.includes("Results were truncated")
+    )
+
+    let sprintListRequest: URL | undefined
+    globalThis.fetch = (async (input) => {
+      sprintListRequest = new URL(String(input))
+      return new Response(
+        JSON.stringify({
+          values: [activeSprint],
+          startAt: 0,
+          maxResults: 50,
+          isLast: true,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      )
+    }) as typeof fetch
+
+    const sprintListPage = await fetchSprintsForBoard(10, 0, [
+      "active",
+      "future",
+      "active",
+    ])
+    ok(
+      "filters board sprints by state",
+      sprintListRequest?.pathname === "/rest/agile/1.0/board/10/sprint" &&
+        sprintListRequest.searchParams.get("state") === "active,future" &&
+        sprintListPage.sprints[0]?.id === 42 &&
+        !sprintListPage.hasMore
+    )
+
+    let boardConfigurationRequest: URL | undefined
+    globalThis.fetch = (async (input) => {
+      boardConfigurationRequest = new URL(String(input))
+      return new Response(
+        JSON.stringify({
+          estimation: {
+            type: "field",
+            field: {
+              fieldId: "customfield_10016",
+              displayName: "Story Points",
+            },
+          },
+          columnConfig: {
+            columns: [
+              { name: "To Do", statuses: [{ id: "1" }] },
+              { name: "Done", statuses: [{ id: "5" }, { id: "6" }] },
+              { name: "Unmapped", statuses: [] },
+            ],
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      )
+    }) as typeof fetch
+
+    const boardConfiguration = await fetchBoardConfiguration(10)
+    ok(
+      "reads board estimation and rightmost nonempty Done statuses",
+      boardConfigurationRequest?.pathname ===
+        "/rest/agile/1.0/board/10/configuration" &&
+        boardConfiguration.estimationType === "field" &&
+        boardConfiguration.estimationFieldId === "customfield_10016" &&
+        boardConfiguration.estimationFieldName === "Story Points" &&
+        boardConfiguration.doneStatusIds.join(",") === "5,6"
+    )
+
+    let sprintIssuesRequest: URL | undefined
+    globalThis.fetch = (async (input) => {
+      sprintIssuesRequest = new URL(String(input))
+      return new Response(
+        JSON.stringify({
+          issues: [minimalIssue],
+          isLast: false,
+          nextPageToken: "sprint-cursor-2",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      )
+    }) as typeof fetch
+
+    const sprintIssuesPage = await fetchSprintIssuesPage(42, {
+      fields: ["summary", "status", "summary"],
+      nextPageToken: "sprint-cursor-1",
+    })
+    ok(
+      "uses enhanced sprint issue endpoint and cursor pagination",
+      sprintIssuesRequest?.pathname === "/rest/software/1.0/sprint/42/issue" &&
+        sprintIssuesRequest.searchParams.get("nextPageToken") ===
+          "sprint-cursor-1" &&
+        sprintIssuesRequest.searchParams.get("fields") === "summary,status" &&
+        sprintIssuesPage.nextPageToken === "sprint-cursor-2" &&
+        sprintIssuesPage.hasMore
+    )
+
+    let changelogRequest: URL | undefined
+    let changelogRequestInit: RequestInit | undefined
+    globalThis.fetch = (async (input, init) => {
+      changelogRequest = new URL(String(input))
+      changelogRequestInit = init
+      return new Response(
+        JSON.stringify({
+          issueChangeLogs: [
+            {
+              issueId: "10001",
+              changeHistories: [
+                {
+                  id: "20001",
+                  created: 1_712_000_000,
+                  items: [
+                    {
+                      field: "Sprint",
+                      fieldId: "customfield_10020",
+                      from: "40",
+                      fromString: "Sprint 40",
+                      to: "42",
+                      toString: "Sprint 42",
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+          nextPageToken: "changelog-cursor-2",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      )
+    }) as typeof fetch
+
+    const changelogPage = await fetchBulkChangelogsPage(["10001"], {
+      fieldIds: ["customfield_10020", "status"],
+      nextPageToken: "changelog-cursor-1",
+      maxResults: 500,
+    })
+    const changelogRequestBody = JSON.parse(
+      String(changelogRequestInit?.body)
+    ) as Record<string, unknown>
+    ok(
+      "posts bulk changelog filters and cursor",
+      changelogRequest?.pathname === "/rest/api/3/changelog/bulkfetch" &&
+        changelogRequestInit?.method === "POST" &&
+        JSON.stringify(changelogRequestBody.issueIdsOrKeys) === '["10001"]' &&
+        JSON.stringify(changelogRequestBody.fieldIds) ===
+          '["customfield_10020","status"]' &&
+        changelogRequestBody.nextPageToken === "changelog-cursor-1" &&
+        changelogRequestBody.maxResults === 500 &&
+        changelogPage.issueChangeLogs[0]?.issueId === "10001" &&
+        changelogPage.nextPageToken === "changelog-cursor-2" &&
+        changelogPage.hasMore
     )
 
     let projectRequest: URL | undefined

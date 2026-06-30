@@ -4,11 +4,11 @@ import { notionIcon } from "@notionhq/workers"
 import type { JiraSprint, BoardLookup } from "./jira.js"
 import { dateOnly } from "./helpers.js"
 
-export const INITIAL_TITLE = "Jira Sprints"
+export const INITIAL_TITLE = "Jira Current Sprints"
 export const PRIMARY_KEY = "Sprint ID"
 
 export const sprintSchema: Schema.Schema<typeof PRIMARY_KEY> = {
-  databaseIcon: notionIcon("run"),
+  databaseIcon: notionIcon("stopwatch"),
   properties: {
     Name: Schema.title(),
 

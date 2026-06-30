@@ -1,9 +1,10 @@
 // Jira Cloud REST API client. Handles authentication and paginated fetching
 // for issues, sprints, and projects.
 //
-// Uses two API surfaces:
+// Uses three API surfaces:
 //   - Platform REST API v3 (/rest/api/3) for issues and projects
 //   - Agile REST API (/rest/agile/1.0) for boards and sprints
+//   - Enhanced Software REST API (/rest/software/1.0) for sprint issues
 //
 // To add a new resource:
 //   1. Add a type for the response shape
@@ -35,12 +36,14 @@ function getAuthHeader(): string {
   return `Basic ${Buffer.from(`${email}:${token}`).toString("base64")}`
 }
 
-async function fetchJson<T>(url: string): Promise<T> {
+async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers)
+  headers.set("Authorization", getAuthHeader())
+  headers.set("Accept", "application/json")
+
   const response = await fetch(url, {
-    headers: {
-      Authorization: getAuthHeader(),
-      Accept: "application/json",
-    },
+    ...init,
+    headers,
   })
 
   const text = await response.text()
@@ -57,10 +60,7 @@ async function fetchJson<T>(url: string): Promise<T> {
 }
 
 class JiraApiError extends Error {
-  constructor(
-    readonly status: number,
-    body: string
-  ) {
+  constructor(readonly status: number, body: string) {
     super(`Jira API error (${status}): ${body || "No response body"}`)
     this.name = "JiraApiError"
   }
@@ -156,7 +156,11 @@ export type JiraIssue = {
   self: string
   fields: {
     summary: string
-    status: { name: string; statusCategory?: { name: string } } | null
+    status: {
+      id?: string
+      name: string
+      statusCategory?: { name: string }
+    } | null
     issuetype: {
       name: string
       subtask?: boolean
@@ -402,6 +406,8 @@ export type JiraSprint = {
   originBoardId: number
 }
 
+export type JiraSprintState = "future" | "active" | "closed"
+
 type BoardListResponse = {
   values: { id: number; name: string }[]
   startAt: number
@@ -443,14 +449,20 @@ export async function fetchAllBoards(
 
 export async function fetchSprintsForBoard(
   boardId: number,
-  startAt?: number
+  startAt?: number,
+  states?: readonly JiraSprintState[]
 ): Promise<{ sprints: JiraSprint[]; hasMore: boolean; nextStartAt: number }> {
   const baseUrl = getBaseUrl()
   const s = startAt ?? 0
-  const url = `${baseUrl}/rest/agile/1.0/board/${boardId}/sprint?startAt=${s}&maxResults=50`
+  const url = new URL(`${baseUrl}/rest/agile/1.0/board/${boardId}/sprint`)
+  url.searchParams.set("startAt", String(s))
+  url.searchParams.set("maxResults", "50")
+  if (states && states.length > 0) {
+    url.searchParams.set("state", [...new Set(states)].join(","))
+  }
 
   try {
-    const body = await fetchJson<SprintListResponse>(url)
+    const body = await fetchJson<SprintListResponse>(url.toString())
     return {
       sprints: body.values,
       hasMore: !body.isLast,
@@ -461,6 +473,185 @@ export async function fetchSprintsForBoard(
       return { sprints: [], hasMore: false, nextStartAt: s }
     }
     throw err
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Sprint analytics — board configuration, sprint issues, and issue history
+// ---------------------------------------------------------------------------
+
+type BoardConfigurationResponse = {
+  estimation?: {
+    type?: string
+    field?: {
+      fieldId?: string
+      displayName?: string
+    }
+  }
+  columnConfig?: {
+    columns?: {
+      statuses?: { id: string }[]
+    }[]
+  }
+}
+
+export type JiraBoardConfiguration = {
+  estimationType?: string
+  estimationFieldId?: string
+  estimationFieldName?: string
+  doneStatusIds: string[]
+}
+
+// Jira considers issues in the board's rightmost column complete. Returning
+// those status IDs keeps that board-specific definition available to sprint
+// analytics instead of assuming every globally "Done" status is equivalent.
+export async function fetchBoardConfiguration(
+  boardId: number
+): Promise<JiraBoardConfiguration> {
+  const baseUrl = getBaseUrl()
+  const body = await fetchJson<BoardConfigurationResponse>(
+    `${baseUrl}/rest/agile/1.0/board/${boardId}/configuration`
+  )
+  const columns = body.columnConfig?.columns ?? []
+  let doneStatuses: { id: string }[] = []
+  for (let index = columns.length - 1; index >= 0; index -= 1) {
+    if ((columns[index].statuses?.length ?? 0) > 0) {
+      doneStatuses = columns[index].statuses ?? []
+      break
+    }
+  }
+
+  return {
+    estimationType: body.estimation?.type,
+    estimationFieldId: body.estimation?.field?.fieldId,
+    estimationFieldName: body.estimation?.field?.displayName,
+    doneStatusIds: [...new Set(doneStatuses.map((status) => status.id))],
+  }
+}
+
+type SprintIssueSearchResponse = {
+  issues: JiraIssue[]
+  isLast?: boolean
+  nextPageToken?: string
+}
+
+export type SprintIssuePageOptions = {
+  fields?: readonly string[]
+  nextPageToken?: string
+  jql?: string
+}
+
+// Jira's enhanced sprint issue endpoint uses opaque cursor pagination. Callers
+// should persist only nextPageToken and must not infer offsets from page size.
+export async function fetchSprintIssuesPage(
+  sprintId: number,
+  options: SprintIssuePageOptions = {}
+): Promise<{
+  issues: JiraIssue[]
+  hasMore: boolean
+  nextPageToken?: string
+}> {
+  const baseUrl = getBaseUrl()
+  const url = new URL(`${baseUrl}/rest/software/1.0/sprint/${sprintId}/issue`)
+  url.searchParams.set("maxResults", "100")
+  if (options.fields && options.fields.length > 0) {
+    url.searchParams.set("fields", [...new Set(options.fields)].join(","))
+  }
+  if (options.nextPageToken) {
+    url.searchParams.set("nextPageToken", options.nextPageToken)
+  }
+  if (options.jql) {
+    url.searchParams.set("jql", options.jql)
+  }
+
+  const body = await fetchJson<SprintIssueSearchResponse>(url.toString())
+  const nextPageToken = body.nextPageToken || undefined
+  return {
+    issues: body.issues,
+    hasMore: body.isLast !== true && nextPageToken !== undefined,
+    nextPageToken,
+  }
+}
+
+export type JiraChangelogItem = {
+  field: string
+  fieldId?: string
+  from?: string | null
+  fromString?: string | null
+  to?: string | null
+  toString?: string | null
+}
+
+export type JiraChangeHistory = {
+  id: string
+  created: string | number
+  items: JiraChangelogItem[]
+}
+
+export type JiraIssueChangeLog = {
+  issueId: string
+  changeHistories: JiraChangeHistory[]
+}
+
+type BulkChangelogResponse = {
+  issueChangeLogs: JiraIssueChangeLog[]
+  nextPageToken?: string
+}
+
+export type BulkChangelogPageOptions = {
+  fieldIds?: readonly string[]
+  nextPageToken?: string
+  maxResults?: number
+}
+
+// The bulk endpoint accepts at most 1,000 issues and 10 fields. It returns all
+// matching histories in chronological order across the requested issue set.
+export async function fetchBulkChangelogsPage(
+  issueIdsOrKeys: readonly string[],
+  options: BulkChangelogPageOptions = {}
+): Promise<{
+  issueChangeLogs: JiraIssueChangeLog[]
+  hasMore: boolean
+  nextPageToken?: string
+}> {
+  if (issueIdsOrKeys.length === 0 || issueIdsOrKeys.length > 1_000) {
+    throw new Error(
+      "Bulk changelog requests require between 1 and 1,000 issues."
+    )
+  }
+  if ((options.fieldIds?.length ?? 0) > 10) {
+    throw new Error("Bulk changelog requests support at most 10 field IDs.")
+  }
+
+  const requestBody: {
+    issueIdsOrKeys: string[]
+    fieldIds?: string[]
+    maxResults: number
+    nextPageToken?: string
+  } = {
+    issueIdsOrKeys: [...new Set(issueIdsOrKeys)],
+    maxResults: options.maxResults ?? 1_000,
+  }
+  if (options.fieldIds && options.fieldIds.length > 0) {
+    requestBody.fieldIds = [...new Set(options.fieldIds)]
+  }
+  if (options.nextPageToken) {
+    requestBody.nextPageToken = options.nextPageToken
+  }
+
+  const body = await fetchJson<BulkChangelogResponse>(
+    `${getBaseUrl()}/rest/api/3/changelog/bulkfetch`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(requestBody),
+    }
+  )
+  const nextPageToken = body.nextPageToken || undefined
+  return {
+    issueChangeLogs: body.issueChangeLogs,
+    hasMore: nextPageToken !== undefined,
+    nextPageToken,
   }
 }
 

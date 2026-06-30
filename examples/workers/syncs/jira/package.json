@@ -5,7 +5,7 @@
   "scripts": {
     "build": "tsc",
     "check": "tsc --noEmit",
-    "test": "tsx test.ts"
+    "test": "node --import tsx --test test.ts sprint-analytics.test.ts"
   },
   "engines": {
     "node": ">=22.0.0",
