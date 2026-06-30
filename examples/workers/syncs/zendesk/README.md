@@ -8,6 +8,14 @@ You don't need to create the Notion databases yourself. The worker declares the
 schemas and Notion creates and manages each database for you (these are called
 "managed databases").
 
+## Supported configuration
+
+To run all six syncs as written, use Zendesk Support Professional or higher, or
+Zendesk Suite Growth or higher, with the updated CSAT experience enabled and an
+admin API user with API token access. Accounts that do not meet this
+configuration can still use the core ticket, organization, user, and
+ticket-metric syncs after removing the CSAT and SLA sync registrations.
+
 ## What you get
 
 | Database                          | Zendesk resource           | Schedule    | Plan                                 |
