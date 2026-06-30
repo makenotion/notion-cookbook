@@ -1,9 +1,9 @@
 // SLA Policies sync — a reference table of your SLA definitions with targets
 // flattened into columns for at-a-glance comparison.
-// Requires Zendesk Professional+ plan.
+// Requires Support Professional or Suite Growth and above.
 //
-// This is a small, rarely-changing dataset (typically <20 policies), so
-// it uses a manual schedule and fetches everything in one call.
+// This is a small, rarely-changing dataset, so it uses a manual schedule and
+// follows Zendesk's offset pages only when triggered.
 
 import * as Schema from "@notionhq/workers/schema"
 import * as Builder from "@notionhq/workers/builder"
@@ -73,12 +73,14 @@ export function slaPolicyToChange(policy: ZendeskSlaPolicy) {
   return {
     type: "upsert" as const,
     key: String(policy.id),
-    upstreamUpdatedAt: policy.updated_at,
+    ...(policy.updated_at ? { upstreamUpdatedAt: policy.updated_at } : {}),
     pageContentMarkdown: description,
     properties: {
       Title: Builder.title(policy.title ?? ""),
       "Policy ID": Builder.richText(String(policy.id)),
-      Position: Builder.number(policy.position),
+      ...(policy.position != null
+        ? { Position: Builder.number(policy.position) }
+        : {}),
       ...(urgentReply != null
         ? { "Urgent First Reply (min)": Builder.number(urgentReply) }
         : {}),
@@ -103,8 +105,12 @@ export function slaPolicyToChange(policy: ZendeskSlaPolicy) {
       ...(lowRes != null
         ? { "Low Resolution (min)": Builder.number(lowRes) }
         : {}),
-      "Created at": Builder.date(dateOnly(policy.created_at)),
-      "Updated at": Builder.date(dateOnly(policy.updated_at)),
+      ...(policy.created_at
+        ? { "Created at": Builder.date(dateOnly(policy.created_at)) }
+        : {}),
+      ...(policy.updated_at
+        ? { "Updated at": Builder.date(dateOnly(policy.updated_at)) }
+        : {}),
     },
   }
 }

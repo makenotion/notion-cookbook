@@ -42,6 +42,12 @@ export const userSchema: Schema.Schema<typeof PRIMARY_KEY> = {
   },
 }
 
+const ROLE_LABELS: Record<string, string> = {
+  "end-user": "End-user",
+  agent: "Agent",
+  admin: "Admin",
+}
+
 export function userToChange(user: ZendeskFullUser) {
   return {
     type: "upsert" as const,
@@ -51,7 +57,9 @@ export function userToChange(user: ZendeskFullUser) {
       Name: Builder.title(user.name ?? ""),
       "User ID": Builder.richText(String(user.id)),
       ...(user.email ? { Email: Builder.email(user.email) } : {}),
-      Role: Builder.select(formatLabel(user.role ?? "end-user")),
+      Role: Builder.select(
+        ROLE_LABELS[user.role] ?? formatLabel(user.role ?? "end-user")
+      ),
       ...(user.organization_id
         ? { "Organization ID": Builder.richText(String(user.organization_id)) }
         : {}),

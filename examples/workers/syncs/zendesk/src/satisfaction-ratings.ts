@@ -1,5 +1,5 @@
-// Satisfaction Ratings sync — tracks CSAT responses with customer comments.
-// Requires Zendesk Professional+ plan (CSAT is a paid feature).
+// Legacy Satisfaction Ratings sync — tracks responses from Zendesk's legacy
+// CSAT feature. Accounts using current CSAT surveys need the Survey Responses API.
 
 import * as Schema from "@notionhq/workers/schema"
 import * as Builder from "@notionhq/workers/builder"
@@ -13,7 +13,7 @@ const SCORE_LABELS: Record<string, string> = {
   offered: "Pending",
 }
 
-export const INITIAL_TITLE = "Zendesk CSAT Ratings"
+export const INITIAL_TITLE = "Zendesk Legacy CSAT Ratings"
 export const PRIMARY_KEY = "Rating ID"
 
 export const satisfactionRatingSchema: Schema.Schema<typeof PRIMARY_KEY> = {
@@ -49,9 +49,7 @@ export function satisfactionRatingToChange(rating: ZendeskSatisfactionRating) {
       "Rating ID": Builder.richText(String(rating.id)),
       "Ticket ID": Builder.richText(String(rating.ticket_id)),
       Score: Builder.select(scoreLabel),
-      ...(rating.reason
-        ? { Reason: Builder.richText(rating.reason) }
-        : {}),
+      ...(rating.reason ? { Reason: Builder.richText(rating.reason) } : {}),
       "Created at": Builder.date(dateOnly(rating.created_at)),
     },
   }

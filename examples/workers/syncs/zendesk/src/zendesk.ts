@@ -4,14 +4,17 @@
 //
 // To add a new resource:
 //   1. Add a type for the API response shape
-//   2. Add a fetchXxxPage() function using fetchPage()
+//   2. Add a paginated fetchXxxPage() function
 //   3. Wire it into index.ts
+
+import { RateLimitError } from "@notionhq/workers"
 
 // ---------------------------------------------------------------------------
 // Shared types and helpers
 // ---------------------------------------------------------------------------
 
 const PAGE_SIZE = 100
+const INITIAL_EXPORT_START_TIME = 1
 
 function requireEnv(name: string): string {
   const value = process.env[name]?.trim()
@@ -44,6 +47,33 @@ export function getAuthorizationHeader(): string {
   )
 }
 
+function retryAfterSeconds(response: Response): number | undefined {
+  const header = response.headers.get("Retry-After")
+  if (!header?.trim()) return undefined
+  const value = Number(header)
+  return Number.isFinite(value) && value >= 0 ? value : undefined
+}
+
+async function fetchJson<T>(url: string): Promise<T> {
+  const authorization = getAuthorizationHeader()
+  const response = await fetch(url, {
+    headers: { Authorization: authorization, Accept: "application/json" },
+    redirect: "error",
+  })
+
+  const text = await response.text()
+  if (response.status === 429) {
+    throw new RateLimitError({ retryAfter: retryAfterSeconds(response) })
+  }
+  if (!response.ok) {
+    throw new Error(
+      `Zendesk API error (${response.status}): ${text || "No response body"}`
+    )
+  }
+
+  return JSON.parse(text) as T
+}
+
 // Generic paginated fetch for any Zendesk list endpoint.
 export async function fetchPage<T>(
   subdomain: string,
@@ -61,51 +91,21 @@ export async function fetchPage<T>(
   }
   const url = `${base}?${params.toString()}`
 
-  const authorization = getAuthorizationHeader()
-  const response = await fetch(url, {
-    headers: { Authorization: authorization, Accept: "application/json" },
-    redirect: "error",
-  })
-
-  const text = await response.text()
-  if (!response.ok) {
-    throw new Error(
-      `Zendesk API error (${response.status}): ${text || "No response body"}`
-    )
-  }
-
-  const body = JSON.parse(text) as T & {
-    meta: { has_more: boolean; after_cursor: string }
+  const body = await fetchJson<
+    T & { meta: { has_more: boolean; after_cursor?: string | null } }
+  >(url)
+  const nextCursor = body.meta.has_more
+    ? body.meta.after_cursor ?? undefined
+    : undefined
+  if (body.meta.has_more && !nextCursor) {
+    throw new Error("Zendesk pagination response is missing after_cursor")
   }
 
   return {
     data: body,
     hasMore: body.meta.has_more,
-    nextCursor: body.meta.has_more ? body.meta.after_cursor : undefined,
+    nextCursor,
   }
-}
-
-// Non-paginated fetch for small collections (e.g. SLA policies).
-export async function fetchAll<T>(
-  subdomain: string,
-  path: string
-): Promise<T> {
-  const url = `https://${subdomain}.zendesk.com${path}`
-  const authorization = getAuthorizationHeader()
-
-  const response = await fetch(url, {
-    headers: { Authorization: authorization, Accept: "application/json" },
-    redirect: "error",
-  })
-
-  const text = await response.text()
-  if (!response.ok) {
-    throw new Error(
-      `Zendesk API error (${response.status}): ${text || "No response body"}`
-    )
-  }
-
-  return JSON.parse(text) as T
 }
 
 // ---------------------------------------------------------------------------
@@ -133,6 +133,19 @@ export type ZendeskTicket = {
   updated_at: string
 }
 
+export type ZendeskDeletedTicket = {
+  id: number
+  status: "deleted"
+}
+
+export type ZendeskExportTicket = ZendeskTicket | ZendeskDeletedTicket
+
+export function isDeletedTicket(
+  ticket: ZendeskExportTicket
+): ticket is ZendeskDeletedTicket {
+  return ticket.status === "deleted"
+}
+
 export type ZendeskUser = {
   id: number
   name: string
@@ -153,63 +166,83 @@ export type UserLookup = Map<number, ZendeskUser>
 export type GroupLookup = Map<number, ZendeskGroup>
 export type OrgLookup = Map<number, ZendeskOrganizationRef>
 
-type ListTicketsResponse = {
-  tickets: ZendeskTicket[]
-  users: ZendeskUser[]
-  groups: ZendeskGroup[]
-  organizations: ZendeskOrganizationRef[]
+type IncrementalTicketsResponse = {
+  tickets: ZendeskExportTicket[]
+  users?: ZendeskUser[]
+  groups?: ZendeskGroup[]
+  organizations?: ZendeskOrganizationRef[]
+  metric_sets?: ZendeskTicketMetric[]
+  after_cursor: string
+  end_of_stream: boolean
 }
 
-// Kept for backward compatibility with tests.
-export function buildTicketsUrl(
-  subdomain: string,
+async function fetchIncrementalTicketsPage(
+  includes: string[],
   cursor?: string
-): string {
-  const base = `https://${subdomain}.zendesk.com/api/v2/tickets.json`
-  const params = new URLSearchParams({
-    "page[size]": String(PAGE_SIZE),
-    include: "users",
-  })
-  if (cursor) {
-    params.set("page[after]", cursor)
+): Promise<IncrementalTicketsResponse> {
+  const subdomain = requireSubdomain()
+  const url = new URL(
+    `https://${subdomain}.zendesk.com/api/v2/incremental/tickets/cursor`
+  )
+  url.searchParams.set("per_page", String(PAGE_SIZE))
+  url.searchParams.set("support_type_scope", "all")
+  if (includes.length > 0) {
+    url.searchParams.set("include", includes.join(","))
   }
-  return `${base}?${params.toString()}`
+  if (cursor) {
+    url.searchParams.set("cursor", cursor)
+  } else {
+    url.searchParams.set("start_time", String(INITIAL_EXPORT_START_TIME))
+  }
+
+  const page = await fetchJson<IncrementalTicketsResponse>(url.toString())
+  if (!page.after_cursor) {
+    throw new Error("Zendesk incremental export is missing after_cursor")
+  }
+  if (!page.end_of_stream && page.after_cursor === cursor) {
+    throw new Error("Zendesk incremental export repeated its cursor")
+  }
+  return page
 }
 
 // Sideloading embeds related objects in the ticket response so we can
 // resolve IDs to names without extra API calls.
 export async function fetchTicketsPage(cursor?: string): Promise<{
-  tickets: ZendeskTicket[]
+  tickets: ZendeskExportTicket[]
   users: UserLookup
   groups: GroupLookup
   orgs: OrgLookup
   hasMore: boolean
-  nextCursor: string | undefined
+  nextCursor: string
 }> {
-  const subdomain = requireSubdomain()
-  const { data, hasMore, nextCursor } = await fetchPage<ListTicketsResponse>(
-    subdomain,
-    "/api/v2/tickets.json",
-    { include: "users,groups,organizations" },
+  const page = await fetchIncrementalTicketsPage(
+    ["users", "groups", "organizations"],
     cursor
   )
 
   const users: UserLookup = new Map()
-  for (const user of data.users ?? []) {
+  for (const user of page.users ?? []) {
     users.set(user.id, user)
   }
 
   const groups: GroupLookup = new Map()
-  for (const group of data.groups ?? []) {
+  for (const group of page.groups ?? []) {
     groups.set(group.id, group)
   }
 
   const orgs: OrgLookup = new Map()
-  for (const org of data.organizations ?? []) {
+  for (const org of page.organizations ?? []) {
     orgs.set(org.id, org)
   }
 
-  return { tickets: data.tickets, users, groups, orgs, hasMore, nextCursor }
+  return {
+    tickets: page.tickets,
+    users,
+    groups,
+    orgs,
+    hasMore: !page.end_of_stream,
+    nextCursor: page.after_cursor,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -290,7 +323,7 @@ export async function fetchUsersPage(cursor?: string): Promise<{
 }
 
 // ---------------------------------------------------------------------------
-// Satisfaction Ratings (Professional+ plans)
+// Legacy Satisfaction Ratings
 // https://developer.zendesk.com/api-reference/ticketing/ticket-management/satisfaction_ratings/
 // ---------------------------------------------------------------------------
 
@@ -336,44 +369,47 @@ export async function fetchSatisfactionRatingsPage(cursor?: string): Promise<{
 export type ZendeskTicketMetric = {
   id: number
   ticket_id: number
-  reopens: number
-  replies: number
-  assignee_stations: number
-  group_stations: number
-  solved_at: string | null
-  reply_time_in_minutes: { calendar: number; business: number }
-  first_resolution_time_in_minutes: { calendar: number; business: number }
-  full_resolution_time_in_minutes: { calendar: number; business: number }
-  on_hold_time_in_minutes: { calendar: number; business: number }
-  agent_wait_time_in_minutes: { calendar: number; business: number }
-  requester_wait_time_in_minutes: { calendar: number; business: number }
-  created_at: string
-  updated_at: string
+  reopens?: number | null
+  replies?: number | null
+  assignee_stations?: number | null
+  group_stations?: number | null
+  solved_at?: string | null
+  reply_time_in_minutes?: ZendeskMinuteMetric | null
+  first_resolution_time_in_minutes?: ZendeskMinuteMetric | null
+  full_resolution_time_in_minutes?: ZendeskMinuteMetric | null
+  on_hold_time_in_minutes?: ZendeskMinuteMetric | null
+  agent_wait_time_in_minutes?: ZendeskMinuteMetric | null
+  requester_wait_time_in_minutes?: ZendeskMinuteMetric | null
+  created_at?: string | null
+  updated_at?: string | null
 }
 
-type ListTicketMetricsResponse = {
-  ticket_metrics: ZendeskTicketMetric[]
+export type ZendeskMinuteMetric = {
+  calendar?: number | null
+  business?: number | null
 }
 
 export async function fetchTicketMetricsPage(cursor?: string): Promise<{
   metrics: ZendeskTicketMetric[]
+  deletedTicketIds: number[]
   hasMore: boolean
-  nextCursor: string | undefined
+  nextCursor: string
 }> {
-  const subdomain = requireSubdomain()
-  const { data, hasMore, nextCursor } =
-    await fetchPage<ListTicketMetricsResponse>(
-      subdomain,
-      "/api/v2/ticket_metrics.json",
-      undefined,
-      cursor
-    )
+  const page = await fetchIncrementalTicketsPage(["metric_sets"], cursor)
+  const deletedTicketIds = page.tickets
+    .filter(isDeletedTicket)
+    .map((ticket) => ticket.id)
 
-  return { metrics: data.ticket_metrics, hasMore, nextCursor }
+  return {
+    metrics: page.metric_sets ?? [],
+    deletedTicketIds,
+    hasMore: !page.end_of_stream,
+    nextCursor: page.after_cursor,
+  }
 }
 
 // ---------------------------------------------------------------------------
-// SLA Policies (Professional+ plans)
+// SLA Policies (Support Professional or Suite Growth and above)
 // https://developer.zendesk.com/api-reference/ticketing/business-rules/sla_policies/
 // ---------------------------------------------------------------------------
 
@@ -388,23 +424,45 @@ export type ZendeskSlaPolicy = {
   id: number
   title: string
   description: string | null
-  position: number
-  policy_metrics: ZendeskSlaPolicyMetric[]
-  created_at: string
-  updated_at: string
+  position?: number | null
+  policy_metrics?: ZendeskSlaPolicyMetric[] | null
+  created_at?: string | null
+  updated_at?: string | null
 }
 
 type ListSlaPoliciesResponse = {
   sla_policies: ZendeskSlaPolicy[]
+  next_page: string | null
 }
 
-// SLA policies are a small collection (typically <20) — no pagination needed.
-export async function fetchSlaPolicies(): Promise<ZendeskSlaPolicy[]> {
-  const subdomain = requireSubdomain()
-  const data = await fetchAll<ListSlaPoliciesResponse>(
-    subdomain,
-    "/api/v2/slas/policies"
-  )
+function validateSlaPageUrl(url: string, subdomain: string): string {
+  const parsed = new URL(url)
+  const expectedOrigin = `https://${subdomain}.zendesk.com`
+  if (
+    parsed.origin !== expectedOrigin ||
+    !parsed.pathname.startsWith("/api/v2/slas/policies")
+  ) {
+    throw new Error("Zendesk returned an invalid SLA pagination URL")
+  }
+  return parsed.toString()
+}
 
-  return data.sla_policies
+export async function fetchSlaPoliciesPage(cursor?: string): Promise<{
+  policies: ZendeskSlaPolicy[]
+  hasMore: boolean
+  nextCursor: string | undefined
+}> {
+  const subdomain = requireSubdomain()
+  const url = cursor
+    ? validateSlaPageUrl(cursor, subdomain)
+    : `https://${subdomain}.zendesk.com/api/v2/slas/policies`
+  const data = await fetchJson<ListSlaPoliciesResponse>(url)
+
+  return {
+    policies: data.sla_policies,
+    hasMore: Boolean(data.next_page),
+    nextCursor: data.next_page
+      ? validateSlaPageUrl(data.next_page, subdomain)
+      : undefined,
+  }
 }
