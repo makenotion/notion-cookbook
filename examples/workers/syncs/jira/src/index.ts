@@ -9,7 +9,7 @@
 // Issues are scoped to specific projects via the JIRA_PROJECTS env var.
 // Board names are fetched once per sprint sync cycle to resolve board IDs.
 // Three pagination models are used because each Jira endpoint differs:
-//   - Issues: startAt/total (classic search endpoint)
+//   - Issues: nextPageToken/isLast (enhanced search endpoint)
 //   - Sprints: multi-board iteration with startAt/isLast per board
 //   - Projects: startAt/isLast
 
@@ -17,12 +17,13 @@ import { Worker } from "@notionhq/workers"
 
 import {
   getBaseUrl,
+  fetchIssueFieldConfig,
   fetchIssuesPage,
   fetchAllBoards,
   fetchSprintsForBoard,
   fetchProjectsPage,
 } from "./jira.js"
-import type { BoardLookup } from "./jira.js"
+import type { BoardLookup, IssueFieldConfig } from "./jira.js"
 import {
   INITIAL_TITLE as ISSUES_TITLE,
   PRIMARY_KEY as ISSUES_PK,
@@ -44,7 +45,9 @@ import {
 
 const worker = new Worker()
 
-// Jira Cloud rate-limits to 10 requests per second on Standard plans.
+// Keep normal traffic conservative. Jira can also return quota- and
+// burst-based 429s, which the API client surfaces as RateLimitError so the
+// Workers runtime can honor Retry-After.
 const pacer = worker.pacer("jira", {
   allowedRequests: 9,
   intervalMs: 1_000,
@@ -55,7 +58,8 @@ const pacer = worker.pacer("jira", {
 // ---------------------------------------------------------------------------
 
 type IssueSyncState = {
-  startAt: number
+  nextPageToken?: string
+  fieldConfig: IssueFieldConfig
 }
 
 const issues = worker.database("issues", {
@@ -70,17 +74,28 @@ worker.sync("issuesSync", {
   mode: "replace",
   schedule: "2m",
   execute: async (state: IssueSyncState | undefined) => {
-    await pacer.wait()
     const baseUrl = getBaseUrl()
+    let fieldConfig = state?.fieldConfig
 
-    const page = await fetchIssuesPage(state?.startAt)
-    const changes = page.issues.map((i) => issueToChange(i, baseUrl))
+    if (!fieldConfig) {
+      await pacer.wait()
+      fieldConfig = await fetchIssueFieldConfig()
+    }
+
+    await pacer.wait()
+    const page = await fetchIssuesPage(fieldConfig, state?.nextPageToken)
+    const changes = page.issues.map((issue) =>
+      issueToChange(issue, baseUrl, fieldConfig)
+    )
 
     if (page.hasMore) {
       return {
         changes,
         hasMore: true,
-        nextState: { startAt: page.nextStartAt },
+        nextState: {
+          nextPageToken: page.nextPageToken,
+          fieldConfig,
+        },
       }
     }
 
@@ -131,9 +146,7 @@ worker.sync("sprintsSync", {
 
     await pacer.wait()
     const result = await fetchSprintsForBoard(boardId, startAt)
-    const changes = result.sprints.map((s) =>
-      sprintToChange(s, sprintBoards!)
-    )
+    const changes = result.sprints.map((s) => sprintToChange(s, sprintBoards!))
 
     if (result.hasMore) {
       return {

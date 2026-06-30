@@ -38,33 +38,25 @@ const STATE_LABELS: Record<string, string> = {
   future: "Future",
 }
 
-export function sprintToChange(
-  sprint: JiraSprint,
-  boards: BoardLookup
-) {
+export function sprintToChange(sprint: JiraSprint, boards: BoardLookup) {
   const state = STATE_LABELS[sprint.state] ?? sprint.state
   const boardName = boards.get(sprint.originBoardId) ?? null
 
   return {
     type: "upsert" as const,
     key: String(sprint.id),
-    upstreamUpdatedAt: sprint.endDate ?? sprint.startDate ?? "",
     pageContentMarkdown: sprint.goal ?? "",
     properties: {
       Name: Builder.title(sprint.name),
       State: Builder.select(state),
-      ...(boardName
-        ? { Board: Builder.richText(boardName) }
-        : {}),
+      ...(boardName ? { Board: Builder.richText(boardName) } : {}),
       ...(sprint.startDate
         ? { "Start Date": Builder.date(dateOnly(sprint.startDate)) }
         : {}),
       ...(sprint.endDate
         ? { "End Date": Builder.date(dateOnly(sprint.endDate)) }
         : {}),
-      ...(sprint.goal
-        ? { Goal: Builder.richText(sprint.goal) }
-        : {}),
+      ...(sprint.goal ? { Goal: Builder.richText(sprint.goal) } : {}),
       ...(sprint.completeDate
         ? { "Complete Date": Builder.date(dateOnly(sprint.completeDate)) }
         : {}),

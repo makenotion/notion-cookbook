@@ -10,58 +10,74 @@ schemas and Notion creates and manages each database for you (these are called
 
 ## What you get
 
-| Database | Jira resource | Schedule |
-| --- | --- | --- |
-| **Jira Issues** | Issues (via JQL search) | Every 2 min |
-| **Jira Sprints** | Sprints (across Scrum boards) | Every 5 min |
-| **Jira Projects** | Projects | Every 5 min |
+| Database          | Jira resource                 | Schedule    |
+| ----------------- | ----------------------------- | ----------- |
+| **Jira Issues**   | Issues (via JQL search)       | Every 2 min |
+| **Jira Sprints**  | Sprints (across Scrum boards) | Every 5 min |
+| **Jira Projects** | Projects                      | Every 5 min |
 
 ### Jira Issues
 
-| Notion property | Jira field | Type |
-| --- | --- | --- |
-| Summary | `summary` | title |
-| Status | `status.name` | select |
-| Issue Type | `issuetype.name` | select |
-| Assignee | `assignee.displayName` | richText |
-| Sprint | `sprint.name` | richText |
-| Updated | `updated` | date |
-| Status Category | `status.statusCategory.name` | select |
-| Priority | `priority.name` | select |
-| Reporter | `reporter.displayName` | richText |
-| Project | `project.name` | richText |
-| Issue Link | link to Jira issue | url |
-| Labels | `labels` | multiSelect |
-| Components | `components[].name` | multiSelect |
-| Fix Versions | `fixVersions[].name` | multiSelect |
-| Resolution | `resolution.name` | select |
-| Due Date | `duedate` | date |
-| Epic | `parent.fields.summary` or custom field | richText |
-| Story Points | custom field (configurable) | number |
-| Created | `created` | date |
-| Issue Key | `key` (e.g. PROJ-123) | richText |
+| Notion property | Jira field                                           | Type        |
+| --------------- | ---------------------------------------------------- | ----------- |
+| Summary         | `summary`                                            | title       |
+| Status          | `status.name`                                        | select      |
+| Issue Type      | `issuetype.name`                                     | select      |
+| Assignee        | `assignee.displayName`                               | richText    |
+| Sprint          | discovered Sprint custom field                       | richText    |
+| Updated         | `updated`                                            | date        |
+| Status Category | `status.statusCategory.name`                         | select      |
+| Priority        | `priority.name`                                      | select      |
+| Reporter        | `reporter.displayName`                               | richText    |
+| Project         | `project.name`                                       | richText    |
+| Issue Link      | link to Jira issue                                   | url         |
+| Labels          | `labels`                                             | multiSelect |
+| Components      | `components[].name`                                  | multiSelect |
+| Fix Versions    | `fixVersions[].name`                                 | multiSelect |
+| Resolution      | `resolution.name`                                    | select      |
+| Due Date        | `duedate`                                            | date        |
+| Epic            | issue hierarchy or discovered Epic Link custom field | richText    |
+| Story Points    | discovered Story Points custom field                 | number      |
+| Created         | `created`                                            | date        |
+| Issue Key       | `key` (e.g. PROJ-123)                                | richText    |
+| Jira Issue ID   | `id` (immutable primary key)                         | richText    |
 
 **Status Category** groups custom statuses (like "Waiting for Customer" or
 "Code Review") into three categories: To Do, In Progress, Done. More useful
 for high-level views than individual status names.
 
-**Epic** is resolved from the issue's parent summary (next-gen/team-managed
-projects) or from a custom field (classic projects — see optional env vars).
+**Sprint**, **Story Points**, and **Epic Link** custom fields are discovered
+automatically from Jira's field metadata. If your Jira instance has ambiguous
+or renamed fields, use the optional environment variables below to specify the
+field IDs explicitly.
 
-**Story Points** requires setting the `JIRA_STORY_POINTS_FIELD` env var.
+Story Points discovery requests both Jira's company-managed **Story Points**
+field and team-managed **Story point estimate** field when both exist, then
+uses whichever is populated on each issue. Because this discovery is based on
+the standard English field names, renamed or localized fields need an explicit
+override.
+
+**Epic** uses a standard issue's direct hierarchy parent, then falls back to
+the discovered Epic Link field. A subtask's direct parent is a task or story,
+so it is deliberately left blank rather than mislabeled when Jira doesn't
+expose an explicit Epic Link for the subtask.
+
+The immutable **Jira Issue ID** is the database primary key. **Issue Key**
+remains a display property and is used in links, but it can change when an issue
+moves to another project.
 
 ### Jira Sprints
 
-| Notion property | Jira field | Type |
-| --- | --- | --- |
-| Name | `name` | title |
-| State | `state` | select |
-| Board | board name (resolved) | richText |
-| Start Date | `startDate` | date |
-| End Date | `endDate` | date |
-| Goal | `goal` | richText |
-| Complete Date | `completeDate` | date |
-| Sprint ID | `id` | richText |
+| Notion property | Jira field            | Type     |
+| --------------- | --------------------- | -------- |
+| Name            | `name`                | title    |
+| State           | `state`               | select   |
+| Board           | board name (resolved) | richText |
+| Start Date      | `startDate`           | date     |
+| End Date        | `endDate`             | date     |
+| Goal            | `goal`                | richText |
+| Complete Date   | `completeDate`        | date     |
+| Sprint ID       | `id`                  | richText |
 
 Board IDs are resolved to names by fetching all Scrum boards once per sync
 cycle. Only Scrum boards are fetched (Kanban boards don't have sprints).
@@ -69,16 +85,20 @@ Page body contains the sprint goal.
 
 ### Jira Projects
 
-| Notion property | Jira field | Type |
-| --- | --- | --- |
-| Name | `name` | title |
-| Project Key | `key` (e.g. PROJ) | richText |
-| Lead | `lead.displayName` | richText |
-| Category | `projectCategory.name` | select |
-| Project Type | `projectTypeKey` | select |
-| Project Link | link to Jira project | url |
+| Notion property | Jira field                   | Type     |
+| --------------- | ---------------------------- | -------- |
+| Name            | `name`                       | title    |
+| Project Key     | `key` (e.g. PROJ)            | richText |
+| Lead            | `lead.displayName`           | richText |
+| Category        | `projectCategory.name`       | select   |
+| Project Type    | `projectTypeKey`             | select   |
+| Project Link    | link to Jira project         | url      |
+| Jira Project ID | `id` (immutable primary key) | richText |
 
 Page body contains the project description.
+The immutable **Jira Project ID** is the database primary key; **Project Key**
+stays available as a display property because Jira administrators can change
+it.
 
 ## Project structure
 
@@ -95,14 +115,16 @@ src/
 ## How it works
 
 1. **Issues** are fetched every 2 minutes via JQL search, scoped to
-   specific projects if `JIRA_PROJECTS` is set. Uses `startAt`/`total`
-   pagination (100 issues per page).
+   specific projects if `JIRA_PROJECTS` is set. Uses `nextPageToken`
+   pagination (100 issues per page). Jira truncation warnings abort the sync so
+   a partial result can't be committed as a complete replacement snapshot.
 2. **Sprints** are fetched every 5 minutes by listing all Scrum boards,
    then fetching sprints for each. Board names are resolved once per cycle.
    Deleted boards are skipped gracefully.
 3. **Projects** are fetched every 5 minutes via the project search endpoint.
-4. All syncs share a single rate-limit pacer (9 requests per second) to stay
-   within Jira Cloud's 10/second limit on Standard plans.
+4. All syncs share a single rate-limit pacer (9 requests per second). If Jira
+   responds with HTTP 429, the worker passes Jira's `Retry-After` interval to
+   the runtime so the request can be retried after the requested delay.
 5. Because all syncs use `mode: "replace"`, records deleted from Jira are
    automatically removed from the Notion database on the next full sync.
 
@@ -110,7 +132,7 @@ src/
 
 - Node >= 22, npm >= 10.9.2
 - A Jira Cloud instance
-- The `ntn` CLI installed and authenticated (`ntn auth login`)
+- The `ntn` CLI installed and authenticated (`ntn login`)
 
 ### Getting a Jira API token
 
@@ -122,23 +144,25 @@ src/
 
 ### Required
 
-| Variable | Description |
-| --- | --- |
-| `JIRA_DOMAIN` | Your Jira Cloud domain (e.g. `acme` for acme.atlassian.net) |
-| `JIRA_EMAIL` | Email of the Atlassian account for API access |
-| `JIRA_API_TOKEN` | API token from id.atlassian.com |
+| Variable         | Description                                                 |
+| ---------------- | ----------------------------------------------------------- |
+| `JIRA_DOMAIN`    | Your Jira Cloud domain (e.g. `acme` for acme.atlassian.net) |
+| `JIRA_EMAIL`     | Email of the Atlassian account for API access               |
+| `JIRA_API_TOKEN` | API token from id.atlassian.com                             |
 
 ### Optional
 
-| Variable | Description |
-| --- | --- |
-| `JIRA_PROJECTS` | Comma-separated project keys to sync (e.g. `PROJ,TEAM`). If not set, all projects are synced. |
-| `JIRA_STORY_POINTS_FIELD` | Custom field ID for story points (e.g. `customfield_10016`) |
-| `JIRA_EPIC_FIELD` | Custom field ID for epic link (e.g. `customfield_10014`) |
+| Variable                  | Description                                                                                                                                          |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `JIRA_PROJECTS`           | Comma-separated project keys whose issues should be synced (e.g. `PROJ,TEAM`). Sprints and the Projects database still include all visible projects. |
+| `JIRA_SPRINT_FIELD`       | Override the automatically discovered Sprint field ID (e.g. `customfield_10020`)                                                                     |
+| `JIRA_STORY_POINTS_FIELD` | Override the automatically discovered Story Points field ID, or comma-separated IDs (e.g. `customfield_10016,customfield_10026`)                     |
+| `JIRA_EPIC_FIELD`         | Override the automatically discovered Epic Link field ID (e.g. `customfield_10014`)                                                                  |
 
-To find your custom field IDs, fetch any issue with all fields:
-`GET https://{domain}.atlassian.net/rest/api/3/issue/{key}` and look for the
-`customfield_XXXXX` entries containing story point values or epic references.
+The worker normally discovers these custom fields from Jira's field metadata,
+so no overrides are needed. To find an ID for an override, request
+`GET https://{domain}.atlassian.net/rest/api/3/field` and find the relevant
+`customfield_XXXXX` entry.
 
 No `NOTION_API_TOKEN` is needed — the platform handles Notion credentials
 automatically.
@@ -148,7 +172,7 @@ automatically.
 1. Install the Notion Workers CLI:
 
    ```sh
-   npm install -g @notionhq/ntn
+   npm install --global ntn
    ```
 
 2. Clone and install:
@@ -168,7 +192,7 @@ automatically.
 4. Log in to Notion:
 
    ```sh
-   ntn auth login
+   ntn login
    ```
 
 5. Deploy the worker:
@@ -185,10 +209,12 @@ automatically.
    ntn workers env set JIRA_API_TOKEN=your-api-token
    ```
 
-7. Optionally scope to specific projects and set custom fields:
+7. Optionally scope the issue sync to specific projects and override custom
+   fields:
 
    ```sh
    ntn workers env set JIRA_PROJECTS=PROJ,TEAM
+   ntn workers env set JIRA_SPRINT_FIELD=customfield_10020
    ntn workers env set JIRA_STORY_POINTS_FIELD=customfield_10016
    ntn workers env set JIRA_EPIC_FIELD=customfield_10014
    ```
@@ -216,10 +242,10 @@ in your Notion workspace after the first run.
 
 Each resource has its own file with a schema and transform function:
 
-| Resource | File |
-| --- | --- |
-| Issues | `src/issues.ts` |
-| Sprints | `src/sprints.ts` |
+| Resource | File              |
+| -------- | ----------------- |
+| Issues   | `src/issues.ts`   |
+| Sprints  | `src/sprints.ts`  |
 | Projects | `src/projects.ts` |
 
 To add a new Jira field:
