@@ -13,9 +13,11 @@ import {
 import { userToChange } from "./src/users.js"
 import { ticketMetricToChange } from "./src/ticket-metrics.js"
 import { slaPolicyToChange } from "./src/sla-policies.js"
+import { surveyResponseToChange } from "./src/survey-responses.js"
 import {
   fetchPage,
   fetchSlaPoliciesPage,
+  fetchSurveyResponsesPage,
   fetchTicketMetricsPage,
   fetchTicketsPage,
   getAuthorizationHeader,
@@ -26,6 +28,7 @@ import type {
   ZendeskTicket,
   ZendeskTicketMetric,
   ZendeskSlaPolicy,
+  ZendeskSurveyResponse,
   UserLookup,
   GroupLookup,
   OrgLookup,
@@ -76,7 +79,6 @@ const standardTicket: ZendeskTicket = {
   group_id: 100,
   organization_id: 500,
   tags: ["account_access", "login"],
-  satisfaction_rating: { score: "good" },
   via: { channel: "email" },
   created_at: "2024-06-15T10:30:00Z",
   updated_at: "2024-06-16T14:00:00Z",
@@ -113,10 +115,6 @@ ok(
 ok(
   "Priority is formatted",
   JSON.stringify(change.properties.Priority).includes("High")
-)
-ok(
-  "CSAT maps good to Satisfied",
-  JSON.stringify(change.properties["CSAT score"]).includes("Satisfied")
 )
 ok(
   "Tags contains raw tag values",
@@ -177,7 +175,6 @@ const minimalTicket: ZendeskTicket = {
   group_id: null,
   organization_id: null,
   tags: [],
-  satisfaction_rating: null,
   via: { channel: "web" },
   created_at: "2024-01-01",
   updated_at: "2024-01-01",
@@ -197,10 +194,6 @@ ok(
   "null priority omits Priority",
   minimalChange.properties.Priority === undefined
 )
-ok(
-  "null satisfaction_rating omits CSAT score",
-  minimalChange.properties["CSAT score"] === undefined
-)
 ok("empty tags omits Tags", minimalChange.properties.Tags === undefined)
 ok(
   "null assignee_id omits Assignee",
@@ -214,43 +207,6 @@ ok(
 ok(
   "requester resolved to name",
   JSON.stringify(minimalChange.properties.Requester).includes("Alice Requester")
-)
-
-// ---------------------------------------------------------------------------
-// ticketToChange — CSAT score mapping
-// ---------------------------------------------------------------------------
-
-console.log("ticketToChange — CSAT score mapping:")
-
-function csatChange(score: string) {
-  const t: ZendeskTicket = {
-    ...standardTicket,
-    satisfaction_rating: { score },
-  }
-  return ticketToChange(t, SUBDOMAIN, users, groups, orgs)
-}
-
-ok(
-  "good maps to Satisfied",
-  JSON.stringify(csatChange("good").properties["CSAT score"]).includes(
-    "Satisfied"
-  )
-)
-ok(
-  "bad maps to Not satisfied",
-  JSON.stringify(csatChange("bad").properties["CSAT score"]).includes(
-    "Not satisfied"
-  )
-)
-ok(
-  "offered maps to Pending",
-  JSON.stringify(csatChange("offered").properties["CSAT score"]).includes(
-    "Pending"
-  )
-)
-ok(
-  "unoffered is omitted",
-  csatChange("unoffered").properties["CSAT score"] === undefined
 )
 
 // ---------------------------------------------------------------------------
@@ -360,6 +316,71 @@ ok(
     partialMetricChange.properties.Reopens === undefined
 )
 
+const surveyResponse: ZendeskSurveyResponse = {
+  id: "01J1WB51MG6HXTYWE6Q0C93RNW",
+  responder_id: 4398080151295,
+  expires_at: "2024-08-21T12:00:00.000Z",
+  subjects: [{ id: "99", type: "ticket", zrn: "zen:ticket:99" }],
+  survey: {
+    id: "01J58KJ9RAE0D2EK7HRVM7Z8F2",
+    version: 3,
+    state: "enabled",
+  },
+  answers: [
+    {
+      type: "rating_scale",
+      rating: 5,
+      rating_category: "good",
+      question: {
+        id: "rating-question",
+        type: "rating_scale_numeric",
+        sub_type: "customer_satisfaction",
+      },
+      created_at: "2024-08-14T12:00:00.000Z",
+      updated_at: "2024-08-14T12:00:00.000Z",
+    },
+    {
+      type: "open_ended",
+      value: "Fast and helpful.",
+      question: {
+        id: "comment-question",
+        type: "open_ended",
+        alias: "comment",
+      },
+      created_at: "2024-08-14T12:01:00.000Z",
+      updated_at: "2024-08-14T12:01:00.000Z",
+    },
+  ],
+}
+const surveyResponseChange = surveyResponseToChange(surveyResponse)
+ok(
+  "current CSAT survey response maps rating, feedback, and ticket",
+  surveyResponseChange.key === surveyResponse.id &&
+    JSON.stringify(surveyResponseChange.properties.Rating).includes("5") &&
+    JSON.stringify(surveyResponseChange.properties["Rating category"]).includes(
+      "Good"
+    ) &&
+    JSON.stringify(surveyResponseChange.properties.Feedback).includes(
+      "Fast and helpful."
+    ) &&
+    JSON.stringify(surveyResponseChange.properties["Ticket ID"]).includes("99")
+)
+ok(
+  "survey response uses the latest answer update as its checkpoint",
+  surveyResponseChange.upstreamUpdatedAt === "2024-08-14T12:01:00.000Z"
+)
+
+const minimalSurveyResponse = surveyResponseToChange({
+  id: "01JMINIMAL",
+  responder_id: 123,
+})
+ok(
+  "optional survey response fields do not emit invalid values",
+  minimalSurveyResponse.properties.Rating === undefined &&
+    minimalSurveyResponse.properties.Feedback === undefined &&
+    minimalSurveyResponse.upstreamUpdatedAt === undefined
+)
+
 const minimalSlaPolicy: ZendeskSlaPolicy = {
   id: 9001,
   title: "Standard SLA",
@@ -394,6 +415,7 @@ function syncConfig(key: string): SyncManifestConfig {
 
 const ticketsConfig = syncConfig("ticketsSync")
 const metricsConfig = syncConfig("ticketMetricsSync")
+const surveyResponsesConfig = syncConfig("surveyResponsesSync")
 const slaConfig = syncConfig("slaPoliciesSync")
 ok(
   "tickets use a five-minute incremental sync",
@@ -402,7 +424,17 @@ ok(
     ticketsConfig.schedule.intervalMs === 5 * 60_000
 )
 ok("ticket metrics use incremental mode", metricsConfig.mode === "incremental")
-ok("SLA policies are manual", slaConfig.schedule?.type === "manual")
+ok(
+  "current CSAT survey responses replace daily",
+  surveyResponsesConfig.mode === "replace" &&
+    surveyResponsesConfig.schedule?.type === "interval" &&
+    surveyResponsesConfig.schedule.intervalMs === 24 * 60 * 60_000
+)
+ok(
+  "SLA policies refresh daily",
+  slaConfig.schedule?.type === "interval" &&
+    slaConfig.schedule.intervalMs === 24 * 60 * 60_000
+)
 ok(
   "incremental exports share a nine-per-minute pacer",
   worker.manifest.pacers.some(
@@ -522,6 +554,17 @@ async function testZendeskClient() {
       })
     }
 
+    if (url.pathname === "/api/v2/guide/survey_responses") {
+      const hasCursor = url.searchParams.has("page[after]")
+      return Response.json({
+        survey_responses: hasCursor ? [] : [surveyResponse],
+        meta: {
+          has_more: !hasCursor,
+          after_cursor: hasCursor ? null : "survey-cursor-1",
+        },
+      })
+    }
+
     if (url.pathname === "/api/v2/organizations.json") {
       return new Response("rate limited", {
         status: 429,
@@ -540,6 +583,10 @@ async function testZendeskClient() {
     const firstTicketsPage = await fetchTicketsPage()
     const finalTicketsPage = await fetchTicketsPage("ticket-cursor-1")
     const metricsPage = await fetchTicketMetricsPage("metric-cursor-1")
+    const firstSurveyPage = await fetchSurveyResponsesPage()
+    const finalSurveyPage = await fetchSurveyResponsesPage(
+      firstSurveyPage.nextCursor
+    )
     const firstSlaPage = await fetchSlaPoliciesPage()
     const finalSlaPage = await fetchSlaPoliciesPage(firstSlaPage.nextCursor)
     type SyncRunResult = {
@@ -560,6 +607,11 @@ async function testZendeskClient() {
     const metricRun = (await worker.run(
       "ticketMetricsSync",
       { state: { cursor: "metric-cursor-1" } },
+      { concreteOutput: true }
+    )) as SyncRunResult
+    const surveyRun = (await worker.run(
+      "surveyResponsesSync",
+      {},
       { concreteOutput: true }
     )) as SyncRunResult
 
@@ -639,6 +691,25 @@ async function testZendeskClient() {
         metricRun.changes.some(
           (change) => change.type === "delete" && change.key === "404"
         )
+    )
+    const finalSurveyUrl = requestedUrls.find(
+      (url) =>
+        url.pathname === "/api/v2/guide/survey_responses" &&
+        url.searchParams.get("page[after]") === "survey-cursor-1"
+    )
+    ok(
+      "current CSAT survey responses use cursor pagination",
+      firstSurveyPage.responses[0]?.id === surveyResponse.id &&
+        firstSurveyPage.hasMore &&
+        firstSurveyPage.nextCursor === "survey-cursor-1" &&
+        !finalSurveyPage.hasMore &&
+        finalSurveyUrl?.searchParams.get("page[size]") === "100"
+    )
+    ok(
+      "survey response sync emits current CSAT responses",
+      surveyRun.changes.some(
+        (change) => change.type === "upsert" && change.key === surveyResponse.id
+      )
     )
     ok(
       "SLA policies follow next_page before completing replace mode",

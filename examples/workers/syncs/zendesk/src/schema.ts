@@ -85,12 +85,6 @@ export const ticketSchema: Schema.Schema<typeof PRIMARY_KEY> = {
     // list them here. Add seed values if you want them pre-created.
     Tags: Schema.multiSelect([]),
 
-    "CSAT score": Schema.select([
-      { name: "Satisfied" },
-      { name: "Not satisfied" },
-      { name: "Pending" },
-    ]),
-
     "Created at": Schema.date(),
 
     "Ticket ID": Schema.richText(),

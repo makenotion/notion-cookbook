@@ -1,5 +1,5 @@
 // Zendesk API client. Handles authentication and paginated fetching for all
-// synced resources (tickets, organizations, users, satisfaction ratings,
+// synced resources (tickets, organizations, users, CSAT survey responses,
 // ticket metrics, SLA policies).
 //
 // To add a new resource:
@@ -127,7 +127,6 @@ export type ZendeskTicket = {
   group_id: number | null
   organization_id: number | null
   tags: string[]
-  satisfaction_rating: { score: string } | null
   via: { channel: string }
   created_at: string
   updated_at: string
@@ -323,42 +322,63 @@ export async function fetchUsersPage(cursor?: string): Promise<{
 }
 
 // ---------------------------------------------------------------------------
-// Legacy Satisfaction Ratings
-// https://developer.zendesk.com/api-reference/ticketing/ticket-management/satisfaction_ratings/
+// CSAT Survey Responses (Support Professional or Suite Growth and above)
+// https://developer.zendesk.com/api-reference/ticketing/ticket-management/csat_survey_responses/
 // ---------------------------------------------------------------------------
 
-export type ZendeskSatisfactionRating = {
-  id: number
-  ticket_id: number
-  score: string
-  comment: string | null
-  requester_id: number
-  assignee_id: number
-  group_id: number | null
-  reason: string | null
-  created_at: string
-  updated_at: string
+export type ZendeskSurveyAnswer = {
+  type: string
+  question: {
+    id: string
+    type: string
+    sub_type?: string
+    alias?: string
+  }
+  rating?: number
+  rating_category?: string
+  value?: string
+  created_at?: string
+  updated_at?: string
 }
 
-type ListSatisfactionRatingsResponse = {
-  satisfaction_ratings: ZendeskSatisfactionRating[]
+export type ZendeskSurveyResponse = {
+  id: string
+  answers?: ZendeskSurveyAnswer[] | null
+  expires_at?: string | null
+  responder_id: number
+  subjects?:
+    | {
+        id: string
+        type: string
+        zrn: string
+      }[]
+    | null
+  survey?: {
+    id: string
+    version: number
+    state: string
+  } | null
 }
 
-export async function fetchSatisfactionRatingsPage(cursor?: string): Promise<{
-  ratings: ZendeskSatisfactionRating[]
+type ListSurveyResponsesResponse = {
+  survey_responses: ZendeskSurveyResponse[]
+}
+
+export async function fetchSurveyResponsesPage(cursor?: string): Promise<{
+  responses: ZendeskSurveyResponse[]
   hasMore: boolean
   nextCursor: string | undefined
 }> {
   const subdomain = requireSubdomain()
   const { data, hasMore, nextCursor } =
-    await fetchPage<ListSatisfactionRatingsResponse>(
+    await fetchPage<ListSurveyResponsesResponse>(
       subdomain,
-      "/api/v2/satisfaction_ratings.json",
+      "/api/v2/guide/survey_responses",
       undefined,
       cursor
     )
 
-  return { ratings: data.satisfaction_ratings, hasMore, nextCursor }
+  return { responses: data.survey_responses, hasMore, nextCursor }
 }
 
 // ---------------------------------------------------------------------------

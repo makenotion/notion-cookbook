@@ -1,5 +1,5 @@
 // Entry point — wires together all synced resources: tickets, organizations,
-// users, satisfaction ratings, ticket metrics, and SLA policies.
+// users, CSAT survey responses, ticket metrics, and SLA policies.
 //
 // Each resource has its own schema + transform file. This file registers the
 // managed databases and sync schedules. Most customization happens in those
@@ -12,7 +12,7 @@ import {
   fetchTicketsPage,
   fetchOrganizationsPage,
   fetchUsersPage,
-  fetchSatisfactionRatingsPage,
+  fetchSurveyResponsesPage,
   fetchTicketMetricsPage,
   fetchSlaPoliciesPage,
   isDeletedTicket,
@@ -33,11 +33,11 @@ import {
   userToChange,
 } from "./users.js"
 import {
-  INITIAL_TITLE as CSAT_TITLE,
-  PRIMARY_KEY as CSAT_PK,
-  satisfactionRatingSchema,
-  satisfactionRatingToChange,
-} from "./satisfaction-ratings.js"
+  INITIAL_TITLE as SURVEY_RESPONSES_TITLE,
+  PRIMARY_KEY as SURVEY_RESPONSES_PK,
+  surveyResponseSchema,
+  surveyResponseToChange,
+} from "./survey-responses.js"
 import {
   INITIAL_TITLE as METRICS_TITLE,
   PRIMARY_KEY as METRICS_PK,
@@ -160,24 +160,26 @@ worker.sync("usersSync", {
 })
 
 // ---------------------------------------------------------------------------
-// Legacy Satisfaction Ratings — CSAT responses for legacy CSAT accounts
+// CSAT Survey Responses — current Zendesk customer feedback (Support
+// Professional or Suite Growth and above). A daily replace sweep catches
+// edited answers because the API has no update-time cursor.
 // ---------------------------------------------------------------------------
 
-const satisfactionRatings = worker.database("satisfactionRatings", {
+const surveyResponses = worker.database("surveyResponses", {
   type: "managed",
-  initialTitle: CSAT_TITLE,
-  primaryKeyProperty: CSAT_PK,
-  schema: satisfactionRatingSchema,
+  initialTitle: SURVEY_RESPONSES_TITLE,
+  primaryKeyProperty: SURVEY_RESPONSES_PK,
+  schema: surveyResponseSchema,
 })
 
-worker.sync("satisfactionRatingsSync", {
-  database: satisfactionRatings,
+worker.sync("surveyResponsesSync", {
+  database: surveyResponses,
   mode: "replace",
-  schedule: "5m",
+  schedule: "1d",
   execute: async (state: SyncState | undefined) => {
     await generalPacer.wait()
-    const page = await fetchSatisfactionRatingsPage(state?.cursor)
-    const changes = page.ratings.map(satisfactionRatingToChange)
+    const page = await fetchSurveyResponsesPage(state?.cursor)
+    const changes = page.responses.map(surveyResponseToChange)
     return {
       changes,
       hasMore: page.hasMore,
@@ -224,7 +226,7 @@ worker.sync("ticketMetricsSync", {
 
 // ---------------------------------------------------------------------------
 // SLA Policies — SLA definitions and targets (Support Professional or
-// Suite Growth and above). Small, rarely changing, and manually triggered.
+// Suite Growth and above). Small, rarely changing, and refreshed daily.
 // ---------------------------------------------------------------------------
 
 const slaPolicies = worker.database("slaPolicies", {
@@ -237,7 +239,7 @@ const slaPolicies = worker.database("slaPolicies", {
 worker.sync("slaPoliciesSync", {
   database: slaPolicies,
   mode: "replace",
-  schedule: "manual",
+  schedule: "1d",
   execute: async (state: SyncState | undefined) => {
     await generalPacer.wait()
     const page = await fetchSlaPoliciesPage(state?.cursor)

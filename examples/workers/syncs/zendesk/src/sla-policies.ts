@@ -2,8 +2,8 @@
 // flattened into columns for at-a-glance comparison.
 // Requires Support Professional or Suite Growth and above.
 //
-// This is a small, rarely-changing dataset, so it uses a manual schedule and
-// follows Zendesk's offset pages only when triggered.
+// This is a small, rarely-changing dataset, so it refreshes daily and follows
+// Zendesk's offset pages before completing each replace sweep.
 
 import * as Schema from "@notionhq/workers/schema"
 import * as Builder from "@notionhq/workers/builder"
