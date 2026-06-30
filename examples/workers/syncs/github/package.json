@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build": "tsc",
-    "check": "tsc --noEmit",
+    "check": "tsc --project tsconfig.test.json",
     "test": "tsx test.ts"
   },
   "engines": {
@@ -17,6 +17,7 @@
     "typescript": "^5.8.0"
   },
   "dependencies": {
-    "@notionhq/workers": ">=0.0.0"
+    "@notionhq/workers": "^0.4.0",
+    "@octokit/auth-app": "^8.2.0"
   }
 }
