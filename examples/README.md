@@ -23,7 +23,7 @@ The [workers](workers/) directory includes examples built with the [Notion Worke
 
 - **[webhooks/zendesk](workers/webhooks/zendesk/)**: Verify Zendesk ticket webhooks and upsert them into a Notion database
 - **[syncs/salesforce](workers/syncs/salesforce/)**: One-way sync from Salesforce records into a Notion database _(coming soon)_
-- **[syncs/linear](workers/syncs/linear/)**: One-way sync from Linear issues into a Notion database _(coming soon)_
+- **[syncs/linear](workers/syncs/linear/)**: Sync Linear projects, issues, and initiatives into managed Notion databases
 - **[tools/snowflake-query](workers/tools/snowflake-query/)**: Query Snowflake from a Notion agent and return results _(coming soon)_
 - **[tools/spotify-control](workers/tools/spotify-control/)**: Start and control Spotify playback from a Notion agent _(coming soon)_
 
