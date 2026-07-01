@@ -8,7 +8,7 @@ The [syncs](syncs/) directory includes one-way sync examples that bring data fro
 
 - **[duckdb-sync-demo](syncs/duckdb-sync-demo/)**: Sync a self-contained in-memory DuckDB into a managed Notion database — no setup required
 - **[snowflake-sync](syncs/snowflake-sync/)**: Sync rows from a Snowflake query into a managed Notion database
-- **[salesforce](syncs/salesforce/)**: One-way sync from Salesforce records into a Notion database _(coming soon)_
+- **[salesforce](syncs/salesforce/)**: Sync Salesforce Accounts and Opportunities into related managed Notion databases
 - **[linear](syncs/linear/)**: Sync Linear projects, issues, and initiatives into managed Notion databases
 
 ## Tools
