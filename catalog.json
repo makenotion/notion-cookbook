@@ -61,7 +61,7 @@
     },
     {
       "id": "notion-github-sync",
-      "title": "Notion–GitHub issue sync",
+      "title": "Notion\u2013GitHub issue sync",
       "summary": "Copy issues from a GitHub repository into a Notion database in a one-way local sync.",
       "path": "examples/notion-github-sync",
       "kind": "api-example",
@@ -77,7 +77,7 @@
     },
     {
       "id": "notion-task-github-pr-sync",
-      "title": "Notion task–GitHub PR sync",
+      "title": "Notion task\u2013GitHub PR sync",
       "summary": "Update Notion tasks when a linked GitHub pull request is closed or merged.",
       "path": "examples/notion-task-github-pr-sync",
       "kind": "api-example",
@@ -308,6 +308,25 @@
         "test": "npm test",
         "build": "npm run build",
         "deploy": "ntn workers deploy --name linear-sync"
+      }
+    },
+    {
+      "id": "patent-portfolio-sync",
+      "title": "Patent portfolio sync",
+      "summary": "Sync US (USPTO) and European (EPO) patent filings into managed Notion databases, grouped into families, with last-known-good source resilience.",
+      "path": "workers/patent-portfolio-sync",
+      "kind": "worker-sync",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "uspto", "epo"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name patent-portfolio-sync"
       }
     },
     {
