@@ -1,6 +1,6 @@
 {
   "name": "Status Update Meeting Preparation",
-  "skills": ["meeting-intelligence", "task-manager"],
+  "skills": ["meeting-intelligence"],
   "query": "Prep for Friday's project status meeting on the Mobile App Redesign project. Create both an internal pre-read and an external agenda.",
   "expected_behavior": [
     "Step 1: Uses Notion:notion-search to find Mobile App Redesign project page",

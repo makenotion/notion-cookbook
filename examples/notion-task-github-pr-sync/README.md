@@ -1,91 +1,84 @@
-# Sample Integration: GitHub PRs to Notion
+# Sync closed GitHub PRs to Notion tasks
 
-<img src="https://dev.notion.so/front-static/external/readme/images/github-notion-example@2x.png" alt="drawing" width="500"/>
+Connect pull requests to the Notion tasks they implement. When a linked PR is
+closed, this example adds the outcome to its Notion task and can optionally
+update a Status property.
 
-## About the Integration
+The script reads one GitHub repository and writes only to Notion. It does not
+change pull requests or other GitHub data.
 
-This Notion integration updates Notion tasks when a linked Github PR is closed/merged. This integration requires the Notion task link be mentioned in the PR description. This example will guide you through setting up a Notion database, creating a Notion integration and sharing the database with the integration.
+## Run it
 
-## Running Locally
+### 1. Prepare Notion
 
-### 1. Setup your local project
+Create or choose a task database, then create a
+[Notion integration](https://www.notion.com/my-integrations) and connect it to
+that database through **••• > Connections**.
 
-```zsh
-# Clone this repository locally
-git clone https://github.com/makenotion/notion-cookbook.git
+The integration needs permission to read and create comments. If you enable
+status updates, it also needs permission to update page content and the database
+must have a Status property with these options:
 
-# Switch into this project
-cd notion-cookbook/examples/notion-task-github-pr-sync
+- `Closed - Merged`
+- `Closed - Not Merged`
 
-# Install the dependencies
+### 2. Prepare GitHub
+
+Create a GitHub personal access token with read access to pull requests in the
+repository you want to inspect. Note the repository owner and name.
+
+For a PR to match a task, put the task's canonical Notion page URL at the end of
+the PR description, without query parameters. For example:
+
+```text
+https://www.notion.so/Example-task-0123456789abcdef0123456789abcdef
+```
+
+### 3. Configure and run
+
+From the repository root:
+
+```sh
+cd examples/notion-task-github-pr-sync
 npm install
 ```
 
-### 2. Create Github Personal Access Token
+Create an untracked `.env` file:
 
-In order for this Integration to work with Github, you'll need a Github Personal Access Token. You can create your GitHub Personal Access token by following the guide [here](https://docs.github.com/en/github/authenticating-to-github/creating-a-personal-access-token). Make a note of the Personal Access token, we'll need it later.
+```dotenv
+GITHUB_KEY=your-github-personal-access-token
+NOTION_KEY=your-notion-integration-token
+GITHUB_REPO_OWNER=github-owner-or-organization
+GITHUB_REPO_NAME=repository-name
 
-### 3. Setup Github Repository
+# Only a value of "true" enables Status updates. "false" or an omitted variable
+# leaves the Status property unchanged.
+UPDATE_STATUS_IN_NOTION_DB=false
 
-If you don't have a Github Repository you may [click here](https://github.com/new) to set one up.
-
-Once you've created a repository or if you already have one, make a note of the repository owner and repository name, we'll need it later.
-
-### 4. Create a Notion Database
-
-You may skip this step if you have a Notion database to use with this integration.
-
-If you don't have a Notion database, you may duplicate [this empty database template](https://www.notion.so/Example-Notion-Tasks-Database-93cf694c6b8c4a829ef3fb389ac62d4e), to get started.
-
-If you'd like this Integration to also update a Database Status property, you should create one now.
-
-If you already have one, make note of the Status Property Name, we'll need it later.
-
-You may choose whether or not to update the Status Property by setting
-
-```
-UPDATE_STATUS_IN_NOTION_DB = <true|false>
+# Required only when UPDATE_STATUS_IN_NOTION_DB=true
+STATUS_PROPERTY_NAME=Status
 ```
 
-in your .env file to true or false. More on this later.
+Then run the sync once:
 
-### 5. Create Notion Integration
-
-In order to leverage the Notion API, we must first create an integration. To do that, [click here](https://www.notion.com/my-integrations), and click Create new integration.
-
-As you progress through the fields, pay close attention to enabling the following permissions:
-
-Capabilities > Content Capabilities > Read Content, Update Content, Insert Content.
-Capabilities > Comment Capabilities > Read Comments, Insert Comments
-
-These capabilities are required to write comments on your Notion Tasks.
-
-Once your integration is created, make a note of your Internal Integration Token, this will be your Notion API Key, we'll need it in the next step.
-
-<img src="https://files.readme.io/cbbd7c3-create_integration.gif" alt="drawing" width="500"/>
-
-### 6. Connect your Integration with your Notion Page
-
-1. Go to the database page in your workspace.
-2. Click the ••• on the top right corner of the page.
-3. At the bottom of the pop-up, click Add connections.
-4. Search for and select your integration in the Search for connections... menu.
-
-### 7. Set your environment variables in a `.env` file
-
-Using the information you noted above, create a `.env` file.
-
-```
-GITHUB_KEY=<your-github-personal-access-token>
-NOTION_KEY=<your-notion-api-key>
-GITHUB_REPO_OWNER=<github-owner-username>
-GITHUB_REPO_NAME=<github-repo-name>
-UPDATE_STATUS_IN_NOTION_DB = <true|false>
-STATUS_PROPERTY_NAME = <your-status-property-name>
-```
-
-### 8. Run code
-
-```zsh
+```sh
 npm start
 ```
+
+## What changes in Notion
+
+For each matching closed PR, the integration adds a comment linking to the PR
+and saying whether it was merged or closed without merging.
+
+| Configuration                                 | Result                                                                                          |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `UPDATE_STATUS_IN_NOTION_DB=false` or omitted | Adds the PR outcome comment and leaves all task properties unchanged.                           |
+| `UPDATE_STATUS_IN_NOTION_DB=true`             | Adds the comment and sets `STATUS_PROPERTY_NAME` to `Closed - Merged` or `Closed - Not Merged`. |
+
+The script skips a task when this integration has already created any comment
+on that page. This prevents duplicate PR comments on later runs, but it also
+means another comment created by the same integration will cause the task to be
+treated as already processed.
+
+If no eligible tasks remain, the script prints `Notion Tasks are already
+up-to-date` and makes no changes.

@@ -1,6 +1,6 @@
 {
   "name": "Create Tasks from Specification",
-  "skills": ["spec-to-implementation", "task-manager"],
+  "skills": ["spec-to-implementation"],
   "query": "Read the Payment Integration spec and create implementation tasks in our Tasks database",
   "expected_behavior": [
     "Step 1: Uses Notion:notion-search to find Payment Integration spec or asks for URL",

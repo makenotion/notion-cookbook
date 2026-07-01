@@ -1,79 +1,54 @@
-# Notion MCP Claude Skills
+# Claude skills for Notion MCP
 
-A collection of Claude skills that enable powerful workflows with Notion using the Model Context Protocol (MCP).
+Four self-contained skills for working with Notion through Claude and the
+[Notion MCP server](https://developers.notion.com/docs/notion-mcp).
 
-## Skills Overview
+## Choose a skill
 
-### 1. Research & Documentation
+| Skill                                                         | Use it to                                                                                                |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| [Knowledge capture](knowledge-capture/SKILL.md)               | Turn a conversation into a decision record, how-to guide, FAQ, or other durable workspace documentation. |
+| [Meeting intelligence](meeting-intelligence/SKILL.md)         | Gather Notion context and create a meeting pre-read and agenda.                                          |
+| [Research and documentation](research-documentation/SKILL.md) | Find information across a workspace, synthesize it, and publish a cited report in Notion.                |
+| [Spec to implementation](spec-to-implementation/SKILL.md)     | Convert a product or technical spec into an implementation plan and trackable Notion tasks.              |
 
-Search workspace, fetch pages, synthesize findings, and write structured output to Notion.
+## Install
 
-**Triggers:** "research X and document it", "gather information about Y and create a summary"
+1. Configure the Notion MCP server in Claude.
+2. Copy the complete directory for each skill you want into the skills directory
+   used by Claude. Keep `SKILL.md`, `reference/`, `examples/`, and `evaluations/`
+   together. For example, from this repository's root, install one user-level
+   Claude Code skill with:
 
-### 2. Task Manager
+   ```sh
+   mkdir -p ~/.claude/skills
+   cp -R skills/claude/knowledge-capture ~/.claude/skills/
+   ```
 
-Query task databases, update properties, create follow-up tasks, and manage task relationships.
+3. Start a new Claude session and describe the outcome you want. Claude selects
+   a relevant installed skill from its `name` and `description` metadata.
 
-**Triggers:** "update my tasks", "create task for X", "what's blocked", "move this to done"
+## Directory structure
 
-### 3. Spec to Implementation
+```text
+claude/
+├── knowledge-capture/
+├── meeting-intelligence/
+├── research-documentation/
+└── spec-to-implementation/
 
-Fetch specs, extract requirements, create implementation plans, update status, and log progress.
-
-**Triggers:** "implement this spec", "work on [task name]", "plan out [feature]"
-
-### 4. Meeting Intelligence
-
-Search context, fetch related pages, synthesize pre-reads, and create agenda pages.
-
-**Triggers:** "prep for meeting about X", "create agenda for Y", "what do I need to know about Z"
-
-### 5. Knowledge Capture
-
-Take conversation context, structure into documentation, and save to Notion wiki.
-
-**Triggers:** "save this to Notion", "document this conversation", "add this to wiki"
-
-## Development Guidelines
-
-This project follows the [Notion Skill Authoring Best Practices](https://dev.notion.so/notion/Skill-authoring-best-practices-6ad753e68def42eba7a64a6a4f261107):
-
-- **Concise content**: Keep SKILL.md files under 500 lines
-- **Progressive disclosure**: Use reference files for detailed information
-- **Evaluation-driven**: Write evaluations before extensive documentation
-- **Workflow-oriented**: Break complex operations into clear sequential steps
-- **Tool bundling**: Combine related MCP tools for coherent workflows
-
-## File Structure
-
-```
-skills/
-├── research-documentation/    # Research & synthesize to Notion
-├── task-manager/             # Task database management
-├── spec-to-implementation/   # Spec parsing and tracking
-├── meeting-intelligence/     # Meeting prep and agenda creation
-└── knowledge-capture/        # Conversation to wiki documentation
-
-evaluations/                  # Test scenarios for all skills
-shared/                       # Common utilities and templates
+<each-skill>/
+├── SKILL.md       # Entry point and workflow instructions
+├── reference/     # Detailed guidance loaded when needed
+├── examples/      # Worked examples
+└── evaluations/   # Evaluation scenarios and instructions
 ```
 
-## Installation
+## For agents and contributors
 
-1. Ensure Notion MCP server is configured in your Claude environment
-2. Place skills in your Claude skills directory
-3. Skills will be automatically discovered when relevant triggers are detected
-
-## Testing
-
-Each skill includes evaluations in the `evaluations/` directory. Run these to validate skill effectiveness across different Claude models (Haiku, Sonnet, Opus).
-
-## Contributing
-
-When adding or modifying skills:
-
-1. Start with evaluations (3+ scenarios)
-2. Write minimal instructions to pass evaluations
-3. Test with multiple Claude models
-4. Document only validated patterns
-5. Keep SKILL.md concise, use reference files for details
+- Read the selected `SKILL.md` first and resolve its links relative to that
+  skill directory.
+- Load only the referenced guidance or examples needed for the current task.
+- Treat `evaluations/` as validation material, not runtime instructions.
+- When changing a skill, update its evaluations and follow the repository
+  [contributing guide](../../CONTRIBUTING.md).

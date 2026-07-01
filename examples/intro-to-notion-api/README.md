@@ -1,118 +1,74 @@
-# Introduction to using Notion's SDK for JavaScript
+# Introduction to the Notion API with JavaScript
 
-## Learn how to make Public API requests
+Learn the Notion SDK for JavaScript through small, runnable examples. Start by
+appending a block to a page, then move on to databases, queries, file uploads,
+comments, and page templates.
 
-Use this sample code to learn how to make Public API requests with varying degrees of difficulty.
+> [!IMPORTANT]
+> These examples make live changes in Notion. Basic examples append content to
+> `NOTION_PAGE_ID`; intermediate examples also create databases, pages, file
+> uploads, and comments beneath that page. Use a test page. Running an example
+> again creates or appends the content again.
 
-The sample code is split into two sections:
+## Quickstart
 
-1. `basic`
-2. `intermediate`
+1. Create an integration in the
+   [integrations dashboard](https://www.notion.com/my-integrations) and copy its
+   API key.
+2. Create a test page, then use **Add connections** in the page menu to connect
+   your integration. Enable the content or comment capabilities required by the
+   example you want to run.
+3. From the repository root, install and configure the examples:
 
-(An `advanced` section will soon be added, as well.)
+   ```sh
+   cd examples/intro-to-notion-api
+   npm install
+   cp .env.example .env
+   ```
 
-If you are new to Notion's SDK for JavaScript, start with the code samples in the `/basic` directory to get more familiar to basic concepts.
+   Add the integration key and test page ID to `.env`:
 
-The files in each directory will build on each other to increase in complexity. For example, in `/intermediate`, first you will see how to create a database, then how to create a database and add a page to it, and finally create a database, add a page, and query/sort the database.
+   ```dotenv
+   NOTION_API_KEY=<your-notion-api-key>
+   NOTION_PAGE_ID=<your-test-page-id>
+   ```
 
-## Table of contents
+   The page ID is the 32-character ID in the page URL:
 
-In case you are looking for example code for a specific task, the files are divided as follows:
+   ![A Notion page URL with the ID highlighted](./assets/page_id.png)
 
-- `basic/1-add-block.ts`: Create a new block and append it to an existing Notion page.
-- `basic/2-add-linked-block.ts`: Create and append new blocks, and add a link to the text of a new block.
-- `basic/3-add-styled-block.ts`: Create and append new blocks, and apply text styles to them.
-- `intermediate/1-create-a-database.ts`: Create a new database with defined properties.
-- `intermediate/2-add-page-to-database.ts`: Create a new database and add new pages to it.
-- `intermediate/3-query-database.ts`: Create a new database, add pages to it, and filter the database entries (pages).
-- `intermediate/4-sort-database.ts`: Create a new database, add pages to it, and filter/sort the database entries (pages).
-- `intermediate/5-upload-file.ts`: Upload a file to Notion and attach it to a page as an image block.
-- `intermediate/6-create-page-with-template.ts`: Create a database, list its templates, and create pages using templates.
+4. Run the first example:
 
-## Running locally
+   ```sh
+   npm run basic:1
+   ```
 
-### 1. Clone project and install dependencies
+When it succeeds, the test page contains a new **Types of kale** heading and
+the terminal prints the API response for the new block.
 
-To use this example on your machine, clone the repo and move into your local copy:
+## Choose an example
 
-```zsh
-git clone https://github.com/makenotion/notion-cookbook.git
-cd notion-cookbook
-```
+Each script is self-contained; intermediate examples create their own database
+rather than reusing one created by an earlier script.
 
-Next, move into this example in the `/examples` directory, and install its dependencies:
+| Command                  | Result in Notion                                                        |
+| ------------------------ | ----------------------------------------------------------------------- |
+| `npm run basic:1`        | Appends a heading                                                       |
+| `npm run basic:2`        | Appends a heading and linked paragraph                                  |
+| `npm run basic:3`        | Appends a heading and styled, linked paragraph                          |
+| `npm run intermediate:1` | Creates a database with grocery-item properties                         |
+| `npm run intermediate:2` | Creates a grocery database and three pages                              |
+| `npm run intermediate:3` | Creates the database and pages, then prints filtered query results      |
+| `npm run intermediate:4` | Creates the database and pages, then prints filtered and sorted results |
+| `npm run intermediate:5` | Uploads an image, appends blocks, and creates a comment with the image  |
+| `npm run intermediate:6` | Creates a task database, a template page, and a page from that template |
 
-```zsh
-cd examples/intro-to-notion-api
-npm install
-```
+Open the corresponding file under `basic/` or `intermediate/` to see the API
+calls behind each result.
 
-### 2. Set your environment variables in a `.env` file
+## Learn more
 
-A `.env.example` file has been included and can be renamed `.env` (or you can run `cp .env.example .env` to copy the file).
-
-Update the environment variables below:
-
-```zsh
-NOTION_API_KEY=<your-notion-api-key>
-NOTION_PAGE_ID=<notion-page-id>
-```
-
-`NOTION_API_KEY`: Create a new integration in the [integrations dashboard](https://www.notion.com/my-integrations) and retrieve the API key from the integration's `Secrets` page.
-
-`NOTION_PAGE_ID`: Use the ID of any Notion page that you want to test adding content to.
-
-The page ID is the 32 character string at the end of any page URL.
-![A Notion page URL with the ID highlighted](./assets/page_id.png)
-
-### 3. Give the integration access to your page
-
-Your Notion integration will need permission to interact with the Notion page being used for your `NOTION_PAGE_ID` variable. To provide access, do the following:
-
-1. Go to the page in your workspace.
-2. Click the `•••` (more menu) on the top-right corner of the page.
-3. Scroll to the bottom of the menu and click `Add connections`.
-4. Search for and select your integration in the `Search for connections...` menu.
-
-Once selected, your integration will have permission to read content from the page.
-
-**If you are receiving authorization errors, make sure the integration has permission to access the page.**
-
-### 3. Run individual examples
-
-You have several options to run the examples:
-
-**Option 1: Use npm scripts (easiest)**
-
-```zsh
-npm run basic:1    # Runs basic/1-add-block.ts
-npm run basic:2    # Runs basic/2-add-linked-block.ts
-npm run basic:3    # Runs basic/3-add-styled-block.ts
-
-npm run intermediate:1    # Runs intermediate/1-create-a-database.ts
-npm run intermediate:2    # Runs intermediate/2-add-page-to-database.ts
-# ... and so on
-```
-
-**Option 2: Use npm exec with file path**
-
-```zsh
-npm run exec basic/1-add-block.ts
-npm run exec intermediate/1-create-a-database.ts
-```
-
-**Option 3: Use the full command**
-
-```zsh
-node --loader ts-node/esm basic/1-add-block.ts
-```
-
----
-
-## Additional resources
-
-To learn more, read the [Public API docs](https://developers.notion.com/) for additional information on using Notion's API. The API docs include a series of [guides](https://developers.notion.com/docs) and the [API reference](https://developers.notion.com/reference/intro), which has a full list of available endpoints.
-
-To see more examples of what you can build with Notion, see our other sample integrations in the parent `/examples` directory. To learn how to build an internal integration with an interactive frontend, read the [Build your first integration](https://developers.notion.com/docs/create-a-notion-integration) guide.
-
-To connect with other developers building with Notion, join the [Notion Developers Slack group](https://join.slack.com/t/notiondevs/shared_invite/zt-20b5996xv-DzJdLiympy6jP0GGzu3AMg).
+- [Notion API guides](https://developers.notion.com/docs)
+- [Notion API reference](https://developers.notion.com/reference/intro)
+- [Build your first integration](https://developers.notion.com/docs/create-a-notion-integration)
+- [Other cookbook examples](../README.md)

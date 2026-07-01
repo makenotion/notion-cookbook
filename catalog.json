@@ -348,6 +348,25 @@
       }
     },
     {
+      "id": "salesforce-sync",
+      "title": "Salesforce sync",
+      "summary": "Sync Salesforce accounts and opportunities into related managed Notion databases.",
+      "path": "workers/salesforce-sync",
+      "kind": "worker-sync",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "salesforce"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name salesforce-sync"
+      }
+    },
+    {
       "id": "snowflake-query",
       "title": "Snowflake query agent tool",
       "summary": "Let a Notion agent discover Snowflake tables and execute bounded, read-only SQL queries.",

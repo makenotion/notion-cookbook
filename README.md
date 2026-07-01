@@ -18,7 +18,8 @@ directory.
 - **Bring external data into Notion:** use a Worker sync for
   [GitHub](workers/github-sync/), [HubSpot](workers/hubspot-sync/),
   [Jira](workers/jira-sync/), [Linear](workers/linear-sync/),
-  [Snowflake](workers/snowflake-sync/), or [Zendesk](workers/zendesk-sync/).
+  [Salesforce](workers/salesforce-sync/), [Snowflake](workers/snowflake-sync/),
+  or [Zendesk](workers/zendesk-sync/).
 - **Give a Notion agent a new tool:** connect it to
   [Airflow](workers/airflow/), [CloudWatch Logs](workers/cloudwatch-logs/),
   [Postgres](workers/postgres-query/), or one of the other Worker tools below.
@@ -50,15 +51,16 @@ and a **webhook** handles events from another service. See the complete
 
 ### Sync external data into Notion
 
-| Task                                                    | Worker                                    | Source     |
-| ------------------------------------------------------- | ----------------------------------------- | ---------- |
-| Learn the sync pattern with seeded, in-memory data      | [DuckDB sync](workers/duckdb-sync/)       | DuckDB     |
-| Sync issues and pull requests                           | [GitHub sync](workers/github-sync/)       | GitHub     |
-| Sync contacts, deals, and companies                     | [HubSpot sync](workers/hubspot-sync/)     | HubSpot    |
-| Sync issues, sprints, analytics, and projects           | [Jira sync](workers/jira-sync/)           | Jira Cloud |
-| Sync projects, issues, and initiatives                  | [Linear sync](workers/linear-sync/)       | Linear     |
-| Sync the result of a warehouse query                    | [Snowflake sync](workers/snowflake-sync/) | Snowflake  |
-| Sync tickets, users, organizations, and support metrics | [Zendesk sync](workers/zendesk-sync/)     | Zendesk    |
+| Task                                                    | Worker                                      | Source     |
+| ------------------------------------------------------- | ------------------------------------------- | ---------- |
+| Learn the sync pattern with seeded, in-memory data      | [DuckDB sync](workers/duckdb-sync/)         | DuckDB     |
+| Sync issues and pull requests                           | [GitHub sync](workers/github-sync/)         | GitHub     |
+| Sync contacts, deals, and companies                     | [HubSpot sync](workers/hubspot-sync/)       | HubSpot    |
+| Sync issues, sprints, analytics, and projects           | [Jira sync](workers/jira-sync/)             | Jira Cloud |
+| Sync projects, issues, and initiatives                  | [Linear sync](workers/linear-sync/)         | Linear     |
+| Sync accounts and opportunities                         | [Salesforce sync](workers/salesforce-sync/) | Salesforce |
+| Sync the result of a warehouse query                    | [Snowflake sync](workers/snowflake-sync/)   | Snowflake  |
+| Sync tickets, users, organizations, and support metrics | [Zendesk sync](workers/zendesk-sync/)       | Zendesk    |
 
 ### Add tools to a Notion agent
 

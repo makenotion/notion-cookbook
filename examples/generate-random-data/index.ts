@@ -281,38 +281,45 @@ async function exerciseReading(
   _properties: GetDataSourceResponse["properties"]
 ) {
   console.log("\n\n********* Exercising Reading *********\n\n")
-  // and read back what we just did
-  const queryResponse = await notion.dataSources.query({
-    data_source_id: dataSourceId,
-  })
-  let numOldRows = 0
-  for (const page of queryResponse.results) {
-    if (!("url" in page)) {
-      // Skip partial page objects (these shouldn't be returned anyway.)
-      continue
+  // Query and print every page created since this run began.
+  let cursor: string | undefined
+  let numNewRows = 0
+
+  do {
+    const queryResponse = await notion.dataSources.query({
+      data_source_id: dataSourceId,
+      filter: {
+        timestamp: "created_time",
+        created_time: { on_or_after: startTime.toISOString() },
+      },
+      start_cursor: cursor,
+      page_size: 100,
+    })
+
+    for (const page of queryResponse.results) {
+      if (!("url" in page)) {
+        // Skip partial page objects (these shouldn't be returned anyway.)
+        continue
+      }
+
+      numNewRows++
+      console.log(`New page: ${page.id}`)
+
+      for (const [name, property] of Object.entries(page.properties)) {
+        const propertyResponse = await notion.pages.properties.retrieve({
+          page_id: page.id,
+          property_id: property.id,
+        })
+        console.log(
+          ` - ${name} ${property.id} - ${extractValueToString(propertyResponse)}`
+        )
+      }
     }
 
-    const createdTime = new Date(page.created_time)
-    if (startTime > createdTime) {
-      numOldRows++
-      return
-    }
+    cursor = queryResponse.next_cursor ?? undefined
+  } while (cursor)
 
-    console.log(`New page: ${page.id}`)
-
-    for (const [name, property] of Object.entries(page.properties)) {
-      const propertyResponse = await notion.pages.properties.retrieve({
-        page_id: page.id,
-        property_id: property.id,
-      })
-      console.log(
-        ` - ${name} ${property.id} - ${extractValueToString(propertyResponse)}`
-      )
-    }
-  }
-  console.log(
-    `Skipped printing ${numOldRows} rows that were written before ${startTime}`
-  )
+  console.log(`Printed ${numNewRows} rows created after ${startTime}`)
 }
 
 async function exerciseFilters(

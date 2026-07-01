@@ -6,14 +6,6 @@ working code, complete setup instructions, and offline checks.
 
 ## Worker ideas
 
-### Salesforce sync
-
-Create a `workers/salesforce-sync/` Worker that imports selected Salesforce
-objects into managed Notion databases. A complete recipe should define a safe
-OAuth or connected-app setup, stable record keys, incremental pagination,
-deletion behavior, schema mapping, rate-limit handling, and offline transform
-tests.
-
 ### Spotify control
 
 Create a `workers/spotify-control/` agent tool that can inspect playback and

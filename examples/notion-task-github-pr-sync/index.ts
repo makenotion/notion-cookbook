@@ -20,11 +20,18 @@ const notion = new Client({ auth: process.env.NOTION_KEY })
 const OPERATION_BATCH_SIZE = 10
 
 /**
- * Enable to change status property in Notion Database
- * When enabling this, make sure you have a set the STATUS_FIELD_NAME
+ * Status updates are opt-in. Environment variables are strings, so checking the
+ * raw value would incorrectly treat "false" as enabled.
  */
-const UPDATE_STATUS_IN_NOTION_DB = process.env.UPDATE_STATUS_IN_NOTION_DB
-const STATUS_PROPERTY_NAME = process.env.STATUS_PROPERTY_NAME
+const UPDATE_STATUS_IN_NOTION_DB =
+  process.env.UPDATE_STATUS_IN_NOTION_DB?.trim().toLowerCase() === "true"
+const STATUS_PROPERTY_NAME = process.env.STATUS_PROPERTY_NAME?.trim()
+
+if (UPDATE_STATUS_IN_NOTION_DB && !STATUS_PROPERTY_NAME) {
+  throw new Error(
+    "STATUS_PROPERTY_NAME is required when UPDATE_STATUS_IN_NOTION_DB=true"
+  )
+}
 
 /**
  * Entry Point
@@ -55,15 +62,22 @@ async function updateNotionDBwithGithubPRs() {
  * @returns {Promise<Boolean>}
  */
 async function hasIntegrationCommentedOnPage(page_id) {
-  const comments = await notion.comments.list({ block_id: page_id })
   const bot = await notion.users.me({})
-  if (comments.results) {
+
+  let cursor: string | undefined
+  do {
+    const comments = await notion.comments.list({
+      block_id: page_id,
+      start_cursor: cursor,
+      page_size: 100,
+    })
     for (const comment of comments.results) {
-      if (comment.created_by.id === bot.id) {
-        return true
-      }
+      if (comment.created_by.id === bot.id) return true
     }
-  }
+
+    cursor = comments.next_cursor ?? undefined
+  } while (cursor)
+
   return false
 }
 
@@ -132,8 +146,8 @@ async function getGitHubPRsForRepository() {
         console.log("Error: PR body is empty")
       }
     }
-    return pullRequests
   }
+  return pullRequests
 }
 
 /***

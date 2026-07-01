@@ -1,42 +1,47 @@
-# Sample Integration: Generate Random Data with Notion API
+# Generate random data in Notion
 
-## About the Integration
+Create schema-aware sample pages, read them back, and try common database
+filters with the Notion API.
 
-This integration finds the first database which your bot has access to, and creates correctly typed random rows of data.
+> [!CAUTION]
+> Every run creates **10 pages in the first database the integration can
+> access**. The script does not ask you to choose a database. Share the
+> integration with only a test database that you are comfortable modifying.
 
-## Running Locally
+## Quickstart
 
-### 1. Setup your local project
+1. Duplicate the
+   [example database](https://public-api-examples.notion.site/f3e098475baa45878759ed8d04ea79af)
+   into your workspace.
+2. Create a Notion integration in the
+   [integrations dashboard](https://www.notion.com/my-integrations), then
+   [connect it](https://developers.notion.com/docs/create-a-notion-integration#step-2-share-a-database-with-your-integration)
+   only to the duplicated test database.
+3. From the repository root, install and configure the example:
 
-```zsh
-# Clone this repository locally
-git clone https://github.com/makenotion/notion-cookbook.git
+   ```sh
+   cd examples/generate-random-data
+   npm install
+   cp example.env .env
+   ```
 
-# Switch into this project
-cd notion-cookbook/examples/generate-random-data
+   Set your integration secret in `.env`:
 
-# Install the dependencies
-npm install
-```
+   ```dotenv
+   NOTION_KEY=<your-notion-api-key>
+   ```
 
-### 2. Setup your Notion workspace
+4. Run it:
 
-You can create your Notion API key [here](https://www.notion.com/my-integrations).
+   ```sh
+   npm run ts-run
+   ```
 
-To create a Notion database that will work with this example, duplicate [this database template](https://public-api-examples.notion.site/f3e098475baa45878759ed8d04ea79af).
+The script creates 10 pages with values matched to the database schema. It
+then reads the new pages, prints their properties, and runs example select and
+rich-text filters. Use the provided database template if you want the complete
+flow; a custom database needs both select and rich-text properties for the
+filter examples.
 
-Your Notion integration will need access to the Notion database you have created. To provide access, follow the instructions found in Notion's [Integration guide](https://developers.notion.com/docs/create-a-notion-integration#step-2-share-a-database-with-your-integration).
-
-### 3. Set your environment variables to a `.env` file
-
-Rename `example.env` to `.env` in this directory and add your API key.
-
-```zsh
-NOTION_KEY=<api-key-you-created-in-the-previous-step>
-```
-
-### 4. Run code
-
-```zsh
-npm run ts-run
-```
+Running the command again creates 10 more pages. The script does not remove the
+sample data.

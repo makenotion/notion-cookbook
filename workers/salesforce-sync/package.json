@@ -1,5 +1,5 @@
 {
-  "name": "salesforce-sync",
+  "name": "@notion-cookbook/salesforce-sync",
   "version": "0.0.0",
   "private": true,
   "scripts": {

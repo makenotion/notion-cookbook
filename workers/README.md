@@ -14,15 +14,16 @@ For local programs built directly on the Notion API, see the
 
 ## Syncs
 
-| Worker                            | What it maintains                                                                                                      |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| [DuckDB sync](duckdb-sync/)       | A self-contained managed database populated from seeded, in-memory DuckDB data; useful for learning the sync contract. |
-| [GitHub sync](github-sync/)       | Issues, all pull requests, and open pull requests with review and CI status.                                           |
-| [HubSpot sync](hubspot-sync/)     | CRM contacts, deals, and companies.                                                                                    |
-| [Jira sync](jira-sync/)           | Jira Cloud issues, current sprints, sprint analytics, and projects.                                                    |
-| [Linear sync](linear-sync/)       | Linear projects, issues, and initiatives.                                                                              |
-| [Snowflake sync](snowflake-sync/) | Rows returned by a configurable Snowflake query.                                                                       |
-| [Zendesk sync](zendesk-sync/)     | Tickets, organizations, users, CSAT responses, ticket metrics, and SLA policies.                                       |
+| Worker                              | What it maintains                                                                                                      |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| [DuckDB sync](duckdb-sync/)         | A self-contained managed database populated from seeded, in-memory DuckDB data; useful for learning the sync contract. |
+| [GitHub sync](github-sync/)         | Issues, all pull requests, and open pull requests with review and CI status.                                           |
+| [HubSpot sync](hubspot-sync/)       | CRM contacts, deals, and companies.                                                                                    |
+| [Jira sync](jira-sync/)             | Jira Cloud issues, current sprints, sprint analytics, and projects.                                                    |
+| [Linear sync](linear-sync/)         | Linear projects, issues, and initiatives.                                                                              |
+| [Salesforce sync](salesforce-sync/) | Salesforce accounts and opportunities, with related account context.                                                   |
+| [Snowflake sync](snowflake-sync/)   | Rows returned by a configurable Snowflake query.                                                                       |
+| [Zendesk sync](zendesk-sync/)       | Tickets, organizations, users, CSAT responses, ticket metrics, and SLA policies.                                       |
 
 ## Agent tools
 
