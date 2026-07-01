@@ -16,6 +16,10 @@ fields listed below. Authentication uses the OAuth client-credentials flow from
 a Salesforce **External Client App**, with a dedicated integration user as its
 **Run As** user. New deployments should not create a legacy Connected App.
 
+The default mapping is intended for **single-currency orgs**. It stores
+`Amount` and `AnnualRevenue` as numbers without `CurrencyIsoCode`; multi-currency
+orgs should add that field before deploying so values remain distinguishable.
+
 Custom objects, custom fields, Person Account-specific fields, and additional
 standard objects are not included by default. You can add them by extending the
 schemas, field lists, and sync registrations as described in
@@ -74,9 +78,6 @@ stable Notion sync key.
 
 Each Opportunity page body contains the Salesforce `Description` as markdown.
 Salesforce percentages are converted to Notion's decimal percent format.
-`Amount` and `AnnualRevenue` are stored as plain numbers without a currency
-symbol. Multi-currency orgs can add `CurrencyIsoCode` by following
-[Adapting the sync](#adapting-the-sync).
 
 **Account** is a two-way relation to the Salesforce Accounts database. The
 relation uses `AccountId`, the same stable Salesforce ID used as the Account
