@@ -1,8 +1,9 @@
 # Worker tool: PowerPoint creator
 
-**TL;DR:** Turn a Notion page into a ready-to-download PowerPoint. The worker
-uses headings to organize slides, preserves common text formatting, and attaches
-the generated `.pptx` to the source page as a comment.
+**TL;DR:** Turn a Notion page into PowerPoint slides and export them as a
+ready-to-download `.pptx` presentation. The worker uses headings to organize
+slides, preserves common text formatting, and attaches the generated file to
+the source page as a comment.
 
 ## Quickstart
 
@@ -13,10 +14,10 @@ From the repository root:
 
 ```zsh
 npm install --global ntn
-cd workers/ppt-creator
+cd workers/powerpoint-creator
 npm install
 ntn login
-ntn workers deploy --name ppt-creator
+ntn workers deploy --name powerpoint-creator
 ```
 
 In Notion, add the deployed worker to a custom agent under
@@ -25,8 +26,8 @@ In Notion, add the deployed worker to a custom agent under
 ## Try asking
 
 - "Create a PowerPoint presentation from this page."
-- "Turn this project brief into a presentation and attach it to the page."
-- "Export this meeting-notes page as a PowerPoint."
+- "Turn this project brief into PowerPoint slides and attach the `.pptx` file."
+- "Export this meeting-notes page as a PowerPoint `.pptx` presentation."
 
 The agent calls `createPresentation`, then adds the generated file to the source
 page as a comment.

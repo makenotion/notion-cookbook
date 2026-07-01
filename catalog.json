@@ -330,10 +330,10 @@
       }
     },
     {
-      "id": "ppt-creator",
+      "id": "powerpoint-creator",
       "title": "PowerPoint creator agent tool",
-      "summary": "Turn a Notion page into a PowerPoint presentation and attach the generated file to the page.",
-      "path": "workers/ppt-creator",
+      "summary": "Turn a Notion page into PowerPoint slides, export them as a .pptx presentation, and attach the file to the page.",
+      "path": "workers/powerpoint-creator",
       "kind": "worker-tool",
       "status": "ready",
       "language": "typescript",
@@ -344,7 +344,7 @@
         "install": "npm install",
         "check": "npm run check",
         "build": "npm run build",
-        "deploy": "ntn workers deploy --name ppt-creator"
+        "deploy": "ntn workers deploy --name powerpoint-creator"
       }
     },
     {

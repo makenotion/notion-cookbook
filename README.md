@@ -64,16 +64,16 @@ and a **webhook** handles events from another service. See the complete
 
 ### Add tools to a Notion agent
 
-| Task                                              | Worker                                      | Integration         |
-| ------------------------------------------------- | ------------------------------------------- | ------------------- |
-| Inspect DAGs, runs, tasks, and logs               | [Airflow](workers/airflow/)                 | Apache Airflow      |
-| Render and insert Vega-Lite charts                | [Chart generator](workers/chart-generator/) | Vega-Lite           |
-| Browse log groups, streams, and events            | [CloudWatch Logs](workers/cloudwatch-logs/) | AWS CloudWatch Logs |
-| Learn the database-query pattern with seeded data | [DuckDB query](workers/duckdb-query/)       | DuckDB              |
-| Query a database with read-only SQL               | [Postgres query](workers/postgres-query/)   | PostgreSQL          |
-| Turn a Notion page into a presentation            | [PowerPoint creator](workers/ppt-creator/)  | Notion, PowerPoint  |
-| Query a warehouse with read-only SQL              | [Snowflake query](workers/snowflake-query/) | Snowflake           |
-| Learn the database-query pattern with seeded data | [SQLite query](workers/sqlite-query/)       | SQLite              |
+| Task                                                | Worker                                            | Integration         |
+| --------------------------------------------------- | ------------------------------------------------- | ------------------- |
+| Inspect DAGs, runs, tasks, and logs                 | [Airflow](workers/airflow/)                       | Apache Airflow      |
+| Render and insert Vega-Lite charts                  | [Chart generator](workers/chart-generator/)       | Vega-Lite           |
+| Browse log groups, streams, and events              | [CloudWatch Logs](workers/cloudwatch-logs/)       | AWS CloudWatch Logs |
+| Learn the database-query pattern with seeded data   | [DuckDB query](workers/duckdb-query/)             | DuckDB              |
+| Query a database with read-only SQL                 | [Postgres query](workers/postgres-query/)         | PostgreSQL          |
+| Turn a Notion page into PowerPoint slides (`.pptx`) | [PowerPoint creator](workers/powerpoint-creator/) | Notion, PowerPoint  |
+| Query a warehouse with read-only SQL                | [Snowflake query](workers/snowflake-query/)       | Snowflake           |
+| Learn the database-query pattern with seeded data   | [SQLite query](workers/sqlite-query/)             | SQLite              |
 
 ### Handle webhooks
 
