@@ -18,6 +18,7 @@ directory.
 - **Bring external data into Notion:** use a Worker sync for
   [GitHub](workers/github-sync/), [HubSpot](workers/hubspot-sync/),
   [Jira](workers/jira-sync/), [Linear](workers/linear-sync/),
+  [Patents](workers/patent-portfolio-sync/),
   [Salesforce](workers/salesforce-sync/), [Snowflake](workers/snowflake-sync/),
   or [Zendesk](workers/zendesk-sync/).
 - **Give a Notion agent a new tool:** connect it to
