@@ -142,7 +142,6 @@ data flow, adapt it to include issue labels, and run its offline checks."
 - [Agent skills](skills/) — reusable workflows for working with Notion
 - [Notion developer documentation](https://developers.notion.com)
 - [Notion API reference](https://developers.notion.com/reference)
-- [Roadmap](ROADMAP.md) — ideas that are not runnable recipes yet
 - [Contributing](CONTRIBUTING.md) — add or improve an example, Worker, skill, or
   guide
 

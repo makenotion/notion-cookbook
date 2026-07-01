@@ -13,7 +13,6 @@ should point here instead of restating these rules.
 | `skills/`                             | Reusable instructions and evaluations for AI-assisted Notion workflows.                                              |
 | `docs/`                               | Longer developer guides that are not standalone runnable projects.                                                   |
 | `scripts/`                            | Repository-wide installation, validation, and maintenance commands.                                                  |
-| `ROADMAP.md`                          | Ideas only. Entries here are not runnable and must not appear in `catalog.json`.                                     |
 
 Do not infer a recipe's category from a path segment that no longer exists.
 `examples/` and `workers/` are both flat collections; `kind` in `catalog.json`
@@ -106,8 +105,8 @@ Every new recipe must include:
 - One complete `catalog.json` entry and links from the appropriate landing page
   and root README.
 
-Do not add a placeholder project. Put an unimplemented idea in `ROADMAP.md`
-until code, setup instructions, and checks are runnable.
+Do not add placeholder projects or catalog entries. Add a recipe only when its
+code, setup instructions, and checks are runnable.
 
 ## Validate changes
 

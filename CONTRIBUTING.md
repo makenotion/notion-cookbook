@@ -12,8 +12,6 @@ verify without relying on another project in this repository.
   `snowflake-query`, or `zendesk-webhook`.
 - Add reusable AI workflows under the appropriate provider in `skills/`.
 - Add longer conceptual or integration guides to `docs/`.
-- Add an unimplemented recipe idea to `ROADMAP.md`, not to `examples/` or
-  `workers/`.
 
 Keep runnable project roots flat. Language, runtime, integration, and Worker
 kind belong in `catalog.json`; they do not need extra directory levels.
@@ -101,8 +99,8 @@ Required fields are:
 - Lowercase integration slugs and project-relative entrypoints.
 - `commands.install` plus supported run, check, test, build, or deploy commands.
 
-The catalog contains runnable package-backed projects only. Roadmap ideas,
-skills, and documentation do not belong in it.
+The catalog contains runnable package-backed projects only. Unimplemented
+ideas, skills, and documentation do not belong in it.
 
 ## Documentation and skills
 
