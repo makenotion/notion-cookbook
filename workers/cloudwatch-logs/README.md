@@ -1,6 +1,37 @@
 # Worker tool: CloudWatch Logs
 
-A Notion worker that lets a custom agent browse and read AWS CloudWatch Logs. It registers three tools:
+**TL;DR:** Connect AWS CloudWatch Logs to a Notion agent so it can find the right log stream and investigate recent errors without opening the AWS console.
+
+## Quickstart
+
+Use AWS credentials with read-only access to the log groups you want the agent to inspect.
+
+From the repository root:
+
+```zsh
+npm install --global ntn
+cd workers/cloudwatch-logs
+npm install
+ntn login
+ntn workers deploy --name cloudwatch-logs
+ntn workers env set AWS_REGION=us-east-1
+ntn workers env set AWS_ACCESS_KEY_ID=your_access_key_id
+ntn workers env set AWS_SECRET_ACCESS_KEY=your_secret_access_key
+# Only needed for temporary credentials (for example, assumed roles):
+# ntn workers env set AWS_SESSION_TOKEN=your_session_token
+```
+
+In Notion, add the deployed worker to a custom agent under **Tools and access > Add connection**.
+
+## Try asking
+
+- "Inspect the most recently active `my-function` Lambda log stream for errors
+  from the last hour."
+- "Find the most recently active stream in `/aws/lambda/payments` and summarize its latest events."
+- "Which log groups start with `/aws/lambda/orders`?"
+- "Show me the events from this stream between 12:00 and 12:30 UTC."
+
+The worker registers three tools:
 
 - `listLogGroups` lists log groups matching a name prefix.
 - `getLogStreams` lists log streams within a group, ordered by most recent activity.
@@ -12,8 +43,8 @@ Together they let the agent find the right log group, narrow to a stream, and re
 
 ```
 src/
-  index.ts   Worker definition and the three tools
-  config.ts  CloudWatch client and error helper
+  index.ts   Worker definition, the three tools, and readable error handling
+  config.ts  CloudWatch client configuration
 ```
 
 The tools chain naturally: `listLogGroups` → `getLogStreams` → `getLogEvents`. All three return paginated, capped results so responses stay readable in the agent conversation.
@@ -41,56 +72,6 @@ Fetches events from a single stream in chronological order. Results are capped a
 
 Pass `startTime` and/or `endTime` as ISO 8601 strings (e.g. `"2024-06-01T12:00:00Z"`) to filter by time range.
 
-## Setup
-
-### 1. Install the Notion Workers CLI
-
-```zsh
-npm install --global ntn
-```
-
-### 2. Clone and install
-
-```zsh
-git clone https://github.com/makenotion/notion-cookbook.git
-cd notion-cookbook/workers/cloudwatch-logs
-npm install
-```
-
-> **Note:** The AWS SDK has a large dependency tree. Expect `node_modules` to be 50-80 MB after install.
-
-### 3. Connect to your workspace
-
-```zsh
-ntn login
-```
-
-### 4. Deploy
-
-```zsh
-ntn workers deploy --name cloudwatch-logs
-```
-
-### 5. Set environment variables
-
-```zsh
-ntn workers env set AWS_REGION=us-east-1
-ntn workers env set AWS_ACCESS_KEY_ID=your_access_key_id
-ntn workers env set AWS_SECRET_ACCESS_KEY=your_secret_access_key
-# Only needed for temporary credentials (e.g. assumed roles):
-# ntn workers env set AWS_SESSION_TOKEN=your_session_token
-```
-
-### 6. Connect to an agent
-
-Once deployed, add the worker to a custom agent under **Tools and access > Add connection**. The agent can then call `listLogGroups`, `getLogStreams`, and `getLogEvents`.
-
-A prompt like:
-
-> What errors appeared in the my-function Lambda logs in the last hour?
-
-will have the agent list groups, find the right stream, and fetch the events.
-
 ## AWS credentials and IAM permissions
 
 The worker uses the standard AWS SDK credential provider chain. Set credentials via environment variables (above) or, if running on EC2/ECS, rely on the instance or task role — the worker only reads `AWS_REGION` plus the standard `AWS_*` credential variables.
@@ -109,18 +90,21 @@ The IAM principal needs these permissions on the relevant log groups:
 }
 ```
 
-Scope `Resource` to specific log group ARNs in production to follow least-privilege.
+`logs:DescribeLogGroups` requires `"Resource": "*"`. For stricter production
+access, keep discovery in a wildcard statement and place
+`logs:DescribeLogStreams` and `logs:GetLogEvents` in a separate statement
+scoped to the permitted log-group ARNs.
 
 > **Note on error messages:** tool errors are returned to the agent verbatim to help it self-correct. An AWS authorization failure can include the caller's account id and IAM principal ARN (e.g. `User: arn:aws:iam::123456789012:user/foo is not authorized...`). That's your own identity surfaced to your own agent, but if you expose this worker more broadly, sanitize errors before returning them.
 
-## Local testing
+## Run locally
 
 Copy `.env.example` to `.env`, fill in `AWS_REGION` and your AWS credentials, then run a tool without deploying:
 
 ```zsh
 ntn workers exec listLogGroups --local -d '{"prefix": "/aws/lambda/", "limit": 5}'
-ntn workers exec getLogStreams --local -d '{"logGroupName": "/aws/lambda/my-function", "limit": 5}'
-ntn workers exec getLogEvents --local -d '{"logGroupName": "/aws/lambda/my-function", "logStreamName": "2024/06/01/[$LATEST]abc123", "limit": 10}'
+ntn workers exec getLogStreams --local -d '{"logGroupName": "/aws/lambda/my-function", "filterPrefix": null, "limit": 5}'
+ntn workers exec getLogEvents --local -d '{"logGroupName": "/aws/lambda/my-function", "logStreamName": "2024/06/01/[$LATEST]abc123", "startTime": null, "endTime": null, "limit": 10}'
 ```
 
 Run the offline unit tests (no AWS needed):

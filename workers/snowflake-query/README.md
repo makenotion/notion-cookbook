@@ -1,6 +1,41 @@
 # Worker tool: Snowflake query
 
-A Notion worker that lets a custom agent query your Snowflake warehouse and get the rows back in the conversation. It registers three tools:
+**TL;DR:** Connect a read-only slice of Snowflake to a Notion agent so it can
+discover warehouse tables, write SQL, and answer data questions in the
+conversation.
+
+## Quickstart
+
+First provision a dedicated user and key pair using
+[Set up Snowflake](#set-up-snowflake). Then deploy the worker with those
+credentials. From the repository root:
+
+```zsh
+npm install --global ntn
+cd workers/snowflake-query
+npm install
+ntn login
+ntn workers deploy --name snowflake-query
+ntn workers env set SNOWFLAKE_ACCOUNT=your_org-your_account
+ntn workers env set SNOWFLAKE_USER=NOTION_AGENT_SVC
+ntn workers env set SNOWFLAKE_WAREHOUSE=NOTION_AGENT_WH
+ntn workers env set SNOWFLAKE_PRIVATE_KEY="$(cat rsa_key.p8)"
+ntn workers env set SNOWFLAKE_DATABASE=MY_DB
+ntn workers env set SNOWFLAKE_SCHEMA=PUBLIC
+ntn workers env set SNOWFLAKE_ROLE=NOTION_AGENT_READONLY
+```
+
+In Notion, add the deployed worker to a custom agent under
+**Tools and access > Add connection**.
+
+## Try asking
+
+- "What were total orders by month this year? Find the right table first."
+- "Which products grew fastest quarter over quarter?"
+- "Compare customer retention by acquisition channel."
+- "Describe `MY_DB.PUBLIC.ORDERS` and summarize what it can answer."
+
+The worker registers three tools:
 
 - `listTables` runs `SHOW TABLES`, optionally scoped to a database/schema or filtered with a `LIKE` pattern.
 - `describeTable` runs `DESCRIBE TABLE` and returns a table's columns and types.
@@ -27,6 +62,7 @@ Run this in a worksheet, replacing `MY_DB` with your database:
 USE ROLE SECURITYADMIN;
 CREATE ROLE IF NOT EXISTS NOTION_AGENT_READONLY;
 
+USE ROLE SYSADMIN;
 CREATE WAREHOUSE IF NOT EXISTS NOTION_AGENT_WH
   WITH WAREHOUSE_SIZE = 'XSMALL'
   AUTO_SUSPEND = 60
@@ -46,6 +82,8 @@ USE ROLE USERADMIN;
 CREATE USER IF NOT EXISTS NOTION_AGENT_SVC
   DEFAULT_ROLE = NOTION_AGENT_READONLY
   DEFAULT_WAREHOUSE = NOTION_AGENT_WH;
+
+USE ROLE SECURITYADMIN;
 GRANT ROLE NOTION_AGENT_READONLY TO USER NOTION_AGENT_SVC;
 ```
 
@@ -66,68 +104,23 @@ ALTER USER NOTION_AGENT_SVC SET RSA_PUBLIC_KEY='MIIBIjANBgkqh...';
 
 `rsa_key.p8` stays on your machine and is only ever passed to the worker as a secret. The `.gitignore` here ignores `*.p8` and `rsa_key*` so it won't get committed by accident.
 
-## Setup
+## Connection settings
 
-### 1. Install the Notion Workers CLI
+Worker secrets never live in the repo (`.env` and `workers.json` are
+gitignored). `SNOWFLAKE_ACCOUNT` is the `orgname-account_name` identifier
+([docs](https://docs.snowflake.com/en/user-guide/admin-account-identifier)).
+The database, schema, and role in the quickstart are optional; setting them
+means the agent does not have to fully qualify every name. Other optional
+secrets are `SNOWFLAKE_PRIVATE_KEY_PASS` for an encrypted key,
+`SNOWFLAKE_MAX_ROWS` (default 100, capped at 1000), and
+`SNOWFLAKE_QUERY_TIMEOUT_SECONDS` (default 60, capped at 300).
 
-```zsh
-npm install --global ntn
-```
-
-### 2. Clone and install
-
-```zsh
-git clone https://github.com/makenotion/notion-cookbook.git
-cd notion-cookbook/workers/snowflake-query
-npm install
-```
-
-### 3. Connect to your workspace
-
-```zsh
-ntn login
-```
-
-### 4. Deploy
-
-```zsh
-ntn workers deploy --name snowflake-query
-```
-
-### 5. Set the connection secrets
-
-These are worker secrets and never live in the repo (`.env` and `workers.json` are gitignored):
-
-```zsh
-ntn workers env set SNOWFLAKE_ACCOUNT=your_org-your_account
-ntn workers env set SNOWFLAKE_USER=NOTION_AGENT_SVC
-ntn workers env set SNOWFLAKE_WAREHOUSE=NOTION_AGENT_WH
-ntn workers env set SNOWFLAKE_PRIVATE_KEY="$(cat rsa_key.p8)"
-
-# Optional, so the agent doesn't have to fully qualify every name:
-ntn workers env set SNOWFLAKE_DATABASE=MY_DB
-ntn workers env set SNOWFLAKE_SCHEMA=PUBLIC
-ntn workers env set SNOWFLAKE_ROLE=NOTION_AGENT_READONLY
-```
-
-`SNOWFLAKE_ACCOUNT` is the `orgname-account_name` identifier ([docs](https://docs.snowflake.com/en/user-guide/admin-account-identifier)). Other optional secrets: `SNOWFLAKE_PRIVATE_KEY_PASS` if the key is encrypted, `SNOWFLAKE_MAX_ROWS` (default 100, capped at 1000), and `SNOWFLAKE_QUERY_TIMEOUT_SECONDS` (default 60, capped at 300).
-
-## Connect it to an agent
-
-Once deployed, add the worker to a custom agent under **Tools and access > Add connection**. The agent can then call `listTables`, `describeTable`, and `query`.
-
-A prompt like:
-
-> What were total orders by month this year? Find the right table first.
-
-usually has the agent list tables, describe the likely one, then run a query and summarize what comes back.
-
-## Test locally
+## Run locally
 
 Copy `.env.example` to `.env`, fill in your values, and run a tool without deploying:
 
 ```zsh
-ntn workers exec listTables --local -d '{}'
+ntn workers exec listTables --local -d '{"database": null, "schema": null, "like": null}'
 ntn workers exec describeTable --local -d '{"table": "MY_DB.PUBLIC.ORDERS"}'
 ntn workers exec query --local -d '{"sql": "SELECT CURRENT_DATE() AS ds", "maxRows": 10}'
 ```

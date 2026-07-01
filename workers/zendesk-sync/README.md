@@ -1,14 +1,66 @@
 # Worker sync: Zendesk
 
-Syncs your Zendesk data into Notion databases that stay up to date
-automatically. One deploy gives you six synced databases covering tickets,
-organizations, users, CSAT survey responses, ticket metrics, and SLA policies.
+Bring your support operation into Notion so teams and agents can investigate
+queue health, customer feedback, response performance, and SLA targets without
+leaving the workspace. One deploy creates six managed databases and keeps them
+updated from Zendesk automatically.
 
-You don't need to create the Notion databases yourself. The worker declares the
-schemas and Notion creates and manages each database for you (these are called
-"managed databases").
+You do not need to build the Notion databases or supply a Notion API token. The
+worker declares their schemas, and Notion creates and manages them for you.
 
-## Supported configuration
+## Quickstart
+
+The default worker needs Zendesk Support Professional or Suite Growth (or
+higher), the updated CSAT experience, and an admin API user. If your account
+does not include CSAT or SLA APIs, see [Zendesk plan compatibility](#zendesk-plan-compatibility).
+
+Create a [Zendesk API token](#zendesk-api-token), then, from the repository
+root, install the worker, connect your workspace, and deploy:
+
+```sh
+npm install --global ntn
+cd workers/zendesk-sync
+npm install
+ntn login
+ntn workers deploy --name zendesk-sync
+```
+
+Configure the deployed worker:
+
+```sh
+ntn workers env set ZENDESK_SUBDOMAIN=acme
+ntn workers env set ZENDESK_API_TOKEN=your-api-token
+ntn workers env set ZENDESK_API_USER_EMAIL=agent@example.com
+```
+
+Preview the ticket sync without changing Notion, then run it:
+
+```sh
+ntn workers sync trigger ticketsSync --preview
+ntn workers sync trigger ticketsSync
+```
+
+The real run populates **Support Tickets**. The other five databases populate
+on their schedules, or you can [trigger them manually](#triggering-syncs-manually).
+
+These databases can contain ticket descriptions, organization notes, user
+emails and phone numbers, and CSAT feedback. Review their Notion sharing
+settings before giving a broader audience access.
+
+## What this helps you answer
+
+| Managed database              | Example questions                                                                                  |
+| ----------------------------- | -------------------------------------------------------------------------------------------------- |
+| Support Tickets               | Which urgent tickets are still open? Who owns them? Which channels or organizations drive volume?  |
+| Zendesk Organizations         | How are customer accounts tagged? Which organization records changed recently?                     |
+| Zendesk Users                 | Who are the agents and admins? Which users are suspended or have not logged in recently?           |
+| Zendesk CSAT Survey Responses | Which responses have bad ratings? What feedback are customers sharing?                             |
+| Zendesk Ticket Metrics        | Which tickets have slow first replies or resolutions? Which are reopened or require many handoffs? |
+| Zendesk SLA Policies          | What are the first-reply and resolution targets for each priority? How do policies differ?         |
+
+## Reference
+
+### Zendesk plan compatibility
 
 To run all six syncs as written, use Zendesk Support Professional or higher, or
 Zendesk Suite Growth or higher, with the updated CSAT experience enabled and an
@@ -16,7 +68,7 @@ admin API user with API token access. Accounts that do not meet this
 configuration can still use the core ticket, organization, user, and
 ticket-metric syncs after removing the CSAT and SLA sync registrations.
 
-## What you get
+### Synced databases
 
 | Database                          | Zendesk resource           | Schedule    | Plan                                 |
 | --------------------------------- | -------------------------- | ----------- | ------------------------------------ |
@@ -27,7 +79,7 @@ ticket-metric syncs after removing the CSAT and SLA sync registrations.
 | **Zendesk Ticket Metrics**        | Ticket Metrics             | Every 5 min | All                                  |
 | **Zendesk SLA Policies**          | SLA Policies               | Daily       | Support Professional / Suite Growth+ |
 
-### Support Tickets
+#### Support Tickets
 
 | Notion property | Zendesk field             | Type        |
 | --------------- | ------------------------- | ----------- |
@@ -53,7 +105,7 @@ with no extra API calls). The incremental export includes archived tickets and
 uses `support_type_scope=all`, so both human-agent and AI-agent tickets are
 included.
 
-### Zendesk Organizations
+#### Zendesk Organizations
 
 | Notion property | Zendesk field  | Type        |
 | --------------- | -------------- | ----------- |
@@ -67,7 +119,7 @@ included.
 
 Page body contains the organization's `notes` field.
 
-### Zendesk Users
+#### Zendesk Users
 
 | Notion property | Zendesk field     | Type        |
 | --------------- | ----------------- | ----------- |
@@ -83,7 +135,7 @@ Page body contains the organization's `notes` field.
 | User ID         | `id`              | richText    |
 | Created at      | `created_at`      | date        |
 
-### Zendesk CSAT Survey Responses
+#### Zendesk CSAT Survey Responses
 
 | Notion property | Zendesk field                               | Type     |
 | --------------- | ------------------------------------------- | -------- |
@@ -105,7 +157,7 @@ This database uses Zendesk's current CSAT Survey Responses API. Open-ended
 feedback is also copied into the page body. It uses a daily replace sweep so
 answers edited after the response was first offered are refreshed correctly.
 
-### Zendesk Ticket Metrics
+#### Zendesk Ticket Metrics
 
 | Notion property        | Zendesk field                         | Type   |
 | ---------------------- | ------------------------------------- | ------ |
@@ -127,7 +179,7 @@ answers edited after the response was first offered are refreshed correctly.
 Times use calendar minutes by default. To switch to business hours, change
 `.calendar` to `.business` in `src/ticket-metrics.ts`.
 
-### Zendesk SLA Policies
+#### Zendesk SLA Policies
 
 | Notion property          | Zendesk field                | Type     |
 | ------------------------ | ---------------------------- | -------- |
@@ -149,7 +201,7 @@ SLA targets are flattened from the `policy_metrics` array into individual
 columns by priority level, so managers can compare targets at a glance.
 Page body contains the policy description.
 
-## Project structure
+### Project structure
 
 ```text
 src/
@@ -164,7 +216,7 @@ src/
 └── sla-policies.ts          — SLA policy schema + transform
 ```
 
-## How it works
+### How it works
 
 1. Tickets and ticket metrics use Zendesk's cursor-based Incremental Ticket
    Export. The first run starts at Unix time `1` to backfill retained history;
@@ -186,19 +238,7 @@ General API calls share a 170-request/minute pacer, leaving headroom under the
 If Zendesk still returns 429, the worker passes `Retry-After` to the Workers
 runtime for backoff.
 
-## Prerequisites
-
-- Node >= 22, npm >= 10.9.2
-- A Zendesk account with API access enabled and an admin API user (required by
-  Incremental Ticket Export)
-- The `ntn` CLI installed and authenticated (`ntn login`)
-
-CSAT Survey Responses requires Zendesk's updated CSAT experience to be active.
-CSAT Survey Responses and SLA Policies are available on Support Professional or
-Suite Growth and above. If your account doesn't include these features, remove
-the corresponding sync from `src/index.ts`.
-
-### Getting a Zendesk API token
+### Zendesk API token
 
 1. In Zendesk, go to **Admin Center > Apps and integrations > Zendesk API**
 2. Enable **Token Access** if it isn't already
@@ -206,9 +246,9 @@ the corresponding sync from `src/index.ts`.
 4. Note the email address of the admin account — you'll need it for
    `ZENDESK_API_USER_EMAIL`
 
-## Environment variables
+### Environment variables
 
-### Required
+#### Required
 
 | Variable                 | Description                                               |
 | ------------------------ | --------------------------------------------------------- |
@@ -216,7 +256,7 @@ the corresponding sync from `src/index.ts`.
 | `ZENDESK_API_TOKEN`      | Zendesk API token (from Admin Center)                     |
 | `ZENDESK_API_USER_EMAIL` | Email of the Zendesk user associated with the API token   |
 
-### Optional
+#### Optional
 
 | Variable                | Default             | Description                          |
 | ----------------------- | ------------------- | ------------------------------------ |
@@ -228,65 +268,7 @@ Alternatively, you can set `ZENDESK_BASIC_AUTH_TOKEN` (a base64-encoded
 No `NOTION_API_TOKEN` is needed — the platform handles Notion credentials
 automatically.
 
-## Setup and deploy
-
-1. Install the Notion Workers CLI:
-
-   ```sh
-   npm install --global ntn
-   ```
-
-2. Clone and install:
-
-   ```sh
-   cd workers/zendesk-sync
-   npm install
-   ```
-
-3. Typecheck and test:
-
-   ```sh
-   npm run check
-   npm test
-   ```
-
-4. Log in to Notion:
-
-   ```sh
-   ntn login
-   ```
-
-5. Deploy the worker:
-
-   ```sh
-   ntn workers deploy
-   ```
-
-6. Set environment variables on the deployed worker:
-
-   ```sh
-   ntn workers env set ZENDESK_SUBDOMAIN=acme
-   ntn workers env set ZENDESK_API_TOKEN=your-api-token
-   ntn workers env set ZENDESK_API_USER_EMAIL=agent@example.com
-   ```
-
-7. Preview a sync without writing to Notion:
-
-   ```sh
-   ntn workers sync trigger ticketsSync --preview
-   ntn workers sync trigger organizationsSync --preview
-   ntn workers sync trigger usersSync --preview
-   ```
-
-8. Run a real sync:
-
-   ```sh
-   ntn workers sync trigger ticketsSync
-   ```
-
-Once deployed, all six syncs run automatically on their configured schedules.
-
-## Triggering syncs manually
+### Triggering syncs manually
 
 ```sh
 ntn workers sync trigger ticketsSync
@@ -300,7 +282,7 @@ ntn workers sync trigger slaPoliciesSync
 SLA Policies refreshes daily, but it can also be triggered manually after a
 policy change.
 
-## Adapting the schema
+### Adapting the schema
 
 Each synced resource has a file containing its schema and transform function.
 To change which fields are synced for a resource, edit that resource's file:
@@ -323,7 +305,7 @@ To add a new Zendesk field to any resource:
 The `PRIMARY_KEY` property is used by the platform to match incoming data to
 existing pages — don't remove it.
 
-## Incremental history and large instances
+### Incremental history and large instances
 
 Tickets and ticket metrics already use Zendesk's cursor-based incremental
 export. The initial request sends `start_time=1` as Unix epoch seconds. Every
@@ -346,7 +328,7 @@ For large collections, follow Notion's recommended two-sync pattern: a
 scheduled incremental delta plus a manual replace backfill against the same
 database and stable key space.
 
-## Local testing
+### Local testing
 
 Run offline tests (no Zendesk connection needed):
 

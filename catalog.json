@@ -231,7 +231,7 @@
         "check": "npm run check",
         "test": "npm test",
         "build": "npm run build",
-        "deploy": "ntn workers deploy"
+        "deploy": "ntn workers deploy --name duckdb-sync"
       }
     },
     {
@@ -269,7 +269,7 @@
         "check": "npm run check",
         "test": "npm test",
         "build": "npm run build",
-        "deploy": "ntn workers deploy"
+        "deploy": "ntn workers deploy --name hubspot-sync"
       }
     },
     {
@@ -288,7 +288,7 @@
         "check": "npm run check",
         "test": "npm test",
         "build": "npm run build",
-        "deploy": "ntn workers deploy"
+        "deploy": "ntn workers deploy --name jira-sync"
       }
     },
     {
@@ -307,7 +307,7 @@
         "check": "npm run check",
         "test": "npm test",
         "build": "npm run build",
-        "deploy": "ntn workers deploy"
+        "deploy": "ntn workers deploy --name linear-sync"
       }
     },
     {
@@ -382,7 +382,7 @@
         "check": "npm run check",
         "test": "npm test",
         "build": "npm run build",
-        "deploy": "ntn workers deploy"
+        "deploy": "ntn workers deploy --name snowflake-sync"
       }
     },
     {
@@ -420,7 +420,7 @@
         "check": "npm run check",
         "test": "npm test",
         "build": "npm run build",
-        "deploy": "ntn workers deploy"
+        "deploy": "ntn workers deploy --name zendesk-sync"
       }
     },
     {

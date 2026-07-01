@@ -1,6 +1,30 @@
 # Worker tool: Chart generator
 
-A Notion worker that renders a [Vega-Lite](https://vega.github.io/vega-lite/) chart to an image and embeds it in a Notion page. It registers two tools:
+**TL;DR:** Let a Notion agent turn data into a polished chart and place the image directly on a page.
+
+## Quickstart
+
+This worker needs no external credentials. Notion authenticates each deployed agent call automatically.
+
+From the repository root:
+
+```zsh
+npm install --global ntn
+cd workers/chart-generator
+npm install
+ntn login
+ntn workers deploy --name chart-generator
+```
+
+In Notion, add the deployed worker to a custom agent under **Tools and access > Add connection**.
+
+## Try asking
+
+- "Make a bar chart of A=28, B=55, and C=43, then add it to this page."
+- "Turn this quarterly revenue table into a line chart and place it below the table."
+- "Create a donut chart from these support-ticket totals and add it to my report."
+
+The agent uses two tools:
 
 - `generateChart` — render a Vega-Lite spec to a PNG and upload it; returns a `fileUploadId`.
 - `insertImage` — append that uploaded image as a block on a page (optionally after a specific block).
@@ -26,45 +50,7 @@ src/
     inter.ttf — bundled font for chart text (SIL Open Font License)
 ```
 
-## Setup
-
-### 1. Install the Notion Workers CLI
-
-```zsh
-npm install --global ntn
-```
-
-### 2. Clone and install
-
-```zsh
-git clone https://github.com/makenotion/notion-cookbook.git
-cd notion-cookbook/workers/chart-generator
-npm install
-```
-
-### 3. Connect to your workspace
-
-```zsh
-ntn login
-```
-
-### 4. Deploy
-
-```zsh
-ntn workers deploy --name chart-generator
-```
-
-After deploying, connect the worker to a custom agent in Notion via **Tools and access > Add connection**.
-
-## Usage
-
-Ask the agent to chart some data and add it to a page:
-
-> "Make a bar chart of A=28, B=55, C=43 and add it to this page."
-
-The agent calls `generateChart` (which returns a `fileUploadId`) and then `insertImage` to embed it.
-
-## Local testing
+## Run locally
 
 The render path needs no Notion connection:
 

@@ -1,9 +1,80 @@
 # Worker webhook: Zendesk
 
-A Notion worker that listens for Zendesk webhook events and keeps a Notion
-database in sync with your ticket activity. Each delivery creates or updates a
-row for the ticket, then fetches the full comment thread from the Zendesk API
-and writes it to the page body.
+A live Zendesk ticket tracker for Notion. When a Zendesk trigger fires, this
+worker creates or updates the ticket's row in your Notion database. The page
+properties show its current status, requester, and assignee; the page body
+contains the description and full comment thread.
+
+Unlike [Zendesk sync](../zendesk-sync/README.md), this worker updates a database
+you create whenever Zendesk sends an event. Use it when selected ticket events
+should appear in Notion immediately.
+
+## Quickstart
+
+1. Create a Notion database using the
+   [required schema](#required-notion-database-schema). Create a
+   [Notion internal integration](https://www.notion.so/profile/integrations/internal),
+   connect it to that database, then copy the database ID or URL and the
+   integration token.
+
+2. From the repository root, install the CLI and worker, connect your workspace,
+   and deploy:
+
+   ```sh
+   npm install --global ntn
+   cd workers/zendesk-webhook
+   npm install
+   ntn login
+   ntn workers deploy --name zendesk-webhook
+   ```
+
+   Copy the webhook URL printed by the deploy command.
+
+3. In Zendesk Admin, go to **Apps and integrations > Webhooks > Create
+   webhook**. Use the worker URL as the endpoint, enable signing, and copy the
+   signing secret.
+
+4. Configure the deployed worker using an admin API token. If you need one,
+   follow the [Zendesk API token steps](../zendesk-sync/README.md#zendesk-api-token).
+
+   ```sh
+   ntn workers env set ZENDESK_WEBHOOK_SECRET=your-signing-secret
+   ntn workers env set ZENDESK_NOTION_DATABASE_ID=your-database-id-or-url
+   ntn workers env set NOTION_API_TOKEN=your-notion-integration-token
+   ntn workers env set ZENDESK_SUBDOMAIN=acme
+   ntn workers env set ZENDESK_API_TOKEN=your-api-token
+   ntn workers env set ZENDESK_API_USER_EMAIL=admin@example.com
+   ```
+
+5. Create a Zendesk trigger for the events you want, such as ticket created or
+   ticket updated. Add **Notify by > Active webhook**, select this webhook, and
+   use the following JSON body after replacing `acme` with your subdomain:
+
+   ```json
+   {
+     "ticket_id": "{{ticket.id}}",
+     "ticket_url": "https://acme.zendesk.com/agent/tickets/{{ticket.id}}",
+     "email": "{{ticket.requester.email}}",
+     "subject": "{{ticket.title}}",
+     "description": "{{ticket.verbatim_description}}",
+     "assignee": "{{ticket.assignee.name}}",
+     "status": "{{ticket.status}}",
+     "latest_comment": "{{ticket.latest_comment}}",
+     "created_at": "{{ticket.created_at_with_timestamp}}"
+   }
+   ```
+
+When the trigger next fires, the ticket appears in your Notion database. Later
+events update the same row by its Zendesk Ticket ID.
+
+Comment enrichment includes internal Zendesk comments. Share the destination
+database only with people who are allowed to read them.
+
+## What this enables
+
+- A shared Notion queue organized by ticket status, requester, or assignee
+- A durable case page with the latest description and complete conversation
+- Notion views and workflows that react to the Zendesk events you choose
 
 ## How it works
 
@@ -39,68 +110,13 @@ src/
 test.ts             — offline unit tests (no network required)
 ```
 
-## Setup
-
-### 1. Install the Notion Workers CLI
-
-```zsh
-npm install --global ntn
-```
-
-### 2. Clone and install
-
-```zsh
-git clone https://github.com/makenotion/notion-cookbook.git
-cd notion-cookbook/workers/zendesk-webhook
-npm install
-```
-
-### 3. Create the Notion database
-
-Create a Notion database with the properties listed in the
-[database schema](#required-notion-database-schema) table. The property names
-are case-sensitive.
-
-### 4. Connect to your workspace
-
-```zsh
-ntn login
-```
-
-### 5. Deploy
-
-```zsh
-ntn workers deploy --name zendesk-webhook
-```
-
-After deploying, copy the worker's webhook URL from the output.
-
-### 6. Create the Zendesk webhook
-
-In Zendesk Admin, go to **Apps and integrations > Webhooks > Create webhook**.
-Set the endpoint URL to the worker's webhook URL, enable signing, and copy the
-signing secret.
-
-### 7. Set environment variables
-
-```zsh
-ntn workers env set ZENDESK_WEBHOOK_SECRET <signing-secret>
-ntn workers env set ZENDESK_NOTION_DATABASE_ID <database-id-or-url>
-ntn workers env set ZENDESK_API_TOKEN <api-token>
-ntn workers env set ZENDESK_API_USER_EMAIL <admin-email>
-```
-
-### 8. Create a Zendesk trigger
-
-Create a trigger in Zendesk that fires on the events you want (e.g. ticket
-created, ticket updated) and calls the webhook you just created.
-
 ## Environment variables
 
 | Variable                     | Required                  | Description                                                                                                |
 | ---------------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | `ZENDESK_WEBHOOK_SECRET`     | Yes                       | Signing secret from the Zendesk webhook (Reveal secret).                                                   |
 | `ZENDESK_NOTION_DATABASE_ID` | Yes                       | ID or URL of the Notion database to sync tickets into.                                                     |
+| `NOTION_API_TOKEN`           | Yes                       | Internal integration token connected to the destination database.                                          |
 | `ZENDESK_SUBDOMAIN`          | No                        | Zendesk subdomain (e.g. `acme` for `acme.zendesk.com`). Not needed if every payload includes `ticket_url`. |
 | `ZENDESK_BASIC_AUTH_TOKEN`   | One of three              | Base64-encoded `email/token:api_token`, or `Basic <base64>`.                                               |
 | `ZENDESK_AUTHORIZATION`      | One of three              | Full Authorization header value (`Basic …` or `Bearer …`).                                                 |
@@ -143,33 +159,26 @@ reusing it.
 ### Comment enrichment
 
 The worker calls the Zendesk REST API to fetch the full comment thread and the
-canonical ticket status. If the API call fails (e.g. credentials not set,
-network error), the worker falls back to the fields from the webhook payload and
-logs the error — the ticket row is still upserted.
+canonical ticket status. If an API request fails after credentials are loaded,
+the worker falls back to the fields from the webhook payload and logs the error
+— the ticket row is still upserted.
 
-The full comment thread includes **internal (non-public) Zendesk comments**, which
-are synced into the Notion database alongside public ones. If your Notion database
-is more widely accessible than your Zendesk agent workspace, filter these out
-before syncing.
+The full comment thread includes **internal (non-public) Zendesk comments**,
+which are synced into the Notion database alongside public ones. If your Notion
+database is more widely accessible than your Zendesk agent workspace, filter
+these out before syncing.
 
 ## Local testing
 
 The offline unit tests cover signature verification, replay protection, ticket
 parsing, status mapping, and ID normalization — no credentials required:
 
-```zsh
+```sh
 npm test
 ```
 
-To exercise the full webhook flow locally with a signed payload:
-
-```zsh
-ntn workers exec zendeskToNotion --local -d '<signed-zendesk-payload-json>'
-```
-
-See the
-[Notion Workers docs](https://developers.notion.com/docs/workers)
-for how to sign a test payload with `ntn workers sign`.
+Use Zendesk's webhook test action or the configured trigger to exercise a full
+signed delivery.
 
 ## Learn more
 

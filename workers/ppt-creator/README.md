@@ -1,6 +1,35 @@
-# Worker Tool: PPT Creator
+# Worker tool: PowerPoint creator
 
-A Notion worker tool that reads a Notion page and generates a PowerPoint presentation from its content. Each heading becomes a new slide. The `.pptx` file is uploaded and attached as a comment on the page.
+**TL;DR:** Turn a Notion page into a ready-to-download PowerPoint. The worker
+uses headings to organize slides, preserves common text formatting, and attaches
+the generated `.pptx` to the source page as a comment.
+
+## Quickstart
+
+This worker needs no external credentials. Notion authenticates each deployed
+agent call automatically.
+
+From the repository root:
+
+```zsh
+npm install --global ntn
+cd workers/ppt-creator
+npm install
+ntn login
+ntn workers deploy --name ppt-creator
+```
+
+In Notion, add the deployed worker to a custom agent under
+**Tools and access > Add connection**.
+
+## Try asking
+
+- "Create a PowerPoint presentation from this page."
+- "Turn this project brief into a presentation and attach it to the page."
+- "Export this meeting-notes page as a PowerPoint."
+
+The agent calls `createPresentation`, then adds the generated file to the source
+page as a comment.
 
 ## How it works
 
@@ -20,50 +49,10 @@ src/
   presentation.ts   — pptxgenjs slide builder with slide masters
 ```
 
-## Setup
+## Run locally
 
-### 1. Install the Notion Workers CLI
-
-```zsh
-npm install --global ntn
-```
-
-### 2. Clone and install
-
-```zsh
-# Clone this repository
-git clone https://github.com/makenotion/notion-cookbook.git
-
-# Switch into this project
-cd notion-cookbook/workers/ppt-creator
-
-# Install dependencies
-npm install
-```
-
-### 3. Connect to a workspace
-
-```zsh
-ntn login
-```
-
-### 4. Deploy
-
-```zsh
-ntn workers deploy --name ppt-creator
-```
-
-After deploying, connect the worker to a custom agent in Notion via **Tools and access > Add connection**.
-
-## Usage
-
-Once connected to an agent, ask it to create a presentation from any page:
-
-> "Create a PowerPoint presentation from this page"
-
-The agent will call the `createPresentation` tool, which reads the page content, generates the slides, and adds the `.pptx` file as a comment.
-
-## Local testing
+Local execution needs a Notion internal integration token with access to the
+source page. Put `NOTION_API_TOKEN=...` in an untracked `.env` file, then run:
 
 ```zsh
 ntn workers exec createPresentation --local -d '{"pageId": "<your-page-id>"}'
@@ -77,15 +66,5 @@ The presentation uses Notion-inspired styling defined via `defineSlideMaster()`:
 - **Section slide** — warm gray background for headings without body content
 - **Content slide** — white background with heading, divider, body area, footer bar, and slide numbers
 
-Inline markdown formatting is preserved: `**bold**` renders as bold and `*italic*` renders as italic in the slides.
-
-## Reading page content
-
-Two approaches are included in `notion.ts`:
-
-| Approach                  | Functions                                     | How it works                                      |
-| ------------------------- | --------------------------------------------- | ------------------------------------------------- |
-| **Markdown API** (active) | `getPageMarkdown` + `groupMarkdownIntoSlides` | Single API call, parses markdown string           |
-| **Block API** (available) | `getAllBlocks` + `groupBlocksIntoSlides`      | Paginated block fetching, switches on block types |
-
-Switch between them by changing the imports in `index.ts`.
+Inline markdown formatting is preserved: `**bold**` renders as bold and
+`*italic*` renders as italic in the slides.

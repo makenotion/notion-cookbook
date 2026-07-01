@@ -1,10 +1,41 @@
 # Worker tool: Airflow
 
-A Notion worker that lets a custom agent inspect and monitor your Apache Airflow instance. It registers nine tools covering DAG discovery, run history, task status, log retrieval, and health — so the agent can answer questions like "why did this pipeline fail last night?" without anyone navigating the Airflow UI.
+**TL;DR:** Connect Airflow to a Notion agent so it can inspect DAGs, trace failed runs down to task logs, and check platform health without sending you to the Airflow UI.
+
+## Quickstart
+
+This Worker targets Airflow 2.x's stable `/api/v1` REST API and sends a Bearer
+token. Airflow 3's `/api/v2` and other authentication schemes require adapting
+the client first.
+
+From the repository root:
+
+```zsh
+npm install --global ntn
+cd workers/airflow
+npm install
+ntn login
+ntn workers deploy --name airflow
+ntn workers env set AIRFLOW_URL=https://airflow.example.com
+ntn workers env set AIRFLOW_API_KEY=your_api_key_here
+```
+
+In Notion, add the deployed worker to a custom agent under **Tools and access > Add connection**.
+
+## Try asking
+
+- "Why did the latest run of `daily_orders` fail? Check the task logs."
+- "Which DAGs are owned by the data platform team, and how have their recent runs performed?"
+- "Show me the task statuses and durations for this DAG run."
+- "Are the Airflow scheduler and metadatabase healthy?"
 
 ## How it works
 
-The worker calls the [Airflow stable REST API](https://airflow.apache.org/docs/apache-airflow/stable/stable-rest-api-ref.html) (v1) using a Bearer token. No Airflow plugin or database access is required — only the REST API endpoint and an API key. Results are returned as structured JSON and summarized by the agent inline in the conversation.
+The worker calls the
+[Airflow 2.10 stable REST API](https://airflow.apache.org/docs/apache-airflow/2.10.4/stable-rest-api-ref.html)
+using `/api/v1` and a Bearer token. No Airflow plugin or database access is
+required. Results are returned as structured JSON and summarized by the agent
+inside the conversation.
 
 ## Tools
 
@@ -20,47 +51,6 @@ The worker calls the [Airflow stable REST API](https://airflow.apache.org/docs/a
 | `getTaskLogs`       | Fetch stdout/stderr logs for a task attempt. Returns the last 55,000 characters.                   |
 | `healthCheck`       | Check the health of the Airflow scheduler and metadatabase.                                        |
 
-## Setup
-
-### 1. Install the Notion Workers CLI
-
-```zsh
-npm install --global ntn
-```
-
-### 2. Clone and install
-
-```zsh
-git clone https://github.com/makenotion/notion-cookbook.git
-cd notion-cookbook/workers/airflow
-npm install
-```
-
-### 3. Connect to your workspace
-
-```zsh
-ntn login
-```
-
-### 4. Deploy
-
-```zsh
-ntn workers deploy --name airflow
-```
-
-### 5. Set the connection secrets
-
-These are worker secrets and never live in the repo (`.env` and `workers.json` are gitignored):
-
-```zsh
-ntn workers env set AIRFLOW_URL=https://airflow.example.com
-ntn workers env set AIRFLOW_API_KEY=your_api_key_here
-```
-
-### 6. Connect it to an agent
-
-Once deployed, add the worker to a custom agent under **Tools and access > Add connection**. The agent can then call any of the nine tools.
-
 ## Environment variables
 
 | Variable          | Required | Description                                                                                              |
@@ -68,9 +58,12 @@ Once deployed, add the worker to a custom agent under **Tools and access > Add c
 | `AIRFLOW_URL`     | Yes      | Base URL of your Airflow instance, without the `/api/v1` suffix. Example: `https://airflow.example.com`. |
 | `AIRFLOW_API_KEY` | Yes      | Bearer token for the Airflow REST API.                                                                   |
 
-> **Note on auth:** This worker uses Bearer token authentication, which is the default for Airflow 2.x with the stable REST API enabled. If your deployment uses HTTP Basic auth instead, change the `Authorization` header in `src/index.ts` from `Bearer ${apiKey}` to `Basic ${Buffer.from(apiKey).toString("base64")}` and store the credentials as `user:password` in `AIRFLOW_API_KEY`.
+> **Note on auth:** This example always sends
+> `Authorization: Bearer <AIRFLOW_API_KEY>`. If your Airflow deployment uses
+> Basic auth or another backend, adapt the `Authorization` header in
+> `src/index.ts` before deploying.
 
-## Local testing
+## Run locally
 
 Copy `.env.example` to `.env`, fill in your values, then run individual tools without deploying:
 
@@ -88,5 +81,5 @@ ntn workers exec healthCheck --local -d '{}'
 ## Learn more
 
 - [Notion Workers documentation](https://developers.notion.com/docs/workers)
-- [Airflow stable REST API reference](https://airflow.apache.org/docs/apache-airflow/stable/stable-rest-api-ref.html)
+- [Airflow 2.10 stable REST API reference](https://airflow.apache.org/docs/apache-airflow/2.10.4/stable-rest-api-ref.html)
 - [Contribute to this cookbook](../../CONTRIBUTING.md)

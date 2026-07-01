@@ -1,15 +1,60 @@
 # Worker sync: Linear
 
-Syncs Linear projects, issues, and initiatives into Notion databases that stay
-up to date automatically. The operational issue mirror refreshes every five
-minutes, while projects and initiatives refresh on schedules suited to
-cross-functional planning.
+Bring Linear projects, issues, and initiatives into Notion so product,
+engineering, and leadership teams can review execution and strategy together.
+The worker creates and maintains all three databases for you, while preserving
+links back to Linear for day-to-day work.
 
-You don't need to create the Notion databases yourself. The worker declares
-the schemas and Notion creates and manages each database for you (these are
-called "managed databases").
+## Quickstart
 
-## What you get
+You need Node.js 22+, a
+[Linear personal API key](#getting-a-linear-personal-api-key), and a Linear
+user who can read the work you want to sync. Create a key in **Linear >
+Settings > Security & access > API keys**, then run these commands from the
+repository root:
+
+```sh
+npm install --global ntn
+cd workers/linear-sync
+npm install
+ntn login
+ntn workers deploy --name linear-sync
+ntn workers env set LINEAR_API_KEY=lin_api_your-key-here
+```
+
+Preview the issue sync without writing to Notion:
+
+```sh
+ntn workers sync trigger issuesSync --preview
+```
+
+Then create and populate the three databases immediately:
+
+```sh
+ntn workers sync trigger projectsSync
+ntn workers sync trigger issuesSync
+ntn workers sync trigger initiativesSync
+```
+
+The worker keeps them current automatically: issues every five minutes,
+projects every 15 minutes, and initiatives every hour. A daily issue sweep
+repairs drift and removes records that Linear has permanently deleted.
+
+Everything visible to the Linear API key can be copied, including project and
+initiative update narratives. Review the destination databases' Notion sharing
+settings before giving a broader audience access.
+
+## What you can answer
+
+| Managed database       | Questions it helps answer                                                                                                          |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| **Linear Projects**    | Which projects are at risk or approaching their target date? Which projects lack a lead, priority, or recent status update?        |
+| **Linear Issues**      | What is overdue, high priority, or unassigned? How is active work distributed across teams, projects, cycles, and workflow stages? |
+| **Linear Initiatives** | Which initiatives are at risk or approaching their target date? Which strategic initiatives have no contributing projects?         |
+
+## Reference
+
+### Synced databases and schedules
 
 Three databases are maintained by four syncs:
 
@@ -29,7 +74,7 @@ names are stored as readable values instead of Notion relations. This keeps
 the example reliable when resources have different visibility, are synced on
 different schedules, or are archived and deleted in a different order.
 
-### Linear Projects
+#### Linear Projects
 
 | Notion property   | Linear field                           | Type     |
 | ----------------- | -------------------------------------- | -------- |
@@ -64,7 +109,7 @@ participate in the sync freshness watermark.
 remains visible for recognition and cross-referencing but is not used for
 identity because human-readable identifiers can change.
 
-### Linear Issues
+#### Linear Issues
 
 | Notion property   | Linear field                         | Type        |
 | ----------------- | ------------------------------------ | ----------- |
@@ -98,7 +143,7 @@ stopping at the first nested page.
 **Issue Key** stays prominent, but it can change when an issue moves between
 teams, so it is not safe as a sync key.
 
-### Linear Initiatives
+#### Linear Initiatives
 
 | Notion property      | Linear field                  | Type     |
 | -------------------- | ----------------------------- | -------- |
@@ -139,7 +184,7 @@ initiative sync fails visibly instead of silently replacing the database with
 an empty snapshot. Initiatives must be enabled, and a guest user's key may not
 be able to read them.
 
-## Project structure
+### Project structure
 
 ```text
 src/
@@ -152,7 +197,7 @@ src/
 └── helpers.ts     — shared labels, people, dates, and content helpers
 ```
 
-## How it works
+### How it works
 
 1. **Projects** use a cursor-paginated replacement sweep every 15 minutes,
    ordered by stable `createdAt` rather than a value that changes mid-sweep.
@@ -195,7 +240,7 @@ assumed. Replacement syncs exclude any trashed records they do receive, and
 the daily issue reconciliation is the guaranteed repair path once a deleted
 issue no longer appears in the full collection.
 
-### Suggested Notion views
+#### Suggested Notion views
 
 - **Active projects:** filter Archived off and Status Category to Backlog,
   Planned, Started, or Paused; sort by Health and Target Date.
@@ -209,7 +254,7 @@ issue no longer appears in the full collection.
 - **History:** filter Archived on in any database rather than mixing historical
   records into its default active view.
 
-### Rate limits and query complexity
+#### Rate limits and query complexity
 
 Every GraphQL request from all four syncs, including follow-up label and
 Initiative-project pages, shares one pacer set to **2,000 requests per hour**.
@@ -230,18 +275,11 @@ complexity reset headers, then passes the longest applicable delay to the
 Workers runtime. It also rejects GraphQL partial responses so missing fields
 cannot silently become incomplete Notion pages.
 
-## Prerequisites
+### Linear access and credentials
 
-- Node >= 22, npm >= 10.9.2
-- A Linear workspace and a user who can read the resources to sync
-- A Linear personal API key
-- The `ntn` CLI installed and authenticated (`ntn login`)
+The key's Linear visibility defines what the worker can copy.
 
-The key's Linear visibility defines what the worker can copy, including update
-narratives. Once synced, that content follows the destination Notion
-database's sharing permissions. Review both audiences before deployment.
-
-### Getting a Linear personal API key
+#### Getting a Linear personal API key
 
 1. Open Linear and go to **Settings > Security & access > API keys**.
 2. Create a new personal API key, give it a recognizable label, and copy it.
@@ -254,9 +292,9 @@ to build authentication headers or provide a `NOTION_API_TOKEN`; the worker
 handles Linear authorization and the Workers platform handles Notion
 credentials.
 
-## Environment variables
+### Configuration reference
 
-### Required
+#### Required
 
 | Variable         | Description                                                |
 | ---------------- | ---------------------------------------------------------- |
@@ -265,68 +303,7 @@ credentials.
 For local execution, copy `.env.example` to `.env` and add your key. `.env` is
 gitignored and must not be committed.
 
-## Setup and deploy
-
-1. Install the Notion Workers CLI:
-
-   ```sh
-   npm install --global ntn
-   ```
-
-2. Install the example's dependencies:
-
-   ```sh
-   cd workers/linear-sync
-   npm install
-   ```
-
-3. Typecheck the source and tests, then run the offline tests:
-
-   ```sh
-   npm run check
-   npm test
-   ```
-
-4. Log in to Notion:
-
-   ```sh
-   ntn login
-   ```
-
-5. Deploy the worker:
-
-   ```sh
-   ntn workers deploy
-   ```
-
-6. Set the personal API key on the deployed worker:
-
-   ```sh
-   ntn workers env set LINEAR_API_KEY=lin_api_your-key-here
-   ```
-
-7. Preview every sync without writing to Notion:
-
-   ```sh
-   ntn workers sync trigger projectsSync --preview
-   ntn workers sync trigger issuesSync --preview
-   ntn workers sync trigger issuesReconciliationSync --preview
-   ntn workers sync trigger initiativesSync --preview
-   ```
-
-8. Trigger real runs if you do not want to wait for their schedules:
-
-   ```sh
-   ntn workers sync trigger projectsSync
-   ntn workers sync trigger issuesSync
-   ntn workers sync trigger issuesReconciliationSync
-   ntn workers sync trigger initiativesSync
-   ```
-
-Once deployed, all four syncs run automatically. Three databases will appear
-in your Notion workspace after their first runs.
-
-## Local testing and live verification
+### Local verification
 
 Run all offline tests without a Linear connection:
 
@@ -344,11 +321,10 @@ ntn workers exec issuesReconciliationSync --local
 ntn workers exec initiativesSync --local
 ```
 
-A live API preview cannot be verified without a valid `LINEAR_API_KEY`. Offline
-tests can verify pagination, transforms, rate-limit behavior, and sync-state
-logic, but they cannot confirm which records a particular Linear user can see.
-After supplying a key, run all four `--preview` commands above and inspect the
-returned fields before triggering a write.
+Use `--preview` when triggering a deployed sync whose returned fields you want
+to inspect before writing to Notion.
+
+### Operational notes
 
 Linear recommends webhooks instead of polling for production integrations that
 can receive events. Workers syncs currently use scheduled execution, so this
@@ -358,7 +334,7 @@ webhook-capable deployment can retain the reconciliation sweep as a repair path.
 Linear-hosted images embedded in Markdown may require Linear authentication;
 Notion readers who are not signed into Linear may not be able to render them.
 
-## Adapting the schema
+### Adapting the schema
 
 Each resource file contains both its managed-database schema and transform:
 

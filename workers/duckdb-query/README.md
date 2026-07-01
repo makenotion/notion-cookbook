@@ -1,9 +1,33 @@
 # Worker tool: DuckDB query
 
-A self-contained Notion worker that lets a custom agent query an in-memory
-DuckDB database seeded with sample sales data. No external database, no
-credentials, no environment variables required — deploy it and it is ready to
-query immediately.
+**TL;DR:** Give a Notion agent an instant, zero-configuration SQL sandbox with
+sample sales data. It is ideal for demos, workshops, and learning how agents
+discover tables and answer questions with DuckDB.
+
+## Quickstart
+
+No database or credentials are required. The worker creates and seeds its
+in-memory database when it starts.
+
+From the repository root:
+
+```zsh
+npm install --global ntn
+cd workers/duckdb-query
+npm install
+ntn login
+ntn workers deploy --name duckdb-query
+```
+
+In Notion, add the deployed worker to a custom agent under
+**Tools and access > Add connection**.
+
+## Try asking
+
+- "Which customers have spent the most? Exclude refunded orders."
+- "What is total revenue by product category?"
+- "How many orders are in each status?"
+- "Show monthly order volume for 2024."
 
 It registers three tools:
 
@@ -34,8 +58,8 @@ order_items(id, order_id, product_id, quantity, unit_price)
   30 rows — line items linking orders to products
 ```
 
-The data is consistent with the `sqlite-query` worker so both examples produce
-the same answers.
+The `sqlite-query` Worker demonstrates the same schema and tool pattern using
+Node's built-in SQLite module, with a separately seeded dataset.
 
 ## Project structure
 
@@ -47,61 +71,7 @@ src/
   seed.ts     Schema DDL and deterministic INSERT data
 ```
 
-## Example questions to ask the agent
-
-Connect the worker to a custom agent, then try:
-
-- Which customers have spent the most (excluding refunds)?
-- What is total revenue by product category?
-- How many orders are in each status?
-- Show monthly order volume for 2024.
-- Which products appear in the most orders?
-
-## Setup
-
-### 1. Install the Notion Workers CLI
-
-```zsh
-npm install --global ntn
-```
-
-### 2. Clone and install
-
-```zsh
-git clone https://github.com/makenotion/notion-cookbook.git
-cd notion-cookbook/workers/duckdb-query
-npm install
-```
-
-### 3. Connect to your workspace
-
-```zsh
-ntn login
-```
-
-### 4. Deploy
-
-```zsh
-ntn workers deploy --name duckdb-query
-```
-
-No environment variables are needed. The demo database is created and seeded
-in memory at startup.
-
-## Connect it to an agent
-
-Once deployed, add the worker to a custom agent under
-**Tools and access > Add connection**. The agent can then call `listTables`,
-`describeTable`, and `query`.
-
-A prompt like:
-
-> Which customers have spent the most? Exclude refunded orders.
-
-will have the agent list tables, describe the relevant ones, run a join, and
-summarize the result.
-
-## Local testing
+## Local development
 
 Run the offline test suite (no database, no network required):
 

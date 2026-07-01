@@ -1,15 +1,66 @@
 # Worker sync: Jira Cloud
 
-Syncs Jira Cloud issues, current sprints, sprint performance, and projects
-into Notion databases that stay up to date automatically. Each database uses
-a schedule suited to its job, from a five-minute operational issue mirror to
-daily sprint analytics and project reference data.
+Bring Jira Cloud issues, sprints, delivery metrics, and projects into Notion so
+teams can review day-to-day work and sprint health in the same workspace. The
+worker creates and maintains four databases for you, including a daily sprint
+scorecard with velocity, scope change, and delivery forecasts.
 
-You don't need to create the Notion databases yourself. The worker declares the
-schemas and Notion creates and manages each database for you (these are called
-"managed databases").
+## Quickstart
 
-## What you get
+You need Node.js 22+, a Jira Cloud account, and an
+[Atlassian API token](https://id.atlassian.com/manage/api-tokens). Note the
+email address associated with the token and your Jira subdomain (for example,
+`acme` for `acme.atlassian.net`).
+
+From the repository root:
+
+```sh
+npm install --global ntn
+cd workers/jira-sync
+npm install
+ntn login
+ntn workers deploy --name jira-sync
+ntn workers env set JIRA_DOMAIN=acme
+ntn workers env set JIRA_EMAIL=you@example.com
+ntn workers env set JIRA_API_TOKEN=your-api-token
+ntn workers env set JIRA_PROJECTS=PROJ
+```
+
+Replace `PROJ` with one or more comma-separated Jira project keys. Omitting
+`JIRA_PROJECTS` syncs every project visible to the API user and can make the
+first run much slower. This setting scopes only **Jira Issues**; the sprint and
+project syncs still include every board and project visible to the API user.
+
+Preview the issue sync without writing to Notion:
+
+```sh
+ntn workers sync trigger issuesSync --preview
+```
+
+Then create and populate all four databases immediately:
+
+```sh
+ntn workers sync trigger issuesSync
+ntn workers sync trigger currentSprintsSync
+ntn workers sync trigger allSprintsSync
+ntn workers sync trigger projectsSync
+```
+
+The worker keeps issues current every five minutes, current sprints every 15
+minutes, and sprint performance and projects current daily.
+
+## What you can answer
+
+| Managed database            | Questions it helps answer                                                                                                      |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| **Jira Issues**             | What is overdue, high priority, or unassigned? How is work distributed across projects, sprints, epics, and status categories? |
+| **Jira Current Sprints**    | Which sprints are active or coming up? What are their goals, boards, and start and end dates?                                  |
+| **Jira Sprint Performance** | Are we likely to complete the current scope? How have velocity, predictability, rollover, and scope change trended by board?   |
+| **Jira Projects**           | Which projects are visible, who leads them, and how are they grouped by category and project type?                             |
+
+## Reference
+
+### Synced databases and schedules
 
 | Database                    | Purpose                                 | Schedule     |
 | --------------------------- | --------------------------------------- | ------------ |
@@ -22,7 +73,7 @@ The four databases are intentionally independent. This example stores stable
 Jira IDs but does not create Notion relations, avoiding sync-order and scope
 dependencies that can make a ready-to-deploy mirror brittle.
 
-### Jira Issues
+#### Jira Issues
 
 | Notion property | Jira field                                           | Type        |
 | --------------- | ---------------------------------------------------- | ----------- |
@@ -72,7 +123,7 @@ The immutable **Jira Issue ID** is the database primary key. **Issue Key**
 remains a display property and is used in links, but it can change when an issue
 moves to another project.
 
-### Jira Current Sprints
+#### Jira Current Sprints
 
 | Notion property | Jira field            | Type     |
 | --------------- | --------------------- | -------- |
@@ -91,7 +142,7 @@ Board IDs are resolved to names by fetching all Scrum boards once per sync
 cycle. Only Scrum boards are fetched (Kanban boards don't have sprints). Page
 body contains the sprint goal.
 
-### Jira Sprint Performance
+#### Jira Sprint Performance
 
 This daily analytical sync creates one scorecard per active or closed sprint
 with configured start and end dates across the visible Scrum boards. It uses
@@ -133,7 +184,7 @@ surfaced in the **Data Quality** property and in a data-quality section on the
 sprint page. Treat older Limited or Partial scorecards as directional rather
 than exact Jira sprint reports.
 
-### Jira Projects
+#### Jira Projects
 
 | Notion property | Jira field                   | Type     |
 | --------------- | ---------------------------- | -------- |
@@ -150,7 +201,7 @@ The immutable **Jira Project ID** is the database primary key; **Project Key**
 stays available as a display property because Jira administrators can change
 it.
 
-## Project structure
+### Project structure
 
 ```text
 src/
@@ -164,7 +215,7 @@ src/
 └── helpers.ts            — shared utilities (dateOnly)
 ```
 
-## How it works
+### How it works
 
 1. **Issues** are fetched every 5 minutes via JQL search, scoped to
    specific projects if `JIRA_PROJECTS` is set. Uses `nextPageToken`
@@ -183,21 +234,17 @@ src/
 6. Because all syncs use `mode: "replace"`, records deleted from Jira are
    automatically removed from the Notion database on the next full sync.
 
-## Prerequisites
+### Jira access and credentials
 
-- Node >= 22, npm >= 10.9.2
-- A Jira Cloud instance
-- The `ntn` CLI installed and authenticated (`ntn login`)
-
-### Getting a Jira API token
+#### Getting a Jira API token
 
 1. Go to [https://id.atlassian.com/manage/api-tokens](https://id.atlassian.com/manage/api-tokens)
 2. Click **Create API token**, give it a name, and copy the token
 3. Note the email address associated with your Atlassian account
 
-## Environment variables
+### Configuration reference
 
-### Required
+#### Required
 
 | Variable         | Description                                                 |
 | ---------------- | ----------------------------------------------------------- |
@@ -205,7 +252,7 @@ src/
 | `JIRA_EMAIL`     | Email of the Atlassian account for API access               |
 | `JIRA_API_TOKEN` | API token from id.atlassian.com                             |
 
-### Optional
+#### Optional
 
 | Variable                  | Description                                                                                                                                                    |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -222,80 +269,17 @@ so no overrides are needed. To find an ID for an override, request
 No `NOTION_API_TOKEN` is needed — the platform handles Notion credentials
 automatically.
 
-## Setup and deploy
+Optional settings can scope the issue sync to selected projects or override
+automatically discovered custom fields:
 
-1. Install the Notion Workers CLI:
+```sh
+ntn workers env set JIRA_PROJECTS=PROJ,TEAM
+ntn workers env set JIRA_SPRINT_FIELD=customfield_10020
+ntn workers env set JIRA_STORY_POINTS_FIELD=customfield_10016
+ntn workers env set JIRA_EPIC_FIELD=customfield_10014
+```
 
-   ```sh
-   npm install --global ntn
-   ```
-
-2. Clone and install:
-
-   ```sh
-   cd workers/jira-sync
-   npm install
-   ```
-
-3. Typecheck and test:
-
-   ```sh
-   npm run check
-   npm test
-   ```
-
-4. Log in to Notion:
-
-   ```sh
-   ntn login
-   ```
-
-5. Deploy the worker:
-
-   ```sh
-   ntn workers deploy
-   ```
-
-6. Set environment variables on the deployed worker:
-
-   ```sh
-   ntn workers env set JIRA_DOMAIN=acme
-   ntn workers env set JIRA_EMAIL=you@example.com
-   ntn workers env set JIRA_API_TOKEN=your-api-token
-   ```
-
-7. Optionally scope the issue sync to specific projects and override custom
-   fields:
-
-   ```sh
-   ntn workers env set JIRA_PROJECTS=PROJ,TEAM
-   ntn workers env set JIRA_SPRINT_FIELD=customfield_10020
-   ntn workers env set JIRA_STORY_POINTS_FIELD=customfield_10016
-   ntn workers env set JIRA_EPIC_FIELD=customfield_10014
-   ```
-
-8. Preview a sync without writing to Notion:
-
-   ```sh
-   ntn workers sync trigger issuesSync --preview
-   ntn workers sync trigger currentSprintsSync --preview
-   ntn workers sync trigger allSprintsSync --preview
-   ntn workers sync trigger projectsSync --preview
-   ```
-
-9. Run a real sync:
-
-   ```sh
-   ntn workers sync trigger issuesSync
-   ntn workers sync trigger currentSprintsSync
-   ntn workers sync trigger allSprintsSync
-   ntn workers sync trigger projectsSync
-   ```
-
-Once deployed, all four syncs run automatically. Four databases will appear in
-your Notion workspace after their first runs.
-
-## Adapting the schema
+### Adapting the schema
 
 Each resource has its own file with a schema and transform function:
 
@@ -314,7 +298,7 @@ To add a new Jira field:
 3. Add a property to the schema with the appropriate `Schema.*` type
 4. Add a `Builder.*` call in the transform function
 
-## Local testing
+### Local testing
 
 Run offline tests (no Jira connection needed):
 

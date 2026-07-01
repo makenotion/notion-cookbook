@@ -1,7 +1,34 @@
 # Worker tool: Postgres query
 
-A Notion worker that lets a custom agent query your Postgres database and get
-the rows back in the conversation. It registers three tools:
+**TL;DR:** Connect a read-only slice of Postgres to a Notion agent so it can
+discover your schema, write SQL, and answer data questions in the conversation.
+
+## Quickstart
+
+First create a dedicated read-only Postgres user using the SQL in
+[Set up Postgres](#set-up-postgres). Then deploy the worker with that user's
+connection string. From the repository root:
+
+```zsh
+npm install --global ntn
+cd workers/postgres-query
+npm install
+ntn login
+ntn workers deploy --name postgres-query
+ntn workers env set DATABASE_URL=postgres://notion_agent_svc:changeme@host:5432/mydb
+```
+
+In Notion, add the deployed worker to a custom agent under
+**Tools and access > Add connection**.
+
+## Try asking
+
+- "What were total orders by month this year? Find the right table first."
+- "Which customers generated the most revenue last quarter?"
+- "Compare refund rates by product category."
+- "Describe the `subscriptions` table and summarize what it can answer."
+
+The worker registers three tools:
 
 - `listTables` queries `information_schema.tables`, optionally scoped to a
   schema or filtered with an ILIKE pattern.
@@ -59,8 +86,9 @@ CREATE ROLE notion_agent_readonly;
 GRANT CONNECT ON DATABASE mydb TO notion_agent_readonly;
 GRANT USAGE ON SCHEMA public TO notion_agent_readonly;
 
--- Grant SELECT on existing and future tables
+-- Grant SELECT on existing tables
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO notion_agent_readonly;
+-- Run this as the role that creates tables to cover its future tables
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
   GRANT SELECT ON TABLES TO notion_agent_readonly;
 
@@ -70,46 +98,17 @@ GRANT notion_agent_readonly TO notion_agent_svc;
 ```
 
 That role, not the SQL check in the code, is what actually keeps the agent from
-writing.
+writing. PostgreSQL default privileges apply only to objects later created by
+the role that runs `ALTER DEFAULT PRIVILEGES`; run that statement as the table
+owner used by your application.
 
-## Setup
+## Connection options
 
-### 1. Install the Notion Workers CLI
-
-```zsh
-npm install --global ntn
-```
-
-### 2. Clone and install
+Worker secrets never live in the repo (`.env` and `workers.json` are
+gitignored). The quickstart uses `DATABASE_URL`; you can instead set discrete
+connection values:
 
 ```zsh
-git clone https://github.com/makenotion/notion-cookbook.git
-cd notion-cookbook/workers/postgres-query
-npm install
-```
-
-### 3. Connect to your workspace
-
-```zsh
-ntn login
-```
-
-### 4. Deploy
-
-```zsh
-ntn workers deploy --name postgres-query
-```
-
-### 5. Set the connection secrets
-
-These are worker secrets and never live in the repo (`.env` and `workers.json`
-are gitignored). Use either `DATABASE_URL` or the discrete `PG*` vars:
-
-```zsh
-# Option A: full connection string
-ntn workers env set DATABASE_URL=postgres://notion_agent_svc:changeme@host:5432/mydb
-
-# Option B: discrete vars
 ntn workers env set PGHOST=host
 ntn workers env set PGPORT=5432
 ntn workers env set PGDATABASE=mydb
@@ -127,27 +126,14 @@ ntn workers env set POSTGRES_MAX_ROWS=100
 ntn workers env set POSTGRES_QUERY_TIMEOUT_SECONDS=60
 ```
 
-## Connect it to an agent
-
-Once deployed, add the worker to a custom agent under
-**Tools and access > Add connection**. The agent can then call `listTables`,
-`describeTable`, and `query`.
-
-A prompt like:
-
-> What were total orders by month this year? Find the right table first.
-
-usually has the agent list tables, describe the likely one, then run a query
-and summarize what comes back.
-
-## Local testing
+## Run locally
 
 Copy `.env.example` to `.env`, fill in your values, and run a tool without
 deploying:
 
 ```zsh
-ntn workers exec listTables --local -d '{}'
-ntn workers exec describeTable --local -d '{"table": "orders"}'
+ntn workers exec listTables --local -d '{"schema": null, "like": null}'
+ntn workers exec describeTable --local -d '{"table": "orders", "schema": null}'
 ntn workers exec query --local \
   -d '{"sql": "SELECT current_date AS ds", "maxRows": 10}'
 ```

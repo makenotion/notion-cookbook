@@ -1,9 +1,33 @@
 # Worker tool: SQLite query
 
-A self-contained Notion worker that lets a custom agent query an in-memory
-SQLite database seeded with sample sales data. No external database, no
-credentials, no environment variables — deploy it and start querying
-immediately.
+**TL;DR:** Give a Notion agent an instant, zero-configuration SQL sandbox with
+sample sales data. It is ideal for demos, onboarding, and learning how agents
+discover tables and answer questions with SQLite.
+
+## Quickstart
+
+No database or credentials are required. The worker creates and seeds its
+in-memory database when it starts.
+
+From the repository root:
+
+```zsh
+npm install --global ntn
+cd workers/sqlite-query
+npm install
+ntn login
+ntn workers deploy --name sqlite-query
+```
+
+In Notion, add the deployed worker to a custom agent under
+**Tools and access > Add connection**.
+
+## Try asking
+
+- "Who are the top three customers by total spend?"
+- "What is revenue by product category?"
+- "How many orders are in each status?"
+- "Which products appear most often in completed orders?"
 
 The database resets each time the worker process starts. It is designed for
 demos, onboarding, and learning the worker tool pattern, not for persisting
@@ -33,18 +57,11 @@ The worker registers three tools:
 - `query` — runs a single read-only `SELECT` (or `WITH ... SELECT`) and
   returns the rows, capped at `maxRows` (default 100, max 1000).
 
-Example questions an agent can answer out of the box:
-
-- Who are the top customers by total spend?
-- What is revenue by product category?
-- How many orders are in each status?
-- Which products appear most often in completed orders?
-
 ## How it works
 
 The SQLite database is opened with Node's built-in `node:sqlite` module
-(`DatabaseSync` from `node:sqlite`, available flag-free in Node 22+). No
-third-party database driver is needed.
+(`DatabaseSync`, available without a flag in Node 22.13+). No third-party
+database driver is needed.
 
 `query` parses the SQL with `node-sql-parser` (SQLite dialect) and only
 allows a single `SELECT` or `WITH ... SELECT`. Writes are rejected before
@@ -65,50 +82,7 @@ src/
 test.ts      Offline end-to-end tests (no network or credentials required)
 ```
 
-## Setup
-
-### 1. Install the Notion Workers CLI
-
-```zsh
-npm install --global ntn
-```
-
-### 2. Clone and install
-
-```zsh
-git clone https://github.com/makenotion/notion-cookbook.git
-cd notion-cookbook/workers/sqlite-query
-npm install
-```
-
-### 3. Connect to your workspace
-
-```zsh
-ntn login
-```
-
-### 4. Deploy
-
-```zsh
-ntn workers deploy --name sqlite-query
-```
-
-No environment variables are needed. The worker is ready as soon as it deploys.
-
-## Connect it to an agent
-
-Once deployed, add the worker to a custom agent under
-**Tools and access > Add connection**. The agent can then call `listTables`,
-`describeTable`, and `query`.
-
-A prompt like:
-
-> Who are the top three customers by total spend? Use the demo database.
-
-usually has the agent list tables, describe `orders` and `customers`, join
-them, and summarize the result.
-
-## Local testing
+## Local development
 
 Run the offline test suite (no network or credentials required):
 
@@ -129,7 +103,7 @@ ntn workers exec query --local \
 
 - Data is ephemeral. The in-memory database resets when the worker process
   restarts. It is not intended for production use.
-- This worker uses Node's built-in `node:sqlite` module (Node 22+), which
+- This worker uses Node's built-in `node:sqlite` module (Node 22.13+), which
   requires no additional npm dependencies beyond `node-sql-parser`.
 - For a worker that connects to a real external database, see
   `../postgres-query` or `../snowflake-query`.

@@ -1,15 +1,63 @@
 # Worker sync: GitHub
 
-Syncs GitHub issues and pull requests from one or more repositories into
-Notion databases that stay up to date automatically. Once deployed, the worker
-creates three databases covering issues, all pull requests, and a focused view
-of open PRs with review activity and CI status.
+Bring issues, pull requests, review activity, and CI status from one or more
+GitHub repositories into Notion. Use the resulting databases to run engineering
+reviews, find work that needs attention, and give the rest of the company a
+current view of delivery without sending everyone to GitHub.
 
-You don't need to create the Notion databases yourself. The worker declares the
-schemas and Notion creates and manages each database for you (these are called
-"managed databases").
+The worker creates and maintains the Notion databases for you. After the first
+sync, it refreshes them every five minutes.
 
-## What you get
+## Quickstart
+
+The shortest path uses a
+[fine-grained personal access token](#option-3-fine-grained-personal-access-token)
+(PAT). You need Node.js 22+, a GitHub PAT with read-only **Issues**, **Pull
+requests**, **Checks**, and **Commit statuses** permissions, and access to the
+repositories you want to sync.
+
+From the repository root:
+
+```sh
+npm install --global ntn
+cd workers/github-sync
+npm install
+ntn login
+ntn workers deploy --name github-sync
+ntn workers env set GITHUB_REPOS=acme/widgets,acme/api
+ntn workers env set GITHUB_AUTH_MODE=pat
+ntn workers env set GITHUB_TOKEN=github_pat_your-token-here
+```
+
+Preview one database without writing to Notion:
+
+```sh
+ntn workers sync trigger issuesSync --preview
+```
+
+Then create and populate all three databases immediately:
+
+```sh
+ntn workers sync trigger issuesSync
+ntn workers sync trigger allPullRequestsSync
+ntn workers sync trigger openPullRequestsSync
+```
+
+For a shared production deployment, use the
+[GitHub App installation mode](#option-1-github-app-installation-recommended)
+instead of a personal token.
+
+## What you can answer
+
+| Managed database    | Questions it helps answer                                                                                               |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| **GitHub Issues**   | Which issues are unassigned, stale, or attracting the most discussion? How is issue work distributed by repo and label? |
+| **All GitHub PRs**  | What merged recently? Which authors, repositories, and branches account for current and historical delivery?            |
+| **Open GitHub PRs** | Which PRs need reviewers, have changes requested, or have failing or pending CI? Which open PRs are still drafts?       |
+
+## Reference
+
+### Synced databases and schedules
 
 | Database            | GitHub resource            | Schedule    |
 | ------------------- | -------------------------- | ----------- |
@@ -17,7 +65,7 @@ schemas and Notion creates and manages each database for you (these are called
 | **All GitHub PRs**  | Pull Requests (all states) | Every 5 min |
 | **Open GitHub PRs** | Open PRs + reviews + CI    | Every 5 min |
 
-### GitHub Issues
+#### GitHub Issues
 
 | Notion property | GitHub field            | Type        |
 | --------------- | ----------------------- | ----------- |
@@ -39,7 +87,7 @@ schemas and Notion creates and manages each database for you (these are called
 
 Each page body contains the issue body (markdown).
 
-### All GitHub PRs
+#### All GitHub PRs
 
 | Notion property | GitHub field                  | Type        |
 | --------------- | ----------------------------- | ----------- |
@@ -64,7 +112,7 @@ Each page body contains the issue body (markdown).
 Each page body contains the PR description (markdown). State is "Merged" when
 `merged_at` is set, regardless of the `state` field.
 
-### Open GitHub PRs
+#### Open GitHub PRs
 
 A focused view of currently open pull requests, enriched with review activity
 and CI status from per-PR API calls.
@@ -101,7 +149,7 @@ nonterminal result produces "Pending". Completed `success`, `neutral`, and
 `skipped` checks count as passing, and all observed results must pass for
 "Success".
 
-## Project structure
+### Project structure
 
 ```text
 src/
@@ -114,7 +162,7 @@ src/
 └── helpers.ts            — shared utilities (dateOnly)
 ```
 
-## How it works
+### How it works
 
 1. The worker runs three syncs across all repositories listed in `GITHUB_REPOS`:
    - **Issues** and **All PRs** use list endpoints that return pages of up to
@@ -136,20 +184,11 @@ src/
    it closes. Records no longer returned by GitHub are removed after a complete
    sweep.
 
-## Prerequisites
+### Authentication options
 
-- Node >= 22, npm >= 10.9.2
-- A GitHub account with access to the repositories you want to sync
-- A GitHub App installed on the target account, or permission to request or
-  install one, if you choose either GitHub App mode
-- The `ntn` CLI installed and authenticated (`ntn login`)
-
-> **Supported configuration:** This example connects to GitHub.com using a
-> GitHub App installation token, a GitHub App user access token, or a
-> fine-grained personal access token. GitHub Enterprise Server base URLs are
-> not implemented.
-
-## Choose an authentication mode
+This example connects to GitHub.com using a GitHub App installation token, a
+GitHub App user access token, or a fine-grained personal access token. GitHub
+Enterprise Server base URLs are not implemented.
 
 Set `GITHUB_AUTH_MODE` to one of these values:
 
@@ -172,7 +211,7 @@ One GitHub App can support both `installation` and `user`. A deployment uses
 one mode at a time, and switching modes requires configuration changes only —
 the sync code stays the same.
 
-### GitHub permissions
+#### GitHub permissions
 
 The GitHub App or fine-grained PAT needs these read-only repository
 permissions:
@@ -185,7 +224,7 @@ permissions:
 GitHub Apps also receive the required read-only **Metadata** permission
 automatically. Grant access only to the repositories listed in `GITHUB_REPOS`.
 
-## Environment variables
+### Configuration reference
 
 | Variable                        | Modes                  | Description                                              |
 | ------------------------------- | ---------------------- | -------------------------------------------------------- |
@@ -200,53 +239,11 @@ automatically. Grant access only to the repositories listed in `GITHUB_REPOS`.
 Only set the credentials required by the selected mode. No `NOTION_API_TOKEN`
 is needed — the platform handles Notion credentials automatically.
 
-## Setup and deploy
+Before configuring a GitHub App mode, complete the Quickstart through the
+first deployment and set `GITHUB_REPOS`. That deployment also allocates the
+callback URL required by user OAuth.
 
-1. Install the Notion Workers CLI:
-
-   ```sh
-   npm install --global ntn
-   ```
-
-2. Clone and install:
-
-   ```sh
-   cd workers/github-sync
-   npm install
-   ```
-
-3. Typecheck and test:
-
-   ```sh
-   npm run check
-   npm test
-   ```
-
-4. Log in to Notion:
-
-   ```sh
-   ntn login
-   ```
-
-5. Deploy the worker:
-
-   ```sh
-   ntn workers deploy --name github-sync
-   ```
-
-   This first deployment registers successfully before GitHub credentials
-   exist. Sync runs still require one option below to be configured. The
-   deployment also allocates the callback URL needed by user OAuth.
-
-6. Configure the repositories shared by every authentication mode:
-
-   ```sh
-   ntn workers env set GITHUB_REPOS=acme/widgets,acme/api
-   ```
-
-7. Complete one of the authentication options below.
-
-### Option 1: GitHub App installation (recommended)
+#### Option 1: GitHub App installation (recommended)
 
 This is GitHub's server-to-server model and is the recommended choice for an
 unattended scheduled sync.
@@ -291,7 +288,7 @@ This example supports one GitHub App installation per worker deployment. Every
 repository in `GITHUB_REPOS` must be available through
 `GITHUB_APP_INSTALLATION_ID`.
 
-### Option 2: GitHub App user OAuth
+#### Option 2: GitHub App user OAuth
 
 This is GitHub's user-to-server model. Use it when access should follow one
 employee and GitHub should attribute the token to that user and the app.
@@ -336,7 +333,7 @@ own access. Notion Workers stores the token and handles refresh automatically.
 One worker deployment stores one authorization for `githubUserOAuth`; this is
 a user-scoped deployment, not a multi-user OAuth service.
 
-### Option 3: Fine-grained personal access token
+#### Option 3: Fine-grained personal access token
 
 Use this for the quickest local evaluation or a small personal deployment:
 
@@ -347,39 +344,18 @@ Use this for the quickest local evaluation or a small personal deployment:
 3. Grant read-only **Issues**, **Pull requests**, **Checks**, and **Commit
    statuses** permissions.
 4. Choose the shortest practical expiration and create the token.
-5. Configure and redeploy the worker:
+5. If you are switching an existing deployment to PAT mode, configure it:
 
    ```sh
    ntn workers env set GITHUB_AUTH_MODE=pat
    ntn workers env set GITHUB_TOKEN=github_pat_your-token-here
-   ntn workers deploy
    ```
 
 Fine-grained PATs select one resource owner. An organization may restrict PATs
 or require administrator approval, and you must rotate the token before it
 expires.
 
-## Run the sync
-
-1. Preview a sync without writing to Notion:
-
-   ```sh
-   ntn workers sync trigger issuesSync --preview
-   ntn workers sync trigger openPullRequestsSync --preview
-   ```
-
-2. Run a real sync:
-
-   ```sh
-   ntn workers sync trigger issuesSync
-   ntn workers sync trigger allPullRequestsSync
-   ntn workers sync trigger openPullRequestsSync
-   ```
-
-Once deployed, all three syncs run automatically. Three databases will appear
-in your Notion workspace after the first run.
-
-## Adapting the schema
+### Adapting the schema
 
 Each resource has its own file with a schema and transform function:
 
@@ -395,7 +371,7 @@ To add a new GitHub field:
 2. Add a property to the schema with the appropriate `Schema.*` type
 3. Add a `Builder.*` call in the transform function
 
-## Local testing
+### Local testing
 
 Run offline tests (no GitHub connection needed):
 

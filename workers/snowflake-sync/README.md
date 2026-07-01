@@ -1,31 +1,61 @@
 # Worker sync: Snowflake
 
-Syncs rows from a Snowflake query into a managed Notion database. The worker
-declares the schema; Notion auto-provisions and owns the database. Each run
-fetches the full result set in 200-row pages and upserts every row by the `ID`
-column. Rows removed from the source query are removed from the Notion database
-on the next full sync (`mode: "replace"`).
+Bring a curated Snowflake result set into Notion so teams can browse, filter,
+and work with warehouse data alongside their projects and docs. The worker
+creates and maintains the Notion database for you; you choose the source data
+with a `SELECT` query.
 
-## How it works
+The included example syncs `id`, `name`, `email`, `status`, and `updated_at`.
+Each run fully refreshes the managed database, including removing rows that are
+no longer returned by the query.
 
-1. You provide a `SNOWFLAKE_SYNC_QUERY` — any `SELECT` that returns an `id`
-   column (case-insensitive) plus whatever columns you want to show in Notion.
-2. On each sync run the worker pages through the query results (200 rows at a
-   time, using `LIMIT`/`OFFSET`) and emits an `upsert` change for every row.
-3. The platform applies those changes to the managed database and loops until
-   `hasMore` is false.
+## Quickstart
 
-The example schema maps `id, name, email, status, updated_at`. See
-[Adapting to your query](#adapting-to-your-query) to change it.
+You need Node 22+, a Snowflake read-only service role, and an RSA key pair for
+JWT authentication. The
+[Snowflake query README](../snowflake-query/README.md) explains the key-pair
+setup.
 
-## Prerequisites
+From the repository root, install the CLI and worker, connect your Notion
+workspace, and deploy:
 
-- Node >= 22, npm >= 10.9.2
-- A Snowflake account with a read-only service role and an RSA key pair for
-  JWT authentication. See the
-  [snowflake-query README](../snowflake-query/README.md) for key-pair
-  setup instructions.
-- The `ntn` CLI installed and authenticated (`ntn login`).
+```sh
+npm install --global ntn
+cd workers/snowflake-sync
+npm install
+ntn login
+ntn workers deploy --name snowflake-sync
+```
+
+Configure the deployed worker with your Snowflake connection and query:
+
+```sh
+ntn workers env set SNOWFLAKE_ACCOUNT=xy12345.us-east-1
+ntn workers env set SNOWFLAKE_USER=svc_notion_sync
+ntn workers env set SNOWFLAKE_WAREHOUSE=COMPUTE_WH
+ntn workers env set SNOWFLAKE_PRIVATE_KEY="$(cat rsa_key.p8)"
+ntn workers env set SNOWFLAKE_SYNC_QUERY="SELECT id, name, email, status, updated_at FROM my_db.my_schema.my_table"
+```
+
+Preview the result without changing Notion, then run the sync:
+
+```sh
+ntn workers sync trigger snowflakeSync --preview
+ntn workers sync trigger snowflakeSync
+```
+
+The real run creates a managed database named **Snowflake Sync**. This example
+uses a manual schedule, so trigger it again whenever you want to refresh the
+data.
+
+## What this helps you answer
+
+| Managed database | Example questions                                                                         |
+| ---------------- | ----------------------------------------------------------------------------------------- |
+| Snowflake Sync   | Which records share a status? Which changed recently? Who is associated with each record? |
+
+Adapt the query and schema to make a customer list, account-health view,
+operational queue, or another warehouse dataset useful in your workspace.
 
 ## Environment variables
 
@@ -52,50 +82,14 @@ The example schema maps `id, name, email, status, updated_at`. See
 No `NOTION_API_TOKEN` is needed. The platform manages the database and handles
 the Notion credentials automatically.
 
-## Setup and deploy
+## How it works
 
-```sh
-# Install dependencies
-cd workers/snowflake-sync
-npm install
-
-# Typecheck
-npm run check
-
-# Build
-npm run build
-
-# Run offline tests
-npm test
-```
-
-Deploy the worker:
-
-```sh
-ntn workers deploy
-```
-
-Set environment variables on the deployed worker:
-
-```sh
-ntn workers env set SNOWFLAKE_ACCOUNT=xy12345.us-east-1
-ntn workers env set SNOWFLAKE_USER=svc_notion_sync
-ntn workers env set SNOWFLAKE_WAREHOUSE=COMPUTE_WH
-ntn workers env set SNOWFLAKE_PRIVATE_KEY="$(cat rsa_key.p8)"
-ntn workers env set SNOWFLAKE_SYNC_QUERY="SELECT id, name, email, status, updated_at FROM my_db.my_schema.my_table"
-```
-
-Preview a sync without writing to Notion:
-
-```sh
-ntn workers sync trigger snowflakeSync --preview
-```
-
-Run a real sync:
-
-```sh
-ntn workers sync trigger snowflakeSync
-```
+1. You provide a `SNOWFLAKE_SYNC_QUERY` — any `SELECT` that returns an `id`
+   column (case-insensitive) plus whatever columns you want to show in Notion.
+2. On each sync run the worker pages through the query results (200 rows at a
+   time, using `LIMIT`/`OFFSET`) and emits an `upsert` change for every row.
+3. The platform applies those changes to the managed database and loops until
+   `hasMore` is false.
 
 ## Adapting to your query
 
