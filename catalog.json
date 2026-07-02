@@ -273,6 +273,25 @@
       }
     },
     {
+      "id": "intercom-sync",
+      "title": "Intercom sync",
+      "summary": "Sync Intercom companies, contacts, conversations, and tickets into a connected support workspace in Notion.",
+      "path": "workers/intercom-sync",
+      "kind": "worker-sync",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "intercom"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name intercom-sync"
+      }
+    },
+    {
       "id": "jira-sync",
       "title": "Jira sync",
       "summary": "Sync Jira Cloud issues, current sprints, sprint analytics, and projects into managed Notion databases.",

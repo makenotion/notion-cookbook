@@ -19,6 +19,7 @@ For local programs built directly on the Notion API, see the
 | [DuckDB sync](duckdb-sync/)         | A self-contained managed database populated from seeded, in-memory DuckDB data; useful for learning the sync contract. |
 | [GitHub sync](github-sync/)         | Issues, all pull requests, and open pull requests with review and CI status.                                           |
 | [HubSpot sync](hubspot-sync/)       | CRM contacts, deals, and companies.                                                                                    |
+| [Intercom sync](intercom-sync/)     | Companies, contacts, conversations, and tickets linked for support operations and customer context.                    |
 | [Jira sync](jira-sync/)             | Jira Cloud issues, current sprints, sprint analytics, and projects.                                                    |
 | [Linear sync](linear-sync/)         | Linear projects, issues, and initiatives.                                                                              |
 | [PagerDuty sync](pagerduty-sync/)   | Active and recent incidents linked to service readiness, current on-call coverage, ownership, and routing context.     |
