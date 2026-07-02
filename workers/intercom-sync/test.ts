@@ -827,7 +827,7 @@ function fakeClient(
       if (!page) throw new Error("Missing fake ticket search page")
       return page
     },
-    async listTickets(createdBefore, cursor) {
+    async searchTicketsForReconciliation(createdBefore, cursor) {
       ;(calls.tickets ??= []).push({ createdBefore, cursor })
       const page = pages.tickets?.shift()
       if (!page) throw new Error("Missing fake ticket page")
@@ -1342,7 +1342,7 @@ test("ticket search sends pinned bounds and replacement uses immutable membershi
   }
   const client = createIntercomClient(async () => {})
   await client.searchTickets(100, 200, "ticket-cursor")
-  await client.listTickets(300, "all-ticket-cursor")
+  await client.searchTicketsForReconciliation(300, "all-ticket-cursor")
 
   assert.equal(new URL(requests[0].url).pathname, "/tickets/search")
   assert.deepEqual(requests[0].body, {

@@ -317,7 +317,10 @@ export async function runTicketReconciliationPage(
       "Intercom ticket reconciliation cutoff must be after the Unix epoch."
     )
   }
-  const page = await client.listTickets(createdBefore, effectiveState?.after)
+  const page = await client.searchTicketsForReconciliation(
+    createdBefore,
+    effectiveState?.after
+  )
   const totalCount = expectedTicketCount(page.totalCount, effectiveState)
   const recentRecordIds = effectiveState?.recentRecordIds ?? []
   if (

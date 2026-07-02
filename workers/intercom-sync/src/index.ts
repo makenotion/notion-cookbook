@@ -1,6 +1,7 @@
 // Entry point — registers one connected Intercom support workspace in Notion.
 // Resource modules own their transforms and pagination behavior; this file
-// keeps only database registration, schedules, pacing, and cycle caches.
+// keeps only database registration, schedules, pacing, and process-local lookup
+// caches.
 
 import { Worker } from "@notionhq/workers"
 
@@ -76,8 +77,10 @@ export function createCycleCache<T>(): CycleCache<T> {
   }
 }
 
-// Each capability gets its own lookup cache. A directory is fetched once for a
-// multi-page cycle, retained across retries, and discarded only on completion.
+// Each capability gets its own process-local lookup cache. A warm process can
+// reuse a directory across continuation pages or retries, but correctness never
+// depends on that memory: a cold invocation refetches it. Terminal pages clear
+// the cached value so the next cycle sees current lookup data.
 const contactDirectories = createCycleCache<ContactDirectory>()
 const incrementalConversationDirectories =
   createCycleCache<AssignmentDirectory>()

@@ -1,6 +1,7 @@
 // Intercom REST API client. It pins the stable API version, selects the
-// workspace's regional host, follows cursor pagination, resolves opaque IDs,
-// and turns provider throttling into a Workers retry signal.
+// workspace's regional host, resolves opaque IDs, and turns provider throttling
+// into a Workers retry signal. Collection methods fetch exactly one provider
+// page; resource executors own cursor continuation through persisted state.
 
 import { RateLimitError } from "@notionhq/workers"
 
@@ -25,6 +26,10 @@ export class IntercomApiError extends Error {
   }
 }
 
+// These DTOs intentionally model only the fields consumed from the API 2.15
+// List, Search, and Scroll responses used by this recipe. Intercom response
+// shapes vary by endpoint, so verify the exact collection endpoint before
+// extending a projection with fields documented for a Retrieve response.
 export type IntercomTag = {
   id?: string | null
   name?: string | null
@@ -213,7 +218,7 @@ export type IntercomClient = {
     until: number,
     cursor?: string
   ): Promise<IntercomPage<IntercomTicket>>
-  listTickets(
+  searchTicketsForReconciliation(
     createdBefore: number,
     cursor?: string
   ): Promise<IntercomPage<IntercomTicket>>
@@ -502,7 +507,7 @@ export function createIntercomClient(
     }
   }
 
-  async function listTickets(
+  async function searchTicketsForReconciliation(
     createdBefore: number,
     cursor?: string
   ): Promise<IntercomPage<IntercomTicket>> {
@@ -511,27 +516,31 @@ export function createIntercomClient(
     }
     if (cursor) pagination.starting_after = cursor
 
-    const body = await fetchJson("/tickets/search", "listing all tickets", {
-      method: "POST",
-      body: JSON.stringify({
-        // Ticket Search is the only collection read endpoint. Creation time
-        // is immutable, so this broad query keeps replacement membership
-        // steadier than an updated_at filter while the sweep is in flight.
-        query: {
-          operator: "AND",
-          value: [
-            { field: "created_at", operator: ">", value: 0 },
-            {
-              field: "created_at",
-              operator: "<",
-              value: createdBefore,
-            },
-          ],
-        },
-        pagination,
-        sort: { field: "id", order: "ascending" },
-      }),
-    })
+    const body = await fetchJson(
+      "/tickets/search",
+      "searching tickets for reconciliation",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          // Ticket Search is the only collection read endpoint. Creation time
+          // is immutable, so this broad query keeps replacement membership
+          // steadier than an updated_at filter while the sweep is in flight.
+          query: {
+            operator: "AND",
+            value: [
+              { field: "created_at", operator: ">", value: 0 },
+              {
+                field: "created_at",
+                operator: "<",
+                value: createdBefore,
+              },
+            ],
+          },
+          pagination,
+          sort: { field: "id", order: "ascending" },
+        }),
+      }
+    )
     const totalCount = body.total_count
     if (
       typeof totalCount !== "number" ||
@@ -595,7 +604,7 @@ export function createIntercomClient(
     searchConversations,
     listConversations,
     searchTickets,
-    listTickets,
+    searchTicketsForReconciliation,
     async fetchContactDirectory() {
       const [admins, tags] = await Promise.all([fetchAdmins(), fetchTags()])
       return { admins, tags }

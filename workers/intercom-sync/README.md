@@ -26,6 +26,8 @@ not use Tickets, leave `ticketsSync` paused and do not trigger
 `ticketsReconciliation`. The other three databases work independently; you do
 not need to edit the bundle.
 
+### Preview locally
+
 Install the example and preview one page from each core resource locally before
 deploying. Local preview calls Intercom but never writes to Notion:
 
@@ -56,6 +58,8 @@ the last Company preview request, let its scroll expire before deployment:
 ```sh
 sleep 65
 ```
+
+### Deploy and initialize
 
 Now deploy without cloud credentials and pause every schedule:
 
@@ -106,9 +110,15 @@ for sync in companiesSync contactsSync conversationsSync; do
 done
 ```
 
+These first runs backfill every Company, Contact, and Conversation visible to
+the private app and returned by these APIs. The optional Ticket run does the
+same for Tickets.
+
 Notion creates and manages all four databases; you do not provide a Notion API
 token. New Conversation and Ticket changes inside the one-minute consistency
 buffer arrive on the next five-minute cycle.
+
+### Redeploy safely
 
 Use `--name intercom-sync` only for the first deployment. Before redeploying an
 existing credentialed Worker, pause every capability that is scheduled or
@@ -116,6 +126,12 @@ running and wait for status to show no active run because stored credentials
 survive deployments. Older versions also scheduled both reconciliation keys,
 so pause those while upgrading. If a Company run did not finish successfully,
 wait another 65 seconds before redeploying so its Intercom scroll expires.
+
+Then update the existing Worker:
+
+```sh
+ntn workers deploy
+```
 
 ## What you get
 
@@ -147,6 +163,9 @@ are not snapshots and deleted records do not appear in search results. Ticket
 replacement also aborts if Intercom's `total_count` changes or the completed
 sweep does not match it, preventing an incomplete run from removing Notion
 rows.
+
+Trigger the manual reconciliations when you need to repair drift or remove
+deleted or newly hidden records, such as after an outage or access change.
 
 Keep replacement and delta runs from overlapping: pause `conversationsSync` or
 `ticketsSync`, use `ntn workers sync status <key>` to confirm it is idle,
@@ -232,7 +251,8 @@ format, so this example does not invent one.
   can therefore be partial. Filter **Incomplete Associations** for affected
   Contacts before relying on either list as exhaustive.
 - Ticket APIs can return `403 api_plan_restricted` when the workspace plan does
-  not include them. Keep both Ticket capabilities paused in that case.
+  not include them. Keep `ticketsSync` paused and do not trigger
+  `ticketsReconciliation` in that case.
 - Ticket requests use pages of 20 because Intercom may include large
   `ticket_parts` collections even though this example does not copy them.
 - Full transcripts are not copied; Intercom caps returned Conversation/Ticket
