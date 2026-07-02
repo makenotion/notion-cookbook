@@ -7,7 +7,6 @@ import { test } from "node:test"
 import { RateLimitError } from "@notionhq/workers"
 
 import {
-  boundedSafeJson,
   durationMinutes,
   humanizeEnum,
   incidentPageContent,
@@ -789,16 +788,6 @@ test("display and content helpers preserve unknowns while protecting secrets", (
   )
   assert.equal(INCIDENT_WINDOW_DAYS, 7)
 
-  const json = boundedSafeJson({
-    value: "safe",
-    headers: { Authorization: "secret" },
-    api_token: "secret",
-  })
-  assert.ok(json)
-  assert.match(json, /safe/)
-  assert.match(json, /\[REDACTED\]/)
-  assert.doesNotMatch(json, /"secret"/)
-
   const content = incidentPageContent({
     first_trigger_log_entry: {
       event_details: { description: "Safe trigger summary" },
@@ -1535,7 +1524,7 @@ test("execute functions wire client, state, and transforms end to end", async ()
           scope.incidentPhase,
           incidentRequest === 1 ? "open" : "openConfirm"
         )
-        return incidentPage([], { total: 0 })
+        return incidentPage([fullIncident])
       }
 
       assert.equal(scope.incidentPhase, "recent")
@@ -1560,7 +1549,7 @@ test("execute functions wire client, state, and transforms end to end", async ()
     config({ incidentLookbackDays: 1 })
   )
   assert.equal(openBatch.hasMore, true)
-  assert.deepEqual(openBatch.changes, [])
+  assert.equal(openBatch.changes[0]?.key, "PINC001")
   assert.equal(openBatch.nextState.phase, "openConfirm")
 
   const confirmBatch = await executeIncidents(

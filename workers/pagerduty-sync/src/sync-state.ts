@@ -1,6 +1,12 @@
 // Serializable state transitions for PagerDuty offset pagination. The REST
 // API does not provide snapshot cursors, so each transition validates totals,
 // ordering, and progress instead of silently accepting a partial traversal.
+//
+// Incidents: open -> openConfirm -> recent window(s) -> complete
+// Services: discover -> publish -> complete
+// Configured services begin directly in publish. The state transitions below
+// are pure; index.ts performs I/O, and the Workers runtime persists nextState
+// between callbacks.
 
 import type {
   IncidentSyncPhase,

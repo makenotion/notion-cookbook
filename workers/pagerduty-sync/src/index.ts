@@ -68,7 +68,11 @@ export async function executeIncidents(
     offset: state.offset,
   })
   const nextState = nextIncidentSyncState(state, page)
-  const changes = page.resources.map(incidentToChange)
+  // Confirmation validates the complete identity set only. The first open
+  // pass already emitted these keys, so replaying their full upserts would add
+  // write volume without strengthening replacement completeness.
+  const changes =
+    state.phase === "openConfirm" ? [] : page.resources.map(incidentToChange)
 
   return nextState
     ? { changes, hasMore: true as const, nextState }

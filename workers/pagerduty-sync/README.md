@@ -43,6 +43,20 @@ ntn workers sync trigger servicesSync --preview
 ntn workers sync trigger incidentsSync --preview
 ```
 
+A preview invokes one callback, while a normal sync cycle follows callbacks
+until `hasMore` is false. Every unscoped service discovery callback and the
+incident confirmation callback are validation-only, so an empty `changes`
+array is expected during those phases. Whenever `hasMore` is true, copy the
+preview's `nextContext` value and continue:
+
+```sh
+ntn workers sync trigger servicesSync --preview --context '<nextContext JSON>'
+```
+
+Repeat with each returned `nextContext` until `hasMore` is false. Use the same
+continuation flow for incidents to inspect the open, confirmation, and recent
+history phases.
+
 Then populate the service directory before its incident relations:
 
 ```sh
@@ -366,8 +380,18 @@ the same source data, so treat it as sensitive too.
 ### Pagination and consistency
 
 PagerDuty's list endpoints use offset pagination and expose at most 10,000
-records through an offset traversal. The worker protects completeness as
-follows:
+records through an offset traversal. One complete Worker cycle follows these
+phase flows:
+
+```text
+Incidents: open → open confirmation → recent window(s) → complete
+Services: discover → publish → complete
+Configured services: publish directly → complete
+```
+
+`src/sync-state.ts` contains pure transitions for these phases; the Workers
+runtime persists the returned `nextState` between callbacks. The worker protects
+completeness as follows:
 
 1. An incident cycle pins the recent-history upper boundary and the service/team
    scope before its first request. Recent-history incidents created later wait
@@ -457,15 +481,20 @@ closed.
 
 ```text
 src/
-├── index.ts       — registers both databases, schedules, snapshots, and pacer
+├── index.ts       — registers databases, syncs, and pacing; orchestrates callbacks
 ├── pagerduty.ts   — list/direct API reads, configuration, and validation
-├── sync-state.ts  — open/history phases, safe window splits, and offsets
+├── sync-state.ts  — incident/service phases, windows, and identity checks
 ├── incidents.ts   — incident schema and transform
 ├── services.ts    — service schema, coverage context, and transform
 └── helpers.ts     — labels, durations, support hours, and safe page formatting
 ```
 
 ### Extending the example
+
+The confirmation, overlap, and window-splitting state machine is specific to
+PagerDuty's live offset pagination. For a provider with stable cursors, start
+from the [Linear sync](../linear-sync/); for incremental change tracking plus a
+replacement repair path, start from the [Salesforce sync](../salesforce-sync/).
 
 Use this checklist when extending the recipe:
 
@@ -521,6 +550,10 @@ ntn workers exec incidentsSync --local
 ntn workers sync trigger servicesSync --preview
 ntn workers sync trigger incidentsSync --preview
 ```
+
+The `workers exec --local` commands validate local wiring and one callback. For
+a complete deployed preview, follow the `nextContext` continuation loop from
+the Quickstart until `hasMore` is false.
 
 For live verification, confirm that names are resolved, removed upstream values
 clear their prior Notion properties, source and conference links open safely,

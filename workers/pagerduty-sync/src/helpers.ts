@@ -11,18 +11,14 @@ import type {
   PagerDutySupportHours,
 } from "./pagerduty.js"
 
-export const MAX_DETAIL_CHARACTERS = 12_000
 export const MAX_PAGE_CONTENT_CHARACTERS = 40_000
 export const MAX_RICH_TEXT_CHARACTERS = 2_000
 export const MAX_MULTI_SELECT_OPTIONS = 100
 export const MAX_OPTION_NAME_CHARACTERS = 100
 
 const MAX_TEXT_CHARACTERS = 8_000
-const MAX_DETAIL_DEPTH = 8
-const MAX_DETAIL_ITEMS = 100
 const MAX_CONTEXTS = 25
 const MAX_CONTEXT_LABEL_CHARACTERS = 300
-const REDACTED_VALUE = "[REDACTED]"
 const ACRONYM_LABELS: Record<string, string> = {
   api: "API",
   sms: "SMS",
@@ -65,15 +61,6 @@ export function uniqueNames(
   }
 
   return names
-}
-
-export function referenceNames(
-  references:
-    | ReadonlyArray<PagerDutyReference | null | undefined>
-    | null
-    | undefined
-): string[] {
-  return uniqueNames((references ?? []).map(referenceName))
 }
 
 /**
@@ -361,7 +348,7 @@ export function supportHoursLabel(
   return timeZone ? `${type ?? "Support Hours"} (${timeZone})` : type
 }
 
-function isSensitiveDetailKey(key: string): boolean {
+function isSensitiveUrlParameter(key: string): boolean {
   const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, "")
   return (
     normalized.endsWith("servicekey") ||
@@ -405,102 +392,6 @@ export function boundedText(
   return text ? boundedString(text, limit) : null
 }
 
-/**
- * Clone JSON-like details while redacting common credential fields and
- * bounding pathological depth/width. API data is expected to be JSON, but the
- * defensive cases keep this helper safe and reusable in unit tests.
- */
-function safeDetailValue(
-  value: unknown,
-  depth: number,
-  ancestors: Set<object>
-): unknown {
-  if (
-    value == null ||
-    typeof value === "boolean" ||
-    typeof value === "number"
-  ) {
-    return value
-  }
-  if (typeof value === "string") {
-    return boundedString(value, MAX_TEXT_CHARACTERS)
-  }
-  if (typeof value === "bigint") return value.toString()
-  if (typeof value !== "object") return String(value)
-  if (ancestors.has(value)) return "[Circular value omitted]"
-  if (depth >= MAX_DETAIL_DEPTH) return "[Maximum depth reached]"
-
-  ancestors.add(value)
-  try {
-    if (Array.isArray(value)) {
-      const items = value
-        .slice(0, MAX_DETAIL_ITEMS)
-        .map((item) => safeDetailValue(item, depth + 1, ancestors))
-      if (value.length > MAX_DETAIL_ITEMS) {
-        items.push(`[${value.length - MAX_DETAIL_ITEMS} more items omitted]`)
-      }
-      return items
-    }
-
-    const result: Record<string, unknown> = {}
-    const entries = Object.entries(value)
-    for (const [key, item] of entries.slice(0, MAX_DETAIL_ITEMS)) {
-      result[key] = isSensitiveDetailKey(key)
-        ? REDACTED_VALUE
-        : safeDetailValue(item, depth + 1, ancestors)
-    }
-    if (entries.length > MAX_DETAIL_ITEMS) {
-      result._omitted_fields = entries.length - MAX_DETAIL_ITEMS
-    }
-    return result
-  } finally {
-    ancestors.delete(value)
-  }
-}
-
-/**
- * Serialize arbitrary details as valid, bounded JSON. Triple backticks are
- * escaped so a value cannot terminate the surrounding Markdown code fence.
- */
-export function boundedSafeJson(value: unknown): string | null {
-  if (value == null) return null
-  if (Array.isArray(value) && value.length === 0) return null
-  if (
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    Object.keys(value).length === 0
-  ) {
-    return null
-  }
-
-  const safeValue = safeDetailValue(value, 0, new Set<object>())
-  const serialized = JSON.stringify(safeValue, null, 2)?.replace(
-    /```/g,
-    "\\u0060\\u0060\\u0060"
-  )
-  if (!serialized) return null
-  if (serialized.length <= MAX_DETAIL_CHARACTERS) return serialized
-
-  // The preview is itself JSON-encoded, keeping the shortened block valid.
-  let previewLength = Math.floor(MAX_DETAIL_CHARACTERS / 2)
-  while (previewLength > 0) {
-    const shortened = JSON.stringify(
-      {
-        _truncated: true,
-        _message: "Details exceeded the Notion page preview limit.",
-        preview: serialized.slice(0, previewLength),
-      },
-      null,
-      2
-    ).replace(/```/g, "\\u0060\\u0060\\u0060")
-
-    if (shortened.length <= MAX_DETAIL_CHARACTERS) return shortened
-    previewLength = Math.floor(previewLength * 0.75)
-  }
-
-  return '{"_truncated":true}'
-}
-
 function escapeMarkdownText(value: string): string {
   return value.replace(/([\\`*_[\]{}()#+\-.!|<>])/g, "\\$1")
 }
@@ -528,7 +419,7 @@ export function safeWebUrl(value: string | null | undefined): string | null {
     const url = new URL(candidate)
     if (url.protocol !== "https:" && url.protocol !== "http:") return null
     if (url.username || url.password) return null
-    if ([...url.searchParams.keys()].some(isSensitiveDetailKey)) return null
+    if ([...url.searchParams.keys()].some(isSensitiveUrlParameter)) return null
     if (url.hash) {
       let fragment = url.hash.slice(1)
       try {
@@ -544,7 +435,7 @@ export function safeWebUrl(value: string | null | undefined): string | null {
       const fragmentParams = new URLSearchParams(
         queryStart >= 0 ? fragment.slice(queryStart + 1) : fragment
       )
-      if ([...fragmentParams.keys()].some(isSensitiveDetailKey)) return null
+      if ([...fragmentParams.keys()].some(isSensitiveUrlParameter)) return null
     }
     return url.toString()
   } catch {
