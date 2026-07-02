@@ -2,7 +2,7 @@
 // query. Rows match Sentry's release entity; there are no per-release calls.
 
 import * as Builder from "@notionhq/workers/builder"
-import { notionIcon } from "@notionhq/workers"
+import { notionIcon, type SyncChangeUpsert } from "@notionhq/workers"
 import * as Schema from "@notionhq/workers/schema"
 
 import {
@@ -42,7 +42,7 @@ export function releaseHealthWindow(now = Date.now()): {
   }
 }
 
-export const releaseSchema: Schema.Schema<typeof PRIMARY_KEY> = {
+export const releaseSchema = {
   databaseIcon: notionIcon("shield"),
   properties: {
     Release: Schema.title(),
@@ -71,7 +71,12 @@ export const releaseSchema: Schema.Schema<typeof PRIMARY_KEY> = {
     "Environment Scope": Schema.richText(),
     "Sentry Release ID": Schema.richText(),
   },
-}
+} satisfies Schema.Schema<typeof PRIMARY_KEY>
+
+type ReleaseChange = SyncChangeUpsert<
+  typeof PRIMARY_KEY,
+  typeof releaseSchema.properties
+> & { pageContentMarkdown: string }
 
 export function healthByRelease(
   snapshot: SentryReleaseHealthSnapshot
@@ -164,7 +169,7 @@ export function releasesToChanges(
   releases: SentryRelease[],
   snapshot: SentryReleaseHealthSnapshot,
   scope: SentryScope
-) {
+): ReleaseChange[] {
   const health = healthByRelease(snapshot)
   return releases.map((release) => {
     const releaseHealth = health.get(release.version)
@@ -218,54 +223,46 @@ export function releasesToChanges(
         Release: Builder.title(
           titleText(release.shortVersion ?? release.version)
         ),
-        ...(projects.length > 0
-          ? { Projects: Builder.multiSelect(...projects) }
-          : {}),
-        ...(crashFreeUsers === null
-          ? {}
-          : { "Crash-Free Users": Builder.number(crashFreeUsers) }),
-        ...(crashFreeSessions === null
-          ? {}
-          : { "Crash-Free Sessions": Builder.number(crashFreeSessions) }),
-        ...(release.newGroups === null
-          ? {}
-          : { "New Issues": Builder.number(release.newGroups) }),
-        ...(status ? { Status: Builder.select(status) } : {}),
-        ...(releaseHealth?.sessions === null ||
-        releaseHealth?.sessions === undefined
-          ? {}
-          : { "Sessions (7d)": Builder.number(releaseHealth.sessions) }),
-        ...(releaseHealth?.users === null || releaseHealth?.users === undefined
-          ? {}
-          : { "Users (7d)": Builder.number(releaseHealth.users) }),
-        ...(sentryUrl ? { "Sentry Link": Builder.url(sentryUrl) } : {}),
-        ...(releasedAt ? { "Released At": Builder.dateTime(releasedAt) } : {}),
-        ...(createdAt ? { "Created At": Builder.dateTime(createdAt) } : {}),
-        ...(hasHealthData === null
-          ? {}
-          : { "Health Data (7d)": Builder.checkbox(hasHealthData) }),
-        ...(externalUrl ? { "Release URL": Builder.url(externalUrl) } : {}),
-        ...(firstEvent ? { "First Event": Builder.dateTime(firstEvent) } : {}),
-        ...(lastEvent ? { "Last Event": Builder.dateTime(lastEvent) } : {}),
-        ...(release.deployCount === null
-          ? {}
-          : { Deploys: Builder.number(release.deployCount) }),
-        ...(release.commitCount === null
-          ? {}
-          : { Commits: Builder.number(release.commitCount) }),
-        ...(platforms.length > 0
-          ? { Platforms: Builder.multiSelect(...platforms) }
-          : {}),
+        Projects: Builder.multiSelect(...projects),
+        "Crash-Free Users":
+          crashFreeUsers === null ? [] : Builder.number(crashFreeUsers),
+        "Crash-Free Sessions":
+          crashFreeSessions === null ? [] : Builder.number(crashFreeSessions),
+        "New Issues":
+          release.newGroups === null ? [] : Builder.number(release.newGroups),
+        Status: status ? Builder.select(status) : [],
+        "Sessions (7d)":
+          releaseHealth?.sessions === null ||
+          releaseHealth?.sessions === undefined
+            ? []
+            : Builder.number(releaseHealth.sessions),
+        "Users (7d)":
+          releaseHealth?.users === null || releaseHealth?.users === undefined
+            ? []
+            : Builder.number(releaseHealth.users),
+        "Sentry Link": sentryUrl ? Builder.url(sentryUrl) : [],
+        "Released At": releasedAt ? Builder.dateTime(releasedAt) : [],
+        "Created At": createdAt ? Builder.dateTime(createdAt) : [],
+        "Health Data (7d)":
+          hasHealthData === null ? [] : Builder.checkbox(hasHealthData),
+        "Release URL": externalUrl ? Builder.url(externalUrl) : [],
+        "First Event": firstEvent ? Builder.dateTime(firstEvent) : [],
+        "Last Event": lastEvent ? Builder.dateTime(lastEvent) : [],
+        Deploys:
+          release.deployCount === null
+            ? []
+            : Builder.number(release.deployCount),
+        Commits:
+          release.commitCount === null
+            ? []
+            : Builder.number(release.commitCount),
+        Platforms: Builder.multiSelect(...platforms),
         Version: Builder.richText(
           propertyText(release.version) ?? "Unknown release"
         ),
-        ...(reference ? { Reference: Builder.richText(reference) } : {}),
-        ...(snapshot.start
-          ? { "Window Start": Builder.dateTime(snapshot.start) }
-          : {}),
-        ...(snapshot.end
-          ? { "Window End": Builder.dateTime(snapshot.end) }
-          : {}),
+        Reference: reference ? Builder.richText(reference) : [],
+        "Window Start": snapshot.start ? Builder.dateTime(snapshot.start) : [],
+        "Window End": snapshot.end ? Builder.dateTime(snapshot.end) : [],
         "Health Project Scope": Builder.richText(
           propertyText(
             scope.projects.join(", ") || "All accessible projects"

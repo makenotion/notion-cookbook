@@ -3,6 +3,9 @@
 import type { SentryIssueScope } from "./sentry.js"
 
 export const ISSUE_WINDOW_DAYS = 30
+// Workers rejects nextState above 256 KiB. Keep explicit headroom so future
+// state fields cannot turn a useful scope error into a runtime rejection.
+export const MAX_SAFE_SYNC_STATE_LENGTH = 240 * 1024
 const DAY_MS = 24 * 60 * 60 * 1_000
 
 export type IssueSyncState = {
@@ -16,6 +19,19 @@ export type IssueSyncState = {
 export type IssueWindow = {
   start: string
   end: string
+}
+
+/** Fail with scope guidance before Workers rejects an oversized continuation. */
+export function boundedSyncState<T>(state: T, resource: string): T {
+  const serializedLength = JSON.stringify(state).length
+  if (serializedLength > MAX_SAFE_SYNC_STATE_LENGTH) {
+    throw new Error(
+      `Sentry ${resource} continuation state exceeded the 240 KiB safety budget (${Math.ceil(
+        serializedLength / 1024
+      )} KiB); narrow SENTRY_PROJECTS so the refresh can continue safely.`
+    )
+  }
+  return state
 }
 
 function validTimestamp(value: string | undefined): value is string {

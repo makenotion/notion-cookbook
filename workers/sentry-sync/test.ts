@@ -51,6 +51,8 @@ import {
 } from "./src/sentry.js"
 import {
   ISSUE_WINDOW_DAYS,
+  MAX_SAFE_SYNC_STATE_LENGTH,
+  boundedSyncState,
   issueWindow,
   nextCursorTraversal,
   nextIssueState,
@@ -437,17 +439,43 @@ test("issue transform keeps stable identity and actionable impact fields", () =>
   assert.match(change.pageContentMarkdown, /Open this issue in Sentry/)
 })
 
-test("issue transform omits absent optional fields without inventing false values", () => {
-  const change = issueToChange(minimalIssue)
+test("issue transform clears values that disappear without inventing false values", () => {
+  const populated = issueToChange(fullIssue).properties as Record<
+    string,
+    unknown
+  >
+  const change = issueToChange({ ...minimalIssue, id: fullIssue.id })
   const properties = change.properties as Record<string, unknown>
-
-  assert.deepEqual(Object.keys(properties), ["Issue", "Sentry Issue ID"])
-  assert.equal(properties.Unhandled, undefined)
-  assert.equal(properties["Events (24h)"], undefined)
-  assert.equal(properties["Events (30d)"], undefined)
-  assert.equal(properties["Users (30d)"], undefined)
-  assert.equal(properties["Lifetime Events"], undefined)
-  assert.equal(properties["Lifetime Users"], undefined)
+  const clearableProperties = [
+    "Status",
+    "Assignee",
+    "Issue Link",
+    "Last Seen",
+    "Priority",
+    "Status Detail",
+    "Level",
+    "Unhandled",
+    "Events (24h)",
+    "Events (30d)",
+    "Users (30d)",
+    "Lifetime Events",
+    "Lifetime Users",
+    "Project",
+    "Category",
+    "Issue Type",
+    "Platform",
+    "Culprit",
+    "First Seen",
+    "Issue Key",
+  ]
+  for (const property of clearableProperties) {
+    assert.notDeepEqual(populated[property], [], `${property} starts populated`)
+    assert.deepEqual(
+      properties[property],
+      [],
+      `${property} is explicitly cleared`
+    )
+  }
   assert.match(change.pageContentMarkdown, /Status:\*\* Not provided/)
 })
 
@@ -548,7 +576,7 @@ test("project aggregation answers service-risk questions without double-counting
   assert.match(change.pageContentMarkdown, /Ownership gaps/)
 })
 
-test("project event buckets use exact seven-day boundaries and omit incomplete totals", () => {
+test("project event buckets use exact boundaries and clear incomplete totals", () => {
   const window = {
     start: "2026-06-02T15:00:00.000Z",
     end: "2026-07-02T15:00:00.000Z",
@@ -574,6 +602,12 @@ test("project event buckets use exact seven-day boundaries and omit incomplete t
   )["99"]
   assert.equal(complete.previous7dEvents, 2)
   assert.equal(complete.events7d, 8)
+  const completeProperties = projectToChange(
+    fullProject,
+    complete,
+    window.end,
+    defaultScope
+  ).properties as Record<string, unknown>
 
   const incomplete = aggregateProjectIssues(
     {},
@@ -587,11 +621,25 @@ test("project event buckets use exact seven-day boundaries and omit incomplete t
     defaultScope
   )
   const properties = change.properties as Record<string, unknown>
-  assert.equal(properties["Events (7d)"], undefined)
-  assert.equal(properties["Previous 7d Events"], undefined)
-  assert.equal(properties["Event Change"], undefined)
-  assert.equal(properties["Events (30d)"], undefined)
-  assert.equal(properties["Most Active Issue (7d)"], undefined)
+  for (const property of [
+    "Events (7d)",
+    "Previous 7d Events",
+    "Event Change vs Prior 7d",
+    "Events (30d)",
+    "Most Active Issue (7d)",
+    "Issue Link",
+  ]) {
+    assert.notDeepEqual(
+      completeProperties[property],
+      [],
+      `${property} starts populated`
+    )
+    assert.deepEqual(
+      properties[property],
+      [],
+      `${property} is explicitly cleared`
+    )
+  }
 })
 
 test("project aggregation fails closed without immutable or consistent identity", () => {
@@ -657,6 +705,11 @@ test("release transform combines metadata and aggregate health with stable ident
 })
 
 test("release rows remain useful when health is absent and preserve explicit zeroes", () => {
+  const populatedProperties = releasesToChanges(
+    [fullRelease],
+    fullReleaseHealth,
+    defaultScope
+  )[0].properties as Record<string, unknown>
   const noHealth = releasesToChanges(
     [
       {
@@ -677,8 +730,23 @@ test("release rows remain useful when health is absent and preserve explicit zer
   const noHealthProperties = noHealth.properties as Record<string, unknown>
   assertPropertyContains(noHealthProperties["Health Data (7d)"], "No")
   assertPropertyContains(noHealthProperties["New Issues"], "0")
-  assert.equal(noHealthProperties["Crash-Free Sessions"], undefined)
-  assert.equal(noHealthProperties["Sessions (7d)"], undefined)
+  for (const property of [
+    "Crash-Free Users",
+    "Crash-Free Sessions",
+    "Sessions (7d)",
+    "Users (7d)",
+  ]) {
+    assert.notDeepEqual(
+      populatedProperties[property],
+      [],
+      `${property} starts populated`
+    )
+    assert.deepEqual(
+      noHealthProperties[property],
+      [],
+      `${property} is explicitly cleared`
+    )
+  }
 
   const zeroHealth = releasesToChanges(
     [fullRelease],
@@ -810,6 +878,21 @@ test("issue window is exactly 30 days and remains pinned between pages", () => {
     seenCursors: ["cursor-a"],
   }
   assert.deepEqual(issueWindow(state, now + 7 * 86_400_000), window)
+})
+
+test("continuation state keeps headroom below the Workers runtime limit", () => {
+  assert.ok(MAX_SAFE_SYNC_STATE_LENGTH < 256 * 1024)
+  assert.deepEqual(boundedSyncState({ cursor: "small" }, "test"), {
+    cursor: "small",
+  })
+  assert.throws(
+    () =>
+      boundedSyncState(
+        { data: "x".repeat(MAX_SAFE_SYNC_STATE_LENGTH) },
+        "test"
+      ),
+    /240 KiB safety budget.*narrow SENTRY_PROJECTS/
+  )
 })
 
 test("release health window is exactly seven days", () => {
@@ -1629,6 +1712,45 @@ test("projects Worker validates a resumed snapshot before making requests", asyn
   assert.equal(fetched, false)
 })
 
+test("projects Worker rejects oversized continuation state before the runtime", async () => {
+  configureEnvironment()
+  const now = Date.parse("2026-07-02T15:00:00.000Z")
+  Date.now = () => now
+  globalThis.fetch = (async (input, init) => {
+    const request = new Request(input, init)
+    const url = new URL(request.url)
+    const issues = Array.from({ length: 100 }, (_, index) =>
+      rawIssue({
+        id: `issue-${index}`,
+        title: `Issue ${index} ${"x".repeat(1_990)}`,
+        permalink: `https://acme.sentry.io/issues/${index}/${"y".repeat(
+          1_850
+        )}`,
+        project: {
+          id: `project-${index}`,
+          name: `Project ${index}`,
+          slug: `project-${index}`,
+          platform: "node",
+        },
+        stats: {
+          "14d": [[Date.parse("2026-07-01T15:00:00.000Z") / 1_000, 1]],
+        },
+      })
+    )
+    return new Response(JSON.stringify(issues), {
+      status: 200,
+      headers: { Link: nextLink(url, "oversized-page-2") },
+    })
+  }) as typeof fetch
+
+  await assert.rejects(
+    worker.run("projectsSync", sentryPacerContext<ProjectSyncState>(), {
+      concreteOutput: true,
+    }),
+    /project aggregation continuation state exceeded.*narrow SENTRY_PROJECTS/
+  )
+})
+
 test("releases Worker uses one bounded list and one aggregate health request", async () => {
   configureEnvironment()
   process.env.SENTRY_PROJECTS = "checkout-api"
@@ -1705,7 +1827,7 @@ test("releases Worker preserves metadata when an older server lacks sessions", a
   assert.equal(result.hasMore, false)
   assert.equal(result.changes.length, 1)
   assert.equal(result.changes[0].targetDatabaseKey, "releases")
-  assert.equal(result.changes[0].properties?.["Health Data (7d)"], undefined)
-  assert.equal(result.changes[0].properties?.["Window Start"], undefined)
-  assert.equal(result.changes[0].properties?.["Window End"], undefined)
+  assert.deepEqual(result.changes[0].properties?.["Health Data (7d)"], [])
+  assert.deepEqual(result.changes[0].properties?.["Window Start"], [])
+  assert.deepEqual(result.changes[0].properties?.["Window End"], [])
 })

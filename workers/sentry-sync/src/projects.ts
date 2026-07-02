@@ -2,7 +2,7 @@
 // counts are intentionally absent because one person can span many groups.
 
 import * as Builder from "@notionhq/workers/builder"
-import { notionIcon } from "@notionhq/workers"
+import { notionIcon, type SyncChangeUpsert } from "@notionhq/workers"
 import * as Schema from "@notionhq/workers/schema"
 
 import {
@@ -53,7 +53,7 @@ export type ProjectIssueAggregate = {
 
 export type ProjectAggregateMap = Record<string, ProjectIssueAggregate>
 
-export const projectSchema: Schema.Schema<typeof PRIMARY_KEY> = {
+export const projectSchema = {
   databaseIcon: notionIcon("chart-line"),
   properties: {
     Project: Schema.title(),
@@ -82,7 +82,12 @@ export const projectSchema: Schema.Schema<typeof PRIMARY_KEY> = {
     "Project Slug": Schema.richText(),
     "Sentry Project ID": Schema.richText(),
   },
-}
+} satisfies Schema.Schema<typeof PRIMARY_KEY>
+
+type ProjectChange = SyncChangeUpsert<
+  typeof PRIMARY_KEY,
+  typeof projectSchema.properties
+> & { pageContentMarkdown: string }
 
 function issueEventBuckets(
   issue: SentryIssue,
@@ -345,7 +350,7 @@ export function projectToChange(
   aggregate: ProjectIssueAggregate | undefined,
   asOf: string,
   scope: SentryScope
-) {
+): ProjectChange {
   const mostActive =
     aggregate?.statsComplete === true ? aggregate.mostActiveIssue : null
   const platform = selectText(
@@ -373,32 +378,30 @@ export function projectToChange(
       "Unresolved Issues (30d)": Builder.number(
         aggregate?.unresolvedIssues ?? 0
       ),
-      ...(aggregate?.statsComplete === false
-        ? {}
-        : { "Events (7d)": Builder.number(aggregate?.events7d ?? 0) }),
-      ...(mostActive
-        ? {
-            "Most Active Issue (7d)": Builder.richText(
-              propertyText(mostActive.title) ?? "Untitled issue"
-            ),
-          }
-        : {}),
-      ...(issueLink ? { "Issue Link": Builder.url(issueLink) } : {}),
-      ...(lastSeen ? { "Last Seen": Builder.dateTime(lastSeen) } : {}),
-      ...(aggregate?.statsComplete === false
-        ? {}
-        : {
-            "Previous 7d Events": Builder.number(
-              aggregate?.previous7dEvents ?? 0
-            ),
-            "Event Change vs Prior 7d": Builder.number(
+      "Events (7d)":
+        aggregate?.statsComplete === false
+          ? []
+          : Builder.number(aggregate?.events7d ?? 0),
+      "Most Active Issue (7d)": mostActive
+        ? Builder.richText(propertyText(mostActive.title) ?? "Untitled issue")
+        : [],
+      "Issue Link": issueLink ? Builder.url(issueLink) : [],
+      "Last Seen": lastSeen ? Builder.dateTime(lastSeen) : [],
+      "Previous 7d Events":
+        aggregate?.statsComplete === false
+          ? []
+          : Builder.number(aggregate?.previous7dEvents ?? 0),
+      "Event Change vs Prior 7d":
+        aggregate?.statsComplete === false
+          ? []
+          : Builder.number(
               (aggregate?.events7d ?? 0) - (aggregate?.previous7dEvents ?? 0)
             ),
-          }),
       "Issue Groups (30d)": Builder.number(aggregate?.issueGroups ?? 0),
-      ...(aggregate?.countsComplete === false
-        ? {}
-        : { "Events (30d)": Builder.number(aggregate?.events30d ?? 0) }),
+      "Events (30d)":
+        aggregate?.countsComplete === false
+          ? []
+          : Builder.number(aggregate?.events30d ?? 0),
       "High-Priority Unresolved (30d)": Builder.number(
         aggregate?.highPriorityUnresolved ?? 0
       ),
@@ -415,13 +418,14 @@ export function projectToChange(
       "Unassigned Unresolved (30d)": Builder.number(
         aggregate?.unassignedUnresolved ?? 0
       ),
-      ...(projectLink ? { "Project Link": Builder.url(projectLink) } : {}),
-      ...(platform ? { Platform: Builder.select(platform) } : {}),
-      ...(teams.length > 0 ? { Teams: Builder.multiSelect(...teams) } : {}),
-      ...(project.hasSessions === null
-        ? {}
-        : { "Has Sessions": Builder.checkbox(project.hasSessions) }),
-      ...(firstEvent ? { "First Event": Builder.dateTime(firstEvent) } : {}),
+      "Project Link": projectLink ? Builder.url(projectLink) : [],
+      Platform: platform ? Builder.select(platform) : [],
+      Teams: Builder.multiSelect(...teams),
+      "Has Sessions":
+        project.hasSessions === null
+          ? []
+          : Builder.checkbox(project.hasSessions),
+      "First Event": firstEvent ? Builder.dateTime(firstEvent) : [],
       "Environment Scope": Builder.richText(
         propertyText(scope.environments.join(", ") || "All environments") ??
           "All environments"

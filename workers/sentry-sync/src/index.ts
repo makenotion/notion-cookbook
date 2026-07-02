@@ -36,6 +36,7 @@ import {
   type SentryScope,
 } from "./sentry.js"
 import {
+  boundedSyncState,
   issueWindow,
   nextCursorTraversal,
   nextIssueState,
@@ -84,7 +85,10 @@ worker.sync("issuesSync", {
       changes: page.resources.map(issueToChange),
       hasMore: page.hasMore,
       nextState: page.hasMore
-        ? nextIssueState(state, window, scope, page.nextCursor)
+        ? boundedSyncState(
+            nextIssueState(state, window, scope, page.nextCursor),
+            "issue pagination"
+          )
         : undefined,
     }
   },
@@ -153,24 +157,30 @@ worker.sync("projectsSync", {
         return {
           changes: [],
           hasMore: true,
-          nextState: {
-            phase: "issues" as const,
-            ...next,
-            aggregates,
-          },
+          nextState: boundedSyncState(
+            {
+              phase: "issues" as const,
+              ...next,
+              aggregates,
+            },
+            "project aggregation"
+          ),
         }
       }
 
       return {
         changes: [],
         hasMore: true,
-        nextState: {
-          phase: "projects" as const,
-          ...window,
-          scope: state.scope,
-          aggregates,
-          unmatchedProjectIds: Object.keys(aggregates),
-        },
+        nextState: boundedSyncState(
+          {
+            phase: "projects" as const,
+            ...window,
+            scope: state.scope,
+            aggregates,
+            unmatchedProjectIds: Object.keys(aggregates),
+          },
+          "project aggregation"
+        ),
       }
     }
 
@@ -205,11 +215,14 @@ worker.sync("projectsSync", {
       return {
         changes,
         hasMore: true,
-        nextState: {
-          ...state,
-          ...traversal,
-          unmatchedProjectIds,
-        },
+        nextState: boundedSyncState(
+          {
+            ...state,
+            ...traversal,
+            unmatchedProjectIds,
+          },
+          "project inventory"
+        ),
       }
     }
 

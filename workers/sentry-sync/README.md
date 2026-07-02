@@ -79,7 +79,8 @@ details, investigation, alerting, and mutations.
 `replace` means complete reconciliation. The Worker updates stable rows and
 removes rows absent from a completed refresh; it does not delete and recreate
 the database. A failed or partial multi-page refresh is not treated as a
-complete snapshot.
+complete snapshot. Every returned row also emits explicit empty property values
+when a Sentry field disappears, so an earlier value cannot remain stale.
 
 ### Issue fields
 
@@ -128,7 +129,7 @@ the complete issue scan. It includes:
 
 The immutable project ID is the primary key. A project with no issue activity
 in the 30-day window still appears with zero issue counts. If any returned
-issue lacks 14-day statistics, the project row omits its seven-day totals and
+issue lacks 14-day statistics, the project row clears its seven-day totals and
 top issue rather than publishing an understated result. The same rule applies
 to an incomplete 30-day event count.
 
@@ -151,8 +152,8 @@ Release Health query adds:
 Sentry reports crash-free rates as percentage points; the transform converts
 them to Notion's percent-property representation without changing their
 meaning. A release without session telemetry still gets a metadata row.
-Absent health values remain absent—never `0`, `100%`, or an invented “Healthy”
-status. Explicit zeroes from Sentry remain zero.
+Absent health values remain empty—never stale, `0`, `100%`, or an invented
+“Healthy” status. Explicit zeroes from Sentry remain zero.
 
 `New Issues`, deploys, and commits remain organization-release values. Projects
 lists every project Sentry associates with the release, while health metrics
@@ -209,9 +210,11 @@ Projects with no matching issues still appear. An issue aggregate whose
 project was deleted or became inaccessible is retained using the issue's
 project metadata so risk does not disappear silently.
 
-The state is capped at 500 active projects. Larger organizations should set
-`SENTRY_PROJECTS`; crossing the boundary fails with an actionable error rather
-than truncating the snapshot.
+Continuation state has a 240 KiB safety budget below Workers' 256 KiB runtime
+limit, plus a secondary cap of 500 active projects. Metadata length varies, so
+the serialized-state budget can be reached first. Larger organizations should
+set `SENTRY_PROJECTS`; crossing either boundary fails with an actionable error
+rather than truncating the snapshot or returning invalid continuation state.
 
 ### Recent rollout health
 
@@ -231,7 +234,7 @@ that conservative request also remains below Sentry's documented
 10,000-data-point constraint even if the service computes series before
 omitting them from the response.
 
-An empty health result is valid and leaves metrics absent. A 404 from the
+An empty health result is valid and clears unavailable metrics. A 404 from the
 sessions endpoint on an older self-hosted installation also preserves release
 metadata. Authentication, authorization, malformed data, timeouts, 429s, and
 other API errors remain visible failures.
@@ -308,8 +311,8 @@ This is a one-way mirror. Changes in Notion do not update Sentry.
 ```text
 src/
 ├── index.ts      — registers all databases, schedules, phases, and shared pacer
-├── sentry.ts     — minimal REST client, strict parsing, pagination, and limits
-├── sync-state.ts — pinned issue windows and reusable cursor-loop safeguards
+├── sentry.ts     — REST client, response validation, pagination, and rate limits
+├── sync-state.ts — pinned windows, cursor safeguards, and continuation limits
 ├── issues.ts     — issue schema and triage transform
 ├── projects.ts   — project schema and truthful issue aggregation
 ├── releases.ts   — release schema and aggregate health merge
@@ -340,7 +343,8 @@ ntn workers exec releasesSync --local --stream
 Confirm that recently active resolved and unresolved issues appear; project
 totals match the scoped issue set; current/prior seven-day buckets line up with
 Sentry; newest releases remain one row each with project context; and missing
-Release Health leaves fields absent rather than creating false zeroes.
+Release Health clears prior fields rather than retaining stale values or
+creating false zeroes.
 
 ## Customizing the default set
 
@@ -349,10 +353,10 @@ To remove a view from a fork, delete its `worker.database(...)` and
 unused. No environment flag is required.
 
 When adding fields, retain only the selected provider shape, validate identity
-and null semantics, preserve schema/transform property order, and add complete,
-missing, zero, future-value, privacy, and pagination tests. Keep raw event data
-out of this base example. A webhook-driven fork can improve issue freshness
-while the full refresh remains reconciliation.
+and null transitions, preserve schema/transform property order, and add
+complete, value-to-missing, zero, future-value, privacy, and pagination tests.
+Keep raw event data out of this base example. A webhook-driven fork can improve
+issue freshness while the full refresh remains reconciliation.
 
 ## Official documentation
 
