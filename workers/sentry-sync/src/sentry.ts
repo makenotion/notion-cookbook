@@ -1,5 +1,6 @@
-// Minimal Sentry REST client for issue groups, projects, recent releases, and
-// aggregate session health. It never requests raw events or user PII.
+// Sentry REST client for issue groups, projects, recent releases, and aggregate
+// session health. It does not request raw events; parsers select only the fields
+// used by the Notion databases and do not persist unselected personal data.
 
 import { createHash } from "node:crypto"
 
@@ -16,6 +17,8 @@ const RECENT_RELEASE_LIMIT = 100
 const RELEASE_HEALTH_GROUP_LIMIT = 250
 const REQUEST_TIMEOUT_MS = 30_000
 const ERROR_EXCERPT_CHARACTERS = 500
+
+// API contracts
 
 export type BeforeRequest = () => Promise<void>
 
@@ -76,9 +79,7 @@ export type SentryScope = {
   credentialFingerprint: string
 }
 
-export type SentryIssueScope = SentryScope
-
-export type SentryPage = {
+export type SentryIssuePage = {
   resources: SentryIssue[]
   hasMore: boolean
   nextCursor: string | undefined
@@ -144,6 +145,8 @@ export type SentryReleaseHealthSnapshot = {
   groups: SentryReleaseHealth[]
 }
 
+// Configuration and request construction
+
 function requireEnv(name: string): string {
   const value = process.env[name]?.trim()
   if (!value) throw new Error(`${name} is not set.`)
@@ -205,9 +208,6 @@ export function getSentryScope(): SentryScope {
     credentialFingerprint: tokenFingerprint(token),
   }
 }
-
-// Retain the issue-specific name for forks importing the original example.
-export const getIssueScope = getSentryScope
 
 function tokenFingerprint(token: string): string {
   return createHash("sha256").update(token).digest("hex")
@@ -342,6 +342,8 @@ export function buildReleaseHealthUrl(
   return url
 }
 
+// Rate limits and pagination
+
 export function parseRetryAfterSeconds(
   value: string | null,
   now = Date.now()
@@ -473,6 +475,8 @@ export function nextCursorFromLink(
   }
   return cursor
 }
+
+// Issue response parsing
 
 function nullableString(
   record: Record<string, unknown>,
@@ -619,6 +623,8 @@ function parseIssue(
   }
 }
 
+// Authenticated transport
+
 function errorExcerpt(text: string): string {
   const compact = text.replace(/\s+/g, " ").trim()
   return Array.from(compact).slice(0, ERROR_EXCERPT_CHARACTERS).join("")
@@ -684,6 +690,8 @@ async function fetchSentryJson(
     )
   }
 }
+
+// Project and release response parsing
 
 function resourceRecord(
   value: unknown,
@@ -915,11 +923,13 @@ function parseReleaseHealthGroup(
   }
 }
 
+// Resource fetchers
+
 export async function fetchIssuesPage(
   beforeRequest: BeforeRequest,
   options: FetchIssuesOptions,
   scope = getSentryScope()
-): Promise<SentryPage> {
+): Promise<SentryIssuePage> {
   const url = buildIssuesUrl(options, scope)
   const { body, headers } = await fetchSentryJson(
     beforeRequest,

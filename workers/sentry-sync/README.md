@@ -31,17 +31,17 @@ cd workers/sentry-sync
 npm install
 ntn login
 ntn workers deploy --name sentry-sync
-ntn workers env set SENTRY_AUTH_TOKEN=your-token
-ntn workers env set SENTRY_ORG_SLUG=your-organization-slug
+ntn workers env set \
+  SENTRY_AUTH_TOKEN=your-token \
+  SENTRY_ORG_SLUG=your-organization-slug \
+  SENTRY_PROJECTS=checkout-api \
+  SENTRY_ENVIRONMENTS=production
 ```
 
-For the first run, scope to one or two production projects. Replace the example
-slug with a Sentry project ID or slug:
-
-```sh
-ntn workers env set SENTRY_PROJECTS=checkout-api
-ntn workers env set SENTRY_ENVIRONMENTS=production
-```
+Apply the credentials and initial scope together before the first run so they
+are not saved as separate partial environment updates. Start with one or two
+production projects; replace `checkout-api` with a comma-separated list of
+Sentry project IDs or slugs.
 
 Create and populate all three databases while streaming each run:
 
@@ -50,6 +50,11 @@ ntn workers exec issuesSync --stream
 ntn workers exec projectsSync --stream
 ntn workers exec releasesSync --stream
 ```
+
+After all three commands complete, the workspace contains managed databases
+named **Sentry Issues**, **Sentry Projects**, and **Sentry Releases**, populated
+with any records matching the configured scope. Subsequent runs update those
+databases on the schedules below.
 
 ## What you can answer
 
@@ -70,11 +75,11 @@ details, investigation, alerting, and mutations.
 
 ### Databases and schedules
 
-| Database            | Sync           | Mode    | Schedule     | Membership                                               |
-| ------------------- | -------------- | ------- | ------------ | -------------------------------------------------------- |
-| **Sentry Issues**   | `issuesSync`   | replace | Every 15 min | Every issue status seen in the pinned prior 30 days      |
-| **Sentry Projects** | `projectsSync` | replace | Daily        | Visible projects, enriched from the pinned prior 30 days |
-| **Sentry Releases** | `releasesSync` | replace | Every 15 min | The 100 most recent releases across the configured scope |
+| Database            | Sync           | Mode    | Schedule     | Membership                                                    |
+| ------------------- | -------------- | ------- | ------------ | ------------------------------------------------------------- |
+| **Sentry Issues**   | `issuesSync`   | replace | Every 15 min | Every issue status seen in the pinned prior 30 days           |
+| **Sentry Projects** | `projectsSync` | replace | Daily        | Visible projects, enriched from the pinned prior 30 days      |
+| **Sentry Releases** | `releasesSync` | replace | Every 15 min | The first 100 rows returned by the configured release request |
 
 `replace` means complete reconciliation. The Worker updates stable rows and
 removes rows absent from a completed refresh; it does not delete and recreate
@@ -178,7 +183,8 @@ metrics.
 - **Rollout watch:** sort releases by Released At descending, then Crash-Free
   Sessions and Sessions (7d).
 - **Missing release telemetry:** filter Health Data (7d) unchecked. Empty means
-  the sessions endpoint was unavailable on that Sentry installation.
+  Sentry returned no health row, no session telemetry exists, or the sessions
+  request used the Worker's 404 fallback described below.
 
 ## How it works
 
@@ -220,9 +226,13 @@ rather than truncating the snapshot or returning invalid continuation state.
 
 The release refresh deliberately requests only the first 100 releases from the
 endpoint's most-recent-first default order, so this is an explicit useful set
-rather than accidental pagination truncation. Project and environment filters
-scope both release membership and health. An explicit empty `status=` includes
-recently archived releases instead of Sentry's default open-only set.
+rather than accidental pagination truncation. The Worker sends configured
+project and environment filters plus an explicit empty `status=` to the release
+request. Sentry's public list-releases reference documents the project filter,
+but not environment or status for this endpoint. Their effect on release
+membership is therefore compatibility behavior, not a portable guarantee
+across Sentry SaaS and self-hosted versions. The separate Release Health query
+always applies the explicit project and environment scope shown in Notion.
 
 One additional sessions request groups the prior seven days by release across
 the configured project and environment scope, requests totals without
@@ -234,10 +244,13 @@ that conservative request also remains below Sentry's documented
 10,000-data-point constraint even if the service computes series before
 omitting them from the response.
 
-An empty health result is valid and clears unavailable metrics. A 404 from the
-sessions endpoint on an older self-hosted installation also preserves release
-metadata. Authentication, authorization, malformed data, timeouts, 429s, and
-other API errors remain visible failures.
+An empty health result is valid and clears unavailable metrics. The Worker also
+treats any 404 from the sessions endpoint as unavailable health and preserves
+release metadata. That fallback does not prove that the Sentry installation is
+too old: if health was expected, check the organization, route, permissions,
+proxy, and Sentry version. Explicit 401/403 authentication and authorization
+responses, malformed data, timeouts, 429s, and other non-404 API errors remain
+visible failures.
 
 ### Rate limits and request safety
 
@@ -340,6 +353,11 @@ ntn workers exec projectsSync --local --stream
 ntn workers exec releasesSync --local --stream
 ```
 
+Keep generated and machine-local files out of commits. `.env`, `workers.json`,
+`workers.*.json`, `package-lock.json`, `dist/`, and `node_modules/` are
+gitignored; `.env.example` is the tracked configuration template. A test
+deployment does not require committing its generated Worker configuration.
+
 Confirm that recently active resolved and unresolved issues appear; project
 totals match the scoped issue set; current/prior seven-day buckets line up with
 Sentry; newest releases remain one row each with project context; and missing
@@ -348,13 +366,42 @@ creating false zeroes.
 
 ## Customizing the default set
 
-To remove a view from a fork, delete its `worker.database(...)` and
+To remove a database from a fork, delete its `worker.database(...)` and
 `worker.sync(...)` blocks from `src/index.ts`, then remove its schema module if
-unused. No environment flag is required.
+unused. No environment flag is required. This stops future management but does
+not trash a database created by an earlier deployment; archive or trash that
+database manually in Notion after confirming its contents are no longer needed.
 
-When adding fields, retain only the selected provider shape, validate identity
-and null transitions, preserve schema/transform property order, and add
-complete, value-to-missing, zero, future-value, privacy, and pagination tests.
+### Safe extension contract
+
+Follow the complete path for every field or resource rather than editing only
+the visible schema:
+
+1. **Provider contract:** add the narrow response type and runtime parser in
+   `src/sentry.ts`. Build URLs from the validated Sentry base, validate provider
+   pagination with `nextCursorFromLink`, and route every request through
+   `fetchSentryJson` so timeout, redirect, authentication, rate-limit, and
+   response checks remain consistent. Retain only fields the database actually
+   uses.
+2. **Database contract:** update the schema and transform together in
+   `src/issues.ts`, `src/projects.ts`, or `src/releases.ts`. Every upsert must
+   emit every declared schema property; emit the empty property value (`[]`)
+   when an upstream nullable value disappears so Notion clears stale data. Use
+   an immutable provider ID as the primary key.
+3. **Lifecycle contract:** register a new database, sync, and schedule in
+   `src/index.ts`. Pin the time window and `SentryScope` for the full refresh,
+   validate cursor traversal with `nextCursorTraversal`, and pass every
+   continuation through `boundedSyncState` in `src/sync-state.ts`.
+4. **Completeness contract:** exhaustive syncs must follow trusted pagination
+   until a terminal `hasMore: false`; never silently stop and call a partial
+   result complete. If a deliberately bounded snapshot is more useful, as with
+   the newest 100 releases, make the limit part of its membership definition
+   and document it.
+5. **Verification contract:** add complete, minimal, populated-to-missing,
+   explicit-zero, unknown-enum, privacy, cursor, rate-limit, and boundary tests
+   in `test.ts`. Then run the offline checks and exercise the changed endpoint
+   against a small real Sentry scope before deployment.
+
 Keep raw event data out of this base example. A webhook-driven fork can improve
 issue freshness while the full refresh remains reconciliation.
 

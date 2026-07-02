@@ -7,13 +7,14 @@ import * as Schema from "@notionhq/workers/schema"
 
 import {
   dateTime,
-  issuePageContent,
+  escapeMarkdown,
   nonnegativeNumber,
   propertyText,
   safeHttpUrl,
   selectText,
   summedStats,
   titleText,
+  type SentryStats,
 } from "./helpers.js"
 import type { SentryIssue } from "./sentry.js"
 
@@ -93,6 +94,118 @@ type IssueChange = SyncChangeUpsert<
   typeof issueSchema.properties
 > & { pageContentMarkdown: string }
 
+const MAX_PAGE_VALUE_CHARACTERS = 500
+
+type TriageIssue = {
+  status: string | null
+  substatus: string | null
+  priority: string | null
+  level: string | null
+  isUnhandled: boolean | null
+  assignedTo: { name: string | null } | null
+  project: { name: string | null; slug: string | null } | null
+  platform: string | null
+  culprit: string | null
+  firstSeen: string | null
+  lastSeen: string | null
+  permalink: string | null
+  count: string | number | null
+  userCount: string | number | null
+  lifetime: {
+    count: string | number | null
+    userCount: string | number | null
+  } | null
+  stats: SentryStats | null
+}
+
+function markdownValue(value: string): string {
+  const characters = Array.from(value)
+  const bounded =
+    characters.length <= MAX_PAGE_VALUE_CHARACTERS
+      ? value
+      : `${characters.slice(0, MAX_PAGE_VALUE_CHARACTERS - 1).join("")}…`
+  return escapeMarkdown(bounded)
+}
+
+function plural(count: number, singular: string): string {
+  return `${count.toLocaleString("en-US")} ${singular}${count === 1 ? "" : "s"}`
+}
+
+/** Build a bounded triage brief from group metadata, never raw event data. */
+export function issuePageContent(issue: TriageIssue): string {
+  const status = selectText(issue.status)
+  const detail = selectText(issue.substatus)
+  const priority = selectText(issue.priority)
+  const level = selectText(issue.level)
+  const assignee = propertyText(issue.assignedTo?.name)
+  const project = propertyText(issue.project?.name ?? issue.project?.slug)
+  const platform = propertyText(issue.platform)
+  const culprit = propertyText(issue.culprit)
+  const firstSeen = dateTime(issue.firstSeen)
+  const lastSeen = dateTime(issue.lastSeen)
+  const recentEvents = summedStats(issue.stats, "24h")
+  const windowEvents = nonnegativeNumber(issue.count)
+  const windowUsers = nonnegativeNumber(issue.userCount)
+  const lifetimeEvents = nonnegativeNumber(issue.lifetime?.count)
+  const lifetimeUsers = nonnegativeNumber(issue.lifetime?.userCount)
+  const url = safeHttpUrl(issue.permalink)
+
+  const signals = [
+    detail && ["New", "Regressed", "Escalating"].includes(detail)
+      ? detail
+      : null,
+    priority === "High" ? "High priority" : null,
+    level === "Fatal" ? "Fatal" : null,
+    issue.isUnhandled === true ? "Unhandled" : null,
+    !assignee && status === "Unresolved" ? "Unassigned" : null,
+  ].filter((value): value is string => Boolean(value))
+
+  const lines = [
+    `- **Status:** ${markdownValue(
+      [status, detail].filter(Boolean).join(" · ") || "Not provided"
+    )}`,
+    `- **Owner:** ${markdownValue(assignee || "Unassigned")}`,
+    recentEvents === null
+      ? null
+      : `- **Last 24 hours:** ${plural(recentEvents, "event")}`,
+    windowEvents === null && windowUsers === null
+      ? null
+      : `- **30-day impact:** ${[
+          windowEvents === null ? null : plural(windowEvents, "event"),
+          windowUsers === null ? null : plural(windowUsers, "user"),
+        ]
+          .filter(Boolean)
+          .join(" · ")}`,
+    lifetimeEvents === null && lifetimeUsers === null
+      ? null
+      : `- **Lifetime impact:** ${[
+          lifetimeEvents === null ? null : plural(lifetimeEvents, "event"),
+          lifetimeUsers === null ? null : plural(lifetimeUsers, "user"),
+        ]
+          .filter(Boolean)
+          .join(" · ")}`,
+    signals.length > 0
+      ? `- **Triage signals:** ${signals.map(markdownValue).join(" · ")}`
+      : null,
+    project || platform
+      ? `- **Location:** ${[project, platform]
+          .filter((value): value is string => Boolean(value))
+          .map(markdownValue)
+          .join(" · ")}`
+      : null,
+    culprit ? `- **Culprit:** ${markdownValue(culprit)}` : null,
+    firstSeen ? `- **First seen:** ${firstSeen}` : null,
+    lastSeen ? `- **Last seen:** ${lastSeen}` : null,
+  ].filter((line): line is string => Boolean(line))
+
+  const source = url
+    ? `\n\n[Open this issue in Sentry](${url
+        .replace(/\(/g, "%28")
+        .replace(/\)/g, "%29")})`
+    : ""
+  return `## Triage snapshot\n\n${lines.join("\n")}${source}`
+}
+
 export function issueToChange(issue: SentryIssue): IssueChange {
   const status = selectText(issue.status)
   const assignee = propertyText(issue.assignedTo?.name)
@@ -122,7 +235,7 @@ export function issueToChange(issue: SentryIssue): IssueChange {
     // this replacement sync intentionally omits upstreamUpdatedAt.
     pageContentMarkdown: issuePageContent(issue),
     properties: {
-      Issue: Builder.title(titleText(issue.title)),
+      Issue: Builder.title(titleText(issue.title, "Untitled Sentry issue")),
       Status: status ? Builder.select(status) : [],
       Assignee: assignee ? Builder.richText(assignee) : [],
       "Issue Link": url ? Builder.url(url) : [],

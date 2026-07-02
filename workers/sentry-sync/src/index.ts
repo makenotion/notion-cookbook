@@ -268,9 +268,9 @@ worker.sync("releasesSync", {
         scope
       )
     } catch (error) {
-      // Older self-hosted Sentry versions can expose release metadata without
-      // the sessions endpoint. Keep those rows useful; all other failures,
-      // including missing org:read, remain actionable.
+      // A sessions 404 can mean that Release Health is unavailable on this
+      // route or installation. Preserve useful metadata-only rows; the README
+      // lists other 404 causes to check when health was expected.
       if (!(error instanceof SentryApiError) || error.status !== 404)
         throw error
       health = { available: false, start: null, end: null, groups: [] }

@@ -374,7 +374,9 @@ export function projectToChange(
     key: project.id,
     pageContentMarkdown: projectPageContent(project, aggregate, asOf, scope),
     properties: {
-      Project: Builder.title(titleText(project.name)),
+      Project: Builder.title(
+        titleText(project.name, "Untitled Sentry project")
+      ),
       "Unresolved Issues (30d)": Builder.number(
         aggregate?.unresolvedIssues ?? 0
       ),

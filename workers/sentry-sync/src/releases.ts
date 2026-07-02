@@ -221,7 +221,10 @@ export function releasesToChanges(
       ),
       properties: {
         Release: Builder.title(
-          titleText(release.shortVersion ?? release.version)
+          titleText(
+            release.shortVersion ?? release.version,
+            "Untitled Sentry release"
+          )
         ),
         Projects: Builder.multiSelect(...projects),
         "Crash-Free Users":

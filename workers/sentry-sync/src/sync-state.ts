@@ -1,6 +1,6 @@
 // Pure, serializable state helpers for the rolling replacement scan.
 
-import type { SentryIssueScope } from "./sentry.js"
+import type { SentryScope } from "./sentry.js"
 
 export const ISSUE_WINDOW_DAYS = 30
 // Workers rejects nextState above 256 KiB. Keep explicit headroom so future
@@ -11,7 +11,7 @@ const DAY_MS = 24 * 60 * 60 * 1_000
 export type IssueSyncState = {
   start: string
   end: string
-  scope: SentryIssueScope
+  scope: SentryScope
   cursor?: string
   seenCursors?: string[]
 }
@@ -72,7 +72,7 @@ export function issueWindow(
 export function nextIssueState(
   state: IssueSyncState | undefined,
   window: IssueWindow,
-  scope: SentryIssueScope,
+  scope: SentryScope,
   nextCursor: string | undefined
 ): IssueSyncState {
   const traversal = nextCursorTraversal(

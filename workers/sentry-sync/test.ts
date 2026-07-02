@@ -9,7 +9,6 @@ import { RateLimitError } from "@notionhq/workers"
 import {
   escapeMarkdown,
   formatSentryLabel,
-  issuePageContent,
   nonnegativeNumber,
   safeHttpUrl,
   selectText,
@@ -18,7 +17,7 @@ import {
 } from "./src/helpers.js"
 import worker from "./src/index.js"
 import type { ProjectSyncState } from "./src/index.js"
-import { issueToChange } from "./src/issues.js"
+import { issuePageContent, issueToChange } from "./src/issues.js"
 import {
   aggregateProjectIssues,
   projectToChange,
@@ -39,15 +38,15 @@ import {
   fetchProjectsPage,
   fetchRecentReleases,
   fetchReleaseHealth,
-  getIssueScope,
+  getSentryScope,
   nextCursorFromLink,
   parseRetryAfterSeconds,
   rateLimitRetryAfterSeconds,
   type SentryIssue,
-  type SentryIssueScope,
   type SentryProject,
   type SentryRelease,
   type SentryReleaseHealthSnapshot,
+  type SentryScope,
 } from "./src/sentry.js"
 import {
   ISSUE_WINDOW_DAYS,
@@ -136,7 +135,7 @@ const minimalIssue: SentryIssue = {
   stats: null,
 }
 
-const defaultScope: SentryIssueScope = {
+const defaultScope: SentryScope = {
   baseUrl: "https://sentry.io/",
   organization: "acme",
   projects: [],
@@ -309,7 +308,7 @@ function rawRelease(overrides: Record<string, unknown> = {}) {
   }
 }
 
-test("manifest enables all three value-first databases by default", () => {
+test("manifest enables all three databases by default", () => {
   assert.deepEqual(
     worker.manifest.databases.map((database) => ({
       key: database.key,
@@ -848,7 +847,37 @@ test("display helpers preserve unknown values and bound provider text", () => {
   assert.equal(summedStats({ "24h": [[1, -1]] }, "24h"), null)
   assert.equal(safeHttpUrl("javascript:alert(1)"), null)
   assert.equal(escapeMarkdown("[prod] *fatal*"), "\\[prod\\] \\*fatal\\*")
-  assert.equal(Array.from(titleText("x".repeat(3_000))).length, 2_000)
+  assert.equal(
+    Array.from(titleText("x".repeat(3_000), "Fallback title")).length,
+    2_000
+  )
+  assert.equal(
+    titleText("  ", "Untitled Sentry project"),
+    "Untitled Sentry project"
+  )
+})
+
+test("resource transforms use resource-specific fallback titles", () => {
+  const issueProperties = issueToChange({
+    ...minimalIssue,
+    title: " ",
+  }).properties as Record<string, unknown>
+  assertPropertyContains(issueProperties.Issue, "Untitled Sentry issue")
+
+  const projectProperties = projectToChange(
+    { ...fullProject, name: " " },
+    undefined,
+    "2026-07-02T15:00:00.000Z",
+    defaultScope
+  ).properties as Record<string, unknown>
+  assertPropertyContains(projectProperties.Project, "Untitled Sentry project")
+
+  const releaseProperties = releasesToChanges(
+    [{ ...fullRelease, shortVersion: " " }],
+    fullReleaseHealth,
+    defaultScope
+  )[0].properties as Record<string, unknown>
+  assertPropertyContains(releaseProperties.Release, "Untitled Sentry release")
 })
 
 test("triage page content is bounded and excludes data that was never selected", () => {
@@ -1365,7 +1394,7 @@ test("new clients fail closed on malformed identity, shape, and health truncatio
 
 test("API client fails closed if credentials change between pages", async () => {
   configureEnvironment()
-  const scope = getIssueScope()
+  const scope = getSentryScope()
   process.env.SENTRY_AUTH_TOKEN = "rotated-token-with-different-access"
   let fetched = false
   globalThis.fetch = (async () => {
@@ -1810,7 +1839,7 @@ test("releases Worker uses one bounded list and one aggregate health request", a
   assert.equal(requestUrls[1].searchParams.get("includeSeries"), "0")
 })
 
-test("releases Worker preserves metadata when an older server lacks sessions", async () => {
+test("releases Worker preserves metadata when sessions returns 404", async () => {
   configureEnvironment()
   globalThis.fetch = (async (input, init) => {
     const request = new Request(input, init)
