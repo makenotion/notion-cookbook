@@ -15,6 +15,7 @@ export const MAX_PAGE_CONTENT_CHARACTERS = 40_000
 export const MAX_RICH_TEXT_CHARACTERS = 2_000
 export const MAX_MULTI_SELECT_OPTIONS = 100
 export const MAX_OPTION_NAME_CHARACTERS = 100
+export const MAX_URL_CHARACTERS = 2_000
 
 const MAX_TEXT_CHARACTERS = 8_000
 const MAX_CONTEXTS = 25
@@ -437,7 +438,8 @@ export function safeWebUrl(value: string | null | undefined): string | null {
       )
       if ([...fragmentParams.keys()].some(isSensitiveUrlParameter)) return null
     }
-    return url.toString()
+    const normalized = url.toString()
+    return normalized.length <= MAX_URL_CHARACTERS ? normalized : null
   } catch {
     return null
   }

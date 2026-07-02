@@ -14,6 +14,8 @@ export const MAX_PAGERDUTY_OFFSET_RECORDS = 10_000
 const DEFAULT_LOOKBACK_DAYS = 90
 const MAX_LOOKBACK_DAYS = 180
 const DEFAULT_RATE_LIMIT_DELAY_SECONDS = 60
+const MAX_PAGERDUTY_ID_CHARACTERS = 255
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/u
 
 export type PagerDutyRegion = keyof typeof API_BASE_URLS
 export type IncidentSyncPhase = "open" | "openConfirm" | "recent"
@@ -209,7 +211,11 @@ export type PagerDutyClient = {
 
 type Environment = Record<string, string | undefined>
 
-function parseIdList(name: string, raw: string | undefined): string[] {
+function parseIdList(
+  name: string,
+  raw: string | undefined,
+  { usedAsPathSegment = false }: { usedAsPathSegment?: boolean } = {}
+): string[] {
   if (!raw?.trim()) return []
 
   const ids: string[] = []
@@ -217,8 +223,20 @@ function parseIdList(name: string, raw: string | undefined): string[] {
   for (const part of raw.split(",")) {
     const id = part.trim()
     if (!id) continue
-    if (!/^P[A-Z0-9]{6}$/.test(id)) {
-      throw new Error(`${name} contains an invalid PagerDuty ID: "${id}"`)
+    if (CONTROL_CHARACTERS.test(id)) {
+      throw new Error(
+        `${name} contains a PagerDuty ID with control characters.`
+      )
+    }
+    if (usedAsPathSegment && (id === "." || id === "..")) {
+      throw new Error(
+        `${name} contains a PagerDuty ID that cannot be used as a URL path segment.`
+      )
+    }
+    if (Array.from(id).length > MAX_PAGERDUTY_ID_CHARACTERS) {
+      throw new Error(
+        `${name} contains a PagerDuty ID longer than ${MAX_PAGERDUTY_ID_CHARACTERS} characters.`
+      )
     }
     if (!seen.has(id)) {
       ids.push(id)
@@ -258,7 +276,11 @@ export function getPagerDutyConfig(
     incidentLookbackDays: parseLookbackDays(
       env.PAGERDUTY_INCIDENT_LOOKBACK_DAYS
     ),
-    serviceIds: parseIdList("PAGERDUTY_SERVICE_IDS", env.PAGERDUTY_SERVICE_IDS),
+    serviceIds: parseIdList(
+      "PAGERDUTY_SERVICE_IDS",
+      env.PAGERDUTY_SERVICE_IDS,
+      { usedAsPathSegment: true }
+    ),
     teamIds: parseIdList("PAGERDUTY_TEAM_IDS", env.PAGERDUTY_TEAM_IDS),
   }
 }

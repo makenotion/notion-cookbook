@@ -338,10 +338,14 @@ while the service database still follows only the service-ID scope. Omit the tea
 filter when the PagerDuty account does not have the `teams` ability.
 
 PagerDuty describes the maximum incident search range as six months. This
-recipe accepts a conservative 1–180 day rolling lookback. Duplicate IDs and
-surrounding whitespace are removed. Configuration is copied into serializable
-sync state at the beginning of a cycle, so an environment change cannot alter
-an in-progress traversal; the next cycle uses the new value.
+recipe accepts a conservative 1–180 day rolling lookback. Configured IDs are
+case-sensitive opaque values rather than values matched to an assumed provider
+format. Each is limited to 255 characters; control characters and the `.` and
+`..` service-ID values are rejected because they cannot be preserved as URL path
+segments, while duplicate IDs and surrounding whitespace are removed.
+Configuration is copied into serializable sync state at the beginning of a
+cycle, so an environment change cannot alter an in-progress traversal; the next
+cycle uses the new value.
 
 To retain 30 days and limit both databases to two services, edit `.env`:
 

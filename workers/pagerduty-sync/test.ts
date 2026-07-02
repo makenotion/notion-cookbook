@@ -13,6 +13,7 @@ import {
   MAX_MULTI_SELECT_OPTIONS,
   MAX_OPTION_NAME_CHARACTERS,
   MAX_PAGE_CONTENT_CHARACTERS,
+  MAX_URL_CHARACTERS,
   nextAutomaticAction,
   providerOptionLabel,
   providerOptionLabels,
@@ -501,6 +502,12 @@ test("incident operational helpers are deterministic and omit unsafe values", ()
     safeWebUrl("https://meet.example.com/room#war-room"),
     "https://meet.example.com/room#war-room"
   )
+  const urlPrefix = "https://example.com/"
+  const maximumLengthUrl = `${urlPrefix}${"a".repeat(
+    MAX_URL_CHARACTERS - urlPrefix.length
+  )}`
+  assert.equal(safeWebUrl(maximumLengthUrl), maximumLengthUrl)
+  assert.equal(safeWebUrl(`${maximumLengthUrl}a`), null)
 
   const unsafeConference = incidentToChange({
     ...minimalIncident,
@@ -907,14 +914,14 @@ test("configuration defaults, normalizes filters, and selects the EU host", () =
     getPagerDutyConfig({
       PAGERDUTY_REGION: " EU ",
       PAGERDUTY_INCIDENT_LOOKBACK_DAYS: "30",
-      PAGERDUTY_SERVICE_IDS: "PSVC001, PSVC002,PSVC001",
-      PAGERDUTY_TEAM_IDS: "PTEAM01,PTEAM01, PTEAM02",
+      PAGERDUTY_SERVICE_IDS: "service-prod/v2, x,service-prod/v2",
+      PAGERDUTY_TEAM_IDS: "team:platform,team:platform, team_lowercase",
     }),
     config({
       region: "eu",
       incidentLookbackDays: 30,
-      serviceIds: ["PSVC001", "PSVC002"],
-      teamIds: ["PTEAM01", "PTEAM02"],
+      serviceIds: ["service-prod/v2", "x"],
+      teamIds: ["team:platform", "team_lowercase"],
     })
   )
 
@@ -930,18 +937,35 @@ test("configuration defaults, normalizes filters, and selects the EU host", () =
     () => getPagerDutyConfig({ PAGERDUTY_INCIDENT_LOOKBACK_DAYS: "181" }),
     /integer from 1 to 180/
   )
-  assert.throws(
-    () => getPagerDutyConfig({ PAGERDUTY_SERVICE_IDS: "bad/id" }),
-    /invalid PagerDuty ID/
+  const maximumLengthId = "x".repeat(255)
+  assert.deepEqual(
+    getPagerDutyConfig({ PAGERDUTY_SERVICE_IDS: maximumLengthId }).serviceIds,
+    [maximumLengthId]
   )
   assert.throws(
-    () => getPagerDutyConfig({ PAGERDUTY_SERVICE_IDS: "PSVC01" }),
-    /invalid PagerDuty ID/
+    () =>
+      getPagerDutyConfig({
+        PAGERDUTY_SERVICE_IDS: `${maximumLengthId}x`,
+      }),
+    /longer than 255 characters/
   )
   assert.throws(
-    () => getPagerDutyConfig({ PAGERDUTY_SERVICE_IDS: "psvc001" }),
-    /invalid PagerDuty ID/
+    () => getPagerDutyConfig({ PAGERDUTY_SERVICE_IDS: "service\nid" }),
+    /control characters/
   )
+  assert.throws(
+    () => getPagerDutyConfig({ PAGERDUTY_SERVICE_IDS: "service\u0085id" }),
+    /control characters/
+  )
+  for (const id of [".", ".."]) {
+    assert.throws(
+      () => getPagerDutyConfig({ PAGERDUTY_SERVICE_IDS: id }),
+      /URL path segment/
+    )
+  }
+  assert.deepEqual(getPagerDutyConfig({ PAGERDUTY_TEAM_IDS: "." }).teamIds, [
+    ".",
+  ])
   assert.throws(
     () => getPagerDutyConfig({ PAGERDUTY_TEAM_IDS: ",," }),
     /at least one PagerDuty ID/
