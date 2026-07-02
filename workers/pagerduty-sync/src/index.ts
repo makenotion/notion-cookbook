@@ -84,6 +84,19 @@ export async function executeServices(
   const state = previousState ?? initialServiceSyncState(readConfig())
   const page = await client.fetchServicesPage(state.scope, state.offset)
   const nextState = nextServiceSyncState(state, page)
+
+  // The unscoped collection is live offset pagination ordered by mutable
+  // name. Discover the complete identity set before emitting replacement rows,
+  // then require the publish pass to reproduce that set exactly.
+  if (state.phase === "discover") {
+    if (!nextState) {
+      throw new Error(
+        "PagerDuty service discovery completed without a publish state."
+      )
+    }
+    return { changes: [], hasMore: true as const, nextState }
+  }
+
   const escalationPolicyIds = [
     ...new Set(
       page.resources.flatMap((service) => {

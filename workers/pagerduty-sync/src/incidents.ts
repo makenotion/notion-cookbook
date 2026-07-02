@@ -3,7 +3,7 @@
 
 import * as Schema from "@notionhq/workers/schema"
 import * as Builder from "@notionhq/workers/builder"
-import { notionIcon } from "@notionhq/workers"
+import { notionIcon, type SyncChangeUpsert } from "@notionhq/workers"
 
 import type { PagerDutyIncident } from "./pagerduty.js"
 import {
@@ -14,8 +14,9 @@ import {
   incidentPageContent,
   latestDateTime,
   nextAutomaticAction,
-  referenceName,
-  referenceNames,
+  providerOptionLabel,
+  referenceOptionName,
+  referenceOptionNames,
   safeWebUrl,
   MAX_RICH_TEXT_CHARACTERS,
 } from "./helpers.js"
@@ -23,7 +24,7 @@ import {
 export const INITIAL_TITLE = "PagerDuty Incidents"
 export const PRIMARY_KEY = "PagerDuty Incident ID"
 
-export const incidentSchema: Schema.Schema<typeof PRIMARY_KEY> = {
+export const incidentSchema = {
   databaseIcon: notionIcon("alarm", "red"),
   properties: {
     Title: Schema.title(),
@@ -94,37 +95,43 @@ export const incidentSchema: Schema.Schema<typeof PRIMARY_KEY> = {
 
     "PagerDuty Incident ID": Schema.richText(),
   },
-}
+} satisfies Schema.Schema<typeof PRIMARY_KEY>
 
 const ASSIGNED_VIA_LABELS: Record<string, string> = {
   escalation_policy: "Escalation Policy",
   direct_assignment: "Direct Assignment",
 }
 
-export function incidentToChange(incident: PagerDutyIncident) {
+export function incidentToChange(
+  incident: PagerDutyIncident
+): SyncChangeUpsert<typeof PRIMARY_KEY, typeof incidentSchema.properties> {
   const title =
     boundedText(incident.title, MAX_RICH_TEXT_CHARACTERS) ?? incident.id
-  const status = humanizeEnum(incident.status)
-  const urgency = humanizeEnum(incident.urgency)
-  const assignedTo = referenceNames(
+  const status = providerOptionLabel(humanizeEnum(incident.status))
+  const urgency = providerOptionLabel(humanizeEnum(incident.urgency))
+  const assignedTo = referenceOptionNames(
+    "Assigned To",
     incident.assignments?.map((assignment) => assignment.assignee)
   )
   const incidentLink = safeWebUrl(incident.html_url)
   const serviceId = incident.service?.id.trim()
-  const incidentType = boundedText(
-    humanizeEnum(incident.incident_type?.name),
-    MAX_RICH_TEXT_CHARACTERS
+  const incidentType = providerOptionLabel(
+    boundedText(
+      humanizeEnum(incident.incident_type?.name),
+      MAX_RICH_TEXT_CHARACTERS
+    )
   )
-  const lastChangedBy = referenceName(incident.last_status_change_by)
+  const lastChangedBy = referenceOptionName(incident.last_status_change_by)
   const nextAction = nextAutomaticAction(incident.pending_actions)
+  const nextActionLabel = providerOptionLabel(nextAction?.label)
   const conferenceLink = safeWebUrl(incident.conference_bridge?.conference_url)
   const conferenceDialIn = boundedText(
     incident.conference_bridge?.conference_number,
     MAX_RICH_TEXT_CHARACTERS
   )
-  const priority = referenceName(incident.priority)
-  const teams = referenceNames(incident.teams)
-  const escalationPolicy = referenceName(incident.escalation_policy)
+  const priority = referenceOptionName(incident.priority)
+  const teams = referenceOptionNames("Teams", incident.teams)
+  const escalationPolicy = referenceOptionName(incident.escalation_policy)
   const lastStatusChange = dateTime(incident.last_status_change_at)
   const updated = dateTime(incident.updated_at)
   const totalAlertCount = incident.alert_counts?.all
@@ -132,7 +139,8 @@ export function incidentToChange(incident: PagerDutyIncident) {
 
   // PagerDuty exposes only current acknowledgements here (the list is empty
   // after retrigger or resolution), so do not present this as lifetime data.
-  const acknowledgedBy = referenceNames(
+  const acknowledgedBy = referenceOptionNames(
+    "Acknowledged By",
     incident.acknowledgements?.map(
       (acknowledgement) => acknowledgement.acknowledger
     )
@@ -141,9 +149,12 @@ export function incidentToChange(incident: PagerDutyIncident) {
     incident.acknowledgements?.map((acknowledgement) => acknowledgement.at)
   )
   const assignedViaValue = incident.assigned_via?.trim()
-  const assignedVia = assignedViaValue
-    ? (ASSIGNED_VIA_LABELS[assignedViaValue] ?? humanizeEnum(assignedViaValue))
-    : null
+  const assignedVia = providerOptionLabel(
+    assignedViaValue
+      ? (ASSIGNED_VIA_LABELS[assignedViaValue] ??
+          humanizeEnum(assignedViaValue))
+      : null
+  )
   const created = dateTime(incident.created_at)
   const resolved = dateTime(incident.resolved_at)
   const resolutionDuration = durationMinutes(created, resolved)
@@ -154,69 +165,58 @@ export function incidentToChange(incident: PagerDutyIncident) {
     // PagerDuty's immutable incident ID is the sync identity.
     key: incident.id,
     upstreamUpdatedAt: incident.updated_at,
-    ...(pageContent ? { pageContentMarkdown: pageContent } : {}),
+    pageContentMarkdown: pageContent,
     properties: {
       Title: Builder.title(title),
-      ...(status ? { Status: Builder.select(status) } : {}),
-      ...(urgency ? { Urgency: Builder.select(urgency) } : {}),
-      ...(assignedTo.length > 0
-        ? { "Assigned To": Builder.multiSelect(...assignedTo) }
-        : {}),
-      ...(incidentLink ? { "Incident Link": Builder.url(incidentLink) } : {}),
-      ...(serviceId ? { Service: [Builder.relation(serviceId)] } : {}),
-      ...(incidentType
-        ? { "Incident Type": Builder.select(incidentType) }
-        : {}),
-      ...(lastChangedBy
-        ? { "Last Changed By": Builder.select(lastChangedBy) }
-        : {}),
-      ...(nextAction
-        ? {
-            "Next Automatic Action": Builder.select(nextAction.label),
-            "Next Action At": Builder.dateTime(nextAction.at),
-          }
-        : {}),
-      ...(conferenceLink
-        ? { "Conference Link": Builder.url(conferenceLink) }
-        : {}),
-      ...(conferenceDialIn
-        ? { "Conference Dial-in": Builder.richText(conferenceDialIn) }
-        : {}),
-      ...(resolutionDuration != null
-        ? {
-            "Resolution Duration (min)": Builder.number(resolutionDuration),
-          }
-        : {}),
-      ...(priority ? { Priority: Builder.select(priority) } : {}),
-      ...(teams.length > 0 ? { Teams: Builder.multiSelect(...teams) } : {}),
-      ...(escalationPolicy
-        ? { "Escalation Policy": Builder.select(escalationPolicy) }
-        : {}),
-      ...(lastStatusChange
-        ? { "Last Status Change": Builder.dateTime(lastStatusChange) }
-        : {}),
-      ...(updated ? { Updated: Builder.dateTime(updated) } : {}),
-      ...(typeof totalAlertCount === "number" &&
-      Number.isFinite(totalAlertCount)
-        ? { "Total Alert Count": Builder.number(totalAlertCount) }
-        : {}),
-      ...(typeof activeAlertCount === "number" &&
-      Number.isFinite(activeAlertCount)
-        ? { "Active Alert Count": Builder.number(activeAlertCount) }
-        : {}),
-      ...(acknowledgedBy.length > 0
-        ? { "Acknowledged By": Builder.multiSelect(...acknowledgedBy) }
-        : {}),
-      ...(lastAcknowledged
-        ? { "Last Acknowledged": Builder.dateTime(lastAcknowledged) }
-        : {}),
-      ...(assignedVia ? { "Assigned Via": Builder.select(assignedVia) } : {}),
-      ...(created ? { Created: Builder.dateTime(created) } : {}),
-      ...(resolved ? { Resolved: Builder.dateTime(resolved) } : {}),
-      ...(typeof incident.incident_number === "number" &&
-      Number.isFinite(incident.incident_number)
-        ? { "Incident Number": Builder.number(incident.incident_number) }
-        : {}),
+      Status: status ? Builder.select(status) : [],
+      Urgency: urgency ? Builder.select(urgency) : [],
+      "Assigned To":
+        assignedTo.length > 0 ? Builder.multiSelect(...assignedTo) : [],
+      "Incident Link": incidentLink ? Builder.url(incidentLink) : [],
+      Service: serviceId ? [Builder.relation(serviceId)] : [],
+      "Incident Type": incidentType ? Builder.select(incidentType) : [],
+      "Last Changed By": lastChangedBy ? Builder.select(lastChangedBy) : [],
+      "Next Automatic Action": nextActionLabel
+        ? Builder.select(nextActionLabel)
+        : [],
+      "Next Action At": nextAction ? Builder.dateTime(nextAction.at) : [],
+      "Conference Link": conferenceLink ? Builder.url(conferenceLink) : [],
+      "Conference Dial-in": conferenceDialIn
+        ? Builder.richText(conferenceDialIn)
+        : [],
+      "Resolution Duration (min)":
+        resolutionDuration != null ? Builder.number(resolutionDuration) : [],
+      Priority: priority ? Builder.select(priority) : [],
+      Teams: teams.length > 0 ? Builder.multiSelect(...teams) : [],
+      "Escalation Policy": escalationPolicy
+        ? Builder.select(escalationPolicy)
+        : [],
+      "Last Status Change": lastStatusChange
+        ? Builder.dateTime(lastStatusChange)
+        : [],
+      Updated: updated ? Builder.dateTime(updated) : [],
+      "Total Alert Count":
+        typeof totalAlertCount === "number" && Number.isFinite(totalAlertCount)
+          ? Builder.number(totalAlertCount)
+          : [],
+      "Active Alert Count":
+        typeof activeAlertCount === "number" &&
+        Number.isFinite(activeAlertCount)
+          ? Builder.number(activeAlertCount)
+          : [],
+      "Acknowledged By":
+        acknowledgedBy.length > 0 ? Builder.multiSelect(...acknowledgedBy) : [],
+      "Last Acknowledged": lastAcknowledged
+        ? Builder.dateTime(lastAcknowledged)
+        : [],
+      "Assigned Via": assignedVia ? Builder.select(assignedVia) : [],
+      Created: created ? Builder.dateTime(created) : [],
+      Resolved: resolved ? Builder.dateTime(resolved) : [],
+      "Incident Number":
+        typeof incident.incident_number === "number" &&
+        Number.isFinite(incident.incident_number)
+          ? Builder.number(incident.incident_number)
+          : [],
       "PagerDuty Incident ID": Builder.richText(incident.id),
     },
   }

@@ -3,7 +3,7 @@
 
 import * as Schema from "@notionhq/workers/schema"
 import * as Builder from "@notionhq/workers/builder"
-import { notionIcon } from "@notionhq/workers"
+import { notionIcon, type SyncChangeUpsert } from "@notionhq/workers"
 
 import type { PagerDutyOnCall, PagerDutyService } from "./pagerduty.js"
 import {
@@ -13,8 +13,10 @@ import {
   MAX_RICH_TEXT_CHARACTERS,
   plainTextPageContent,
   positiveMinutes,
-  referenceName,
-  referenceNames,
+  providerOptionLabel,
+  providerOptionLabels,
+  referenceOptionName,
+  referenceOptionNames,
   safeWebUrl,
   supportHoursLabel,
   urgencyRuleLabel,
@@ -23,7 +25,7 @@ import {
 export const INITIAL_TITLE = "PagerDuty Services"
 export const PRIMARY_KEY = "PagerDuty Service ID"
 
-export const serviceSchema: Schema.Schema<typeof PRIMARY_KEY> = {
+export const serviceSchema = {
   databaseIcon: notionIcon("server", "blue"),
   properties: {
     Name: Schema.title(),
@@ -74,7 +76,7 @@ export const serviceSchema: Schema.Schema<typeof PRIMARY_KEY> = {
 
     "PagerDuty Service ID": Schema.richText(),
   },
-}
+} satisfies Schema.Schema<typeof PRIMARY_KEY>
 
 export type ServiceOperationalContextEntry = {
   covered: boolean
@@ -116,7 +118,7 @@ export function buildServiceOperationalContext(
     if (!entry) continue
     entry.covered = true
 
-    const user = referenceName(onCall.user)
+    const user = referenceOptionName(onCall.user)
     if (user) entry.primaryOnCall.add(user)
   }
 
@@ -183,15 +185,23 @@ export function serviceToChange(
   service: PagerDutyService,
   observedAt: string,
   operationalContext: ServiceOperationalContext
-) {
+): SyncChangeUpsert<typeof PRIMARY_KEY, typeof serviceSchema.properties> {
   const name = boundedText(service.name, MAX_RICH_TEXT_CHARACTERS) ?? service.id
   const statusValue = service.status.trim().toLowerCase()
-  const responseState =
+  const responseState = providerOptionLabel(
     RESPONSE_STATE_LABELS[statusValue] ?? humanizeEnum(service.status)
+  )
   const coverage = coverageForService(service, operationalContext)
-  const teams = referenceNames(service.teams)
+  const primaryOnCall = providerOptionLabels(
+    "Primary On Call",
+    coverage.primaryOnCall
+  )
+  const teams = referenceOptionNames("Teams", service.teams)
   const serviceLink = safeWebUrl(service.html_url)
-  const integrations = referenceNames(service.integrations)
+  const integrations = referenceOptionNames(
+    "Integrations",
+    service.integrations
+  )
   const integrationCount = service.integrations
     ? new Set(
         service.integrations
@@ -201,7 +211,7 @@ export function serviceToChange(
     : null
   const supportHours = supportHoursLabel(service.support_hours)
   const lastIncident = dateTime(service.last_incident_timestamp)
-  const escalationPolicy = referenceName(service.escalation_policy)
+  const escalationPolicy = referenceOptionName(service.escalation_policy)
   const description = boundedText(service.description, MAX_RICH_TEXT_CHARACTERS)
   const descriptionPageContent = plainTextPageContent(service.description)
   const urgencyRule = urgencyRuleLabel(service.incident_urgency_rule)
@@ -213,49 +223,32 @@ export function serviceToChange(
     type: "upsert" as const,
     key: service.id,
     upstreamUpdatedAt: observedAt,
-    ...(descriptionPageContent
-      ? { pageContentMarkdown: descriptionPageContent }
-      : {}),
+    pageContentMarkdown: descriptionPageContent ?? "",
     properties: {
       Name: Builder.title(name),
-      ...(responseState
-        ? { "Response State": Builder.select(responseState) }
-        : {}),
-      ...(coverage.primaryOnCall.length > 0
-        ? {
-            "Primary On Call": Builder.multiSelect(...coverage.primaryOnCall),
-          }
-        : {}),
+      "Response State": responseState ? Builder.select(responseState) : [],
+      "Primary On Call":
+        primaryOnCall.length > 0 ? Builder.multiSelect(...primaryOnCall) : [],
       "Primary Coverage": Builder.select(coverage.label),
-      ...(teams.length > 0 ? { Teams: Builder.multiSelect(...teams) } : {}),
-      ...(serviceLink ? { "Service Link": Builder.url(serviceLink) } : {}),
+      Teams: teams.length > 0 ? Builder.multiSelect(...teams) : [],
+      "Service Link": serviceLink ? Builder.url(serviceLink) : [],
       "Coverage Checked": Builder.dateTime(observedAt),
-      ...(integrations.length > 0
-        ? { Integrations: Builder.multiSelect(...integrations) }
-        : {}),
-      ...(integrationCount != null
-        ? { "Integration Count": Builder.number(integrationCount) }
-        : {}),
-      ...(supportHours
-        ? { "Support Hours": Builder.richText(supportHours) }
-        : {}),
-      ...(lastIncident
-        ? { "Last Incident": Builder.dateTime(lastIncident) }
-        : {}),
-      ...(escalationPolicy
-        ? { "Escalation Policy": Builder.select(escalationPolicy) }
-        : {}),
-      ...(description ? { Description: Builder.richText(description) } : {}),
-      ...(urgencyRule ? { "Urgency Rule": Builder.richText(urgencyRule) } : {}),
-      ...(autoResolveMinutes != null
-        ? { "Auto Resolve (min)": Builder.number(autoResolveMinutes) }
-        : {}),
-      ...(retriggerMinutes != null
-        ? {
-            "Re-trigger After Ack (min)": Builder.number(retriggerMinutes),
-          }
-        : {}),
-      ...(created ? { Created: Builder.dateTime(created) } : {}),
+      Integrations:
+        integrations.length > 0 ? Builder.multiSelect(...integrations) : [],
+      "Integration Count":
+        integrationCount != null ? Builder.number(integrationCount) : [],
+      "Support Hours": supportHours ? Builder.richText(supportHours) : [],
+      "Last Incident": lastIncident ? Builder.dateTime(lastIncident) : [],
+      "Escalation Policy": escalationPolicy
+        ? Builder.select(escalationPolicy)
+        : [],
+      Description: description ? Builder.richText(description) : [],
+      "Urgency Rule": urgencyRule ? Builder.richText(urgencyRule) : [],
+      "Auto Resolve (min)":
+        autoResolveMinutes != null ? Builder.number(autoResolveMinutes) : [],
+      "Re-trigger After Ack (min)":
+        retriggerMinutes != null ? Builder.number(retriggerMinutes) : [],
+      Created: created ? Builder.dateTime(created) : [],
       "PagerDuty Service ID": Builder.richText(service.id),
     },
   }

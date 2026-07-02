@@ -130,9 +130,9 @@ page can show or count its synced incidents.
 
 PagerDuty returns assignments only while an incident is open and returns
 acknowledgements only for an acknowledged incident. The transform therefore
-omits those properties when PagerDuty does not return them; it does not turn
-missing history into a misleading zero. Priority and Incident Type are also
-omitted for accounts or incidents where the features are unavailable.
+clears those Notion values when PagerDuty no longer returns them; it does not
+turn missing history into a misleading zero. Priority and Incident Type are
+also left empty for accounts or incidents where the features are unavailable.
 
 **Next Automatic Action** is the chronologically earliest valid pending action
 PagerDuty returns, with action type and destination used as deterministic tie
@@ -140,7 +140,7 @@ breakers. It describes provider automation such as escalation, unacknowledgment,
 auto-resolution, or an urgency change; it is not a task assigned in Notion.
 **Resolution Duration (min)** is rounded to one decimal and appears only when
 both timestamps form a valid nonnegative interval. Last Changed By may identify
-a user, service, or integration. Conference fields are omitted independently
+a user, service, or integration. Conference fields are cleared independently
 when PagerDuty does not return a safe web URL or a dial-in number.
 
 The incident page body is a bounded initial-trigger snapshot: the first-trigger
@@ -174,9 +174,18 @@ trigger details, notes, status updates, or the PagerDuty timeline. Follow
 
 The complete service description is also used as page content. A disabled or
 unavailable timeout is left empty instead of being presented as a duration.
-Integration Count preserves zero; Integrations is omitted when there are no
-names to display. Support Hours is omitted when the service has no configured
+Integration Count preserves zero; Integrations is empty when there are no
+names to display. Support Hours is empty when the service has no configured
 window.
+
+Every upsert includes every schema property, using an explicit empty value when
+PagerDuty removes data. This lets a populated incident or service converge to
+its new empty state instead of retaining stale Notion values. Provider-authored
+select and multi-select labels normalize ASCII commas, de-duplicate
+case-insensitively, sort deterministically, and bound long names with a stable
+digest suffix. A row with more than Notion's 100-value multi-select limit fails
+visibly rather than silently dropping ownership, responder, or integration
+data.
 
 Response State maps PagerDuty's service status as follows: `active` becomes
 **No Open Incidents**, `warning` becomes **Response in Progress**, `critical`
@@ -200,7 +209,9 @@ entries. Coverage can still be **Covered** when an entry exists but its user
 reference has no displayable name. The Worker never converts a failed,
 unauthorized, malformed, changing, or incomplete `/oncalls` traversal into the
 **No Primary On Call** state; the service replacement cycle fails instead and
-leaves the last successful snapshot in place.
+does not perform replacement deletion. Upserts from successful earlier publish
+pages may already be visible, so a failed multi-page cycle is not described as
+transactional.
 
 PagerDuty's service response has no general `updated_at` timestamp. Each row's
 `upstreamUpdatedAt` is therefore the cycle's pinned observation time so response
@@ -384,20 +395,24 @@ follows:
    stable total, processed count, and strictly increasing incident numbers. An
    inconsistent traversal fails visibly instead of committing a knowingly
    partial replacement.
-6. Without `PAGERDUTY_SERVICE_IDS`, services are sorted by name and checked for
-   duplicate IDs and total-count drift. A visible directory above 10,000 fails
-   with guidance to configure explicit service IDs. With IDs configured, each
-   service is fetched directly, a missing/invisible ID fails visibly, and the
+6. Without `PAGERDUTY_SERVICE_IDS`, the Worker first discovers the complete
+   service identity set without emitting rows, then traverses the directory
+   again to publish it. The publish pass must reproduce the same set, so an
+   equal-count delete/create race or mutable-name page shift fails before
+   replacement deletion instead of silently removing a still-live service. A
+   visible directory above 10,000 fails with guidance to configure explicit
+   service IDs. With IDs configured, each service is fetched directly and
+   published without discovery; a missing/invisible ID fails visibly, and the
    offset ceiling does not apply.
-7. Each service callback collects the unique escalation policies referenced by
-   that service page and reads their current on-calls at the cycle-pinned
-   **Coverage Checked** instant. The request uses the same timestamp for `since`
-   and `until`, follows every offset page, requires a stable reported total and
-   processed count, validates each entry, and fails above 10,000 entries. If the
-   result spans multiple pages, the Worker repeats the complete traversal and
-   requires the same raw identity multiset before publishing coverage. The
-   Worker transforms the service page only after this traversal completes. A
-   page with no escalation policies makes no `/oncalls` request.
+7. Each service publish callback collects the unique escalation policies
+   referenced by that service page and reads their current on-calls at the
+   cycle-pinned **Coverage Checked** instant. The request uses the same timestamp
+   for `since` and `until`, follows every offset page, requires a stable reported
+   total and processed count, validates each entry, and fails above 10,000
+   entries. If the result spans multiple pages, the Worker repeats the complete
+   traversal and requires the same raw identity multiset before publishing
+   coverage. The Worker transforms the service page only after this traversal
+   completes. A page with no escalation policies makes no `/oncalls` request.
 
 All state is plain serializable data; the sync never relies on a module-global
 cache surviving between Worker executions.
@@ -413,16 +428,18 @@ Per cycle, the open confirmation costs twice the number of open-incident pages,
 and recent history costs one request per page and subwindow. The new incident
 properties come from those list responses and do not add per-incident requests.
 
-An unfiltered service callback reads up to 100 services, then queries `/oncalls`
-for the unique escalation policies on that page. Its request cost is one service
-request plus one on-call request when the result fits on one page. A multi-page
+An unfiltered service cycle reads every `/services` page twice: discovery emits
+no rows and makes no `/oncalls` requests, then publish reproduces the discovered
+identity set. Each publish callback reads up to 100 services and queries
+`/oncalls` for the unique escalation policies on that page. A one-page directory
+with one-page coverage therefore costs three requests. A multi-page on-call
 result costs twice its page count because the Worker confirms the complete raw
-identity set with a second traversal. An explicit service scope reads one
-configured service per callback and queries that service's policy; a policy
-shared by services on different pages can therefore be queried again. A page
-with no policies skips the on-call request. Integrations and support hours come
-from the service response and add no per-service lookup. The shared pacer applies
-to all incident, service, and on-call requests combined.
+identity set with a second traversal. An explicit service scope skips discovery,
+reads one configured service per callback, and queries that service's policy; a
+policy shared by services on different pages can therefore be queried again. A
+page with no policies skips the on-call request. Integrations and support hours
+come from the service response and add no per-service lookup. The shared pacer
+applies to all incident, service, and on-call requests combined.
 
 The Worker deliberately does not duplicate the bounded incident traversal to
 calculate service-level open-incident counts. It also makes no per-incident
@@ -470,9 +487,10 @@ Use this checklist when extending the recipe:
 7. Whitelist any page content, render provider text as plain text, accept only
    safe context-link protocols, bound its size, and update the privacy inventory.
    Do not copy arbitrary provider payloads or credentials.
-8. Add offline tests for populated and omitted values, request parameters,
-   pagination, split boundaries, duplicate detection, filter semantics, and rate
-   limits. Add a safe live preview for behavior that fixtures cannot prove.
+8. Add offline tests for populated and explicitly cleared values, request
+   parameters, pagination, split boundaries, duplicate detection, filter
+   semantics, and rate limits. Add a safe live preview for behavior that fixtures
+   cannot prove.
 9. Update the property/configuration tables, expected output, extension notes,
    and verification steps. If behavior, entrypoints, integrations, or commands
    change, update the recipe's `catalog.json` entry too.
@@ -504,9 +522,10 @@ ntn workers sync trigger servicesSync --preview
 ntn workers sync trigger incidentsSync --preview
 ```
 
-For live verification, confirm that names are resolved, optional properties are
-omitted, source and conference links open safely, the two-way Incident → Service
-relation resolves, and resolution duration agrees with the source timestamps.
+For live verification, confirm that names are resolved, removed upstream values
+clear their prior Notion properties, source and conference links open safely,
+the two-way Incident → Service relation resolves, and resolution duration agrees
+with the source timestamps.
 For services, confirm Response State matches PagerDuty, Primary On Call contains
 only current level-one responders, Primary Coverage reflects that level rather
 than every fallback, Coverage Checked matches the snapshot instant, and

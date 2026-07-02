@@ -11,8 +11,12 @@ import {
   durationMinutes,
   humanizeEnum,
   incidentPageContent,
+  MAX_MULTI_SELECT_OPTIONS,
+  MAX_OPTION_NAME_CHARACTERS,
   MAX_PAGE_CONTENT_CHARACTERS,
   nextAutomaticAction,
+  providerOptionLabel,
+  providerOptionLabels,
   referenceName,
   safeWebUrl,
   supportHoursLabel,
@@ -395,10 +399,7 @@ test("acknowledged incident maps available properties in schema order", () => {
   assert.equal(change.upstreamUpdatedAt, fullIncident.updated_at)
   assert.deepEqual(
     Object.keys(change.properties),
-    Object.keys(incidentSchema.properties).filter(
-      (property) =>
-        property !== "Resolved" && property !== "Resolution Duration (min)"
-    )
+    Object.keys(incidentSchema.properties)
   )
   assertPropertyContains(change.properties.Title, "Checkout latency above SLO")
   assertPropertyContains(change.properties.Status, "Acknowledged")
@@ -458,9 +459,9 @@ test("resolved incident maps its resolution without stale current ownership", ()
 
   assertPropertyContains(change.properties.Resolved, "12:45")
   assertPropertyContains(change.properties["Resolution Duration (min)"], "45")
-  assert.equal("Assigned To" in change.properties, false)
-  assert.equal("Acknowledged By" in change.properties, false)
-  assert.equal("Last Acknowledged" in change.properties, false)
+  assert.deepEqual(change.properties["Assigned To"], [])
+  assert.deepEqual(change.properties["Acknowledged By"], [])
+  assert.deepEqual(change.properties["Last Acknowledged"], [])
 })
 
 test("incident operational helpers are deterministic and omit unsafe values", () => {
@@ -511,16 +512,13 @@ test("incident operational helpers are deterministic and omit unsafe values", ()
     },
     resolved_at: "2026-07-02T12:59:00Z",
   })
-  assert.equal("Conference Link" in unsafeConference.properties, false)
-  assert.equal("Incident Link" in unsafeConference.properties, false)
+  assert.deepEqual(unsafeConference.properties["Conference Link"], [])
+  assert.deepEqual(unsafeConference.properties["Incident Link"], [])
   assertPropertyContains(
     unsafeConference.properties["Conference Dial-in"],
     "+1 212-555-0199"
   )
-  assert.equal(
-    "Resolution Duration (min)" in unsafeConference.properties,
-    false
-  )
+  assert.deepEqual(unsafeConference.properties["Resolution Duration (min)"], [])
 })
 
 test("incident alert counts preserve meaningful zero values", () => {
@@ -533,24 +531,21 @@ test("incident alert counts preserve meaningful zero values", () => {
   assertPropertyContains(change.properties["Active Alert Count"], "0")
 })
 
-test("minimal incident omits unresolved and absent optional values", () => {
+test("minimal incident explicitly clears unresolved and absent values", () => {
   const change = incidentToChange(minimalIncident)
 
-  assert.deepEqual(Object.keys(change.properties), [
-    "Title",
-    "Status",
-    "Updated",
-    "Created",
-    "Incident Number",
-    "PagerDuty Incident ID",
-  ])
+  assert.deepEqual(
+    Object.keys(change.properties),
+    Object.keys(incidentSchema.properties)
+  )
   assertPropertyContains(change.properties.Title, "Unknown workflow state")
   assertPropertyContains(change.properties.Status, "Custom New State")
-  assert.equal("pageContentMarkdown" in change, false)
-  assert.equal("Incident Link" in change.properties, false)
-  assert.equal("Assigned To" in change.properties, false)
-  assert.equal("Acknowledged By" in change.properties, false)
-  assert.equal("Priority" in change.properties, false)
+  assert.equal(change.pageContentMarkdown, "")
+  assert.deepEqual(change.properties["Incident Link"], [])
+  assert.deepEqual(change.properties["Assigned To"], [])
+  assert.deepEqual(change.properties["Acknowledged By"], [])
+  assert.deepEqual(change.properties.Priority, [])
+  assert.deepEqual(change.properties.Service, [])
 })
 
 test("service transform preserves ownership, bounded content, and timeouts", () => {
@@ -604,7 +599,7 @@ test("service transform preserves ownership, bounded content, and timeouts", () 
   assert.match(change.pageContentMarkdown, /\\\*and\\\*/)
 })
 
-test("minimal service omits disabled timeouts and missing context", () => {
+test("minimal service explicitly clears timeouts and missing context", () => {
   const change = serviceToChange(
     {
       ...minimalService,
@@ -615,15 +610,10 @@ test("minimal service omits disabled timeouts and missing context", () => {
     new Map()
   )
 
-  assert.deepEqual(Object.keys(change.properties), [
-    "Name",
-    "Response State",
-    "Primary Coverage",
-    "Coverage Checked",
-    "Integration Count",
-    "Created",
-    "PagerDuty Service ID",
-  ])
+  assert.deepEqual(
+    Object.keys(change.properties),
+    Object.keys(serviceSchema.properties)
+  )
   assertPropertyContains(
     change.properties["Response State"],
     "Experimental State"
@@ -633,9 +623,98 @@ test("minimal service omits disabled timeouts and missing context", () => {
     "No Escalation Policy"
   )
   assertPropertyContains(change.properties["Integration Count"], "0")
-  assert.equal("pageContentMarkdown" in change, false)
-  assert.equal("Service Link" in change.properties, false)
-  assert.equal("Auto Resolve (min)" in change.properties, false)
+  assert.equal(change.pageContentMarkdown, "")
+  assert.deepEqual(change.properties["Service Link"], [])
+  assert.deepEqual(change.properties["Auto Resolve (min)"], [])
+  assert.deepEqual(change.properties["Primary On Call"], [])
+  assert.deepEqual(change.properties.Integrations, [])
+  assert.deepEqual(change.properties["Support Hours"], [])
+  assert.deepEqual(change.properties.Description, [])
+})
+
+test("complete upserts clear values that disappear from the same records", () => {
+  const clearedIncident = incidentToChange({
+    ...fullIncident,
+    html_url: null,
+    urgency: null,
+    service: null,
+    assignments: [],
+    priority: null,
+    incident_type: null,
+    last_status_change_by: null,
+    last_status_change_at: null,
+    pending_actions: [],
+    conference_bridge: null,
+    teams: [],
+    escalation_policy: null,
+    alert_counts: null,
+    acknowledgements: [],
+    assigned_via: null,
+    first_trigger_log_entry: null,
+  })
+  assert.equal(clearedIncident.key, fullIncident.id)
+  assert.equal(clearedIncident.pageContentMarkdown, "")
+  for (const property of [
+    "Urgency",
+    "Assigned To",
+    "Incident Link",
+    "Service",
+    "Incident Type",
+    "Last Changed By",
+    "Next Automatic Action",
+    "Next Action At",
+    "Conference Link",
+    "Conference Dial-in",
+    "Resolution Duration (min)",
+    "Priority",
+    "Teams",
+    "Escalation Policy",
+    "Last Status Change",
+    "Total Alert Count",
+    "Active Alert Count",
+    "Acknowledged By",
+    "Last Acknowledged",
+    "Assigned Via",
+    "Resolved",
+  ] as const) {
+    assert.deepEqual(clearedIncident.properties[property], [])
+  }
+
+  const clearedService = serviceToChange(
+    {
+      ...fullService,
+      html_url: null,
+      teams: [],
+      escalation_policy: null,
+      description: null,
+      integrations: [],
+      support_hours: null,
+      last_incident_timestamp: null,
+      incident_urgency_rule: null,
+      auto_resolve_timeout: null,
+      acknowledgement_timeout: null,
+    },
+    "2026-07-02T14:00:00.000Z",
+    new Map()
+  )
+  assert.equal(clearedService.key, fullService.id)
+  assert.equal(clearedService.pageContentMarkdown, "")
+  for (const property of [
+    "Primary On Call",
+    "Teams",
+    "Service Link",
+    "Integrations",
+    "Support Hours",
+    "Last Incident",
+    "Escalation Policy",
+    "Description",
+    "Urgency Rule",
+    "Auto Resolve (min)",
+    "Re-trigger After Ack (min)",
+  ] as const) {
+    assert.deepEqual(clearedService.properties[property], [])
+  }
+  assertPropertyContains(clearedService.properties["Integration Count"], "0")
 })
 
 test("service response state and coverage distinguish every operational case", () => {
@@ -676,7 +755,7 @@ test("service response state and coverage distinguish every operational case", (
     gapChange.properties["Primary Coverage"],
     "No Primary On Call"
   )
-  assert.equal("Primary On Call" in gapChange.properties, false)
+  assert.deepEqual(gapChange.properties["Primary On Call"], [])
 
   const disabled = serviceToChange(
     { ...fullService, status: "disabled" },
@@ -754,6 +833,83 @@ test("display and content helpers preserve unknowns while protecting secrets", (
     },
   })
   assert.equal(webContent, "")
+})
+
+test("provider option labels satisfy Notion option constraints", () => {
+  assert.equal(providerOptionLabel("  Payments,   US  "), "Payments， US")
+  assert.equal(providerOptionLabel("ＡＰＩ"), "API")
+  const forward = providerOptionLabels("Teams", [
+    "sre",
+    "Payments, US",
+    "SRE",
+    "  payments,   us ",
+  ])
+  const reverse = providerOptionLabels("Teams", [
+    "  payments,   us ",
+    "SRE",
+    "Payments, US",
+    "sre",
+  ])
+  assert.deepEqual(forward, reverse)
+  assert.deepEqual(forward, ["Payments， US", "SRE"])
+  assert.deepEqual(
+    providerOptionLabels("Teams", ["Payments, US", "Payments · US"]),
+    ["Payments · US", "Payments， US"]
+  )
+
+  const sharedPrefix = "Long option ".repeat(20)
+  const longA = providerOptionLabel(`${sharedPrefix}alpha`)
+  const longB = providerOptionLabel(`${sharedPrefix}beta`)
+  assert.ok(longA)
+  assert.ok(longB)
+  assert.notEqual(longA, longB)
+  assert.equal(Array.from(longA).length, MAX_OPTION_NAME_CHARACTERS)
+  assert.equal(Array.from(longB).length, MAX_OPTION_NAME_CHARACTERS)
+  assert.equal(providerOptionLabel(`${sharedPrefix}alpha`), longA)
+
+  assert.equal(
+    providerOptionLabels(
+      "Teams",
+      Array.from(
+        { length: MAX_MULTI_SELECT_OPTIONS },
+        (_, index) => `Team ${index}`
+      )
+    ).length,
+    MAX_MULTI_SELECT_OPTIONS
+  )
+  assert.throws(
+    () =>
+      providerOptionLabels(
+        "Teams",
+        Array.from(
+          { length: MAX_MULTI_SELECT_OPTIONS + 1 },
+          (_, index) => `Team ${index}`
+        )
+      ),
+    /at most 100 options/
+  )
+
+  const normalizedIncident = incidentToChange({
+    ...minimalIncident,
+    assignments: [
+      {
+        at: "2026-07-02T13:00:00Z",
+        assignee: { id: "PUSR001", summary: "Doe, Jane" },
+      },
+      {
+        at: "2026-07-02T13:01:00Z",
+        assignee: { id: "PUSR002", summary: "doe, jane" },
+      },
+    ],
+  })
+  assertPropertyContains(
+    normalizedIncident.properties["Assigned To"],
+    "Doe， Jane"
+  )
+  assert.doesNotMatch(
+    propertyText(normalizedIncident.properties["Assigned To"]),
+    /doe， jane/
+  )
 })
 
 test("configuration defaults, normalizes filters, and selects the EU host", () => {
@@ -1369,6 +1525,7 @@ test("client fails closed on malformed pagination, JSON, and API errors", async 
 
 test("execute functions wire client, state, and transforms end to end", async () => {
   let incidentRequest = 0
+  let serviceRequests = 0
   let onCallRequests = 0
   const client: PagerDutyClient = {
     async fetchIncidentsPage(scope) {
@@ -1385,6 +1542,7 @@ test("execute functions wire client, state, and transforms end to end", async ()
       return incidentPage([fullIncident])
     },
     async fetchServicesPage(scope, offset) {
+      serviceRequests++
       assert.equal(scope.region, "us")
       assert.equal(offset, 0)
       return servicePage([fullService])
@@ -1427,10 +1585,23 @@ test("execute functions wire client, state, and transforms end to end", async ()
   assert.equal(recentBatch.changes[0].key, "PINC001")
 
   const serviceState = initialServiceSyncState(config(), "2026-07-02T14:00:00Z")
-  const serviceBatch = await executeServices(serviceState, client, () => {
+  const serviceDiscovery = await executeServices(serviceState, client, () => {
     throw new Error("Pinned state should not re-read configuration.")
   })
+  assert.equal(serviceDiscovery.hasMore, true)
+  assert.deepEqual(serviceDiscovery.changes, [])
+  assert.equal(serviceDiscovery.nextState.phase, "publish")
+  assert.equal(onCallRequests, 0)
+
+  const serviceBatch = await executeServices(
+    serviceDiscovery.nextState,
+    client,
+    () => {
+      throw new Error("Pinned state should not re-read configuration.")
+    }
+  )
   assert.equal(serviceBatch.hasMore, false)
+  assert.equal(serviceRequests, 2)
   assert.equal(onCallRequests, 1)
   assert.equal(serviceBatch.changes[0].key, "PSVC001")
   assert.equal(
@@ -1719,13 +1890,15 @@ test("incident state rejects reordering, changing totals, and stalled offsets", 
   )
 })
 
-test("service state counts unique IDs and rejects mutable-order duplicates", () => {
+test("configured service state publishes directly and rejects duplicates", () => {
   const initial = initialServiceSyncState(
-    config({ serviceIds: ["PSVC001"] }),
+    config({ serviceIds: ["PSVC001", "PSVC002"] }),
     "2026-07-02T12:00:00Z"
   )
   assert.equal(initial.observedAt, "2026-07-02T12:00:00.000Z")
-  assert.deepEqual(initial.scope.serviceIds, ["PSVC001"])
+  assert.equal(initial.phase, "publish")
+  assert.deepEqual(initial.scope.serviceIds, ["PSVC001", "PSVC002"])
+  assert.deepEqual(initial.expectedServiceIds, ["PSVC001", "PSVC002"])
 
   const first = nextServiceSyncState(
     initial,
@@ -1773,5 +1946,107 @@ test("service state counts unique IDs and rejects mutable-order duplicates", () 
         })
       ),
     /total changed/
+  )
+})
+
+test("unscoped service discovery requires the same complete publish set", () => {
+  const initial = initialServiceSyncState(config(), "2026-07-02T12:00:00Z")
+  assert.equal(initial.phase, "discover")
+  assert.deepEqual(initial.expectedServiceIds, [])
+
+  const publish = nextServiceSyncState(
+    initial,
+    servicePage([fullService, minimalService], { total: 2 })
+  )
+  assert.ok(publish)
+  assert.equal(publish.phase, "publish")
+  assert.equal(publish.offset, 0)
+  assert.equal(publish.expectedTotal, undefined)
+  assert.deepEqual(publish.seenServiceIds, [])
+  assert.deepEqual(publish.expectedServiceIds, ["PSVC001", "PSVC002"])
+
+  // Membership is set-based: a harmless name-order change still converges.
+  assert.equal(
+    nextServiceSyncState(
+      publish,
+      servicePage([minimalService, fullService], { total: 2 })
+    ),
+    undefined
+  )
+
+  assert.throws(
+    () =>
+      nextServiceSyncState(
+        publish,
+        servicePage(
+          [
+            fullService,
+            { ...minimalService, id: "PSVC003", name: "New service" },
+          ],
+          { total: 2 }
+        )
+      ),
+    /PSVC003 appeared after service discovery/
+  )
+  assert.throws(
+    () =>
+      nextServiceSyncState(publish, servicePage([fullService], { total: 1 })),
+    /membership changed between discovery and publish \(2 to 1\)/
+  )
+})
+
+test("empty service discovery publishes one confirmed empty snapshot", () => {
+  const initial = initialServiceSyncState(config(), "2026-07-02T12:00:00Z")
+  const publish = nextServiceSyncState(initial, servicePage([]))
+  assert.ok(publish)
+  assert.equal(publish.phase, "publish")
+  assert.deepEqual(publish.expectedServiceIds, [])
+  assert.equal(nextServiceSyncState(publish, servicePage([])), undefined)
+})
+
+test("service publish rejects a late equal-count substitution across pages", () => {
+  const initial = initialServiceSyncState(config(), "2026-07-02T12:00:00Z")
+  const discoveryPageTwo = nextServiceSyncState(
+    initial,
+    servicePage([fullService, minimalService], {
+      limit: 2,
+      total: 3,
+      more: true,
+      nextOffset: 2,
+    })
+  )
+  assert.ok(discoveryPageTwo)
+  const thirdService = {
+    ...minimalService,
+    id: "PSVC003",
+    name: "Third service",
+  }
+  const publish = nextServiceSyncState(
+    discoveryPageTwo,
+    servicePage([thirdService], { offset: 2, limit: 2, total: 3 })
+  )
+  assert.ok(publish)
+  assert.equal(publish.phase, "publish")
+
+  const publishPageTwo = nextServiceSyncState(
+    publish,
+    servicePage([fullService, minimalService], {
+      limit: 2,
+      total: 3,
+      more: true,
+      nextOffset: 2,
+    })
+  )
+  assert.ok(publishPageTwo)
+  assert.throws(
+    () =>
+      nextServiceSyncState(
+        publishPageTwo,
+        servicePage(
+          [{ ...thirdService, id: "PSVC004", name: "Replacement service" }],
+          { offset: 2, limit: 2, total: 3 }
+        )
+      ),
+    /PSVC004 appeared after service discovery/
   )
 })

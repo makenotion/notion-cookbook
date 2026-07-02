@@ -2,6 +2,8 @@
 // Keep API identifiers out of visible labels: references are useful to a
 // Notion user only when PagerDuty supplied a human-readable summary or name.
 
+import { createHash } from "node:crypto"
+
 import type {
   PagerDutyIncident,
   PagerDutyReference,
@@ -12,6 +14,8 @@ import type {
 export const MAX_DETAIL_CHARACTERS = 12_000
 export const MAX_PAGE_CONTENT_CHARACTERS = 40_000
 export const MAX_RICH_TEXT_CHARACTERS = 2_000
+export const MAX_MULTI_SELECT_OPTIONS = 100
+export const MAX_OPTION_NAME_CHARACTERS = 100
 
 const MAX_TEXT_CHARACTERS = 8_000
 const MAX_DETAIL_DEPTH = 8
@@ -70,6 +74,83 @@ export function referenceNames(
     | undefined
 ): string[] {
   return uniqueNames((references ?? []).map(referenceName))
+}
+
+/**
+ * Normalize provider-authored option labels before they reach a Notion
+ * select. ASCII commas are not valid option-name characters in Notion.
+ */
+export function providerOptionLabel(
+  value: string | null | undefined
+): string | null {
+  const normalized = value?.normalize("NFKC").trim().replace(/\s+/gu, " ")
+  if (!normalized) return null
+
+  // A full-width comma remains readable without colliding with a provider
+  // label that already uses a middle dot.
+  const safe = normalized.replace(/,/gu, "，")
+  const characters = Array.from(safe)
+  if (characters.length <= MAX_OPTION_NAME_CHARACTERS) return safe
+
+  const digest = createHash("sha256")
+    .update(normalized)
+    .digest("hex")
+    .slice(0, 8)
+  const suffix = `… ${digest}`
+  const prefixLength = MAX_OPTION_NAME_CHARACTERS - Array.from(suffix).length
+
+  return `${characters.slice(0, prefixLength).join("")}${suffix}`
+}
+
+/**
+ * Produce one deterministic, Notion-safe option list. De-duplicate using
+ * Notion's case-insensitive option identity and fail rather than silently
+ * discard operational data above the per-value multi-select limit.
+ */
+export function providerOptionLabels(
+  property: string,
+  values: ReadonlyArray<string | null | undefined> | null | undefined
+): string[] {
+  const candidates = (values ?? [])
+    .map(providerOptionLabel)
+    .filter((label): label is string => label !== null)
+    .sort(
+      (left, right) =>
+        left.localeCompare(right, "en-US", { sensitivity: "base" }) ||
+        (left < right ? -1 : left > right ? 1 : 0)
+    )
+  const unique = new Map<string, string>()
+
+  for (const label of candidates) {
+    const identity = label.toLocaleLowerCase("en-US")
+    if (!unique.has(identity)) unique.set(identity, label)
+  }
+
+  const labels = [...unique.values()]
+
+  if (labels.length > MAX_MULTI_SELECT_OPTIONS) {
+    throw new Error(
+      `PagerDuty ${property} produced ${labels.length} unique values; Notion supports at most ${MAX_MULTI_SELECT_OPTIONS} options in one multi-select value.`
+    )
+  }
+
+  return labels
+}
+
+export function referenceOptionName(
+  reference: PagerDutyReference | null | undefined
+): string | null {
+  return providerOptionLabel(referenceName(reference))
+}
+
+export function referenceOptionNames(
+  property: string,
+  references:
+    | ReadonlyArray<PagerDutyReference | null | undefined>
+    | null
+    | undefined
+): string[] {
+  return providerOptionLabels(property, (references ?? []).map(referenceName))
 }
 
 export function dateTime(value: string | null | undefined): string | null {

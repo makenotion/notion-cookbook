@@ -36,11 +36,14 @@ export type IncidentSyncState = {
 }
 
 export type ServiceSyncState = {
+  phase: "discover" | "publish"
   scope: PagerDutyScope
   observedAt: string
   offset: number
   expectedTotal?: number
   seenServiceIds: string[]
+  /** Complete unscoped discovery set, or the explicitly configured IDs. */
+  expectedServiceIds: string[]
 }
 
 function scopeFromConfig(
@@ -418,14 +421,20 @@ export function initialServiceSyncState(
   now: Date | string = new Date()
 ): ServiceSyncState {
   return {
+    phase: config.serviceIds.length > 0 ? "publish" : "discover",
     scope: scopeFromConfig(config),
     observedAt: iso(timestamp(now)),
     offset: 0,
     seenServiceIds: [],
+    expectedServiceIds: [...config.serviceIds],
   }
 }
 
-/** Track IDs because the service endpoint can only sort by mutable name. */
+/**
+ * Discover then publish unscoped services because the endpoint can only use
+ * live offset pagination ordered by mutable name. The publish pass must
+ * reproduce the complete discovered identity set before replacement commits.
+ */
 export function nextServiceSyncState(
   state: ServiceSyncState,
   page: PagerDutyOffsetPage<PagerDutyService>
@@ -445,9 +454,23 @@ export function nextServiceSyncState(
     page.total,
     "service"
   )
+  const expectedServiceIds = new Set(state.expectedServiceIds)
+  if (
+    state.phase === "publish" &&
+    page.total !== state.expectedServiceIds.length
+  ) {
+    throw new Error(
+      `PagerDuty service membership changed between discovery and publish (${state.expectedServiceIds.length} to ${page.total}).`
+    )
+  }
   const seen = new Set(state.seenServiceIds)
 
   for (const service of page.resources) {
+    if (state.phase === "publish" && !expectedServiceIds.has(service.id)) {
+      throw new Error(
+        `PagerDuty service ${service.id} appeared after service discovery.`
+      )
+    }
     if (seen.has(service.id)) {
       throw new Error(
         `PagerDuty service pagination repeated service ${service.id}.`
@@ -478,6 +501,26 @@ export function nextServiceSyncState(
   if (seenServiceIds.length !== expectedTotal) {
     throw new Error(
       `PagerDuty service pagination saw ${seenServiceIds.length} of ${expectedTotal} unique services.`
+    )
+  }
+
+  if (state.phase === "discover") {
+    return {
+      ...state,
+      phase: "publish",
+      offset: 0,
+      expectedTotal: undefined,
+      seenServiceIds: [],
+      expectedServiceIds: [...seenServiceIds].sort(),
+    }
+  }
+
+  if (
+    seenServiceIds.some((serviceId) => !expectedServiceIds.has(serviceId)) ||
+    state.expectedServiceIds.some((serviceId) => !seen.has(serviceId))
+  ) {
+    throw new Error(
+      "PagerDuty service identities changed between discovery and publish."
     )
   }
   return undefined
