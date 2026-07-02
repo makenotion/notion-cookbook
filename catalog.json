@@ -311,6 +311,25 @@
       }
     },
     {
+      "id": "pagerduty-sync",
+      "title": "PagerDuty sync",
+      "summary": "Sync active and recent PagerDuty incidents plus service readiness signals into related managed Notion databases for read-only operations awareness.",
+      "path": "workers/pagerduty-sync",
+      "kind": "worker-sync",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "pagerduty"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name pagerduty-sync"
+      }
+    },
+    {
       "id": "postgres-query",
       "title": "Postgres query agent tool",
       "summary": "Let a Notion agent discover PostgreSQL tables and execute bounded, read-only SQL queries.",

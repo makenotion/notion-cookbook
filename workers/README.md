@@ -21,6 +21,7 @@ For local programs built directly on the Notion API, see the
 | [HubSpot sync](hubspot-sync/)       | CRM contacts, deals, and companies.                                                                                    |
 | [Jira sync](jira-sync/)             | Jira Cloud issues, current sprints, sprint analytics, and projects.                                                    |
 | [Linear sync](linear-sync/)         | Linear projects, issues, and initiatives.                                                                              |
+| [PagerDuty sync](pagerduty-sync/)   | Active and recent incidents linked to service readiness, current on-call coverage, ownership, and routing context.     |
 | [Salesforce sync](salesforce-sync/) | Salesforce accounts and opportunities, with related account context.                                                   |
 | [Snowflake sync](snowflake-sync/)   | Rows returned by a configurable Snowflake query.                                                                       |
 | [Zendesk sync](zendesk-sync/)       | Tickets, organizations, users, CSAT responses, ticket metrics, and SLA policies.                                       |
