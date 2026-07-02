@@ -24,6 +24,7 @@ For local programs built directly on the Notion API, see the
 | [Linear sync](linear-sync/)         | Linear projects, issues, and initiatives.                                                                              |
 | [PagerDuty sync](pagerduty-sync/)   | Active and recent incidents linked to service readiness, current on-call coverage, ownership, and routing context.     |
 | [Salesforce sync](salesforce-sync/) | Salesforce accounts and opportunities, with related account context.                                                   |
+| [Sentry sync](sentry-sync/)         | A rolling 30-day issue view with lifecycle, ownership, and impact signals for operational triage.                      |
 | [Snowflake sync](snowflake-sync/)   | Rows returned by a configurable Snowflake query.                                                                       |
 | [Zendesk sync](zendesk-sync/)       | Tickets, organizations, users, CSAT responses, ticket metrics, and SLA policies.                                       |
 
