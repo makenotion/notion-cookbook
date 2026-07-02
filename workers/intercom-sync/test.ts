@@ -6,7 +6,11 @@ import { afterEach, test } from "node:test"
 
 import { RateLimitError } from "@notionhq/workers"
 
-import { companyToChange, runCompaniesPage } from "./src/companies.js"
+import {
+  COMPANY_SCROLL_RESTART_AFTER_MS,
+  companyToChange,
+  runCompaniesPage,
+} from "./src/companies.js"
 import { contactToChange, runContactsPage } from "./src/contacts.js"
 import {
   CONSISTENCY_BUFFER_SECONDS,
@@ -30,6 +34,7 @@ import worker, { createCycleCache } from "./src/index.js"
 import {
   INTERCOM_API_VERSION,
   INTERCOM_PAGE_SIZE,
+  INTERCOM_TICKET_PAGE_SIZE,
   IntercomApiError,
   createIntercomClient,
   getIntercomApiRoot,
@@ -335,6 +340,7 @@ test("minimal contact uses a stable title and explicitly clears nullable fields"
     "Companies",
     "Country",
     "Tags",
+    "Incomplete Associations",
     "Last Seen",
     "Signed Up",
     "Last Contacted",
@@ -344,6 +350,64 @@ test("minimal contact uses a stable title and explicitly clears nullable fields"
   ] as const) {
     assertEmpty(change.properties[property])
   }
+})
+
+test("contacts identify association lists that Intercom truncated", () => {
+  const both = contactToChange(
+    {
+      ...fullContact,
+      companies: { ...(fullContact.companies ?? {}), has_more: true },
+      tags: { ...(fullContact.tags ?? {}), has_more: true },
+    },
+    contactDirectory
+  )
+  assertPropertyContains(
+    both.properties["Incomplete Associations"],
+    "Companies"
+  )
+  assertPropertyContains(both.properties["Incomplete Associations"], "Tags")
+
+  const tagsOnly = contactToChange(
+    {
+      ...fullContact,
+      companies: { ...(fullContact.companies ?? {}), has_more: false },
+      tags: { ...(fullContact.tags ?? {}), has_more: true },
+    },
+    contactDirectory
+  )
+  assert.doesNotMatch(
+    propertyText(tagsOnly.properties["Incomplete Associations"]),
+    /Companies/
+  )
+  assertPropertyContains(tagsOnly.properties["Incomplete Associations"], "Tags")
+
+  const countMismatch = contactToChange(
+    {
+      ...minimalContact,
+      companies: { data: [{ id: "company-acme" }], total_count: 2 },
+    },
+    contactDirectory
+  )
+  assertPropertyContains(
+    countMismatch.properties["Incomplete Associations"],
+    "Companies"
+  )
+
+  const metadataMissing = contactToChange(
+    {
+      ...minimalContact,
+      tags: {
+        data: Array.from({ length: 10 }, (_, index) => ({
+          id: `tag-${index}`,
+        })),
+      },
+    },
+    contactDirectory
+  )
+  assertPropertyContains(
+    metadataMissing.properties["Incomplete Associations"],
+    "Tags"
+  )
 })
 
 test("contact title fallbacks and unknown lookup values stay diagnosable", () => {
@@ -724,7 +788,7 @@ type FakeClientCalls = {
   conversations: Array<string | undefined>
   companyScrolls?: Array<string | undefined>
   ticketSearches?: Array<{ since: number; until: number; cursor?: string }>
-  tickets?: Array<string | undefined>
+  tickets?: Array<{ createdBefore: number; cursor?: string }>
 }
 
 function fakeClient(
@@ -763,8 +827,8 @@ function fakeClient(
       if (!page) throw new Error("Missing fake ticket search page")
       return page
     },
-    async listTickets(cursor) {
-      ;(calls.tickets ??= []).push(cursor)
+    async listTickets(createdBefore, cursor) {
+      ;(calls.tickets ??= []).push({ createdBefore, cursor })
       const page = pages.tickets?.shift()
       if (!page) throw new Error("Missing fake ticket page")
       return page
@@ -866,7 +930,10 @@ test("company replacement safely restarts an expired scroll session", async () =
     async scrollCompanies(scrollParameter) {
       calls.push(scrollParameter)
       if (calls.length === 1) {
-        throw new IntercomApiError(500, "expired company scroll")
+        throw new IntercomApiError(
+          500,
+          "Request failed due to an internal network error. Please restart the scroll operation."
+        )
       }
       return { records: [fullCompany], scrollParameter: "fresh-scroll" }
     },
@@ -881,6 +948,84 @@ test("company replacement safely restarts an expired scroll session", async () =
   assert.deepEqual(calls, ["expired-scroll", undefined])
   assert.equal(result.nextState.restartCount, 1)
   assert.equal(result.nextState.pageCount, 1)
+
+  let genericAttempts = 0
+  const genericFailure: IntercomClient = {
+    ...base,
+    async scrollCompanies() {
+      genericAttempts++
+      throw new IntercomApiError(500, "Intercom service unavailable")
+    },
+  }
+  await assert.rejects(
+    () =>
+      runCompaniesPage(genericFailure, {
+        scrollParameter: "active-scroll",
+        recentPageKeys: ["old:first:1"],
+        pageCount: 1,
+      }),
+    /service unavailable/
+  )
+  assert.equal(genericAttempts, 1)
+})
+
+test("company replacement respects active scrolls, restarts stale state, and fails closed", async () => {
+  const calls: Array<string | undefined> = []
+  const base = fakeClient({}, { contacts: [], searches: [], conversations: [] })
+  const client: IntercomClient = {
+    ...base,
+    async scrollCompanies(scrollParameter) {
+      calls.push(scrollParameter)
+      return { records: [fullCompany], scrollParameter: "fresh-scroll" }
+    },
+  }
+  const staleState = {
+    scrollParameter: "expired-scroll",
+    recentPageKeys: ["old:first:1"],
+    pageCount: 4,
+    restartCount: 0,
+    lastRequestAt: 1_000,
+  }
+  const fresh = await runCompaniesPage(
+    client,
+    staleState,
+    () => new Date(1_000 + COMPANY_SCROLL_RESTART_AFTER_MS - 1)
+  )
+  if (!fresh.hasMore) assert.fail("Expected active company pagination")
+  assert.deepEqual(calls, ["expired-scroll"])
+  assert.equal(fresh.nextState.restartCount, 0)
+
+  const result = await runCompaniesPage(
+    client,
+    staleState,
+    () => new Date(1_000 + COMPANY_SCROLL_RESTART_AFTER_MS)
+  )
+  if (!result.hasMore) assert.fail("Expected restarted company pagination")
+  assert.deepEqual(calls, ["expired-scroll", undefined])
+  assert.equal(result.nextState.restartCount, 1)
+  assert.equal(result.nextState.pageCount, 1)
+
+  await assert.rejects(
+    () =>
+      runCompaniesPage(
+        client,
+        { ...staleState, restartCount: 2 },
+        () => new Date(1_000 + COMPANY_SCROLL_RESTART_AFTER_MS)
+      ),
+    /repeatedly expired/
+  )
+  assert.deepEqual(calls, ["expired-scroll", undefined])
+
+  await assert.rejects(
+    () =>
+      runCompaniesPage(
+        client,
+        { ...staleState, lastRequestAt: 100_000 },
+        () => new Date(99_999)
+      ),
+    /invalid timestamp/
+  )
+  assert.deepEqual(calls, ["expired-scroll", undefined])
 })
 
 test("conversation incremental pages pin bounds and checkpoint with overlap", async () => {
@@ -1006,7 +1151,8 @@ test("ticket replacement pins total count before allowing reconciliation", async
   const first = await runTicketReconciliationPage(
     client,
     assignmentDirectory,
-    undefined
+    undefined,
+    () => new Date(2_000_000)
   )
   if (!first.hasMore) assert.fail("Expected another ticket page")
   const second = await runTicketReconciliationPage(
@@ -1014,7 +1160,11 @@ test("ticket replacement pins total count before allowing reconciliation", async
     assignmentDirectory,
     first.nextState
   )
-  assert.deepEqual(calls.tickets, [undefined, "ticket-all-next"])
+  assert.deepEqual(calls.tickets, [
+    { createdBefore: 1_940, cursor: undefined },
+    { createdBefore: 1_940, cursor: "ticket-all-next" },
+  ])
+  assert.equal(first.nextState.createdBefore, 1_940)
   assert.equal(first.nextState.expectedTotalCount, 2)
   assert.deepEqual(second.hasMore, false)
 
@@ -1047,6 +1197,35 @@ test("ticket replacement pins total count before allowing reconciliation", async
       ),
     /repeated a record/
   )
+})
+
+test("ticket replacement safely restarts continuation state from older deployments", async () => {
+  const calls: FakeClientCalls = {
+    contacts: [],
+    searches: [],
+    conversations: [],
+  }
+  const client = fakeClient(
+    {
+      tickets: [{ records: [minimalTicket], totalCount: 1 }],
+    },
+    calls
+  )
+  const result = await runTicketReconciliationPage(
+    client,
+    assignmentDirectory,
+    {
+      after: "legacy-cursor",
+      recentCursors: ["legacy-cursor"],
+      pageCount: 3,
+      expectedTotalCount: 3,
+      seenCount: 2,
+      recentRecordIds: ["old-ticket"],
+    },
+    () => new Date(3_000_000)
+  )
+  assert.deepEqual(calls.tickets, [{ createdBefore: 2_940, cursor: undefined }])
+  assert.deepEqual(result.hasMore, false)
 })
 
 test("cycle cache shares pending work, evicts terminal data, and retries errors", async () => {
@@ -1163,7 +1342,7 @@ test("ticket search sends pinned bounds and replacement uses immutable membershi
   }
   const client = createIntercomClient(async () => {})
   await client.searchTickets(100, 200, "ticket-cursor")
-  await client.listTickets("all-ticket-cursor")
+  await client.listTickets(300, "all-ticket-cursor")
 
   assert.equal(new URL(requests[0].url).pathname, "/tickets/search")
   assert.deepEqual(requests[0].body, {
@@ -1174,12 +1353,24 @@ test("ticket search sends pinned bounds and replacement uses immutable membershi
         { field: "updated_at", operator: "<", value: 200 },
       ],
     },
-    pagination: { per_page: 150, starting_after: "ticket-cursor" },
+    pagination: {
+      per_page: INTERCOM_TICKET_PAGE_SIZE,
+      starting_after: "ticket-cursor",
+    },
     sort: { field: "id", order: "ascending" },
   })
   assert.deepEqual(requests[1].body, {
-    query: { field: "created_at", operator: ">", value: 0 },
-    pagination: { per_page: 150, starting_after: "all-ticket-cursor" },
+    query: {
+      operator: "AND",
+      value: [
+        { field: "created_at", operator: ">", value: 0 },
+        { field: "created_at", operator: "<", value: 300 },
+      ],
+    },
+    pagination: {
+      per_page: INTERCOM_TICKET_PAGE_SIZE,
+      starting_after: "all-ticket-cursor",
+    },
     sort: { field: "id", order: "ascending" },
   })
 })
@@ -1336,13 +1527,13 @@ test("worker manifest exposes one connected four-database support bundle", () =>
       "replace",
       { type: "interval", intervalMs: 60 * 60_000 },
       "incremental",
-      { type: "interval", intervalMs: 2 * 60_000 },
+      { type: "interval", intervalMs: 5 * 60_000 },
       "replace",
-      { type: "interval", intervalMs: 24 * 60 * 60_000 },
+      { type: "manual" },
       "incremental",
-      { type: "interval", intervalMs: 2 * 60_000 },
+      { type: "interval", intervalMs: 5 * 60_000 },
       "replace",
-      { type: "interval", intervalMs: 24 * 60 * 60_000 },
+      { type: "manual" },
     ]
   )
   assert.deepEqual(worker.manifest.pacers, [

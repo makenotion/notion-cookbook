@@ -60,9 +60,48 @@ export const companySchema = {
 export type CompanySyncState = PaginationGuardState & {
   scrollParameter: string
   restartCount?: number
+  lastRequestAt?: number
 }
 
 const MAX_SCROLL_RESTARTS = 2
+// Intercom expires a Company Scroll after one idle minute. A small grace
+// avoids starting a replacement scroll while the previous one may still own
+// the app-wide single-scroll slot.
+export const COMPANY_SCROLL_RESTART_AFTER_MS = 65_000
+
+function clockMillis(now: () => Date): number {
+  const value = now().getTime()
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new Error("Intercom company sync clock is invalid.")
+  }
+  return value
+}
+
+function scrollExpired(
+  state: CompanySyncState | undefined,
+  nowMillis: number
+): boolean {
+  if (!state?.scrollParameter || state.lastRequestAt === undefined) return false
+  if (
+    !Number.isSafeInteger(state.lastRequestAt) ||
+    state.lastRequestAt < 0 ||
+    state.lastRequestAt > nowMillis
+  ) {
+    throw new Error("Intercom company scroll state has an invalid timestamp.")
+  }
+  return nowMillis - state.lastRequestAt >= COMPANY_SCROLL_RESTART_AFTER_MS
+}
+
+function restartableScrollError(error: unknown): boolean {
+  if (!(error instanceof IntercomApiError)) return false
+  if (error.status === 400 || error.status === 404) return true
+  return (
+    error.status === 500 &&
+    /internal network error[\s\S]*restart the scroll operation/i.test(
+      error.message
+    )
+  )
+}
 
 function companyId(company: IntercomCompany): string {
   const id = nonEmpty(company.id)
@@ -158,27 +197,48 @@ export function companyToChange(
 
 export async function runCompaniesPage(
   client: IntercomClient,
-  state: CompanySyncState | undefined
+  state: CompanySyncState | undefined,
+  now: () => Date = () => new Date()
 ) {
   let page: IntercomCompanyPage
   let restartCount = state?.restartCount ?? 0
   let restarted = false
-  try {
-    page = await client.scrollCompanies(state?.scrollParameter)
-  } catch (error) {
-    const restartable =
-      state?.scrollParameter &&
-      error instanceof IntercomApiError &&
-      [400, 404, 500].includes(error.status)
-    if (!restartable || restartCount >= MAX_SCROLL_RESTARTS) throw error
-
-    // A scroll session expires after one idle minute, and Intercom documents
-    // some 500s as requiring a restart. Replaying earlier upserts is safe
-    // inside the same replacement cycle; bounded restarts prevent a loop.
+  if (
+    !Number.isSafeInteger(restartCount) ||
+    restartCount < 0 ||
+    restartCount > MAX_SCROLL_RESTARTS
+  ) {
+    throw new Error(
+      "Intercom company scroll state has an invalid restart count."
+    )
+  }
+  const beforeRequest = clockMillis(now)
+  if (scrollExpired(state, beforeRequest)) {
+    if (restartCount >= MAX_SCROLL_RESTARTS) {
+      throw new Error(
+        "Intercom company scroll repeatedly expired between Worker continuations."
+      )
+    }
     restartCount++
     restarted = true
     page = await client.scrollCompanies()
+  } else {
+    try {
+      page = await client.scrollCompanies(state?.scrollParameter)
+    } catch (error) {
+      const restartable =
+        state?.scrollParameter && restartableScrollError(error)
+      if (!restartable || restartCount >= MAX_SCROLL_RESTARTS) throw error
+
+      // Some documented Company Scroll errors require a full restart.
+      // Replayed upserts are safe in the same replacement cycle, and the
+      // restart limit makes the cycle fail closed before Notion deletes rows.
+      restartCount++
+      restarted = true
+      page = await client.scrollCompanies()
+    }
   }
+  const lastRequestAt = clockMillis(now)
   const changes = page.records.map(companyToChange)
 
   // Intercom terminates a company scroll with an empty data page. Its scroll
@@ -208,6 +268,7 @@ export async function runCompaniesPage(
     nextState: {
       scrollParameter: page.scrollParameter,
       restartCount,
+      lastRequestAt,
       ...guard,
     },
   }

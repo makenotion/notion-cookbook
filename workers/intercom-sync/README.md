@@ -10,7 +10,8 @@ overwrite edits to managed properties in Notion.
 
 ## Quickstart
 
-You need Node.js 22+, an Intercom workspace, and a token from a
+You need Node.js 22+, Notion CLI 0.18.1 or newer, an Intercom workspace,
+and a token from a
 [private Intercom app](https://developers.intercom.com/docs/build-an-integration/learn-more/authentication).
 Grant only these permissions:
 
@@ -18,44 +19,103 @@ Grant only these permissions:
 - **Read tags**
 - **Read conversations**
 - **Read admins**
-- **Read tickets**
+- **Read tickets**—only when you intend to sync Tickets
 
 Tickets API access also depends on your Intercom plan. If your workspace does
-not use Tickets, remove the clearly labeled Tickets import, database, and sync
-blocks from `src/index.ts`; the other three databases work independently.
+not use Tickets, leave `ticketsSync` paused and do not trigger
+`ticketsReconciliation`. The other three databases work independently; you do
+not need to edit the bundle.
 
-From the repository root:
+Install the example and preview one page from each core resource locally before
+deploying. Local preview calls Intercom but never writes to Notion:
 
 ```sh
-npm install --global ntn
+npm install --global ntn@latest
+ntn --version
 cd workers/intercom-sync
 npm install
+cp .env.example .env
+# Add INTERCOM_ACCESS_TOKEN and the correct INTERCOM_REGION to .env.
+ntn workers sync trigger contactsSync --local --preview
+ntn workers sync trigger conversationsSync --local --preview
+ntn workers sync trigger companiesSync --local --preview
+```
+
+Run the optional Ticket preview too if you intend to use Tickets. A successful
+preview confirms that the private app and workspace plan can read them:
+
+```sh
+ntn workers sync trigger ticketsSync --local --preview
+```
+
+Company preview opens Intercom's single app-wide Company Scroll. `--preview`
+executes one page. To inspect every preview page, rerun the command with
+`--context '<nextContext>'` from the previous result until it completes. After
+the last Company preview request, let its scroll expire before deployment:
+
+```sh
+sleep 65
+```
+
+Now deploy without cloud credentials and pause every schedule:
+
+```sh
 ntn login
 ntn workers deploy --name intercom-sync
+for sync in companiesSync contactsSync conversationsSync ticketsSync; do
+  ntn workers sync pause "$sync"
+done
+ntn workers sync status --no-watch
+```
+
+Stop here unless status reports all four scheduled capabilities paused with no
+active run. Then set the region before the token:
+
+```sh
+ntn workers env set INTERCOM_REGION=us
 ntn workers env set INTERCOM_ACCESS_TOKEN=your-private-app-token
 ```
 
-US-hosted workspaces need no region setting. For EU or Australia hosting, add
-one of:
+Use `eu` or `au` instead of `us` for those hosting regions. Trigger each core
+backfill in dependency order and wait for it to complete before continuing.
+Each status command watches the run; press Ctrl-C after it reports completion.
 
 ```sh
-ntn workers env set INTERCOM_REGION=eu
-ntn workers env set INTERCOM_REGION=au
+ntn workers sync trigger companiesSync
+ntn workers sync status companiesSync
+ntn workers sync trigger contactsSync
+ntn workers sync status contactsSync
+ntn workers sync trigger conversationsSync
+ntn workers sync status conversationsSync
 ```
 
-Preview in dependency order, then remove `--preview` to write to Notion:
+If the Ticket preview succeeded, initialize and enable Tickets too. Otherwise
+leave Ticket syncing disabled:
 
 ```sh
-ntn workers sync trigger companiesSync --preview
-ntn workers sync trigger contactsSync --preview
-ntn workers sync trigger conversationsSync --preview
-ntn workers sync trigger ticketsSync --preview
+ntn workers sync trigger ticketsSync
+ntn workers sync status ticketsSync
+ntn workers sync resume ticketsSync
 ```
 
-Notion creates and manages the databases; you do not provide a Notion API
-token. The first runs backfill all records visible to the private app. New
-Conversation and Ticket changes inside the one-minute consistency buffer arrive
-on the next scheduled cycle.
+Finally, enable the core schedules:
+
+```sh
+for sync in companiesSync contactsSync conversationsSync; do
+  ntn workers sync resume "$sync"
+done
+```
+
+Notion creates and manages all four databases; you do not provide a Notion API
+token. New Conversation and Ticket changes inside the one-minute consistency
+buffer arrive on the next five-minute cycle.
+
+Use `--name intercom-sync` only for the first deployment. Before redeploying an
+existing credentialed Worker, pause every capability that is scheduled or
+running and wait for status to show no active run because stored credentials
+survive deployments. Older versions also scheduled both reconciliation keys,
+so pause those while upgrading. If a Company run did not finish successfully,
+wait another 65 seconds before redeploying so its Intercom scroll expires.
 
 ## What you get
 
@@ -75,18 +135,34 @@ Conversations and Tickets. Each related property is visible from both sides.
 | ----------------------------- | ------------- | ----------- | -------- | --------------------------------------------------------------------- |
 | `companiesSync`               | Companies     | replace     | hourly   | Refresh the canonical Company scroll and remove missing records.      |
 | `contactsSync`                | Contacts      | replace     | hourly   | Avoid unsafe day-granularity Contact timestamp cursors.               |
-| `conversationsSync`           | Conversations | incremental | 2 min    | Deliver changed Conversations quickly with a buffered, pinned window. |
-| `conversationsReconciliation` | Conversations | replace     | daily    | Repair drift and remove deleted or newly hidden records.              |
-| `ticketsSync`                 | Tickets       | incremental | 2 min    | Deliver changed Tickets quickly with the same overlap strategy.       |
-| `ticketsReconciliation`       | Tickets       | replace     | daily    | Repair drift and remove Tickets no longer returned by Intercom.       |
+| `conversationsSync`           | Conversations | incremental | 5 min    | Deliver changed Conversations quickly with a buffered, pinned window. |
+| `conversationsReconciliation` | Conversations | replace     | manual   | Repair drift and remove deleted or newly hidden records.              |
+| `ticketsSync`                 | Tickets       | incremental | 5 min    | Deliver changed Tickets quickly with the same overlap strategy.       |
+| `ticketsReconciliation`       | Tickets       | replace     | manual   | Repair drift and remove Tickets no longer returned by Intercom.       |
 
 Incremental searches pin their upper timestamp across every page, sort by
 immutable Intercom ID, wait one minute for indexing, and replay a five-minute
-overlap. Daily replacement is still necessary because Intercom search cursors
+overlap. Manual replacement is still necessary because Intercom search cursors
 are not snapshots and deleted records do not appear in search results. Ticket
 replacement also aborts if Intercom's `total_count` changes or the completed
 sweep does not match it, preventing an incomplete run from removing Notion
 rows.
+
+Keep replacement and delta runs from overlapping: pause `conversationsSync` or
+`ticketsSync`, use `ntn workers sync status <key>` to confirm it is idle,
+trigger the matching reconciliation, wait for that run to finish, then resume
+the delta. This follows the Workers backfill pattern and prevents a replacement
+from deleting a newer row written by a concurrent delta.
+
+```sh
+ntn workers sync pause conversationsSync
+ntn workers sync status conversationsSync
+ntn workers sync trigger conversationsReconciliation
+ntn workers sync status conversationsReconciliation
+ntn workers sync resume conversationsSync
+```
+
+For Tickets, use `ticketsSync` and `ticketsReconciliation` in the same sequence.
 
 Every record is keyed by Intercom's immutable API `id`. The human-facing
 `ticket_id` is copied only as **Inbox Ticket ID** and is never used for API
@@ -97,7 +173,7 @@ queries.
 - Companies: plan, industry, website, employee/user/session counts, monthly
   spend, activity, tags, segments, and timestamps.
 - Contacts: identity, role, owner, email/phone, company relations, tags,
-  country, activity, and email restrictions.
+  association completeness, country, activity, and email restrictions.
 - Conversations: state, priority, contacts/company, assignment, channel, tags,
   SLA, CSAT, first/median reply time, handling time, last reply, reopens, and AI
   resolution. The page body contains a sanitized opening message and rating
@@ -148,14 +224,17 @@ format, so this example does not invent one.
 
 - Intercom permits only one active Company scroll per app, expires it after one
   idle minute, and may return the same scroll token for multiple distinct pages.
-  Do not overlap manual Company runs. The Worker detects repeated pages and
-  performs at most two safe restarts for expired or documented server-error
-  sessions.
+  Never overlap Company runs, previews, or deployments that share a private-app
+  token. The Worker detects expired/repeated pages, performs at most two full
+  restarts, and fails before replacement deletion if it cannot finish safely.
 - Company Scroll omits Companies with no associated users.
 - A Contact embeds at most ten Companies and ten Tags; those relation/tag lists
-  can therefore be partial when `has_more` is true.
+  can therefore be partial. Filter **Incomplete Associations** for affected
+  Contacts before relying on either list as exhaustive.
 - Ticket APIs can return `403 api_plan_restricted` when the workspace plan does
-  not include them.
+  not include them. Keep both Ticket capabilities paused in that case.
+- Ticket requests use pages of 20 because Intercom may include large
+  `ticket_parts` collections even though this example does not copy them.
 - Full transcripts are not copied; Intercom caps returned Conversation/Ticket
   parts and those parts may include internal or redacted content.
 
@@ -174,8 +253,9 @@ npm test
 npm run build
 ```
 
-For a live smoke test, preview each capability in the Quickstart order. Confirm
-that Company and Contact counts are plausible, relations resolve, a recently
-updated Conversation and Ticket appear after the consistency buffer, and no
-unexpected message or custom-attribute content is copied. Then run without
-`--preview` and compare a small sample against Intercom.
+For a live smoke test, follow the Quickstart's local-preview and paused-deploy
+flow. Confirm that the Company run reaches a terminal state, Company and Contact
+counts are plausible, relations resolve, and a recently updated Conversation
+and optional Ticket appear after the consistency buffer. Compare a small sample
+against Intercom and check **Incomplete Associations** before treating Contact
+relations or tags as exhaustive.

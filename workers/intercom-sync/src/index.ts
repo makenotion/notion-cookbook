@@ -148,7 +148,7 @@ const conversations = worker.database("conversations", {
 worker.sync("conversationsSync", {
   database: conversations,
   mode: "incremental",
-  schedule: "2m",
+  schedule: "5m",
   execute: async (state: ConversationIncrementalState | undefined) => {
     if (!state?.after) incrementalConversationDirectories.clear()
     const client = createClient()
@@ -168,7 +168,7 @@ worker.sync("conversationsSync", {
 worker.sync("conversationsReconciliation", {
   database: conversations,
   mode: "replace",
-  schedule: "1d",
+  schedule: "manual",
   execute: async (state: CursorSyncState | undefined) => {
     if (!state) reconciliationConversationDirectories.clear()
     const client = createClient()
@@ -186,8 +186,8 @@ worker.sync("conversationsReconciliation", {
 })
 
 // ---------------------------------------------------------------------------
-// Tickets — optional in Intercom plans, but included in the same deploy so a
-// support team can copy one complete bundle and remove this block if unused.
+// Tickets — optional in Intercom plans, but included in the same deploy. Keep
+// the scheduled sync paused and do not trigger reconciliation without access.
 // ---------------------------------------------------------------------------
 
 const tickets = worker.database("tickets", {
@@ -200,7 +200,7 @@ const tickets = worker.database("tickets", {
 worker.sync("ticketsSync", {
   database: tickets,
   mode: "incremental",
-  schedule: "2m",
+  schedule: "5m",
   execute: async (state: TicketIncrementalState | undefined) => {
     if (!state?.after) incrementalTicketDirectories.clear()
     const client = createClient()
@@ -216,7 +216,7 @@ worker.sync("ticketsSync", {
 worker.sync("ticketsReconciliation", {
   database: tickets,
   mode: "replace",
-  schedule: "1d",
+  schedule: "manual",
   execute: async (state: TicketReconciliationState | undefined) => {
     if (!state) reconciliationTicketDirectories.clear()
     const client = createClient()

@@ -43,6 +43,11 @@ export const contactSchema = {
 
     Tags: Schema.multiSelect([]),
 
+    "Incomplete Associations": Schema.multiSelect([
+      { name: "Companies" },
+      { name: "Tags" },
+    ]),
+
     "Last Seen": Schema.date(),
 
     "Signed Up": Schema.date(),
@@ -125,6 +130,29 @@ function emailRestrictions(contact: IntercomContact): string[] {
   ].filter((value): value is string => value !== undefined)
 }
 
+function incompleteAssociations(contact: IntercomContact): string[] {
+  const companies = contact.companies
+  const tags = contact.tags
+  const companiesIncomplete =
+    companies?.has_more === true ||
+    (Number.isSafeInteger(companies?.total_count) &&
+      (companies?.total_count ?? 0) > (companies?.data?.length ?? 0)) ||
+    (companies?.has_more == null &&
+      !Number.isSafeInteger(companies?.total_count) &&
+      (companies?.data?.length ?? 0) >= 10)
+  const tagsIncomplete =
+    tags?.has_more === true ||
+    (Number.isSafeInteger(tags?.total_count) &&
+      (tags?.total_count ?? 0) > (tags?.data?.length ?? 0)) ||
+    (tags?.has_more == null &&
+      !Number.isSafeInteger(tags?.total_count) &&
+      (tags?.data?.length ?? 0) >= 10)
+  return [
+    companiesIncomplete ? "Companies" : undefined,
+    tagsIncomplete ? "Tags" : undefined,
+  ].filter((value): value is string => value !== undefined)
+}
+
 export function contactToChange(
   contact: IntercomContact,
   directory: ContactDirectory
@@ -139,6 +167,7 @@ export function contactToChange(
   const companies = companyIds(contact)
   const country = nonEmpty(contact.location?.country)
   const tags = tagNames(contact, directory)
+  const incomplete = incompleteAssociations(contact)
   const lastSeen = optionalUnixSecondsToIso(
     contact.last_seen_at,
     "Contact last_seen_at"
@@ -172,6 +201,8 @@ export function contactToChange(
       Companies: companies.map((companyId) => Builder.relation(companyId)),
       Country: country ? Builder.select(country) : [],
       Tags: tags.length > 0 ? Builder.multiSelect(...tags) : [],
+      "Incomplete Associations":
+        incomplete.length > 0 ? Builder.multiSelect(...incomplete) : [],
       "Last Seen": lastSeen ? Builder.dateTime(lastSeen) : [],
       "Signed Up": signedUp ? Builder.dateTime(signedUp) : [],
       "Last Contacted": lastContacted ? Builder.dateTime(lastContacted) : [],

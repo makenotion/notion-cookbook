@@ -82,6 +82,7 @@ export type TicketIncrementalState = {
 }
 
 export type TicketReconciliationState = CursorSyncState & {
+  createdBefore?: number
   expectedTotalCount: number
   seenCount: number
   recentRecordIds: string[]
@@ -294,11 +295,31 @@ function expectedTicketCount(
 export async function runTicketReconciliationPage(
   client: IntercomClient,
   directory: AssignmentDirectory,
-  state: TicketReconciliationState | undefined
+  state: TicketReconciliationState | undefined,
+  now: () => Date = () => new Date()
 ) {
-  const page = await client.listTickets(state?.after)
-  const totalCount = expectedTicketCount(page.totalCount, state)
-  const recentRecordIds = state?.recentRecordIds ?? []
+  // Deployments preserve continuation state. A run started by a version before
+  // createdBefore existed safely restarts from page one; keyed upserts make
+  // replay harmless and a complete restart preserves replacement semantics.
+  const effectiveState =
+    state?.after && state.createdBefore == null ? undefined : state
+  const nowSeconds = Math.floor(now().getTime() / 1_000)
+  // Intercom documents its Ticket Search `<` operator as inclusive. Keep the
+  // cutoff behind the same indexing buffer as incremental syncs so tickets
+  // created during this stateless sweep cannot join its membership.
+  const createdBefore = unixSeconds(
+    effectiveState?.createdBefore ??
+      Math.max(1, nowSeconds - TICKET_CONSISTENCY_BUFFER_SECONDS),
+    "Intercom ticket reconciliation state.createdBefore"
+  )
+  if (createdBefore === 0) {
+    throw new Error(
+      "Intercom ticket reconciliation cutoff must be after the Unix epoch."
+    )
+  }
+  const page = await client.listTickets(createdBefore, effectiveState?.after)
+  const totalCount = expectedTicketCount(page.totalCount, effectiveState)
+  const recentRecordIds = effectiveState?.recentRecordIds ?? []
   if (
     !Array.isArray(recentRecordIds) ||
     recentRecordIds.length > MAX_RECENT_TICKET_IDS ||
@@ -320,7 +341,7 @@ export async function runTicketReconciliationPage(
   const changes = page.records.map((ticket) =>
     ticketToChange(ticket, directory)
   )
-  const seenCount = (state?.seenCount ?? 0) + page.records.length
+  const seenCount = (effectiveState?.seenCount ?? 0) + page.records.length
   if (seenCount > totalCount) {
     throw new Error(
       "Intercom ticket reconciliation returned more records than total_count."
@@ -338,7 +359,12 @@ export async function runTicketReconciliationPage(
       changes,
       hasMore: true as const,
       nextState: {
-        ...nextCursorState(state, page.nextCursor, "ticket reconciliation"),
+        ...nextCursorState(
+          effectiveState,
+          page.nextCursor,
+          "ticket reconciliation"
+        ),
+        createdBefore,
         expectedTotalCount: totalCount,
         seenCount,
         recentRecordIds: [...recentRecordIds, ...recordIds].slice(

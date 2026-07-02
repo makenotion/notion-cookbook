@@ -6,6 +6,10 @@ import { RateLimitError } from "@notionhq/workers"
 
 export const INTERCOM_API_VERSION = "2.15"
 export const INTERCOM_PAGE_SIZE = 150
+// Ticket Search returns full Ticket objects, including potentially large
+// ticket_parts collections. Keep Ticket responses much smaller than the
+// lightweight list/search endpoints used by the other resources.
+export const INTERCOM_TICKET_PAGE_SIZE = 20
 const DEFAULT_RETRY_AFTER_SECONDS = 10
 const MAX_ERROR_DETAIL_LENGTH = 500
 
@@ -209,7 +213,10 @@ export type IntercomClient = {
     until: number,
     cursor?: string
   ): Promise<IntercomPage<IntercomTicket>>
-  listTickets(cursor?: string): Promise<IntercomPage<IntercomTicket>>
+  listTickets(
+    createdBefore: number,
+    cursor?: string
+  ): Promise<IntercomPage<IntercomTicket>>
   fetchContactDirectory(): Promise<ContactDirectory>
   fetchAssignmentDirectory(): Promise<AssignmentDirectory>
 }
@@ -471,7 +478,7 @@ export function createIntercomClient(
     cursor?: string
   ): Promise<IntercomPage<IntercomTicket>> {
     const pagination: { per_page: number; starting_after?: string } = {
-      per_page: INTERCOM_PAGE_SIZE,
+      per_page: INTERCOM_TICKET_PAGE_SIZE,
     }
     if (cursor) pagination.starting_after = cursor
 
@@ -496,10 +503,11 @@ export function createIntercomClient(
   }
 
   async function listTickets(
+    createdBefore: number,
     cursor?: string
   ): Promise<IntercomPage<IntercomTicket>> {
     const pagination: { per_page: number; starting_after?: string } = {
-      per_page: INTERCOM_PAGE_SIZE,
+      per_page: INTERCOM_TICKET_PAGE_SIZE,
     }
     if (cursor) pagination.starting_after = cursor
 
@@ -509,7 +517,17 @@ export function createIntercomClient(
         // Ticket Search is the only collection read endpoint. Creation time
         // is immutable, so this broad query keeps replacement membership
         // steadier than an updated_at filter while the sweep is in flight.
-        query: { field: "created_at", operator: ">", value: 0 },
+        query: {
+          operator: "AND",
+          value: [
+            { field: "created_at", operator: ">", value: 0 },
+            {
+              field: "created_at",
+              operator: "<",
+              value: createdBefore,
+            },
+          ],
+        },
         pagination,
         sort: { field: "id", order: "ascending" },
       }),
