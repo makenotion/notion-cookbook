@@ -17,7 +17,7 @@ import {
 } from "./helpers.js"
 import type { SentryIssue } from "./sentry.js"
 
-export const INITIAL_TITLE = "Sentry Issues — Last 30 Days"
+export const INITIAL_TITLE = "Sentry Issues"
 export const PRIMARY_KEY = "Sentry Issue ID"
 
 export const issueSchema: Schema.Schema<typeof PRIMARY_KEY> = {

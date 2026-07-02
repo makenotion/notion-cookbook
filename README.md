@@ -62,7 +62,7 @@ and a **webhook** handles events from another service. See the complete
 | Sync projects, issues, and initiatives                      | [Linear sync](workers/linear-sync/)         | Linear     |
 | Monitor PagerDuty incidents and service readiness in Notion | [PagerDuty sync](workers/pagerduty-sync/)   | PagerDuty  |
 | Sync accounts and opportunities                             | [Salesforce sync](workers/salesforce-sync/) | Salesforce |
-| Triage errors and review recent issue impact                | [Sentry sync](workers/sentry-sync/)         | Sentry     |
+| Coordinate issue triage, service risk, and rollout health   | [Sentry sync](workers/sentry-sync/)         | Sentry     |
 | Sync the result of a warehouse query                        | [Snowflake sync](workers/snowflake-sync/)   | Snowflake  |
 | Sync tickets, users, organizations, and support metrics     | [Zendesk sync](workers/zendesk-sync/)       | Zendesk    |
 

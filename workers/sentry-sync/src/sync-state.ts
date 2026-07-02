@@ -59,22 +59,36 @@ export function nextIssueState(
   scope: SentryIssueScope,
   nextCursor: string | undefined
 ): IssueSyncState {
-  const cursor = nextCursor?.trim()
-  if (!cursor) {
-    throw new Error("Sentry issue pagination is missing its next cursor")
-  }
-
-  const seenCursors = new Set(state?.seenCursors ?? [])
-  if (state?.cursor) seenCursors.add(state.cursor)
-  if (seenCursors.has(cursor)) {
-    throw new Error("Sentry issue pagination repeated a cursor")
-  }
-  seenCursors.add(cursor)
+  const traversal = nextCursorTraversal(
+    state?.cursor,
+    state?.seenCursors,
+    nextCursor,
+    "issue"
+  )
 
   return {
     ...window,
     scope,
-    cursor,
-    seenCursors: [...seenCursors],
+    ...traversal,
   }
+}
+
+export function nextCursorTraversal(
+  currentCursor: string | undefined,
+  priorCursors: string[] | undefined,
+  nextCursor: string | undefined,
+  resource: string
+): { cursor: string; seenCursors: string[] } {
+  const cursor = nextCursor?.trim()
+  if (!cursor) {
+    throw new Error(`Sentry ${resource} pagination is missing its next cursor`)
+  }
+
+  const seenCursors = new Set(priorCursors ?? [])
+  if (currentCursor) seenCursors.add(currentCursor)
+  if (seenCursors.has(cursor)) {
+    throw new Error(`Sentry ${resource} pagination repeated a cursor`)
+  }
+  seenCursors.add(cursor)
+  return { cursor, seenCursors: [...seenCursors] }
 }

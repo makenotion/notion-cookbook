@@ -1,6 +1,5 @@
-// Entry point — maintains one rolling Sentry issue database for operational
-// triage and recent review. Every run is a complete, paginated reconciliation
-// of issue groups seen during the pinned prior 30 days.
+// Three default, complementary Sentry views: recent issue triage, project
+// reliability signals, and rollout health for the newest releases.
 
 import { Worker } from "@notionhq/workers"
 
@@ -10,18 +9,45 @@ import {
   issueSchema,
   issueToChange,
 } from "./issues.js"
-import { fetchIssuesPage, getIssueScope } from "./sentry.js"
+import {
+  INITIAL_TITLE as PROJECTS_TITLE,
+  PRIMARY_KEY as PROJECTS_PK,
+  aggregateProjectIssues,
+  aggregateProjectResource,
+  projectMatchesScope,
+  projectSchema,
+  projectToChange,
+  type ProjectAggregateMap,
+} from "./projects.js"
+import {
+  INITIAL_TITLE as RELEASES_TITLE,
+  PRIMARY_KEY as RELEASES_PK,
+  releaseHealthWindow,
+  releaseSchema,
+  releasesToChanges,
+} from "./releases.js"
+import {
+  SentryApiError,
+  fetchIssuesPage,
+  fetchProjectsPage,
+  fetchRecentReleases,
+  fetchReleaseHealth,
+  getSentryScope,
+  type SentryScope,
+} from "./sentry.js"
 import {
   issueWindow,
+  nextCursorTraversal,
   nextIssueState,
   type IssueSyncState,
+  type IssueWindow,
 } from "./sync-state.js"
 
 const worker = new Worker()
 
 // Sentry applies caller- and endpoint-specific frequency/concurrency limits,
-// rather than publishing one universal quota. Serialize all issue-list calls
-// through a conservative shared courtesy cap and still honor 429/reset headers.
+// rather than publishing one universal quota. Serialize all calls through a
+// conservative shared courtesy cap and still honor 429/reset headers.
 const pacer = worker.pacer("sentry", {
   allowedRequests: 60,
   intervalMs: 60_000,
@@ -44,7 +70,7 @@ worker.sync("issuesSync", {
     // Pin resource scope with the first page as well as the time window. If an
     // environment variable changes mid-run, the current snapshot finishes
     // against its original query and the new scope starts on the next cycle.
-    const scope = state?.scope ?? getIssueScope()
+    const scope = state?.scope ?? getSentryScope()
     const page = await fetchIssuesPage(
       beforeSentryRequest,
       {
@@ -60,6 +86,186 @@ worker.sync("issuesSync", {
       nextState: page.hasMore
         ? nextIssueState(state, window, scope, page.nextCursor)
         : undefined,
+    }
+  },
+})
+
+type ProjectIssueState = IssueSyncState & {
+  phase: "issues"
+  aggregates: ProjectAggregateMap
+}
+
+type ProjectRowsState = {
+  phase: "projects"
+  start: string
+  end: string
+  scope: SentryScope
+  aggregates: ProjectAggregateMap
+  unmatchedProjectIds: string[]
+  cursor?: string
+  seenCursors?: string[]
+}
+
+export type ProjectSyncState = ProjectIssueState | ProjectRowsState
+
+const projects = worker.database("projects", {
+  type: "managed",
+  initialTitle: PROJECTS_TITLE,
+  primaryKeyProperty: PROJECTS_PK,
+  schema: projectSchema,
+})
+
+worker.sync("projectsSync", {
+  database: projects,
+  mode: "replace",
+  schedule: "1d",
+  execute: async (previousState: ProjectSyncState | undefined) => {
+    let state = previousState
+    if (!state) {
+      const window = issueWindow(undefined)
+      state = {
+        phase: "issues",
+        ...window,
+        scope: getSentryScope(),
+        aggregates: {},
+      }
+    }
+
+    const window: IssueWindow = issueWindow(state)
+    if (state.phase === "issues") {
+      const page = await fetchIssuesPage(
+        beforeSentryRequest,
+        {
+          ...window,
+          cursor: state.cursor,
+          statsPeriod: "14d",
+        },
+        state.scope
+      )
+      const aggregates = aggregateProjectIssues(
+        state.aggregates,
+        page.resources,
+        window
+      )
+
+      if (page.hasMore) {
+        const next = nextIssueState(state, window, state.scope, page.nextCursor)
+        return {
+          changes: [],
+          hasMore: true,
+          nextState: {
+            phase: "issues" as const,
+            ...next,
+            aggregates,
+          },
+        }
+      }
+
+      return {
+        changes: [],
+        hasMore: true,
+        nextState: {
+          phase: "projects" as const,
+          ...window,
+          scope: state.scope,
+          aggregates,
+          unmatchedProjectIds: Object.keys(aggregates),
+        },
+      }
+    }
+
+    const page = await fetchProjectsPage(
+      beforeSentryRequest,
+      state.cursor,
+      state.scope
+    )
+    const resources = page.resources.filter((project) =>
+      projectMatchesScope(project, state.scope)
+    )
+    const returnedIds = new Set(resources.map((project) => project.id))
+    const unmatchedProjectIds = state.unmatchedProjectIds.filter(
+      (projectId) => !returnedIds.has(projectId)
+    )
+    const changes = resources.map((project) =>
+      projectToChange(
+        project,
+        state.aggregates[project.id],
+        window.end,
+        state.scope
+      )
+    )
+
+    if (page.hasMore) {
+      const traversal = nextCursorTraversal(
+        state.cursor,
+        state.seenCursors,
+        page.nextCursor,
+        "project"
+      )
+      return {
+        changes,
+        hasMore: true,
+        nextState: {
+          ...state,
+          ...traversal,
+          unmatchedProjectIds,
+        },
+      }
+    }
+
+    // An issue can outlive a deleted/inaccessible project record. Preserve its
+    // aggregate with current issue metadata rather than silently dropping risk.
+    const fallbackChanges = unmatchedProjectIds.map((projectId) =>
+      projectToChange(
+        aggregateProjectResource(state.aggregates[projectId]),
+        state.aggregates[projectId],
+        window.end,
+        state.scope
+      )
+    )
+    return { changes: [...changes, ...fallbackChanges], hasMore: false }
+  },
+})
+
+const releases = worker.database("releases", {
+  type: "managed",
+  initialTitle: RELEASES_TITLE,
+  primaryKeyProperty: RELEASES_PK,
+  schema: releaseSchema,
+})
+
+worker.sync("releasesSync", {
+  database: releases,
+  mode: "replace",
+  schedule: "15m",
+  execute: async () => {
+    const scope = getSentryScope()
+    const window = releaseHealthWindow()
+    const recentReleases = await fetchRecentReleases(beforeSentryRequest, scope)
+    if (recentReleases.length === 0) {
+      return { changes: [], hasMore: false }
+    }
+
+    let health
+    try {
+      health = await fetchReleaseHealth(
+        beforeSentryRequest,
+        window.start,
+        window.end,
+        scope
+      )
+    } catch (error) {
+      // Older self-hosted Sentry versions can expose release metadata without
+      // the sessions endpoint. Keep those rows useful; all other failures,
+      // including missing org:read, remain actionable.
+      if (!(error instanceof SentryApiError) || error.status !== 404)
+        throw error
+      health = { available: false, start: null, end: null, groups: [] }
+    }
+
+    return {
+      changes: releasesToChanges(recentReleases, health, scope),
+      hasMore: false,
     }
   },
 })

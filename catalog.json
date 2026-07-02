@@ -407,7 +407,7 @@
     {
       "id": "sentry-sync",
       "title": "Sentry sync",
-      "summary": "Sync a rolling 30-day view of Sentry issues, ownership, lifecycle signals, and impact into a managed Notion database.",
+      "summary": "Sync Sentry issue triage, project reliability trends, and recent release health into three managed Notion databases.",
       "path": "workers/sentry-sync",
       "kind": "worker-sync",
       "status": "ready",

@@ -1,21 +1,29 @@
 # Worker sync: Sentry
 
-Bring the Sentry issues that mattered during the last 30 days into Notion for
-triage, operational review, and cross-functional visibility. The Worker keeps
-one approachable **Sentry Issues — Last 30 Days** database current every 15
-minutes, with native lifecycle signals, recent event volume, user impact,
-ownership, and a link back to Sentry.
+Bring Sentry's operational signals into Notion so engineering, product, and
+support can coordinate reliability work without turning Notion into another
+error console. Out of the box, this Worker helps teams see what is breaking,
+which services carry the most unresolved risk, whether ownership gaps are
+growing, and how the newest releases are behaving.
 
-The result is useful immediately: create views for unresolved issues,
-regressions, unassigned high-impact errors, recently active issues that are now
-resolved, or concentrations by project without changing the code.
+The example creates three complementary databases by default:
+
+- **Sentry Issues** keeps a rolling triage view current every 15 minutes.
+- **Sentry Projects** adds a daily service-level reliability summary to the
+  complete project inventory.
+- **Sentry Releases** combines the 100 newest releases with seven-day rollout
+  health every 15 minutes.
+
+All three are registered intentionally. It is easier to remove a database and
+its sync from a fork than to discover and wire up a valuable view later. There
+are no hidden enable flags, relations, invented health scores, or raw-event
+copies.
 
 ## Quickstart
 
-You need Node.js 22+, a Sentry organization, an
-[internal integration token](#create-a-sentry-token) with `event:read` access,
-and permission to read the projects you want to sync. From the repository
-root:
+You need Node.js 22+, a Sentry organization, and an
+[internal integration token](#create-a-sentry-token) with `event:read`,
+`org:read`, and `project:releases`. From the repository root:
 
 ```sh
 npm install --global ntn
@@ -28,155 +36,217 @@ ntn workers env set SENTRY_ORG_SLUG=your-organization-slug
 ```
 
 For the first run, scope to one or two production projects. Replace the example
-slug with your Sentry project ID or slug:
+slug with a Sentry project ID or slug:
 
 ```sh
 ntn workers env set SENTRY_PROJECTS=checkout-api
 ntn workers env set SENTRY_ENVIRONMENTS=production
 ```
 
-Create and populate the database immediately, while streaming the run output:
+Create and populate all three databases while streaming each run:
 
 ```sh
 ntn workers exec issuesSync --stream
+ntn workers exec projectsSync --stream
+ntn workers exec releasesSync --stream
 ```
-
-The Worker refreshes the database every 15 minutes. It includes issues of
-every status that Sentry considers active in the pinned 30-day query window;
-an issue that is no longer returned by that rolling window is removed from the
-managed database after a complete successful refresh.
 
 ## What you can answer
 
-| Question                                                                | Fields to use                                      |
-| ----------------------------------------------------------------------- | -------------------------------------------------- |
-| What is breaking now?                                                   | Status, Priority, Events (24h), Users (30d)        |
-| What is new, regressed, or escalating?                                  | Status Detail, Last Seen                           |
-| Which important or unhandled issues have no owner?                      | Assignee, Priority, Unhandled, Events (30d)        |
-| Which issues are hottest today or have caused the most lifetime impact? | Events (24h), Lifetime Events, Lifetime Users      |
-| Which recently active issues are now resolved or ignored?               | Status, Last Seen                                  |
-| Where are recent issues concentrated?                                   | Project, Platform, Category, Issue Type, Unhandled |
+| Question                                                      | Signals to use                                                          |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| What is breaking now?                                         | Issue status, priority, 24-hour events, 30-day users                    |
+| What is new, regressed, escalating, or unowned?               | Status detail, assignee, unhandled, last seen                           |
+| Which services carry the most current reliability burden?     | Unresolved issues, seven-day events, high-priority and lifecycle counts |
+| Is service activity rising compared with the prior week?      | Events (7d), Previous 7d Events, Event Change vs Prior 7d               |
+| Where are ownership and instrumentation gaps concentrated?    | Unassigned Unresolved (30d), Teams, Has Sessions                        |
+| Are the newest rollouts stable and broadly exercised?         | Crash-Free Sessions, Crash-Free Users, Sessions (7d), Users (7d)        |
+| Which releases introduced new issue groups or lack telemetry? | New Issues, Health Data (7d), First Event, Last Event                   |
+
+These are coordination views. Sentry remains the system of record for event
+details, investigation, alerting, and mutations.
 
 ## Reference
 
-### Database and schedule
+### Databases and schedules
 
-| Database                         | Sync         | Mode    | Schedule     | Membership                             |
-| -------------------------------- | ------------ | ------- | ------------ | -------------------------------------- |
-| **Sentry Issues — Last 30 Days** | `issuesSync` | replace | Every 15 min | Every status seen in the prior 30 days |
+| Database            | Sync           | Mode    | Schedule     | Membership                                               |
+| ------------------- | -------------- | ------- | ------------ | -------------------------------------------------------- |
+| **Sentry Issues**   | `issuesSync`   | replace | Every 15 min | Every issue status seen in the pinned prior 30 days      |
+| **Sentry Projects** | `projectsSync` | replace | Daily        | Visible projects, enriched from the pinned prior 30 days |
+| **Sentry Releases** | `releasesSync` | replace | Every 15 min | The 100 most recent releases across the configured scope |
 
-Here, `replace` means a **complete reconciliation**: the Worker reads every API
-page in one pinned snapshot and Notion reconciles membership only after that
-refresh succeeds. It does not delete and recreate the database. Existing rows
-are updated by immutable Sentry issue ID; rows absent from the completed
-30-day snapshot are removed.
+`replace` means complete reconciliation. The Worker updates stable rows and
+removes rows absent from a completed refresh; it does not delete and recreate
+the database. A failed or partial multi-page refresh is not treated as a
+complete snapshot.
 
-One database is deliberate. Active, regressed, unassigned, resolved, and
-project-specific lists are different views of the same issue data, so separate
-managed databases would duplicate rows and make setup harder. A future
-**Sentry Project Health** database would be worthwhile only with distinct
-aggregates such as unresolved counts, high-priority counts, recent events, and
-affected users—not merely project reference metadata.
+### Issue fields
 
-### Field mapping
+| Notion property | Sentry issue-group field               |
+| --------------- | -------------------------------------- |
+| Issue           | `title`                                |
+| Status          | `status`                               |
+| Assignee        | `assignedTo.name`                      |
+| Issue Link      | `permalink`                            |
+| Last Seen       | `lastSeen`                             |
+| Priority        | `priority`                             |
+| Status Detail   | `substatus`                            |
+| Level           | `level`                                |
+| Unhandled       | `isUnhandled`                          |
+| Events (24h)    | sum of `stats["24h"]`                  |
+| Events (30d)    | query-window `count`                   |
+| Users (30d)     | query-window `userCount`               |
+| Lifetime Events | `lifetime.count`                       |
+| Lifetime Users  | `lifetime.userCount`                   |
+| Project         | `project.name` or `project.slug`       |
+| Category        | `issueCategory`                        |
+| Issue Type      | `issueType`                            |
+| Platform        | issue or project `platform`            |
+| Culprit         | `culprit`                              |
+| First Seen      | `firstSeen`                            |
+| Issue Key       | `shortId` (for example, `CHECKOUT-42`) |
+| Sentry Issue ID | immutable `id`                         |
 
-| Notion property | Sentry issue-group field               | Type     |
-| --------------- | -------------------------------------- | -------- |
-| Issue           | `title`                                | title    |
-| Status          | `status`                               | select   |
-| Assignee        | `assignedTo.name`                      | richText |
-| Issue Link      | `permalink`                            | url      |
-| Last Seen       | `lastSeen`                             | date     |
-| Priority        | `priority`                             | select   |
-| Status Detail   | `substatus`                            | select   |
-| Level           | `level`                                | select   |
-| Unhandled       | `isUnhandled`                          | checkbox |
-| Events (24h)    | sum of `stats["24h"]`                  | number   |
-| Events (30d)    | query-window `count`                   | number   |
-| Users (30d)     | query-window `userCount`               | number   |
-| Lifetime Events | `lifetime.count`                       | number   |
-| Lifetime Users  | `lifetime.userCount`                   | number   |
-| Project         | `project.name` or `project.slug`       | select   |
-| Category        | `issueCategory`                        | select   |
-| Issue Type      | `issueType`                            | select   |
-| Platform        | issue or project `platform`            | select   |
-| Culprit         | `culprit`                              | richText |
-| First Seen      | `firstSeen`                            | date     |
-| Issue Key       | `shortId` (for example, `CHECKOUT-42`) | richText |
-| Sentry Issue ID | immutable `id`                         | richText |
+The immutable Sentry issue ID is the primary key. Each page body contains a
+short, bounded triage snapshot assembled from these same group-level fields.
 
-**Sentry Issue ID** is the primary key. The familiar **Issue Key** remains
-visible for recognition, but it is not used for identity because a display
-identifier is not as durable as Sentry's underlying group ID.
+### Project fields
 
-Each page body contains a short, bounded triage snapshot assembled from these
-same group-level fields: status, ownership, 24-hour, 30-day, and lifetime
-impact, native lifecycle signals, location, first/last seen timestamps, and
-the source link. It does not copy raw event payloads.
+The project database combines Sentry's project inventory with aggregates from
+the complete issue scan. It includes:
 
-### Suggested Notion views
+- unresolved, high-priority, new, regressed, escalating, unhandled, and
+  unassigned issue-group counts;
+- event volume in the current and previous seven-day windows, with the exact
+  change rather than a subjective score;
+- 30-day issue-group and event totals;
+- the most active issue in the current seven-day window and its source link;
+- last activity, team, platform, session-instrumentation, and first-event
+  context;
+- the environment scope used for every issue-derived aggregate.
 
-- **Active triage:** filter Status to Unresolved; sort by Priority, Events
-  (24h), and Users (30d).
-- **New and regressed:** filter Status Detail to New, Regressed, or Escalating;
-  sort by Last Seen descending.
-- **Needs an owner:** filter Status to Unresolved and Assignee empty, then sort
-  by Unhandled, Priority, and Events (24h).
-- **Largest user impact:** sort by Lifetime Users and Lifetime Events.
-- **Recently active resolutions:** filter Status to Resolved or Ignored and
-  sort by Last Seen. Last Seen is event activity—not the resolution timestamp.
-- **Risk by service:** group by Project or Platform, then sort by Events (24h).
+The immutable project ID is the primary key. A project with no issue activity
+in the 30-day window still appears with zero issue counts. If any returned
+issue lacks 14-day statistics, the project row omits its seven-day totals and
+top issue rather than publishing an understated result. The same rule applies
+to an incomplete 30-day event count.
 
-### Project structure
+There is deliberately no project-level affected-users total: one person can
+appear in several issue groups, so summing `userCount` would double-count them.
 
-```text
-src/
-├── index.ts      — registers the managed database, schedule, and shared pacer
-├── sentry.ts     — minimal REST client, trusted pagination, and rate limits
-├── sync-state.ts — pinned 30-day window and cursor-loop safeguards
-├── issues.ts     — Notion schema and issue-group transform
-└── helpers.ts    — labels, safe values, statistics, and page summaries
-```
+### Release fields
 
-### How it works
+Each release row represents one Sentry organization release, keyed by its
+immutable release ID. The newest 100 releases contribute status, projects,
+dates, new issue groups, deploy and commit counts, platforms, version, a direct
+Sentry link, and the provider-supplied external release URL. One aggregate
+Release Health query adds:
 
-1. The Worker calls Sentry's current organization issue-search endpoint,
-   `GET /api/0/organizations/{organization}/issues/`, requesting 100 groups per
-   page. It makes one request per page and performs no per-issue enrichment.
-2. Sentry normally defaults this endpoint to unresolved issues. The client
-   deliberately sends an empty `query=` so the rolling database also includes
-   resolved and ignored issues returned for the window.
-3. The first page fixes an exact `start` and `end` spanning 30 days, plus the
-   base URL, organization, project filters, environment filters, and a
-   non-secret credential fingerprint. That scope remains in serializable sync
-   state through the final page, so a long run cannot slide its window, mix
-   queries, or continue under a newly rotated token with different access.
-   Results use Sentry's `new` sort and request 24-hour group statistics.
-4. Sentry's `Link` header is authoritative. The client continues only when the
-   one `rel="next"` entry declares `results="true"`, extracts its opaque cursor,
-   validates the URL's origin and path, and rebuilds the configured request.
-   Missing links/cursors, duplicate next links, and immediate or longer cursor
-   cycles fail the refresh instead of silently truncating it or looping.
-5. A completed replace-mode run reconciles the whole key set. This catches
-   status, priority, and assignee changes and removes groups that leave the
-   rolling window. Sentry does not expose a reliable general issue mutation
-   timestamp: `lastSeen` records event activity, so it is intentionally not
-   treated as an incremental watermark.
-6. All requests share a conservative 60-request-per-minute client-side pacer.
-   Sentry uses caller- and endpoint-specific frequency and concurrency limits
-   rather than one universal quota. On HTTP 429, the Worker passes usable
-   `Retry-After` and `X-Sentry-Rate-Limit-Reset` delays to the Workers runtime
-   for backoff.
-7. Unknown future enum values remain visible as readable select values. Null
-   values are omitted instead of being mislabeled; meaningful zero counts and
-   a real `false` Unhandled value are preserved.
+- crash-free session and user rates;
+- sessions and unique users in the returned seven-day window;
+- the exact rounded window Sentry evaluated;
+- the configured project and environment scope used for health.
 
-Every scheduled run reads the complete scoped 30-day result—one request for
-each 100 issue groups. That is intentionally correct for status, priority, and
-assignee changes, but a large unscoped organization can generate substantial
-API traffic. Start with production and the projects your team reviews. If you
-fork the example for a very large scope, use a slower schedule or combine a
-webhook path with this full refresh as reconciliation.
+Sentry reports crash-free rates as percentage points; the transform converts
+them to Notion's percent-property representation without changing their
+meaning. A release without session telemetry still gets a metadata row.
+Absent health values remain absent—never `0`, `100%`, or an invented “Healthy”
+status. Explicit zeroes from Sentry remain zero.
+
+`New Issues`, deploys, and commits remain organization-release values. Projects
+lists every project Sentry associates with the release, while health metrics
+are aggregated only over the explicit **Health Project Scope** and
+**Environment Scope**. Keeping both scopes visible prevents a shared release
+from implying that scoped health covers every listed project. The base example
+avoids duplicated rows with misleading per-project copies of release-level
+metrics.
+
+## Suggested Notion views
+
+- **Active triage:** Status is Unresolved; sort by Priority, Events (24h), and
+  Users (30d).
+- **New and regressed:** Status Detail is New, Regressed, or Escalating; sort
+  by Last Seen descending.
+- **Needs an owner:** Status is Unresolved and Assignee is empty; sort by
+  Unhandled, Priority, and Events (24h).
+- **Services needing attention:** sort projects by Unresolved Issues (30d),
+  Events (7d), Event Change vs Prior 7d, and Unassigned Unresolved (30d).
+- **Regression concentration:** sort projects by Regressed Unresolved (30d)
+  and High-Priority Unresolved (30d); group by Team or Platform.
+- **Rollout watch:** sort releases by Released At descending, then Crash-Free
+  Sessions and Sessions (7d).
+- **Missing release telemetry:** filter Health Data (7d) unchecked. Empty means
+  the sessions endpoint was unavailable on that Sentry installation.
+
+## How it works
+
+### Rolling issue triage
+
+The Worker calls Sentry's current organization issue-search endpoint with an
+explicit empty `query=`. Sentry otherwise defaults the endpoint to unresolved
+issues, while this example needs recently active resolved and ignored groups
+for review as well. The first page pins an exact 30-day `start` and `end`, base
+URL, organization, filters, and a non-secret credential fingerprint.
+
+Every page requests 100 groups and 24-hour group statistics. Sentry's `Link`
+header is authoritative: the Worker continues only when the one trusted
+`rel="next"` entry declares `results="true"`. Missing or malformed links,
+untrusted origins/paths, duplicate next links, and cursor cycles fail closed.
+
+### Service-level reliability
+
+The daily project refresh has two phases:
+
+1. Scan the same pinned 30-day issue scope with 14-day statistics and keep only
+   compact per-project counters in serializable state.
+2. Page through the organization project inventory and enrich each project
+   with those aggregates.
+
+Configured project IDs or slugs are applied to issue search and locally to the
+project inventory; configured environments scope the issue-derived signals.
+Projects with no matching issues still appear. An issue aggregate whose
+project was deleted or became inaccessible is retained using the issue's
+project metadata so risk does not disappear silently.
+
+The state is capped at 500 active projects. Larger organizations should set
+`SENTRY_PROJECTS`; crossing the boundary fails with an actionable error rather
+than truncating the snapshot.
+
+### Recent rollout health
+
+The release refresh deliberately requests only the first 100 releases from the
+endpoint's most-recent-first default order, so this is an explicit useful set
+rather than accidental pagination truncation. Project and environment filters
+scope both release membership and health. An explicit empty `status=` includes
+recently archived releases instead of Sentry's default open-only set.
+
+One additional sessions request groups the prior seven days by release across
+the configured project and environment scope, requests totals without
+time-series payloads, and orders by session volume. This avoids per-release
+detail calls. The Worker requests at most 250 groups and fails if Sentry reaches
+that boundary, because treating a potentially capped result as complete could
+remove valid rows or omit health. With four fields and seven daily buckets,
+that conservative request also remains below Sentry's documented
+10,000-data-point constraint even if the service computes series before
+omitting them from the response.
+
+An empty health result is valid and leaves metrics absent. A 404 from the
+sessions endpoint on an older self-hosted installation also preserves release
+metadata. Authentication, authorization, malformed data, timeouts, 429s, and
+other API errors remain visible failures.
+
+### Rate limits and request safety
+
+All three syncs share a conservative 60-request-per-minute pacer. Sentry uses
+caller- and endpoint-specific quotas instead of publishing one universal
+limit. On HTTP 429, the Worker passes usable `Retry-After` and
+`X-Sentry-Rate-Limit-Reset` delays to the Workers runtime.
+
+Requests have a 30-second timeout, reject redirects, and send the bearer token
+only to a validated HTTPS base URL. Loopback HTTP is allowed for local testing.
+The token fingerprint prevents a multi-page refresh from continuing under a
+rotated credential with different access.
 
 ## Sentry access and configuration
 
@@ -184,34 +254,26 @@ webhook path with this full refresh as reconciliation.
 
 Prefer an organization **internal integration** for a deployed Worker:
 
-1. In Sentry, open **Organization Settings > Developer Settings > Internal
+1. Open **Organization Settings > Developer Settings > Internal
    Integrations**.
 2. Create an integration dedicated to this Worker.
-3. Grant the least privilege needed to list issue groups: `event:read`.
-4. Copy its token into `SENTRY_AUTH_TOKEN` and store it only with
-   `ntn workers env set`.
+3. Grant `event:read` for issue groups, `org:read` for projects and aggregate
+   Release Health, and `project:releases` for release metadata.
+4. Store the token only with `ntn workers env set`.
 
-A personal authentication token is convenient for testing, but it follows the
-user's access and lifecycle. The internal integration is easier to scope and
-operate independently. The token can sync only organizations, projects, and
-environments it is allowed to read.
+A broader `project:read` permission also authorizes release listing, but
+`project:releases` is the narrower purpose-specific choice. A personal token is
+convenient for testing but follows that user's access and lifecycle.
 
 ### Environment variables
 
-| Variable              | Required | Description                                                                               |
-| --------------------- | -------- | ----------------------------------------------------------------------------------------- |
-| `SENTRY_AUTH_TOKEN`   | Yes      | Bearer token with `event:read`                                                            |
-| `SENTRY_ORG_SLUG`     | Yes      | Organization slug from the Sentry URL                                                     |
-| `SENTRY_PROJECTS`     | No       | Comma-separated project IDs or slugs; omit for all projects visible to the token          |
-| `SENTRY_ENVIRONMENTS` | No       | Comma-separated environment names, such as `production,staging`                           |
-| `SENTRY_BASE_URL`     | No       | HTTPS root for self-hosted Sentry; defaults to `https://sentry.io` and must omit `/api/0` |
-
-For example, scope a deployed Worker to two services and production:
-
-```sh
-ntn workers env set SENTRY_PROJECTS=checkout-api,billing-api
-ntn workers env set SENTRY_ENVIRONMENTS=production
-```
+| Variable              | Required | Description                                                                          |
+| --------------------- | -------- | ------------------------------------------------------------------------------------ |
+| `SENTRY_AUTH_TOKEN`   | Yes      | Bearer token with `event:read`, `org:read`, and `project:releases`                   |
+| `SENTRY_ORG_SLUG`     | Yes      | Organization slug from the Sentry URL                                                |
+| `SENTRY_PROJECTS`     | No       | Comma-separated project IDs or slugs; scopes issues, projects, releases, and health  |
+| `SENTRY_ENVIRONMENTS` | No       | Comma-separated environments; scopes issues, project aggregates, and release health  |
+| `SENTRY_BASE_URL`     | No       | HTTPS root for self-hosted Sentry; defaults to `https://sentry.io`, without API path |
 
 For self-hosted Sentry:
 
@@ -219,31 +281,44 @@ For self-hosted Sentry:
 ntn workers env set SENTRY_BASE_URL=https://sentry.example.com
 ```
 
-The client requires HTTPS before sending its bearer token; loopback HTTP is
-accepted only for local development. Self-hosted versions can lag Sentry SaaS,
-so the parser accepts absent optional fields and future enum values but fails
-visibly if required identity or pagination contracts are missing.
+Self-hosted versions can lag Sentry SaaS. Optional fields and unknown future
+enum values are tolerated; missing identity, pagination, and completeness
+contracts fail visibly.
 
 ## Privacy and operational boundaries
 
-This example intentionally fetches only Sentry **issue-group metadata**. It
-does not request raw events, stack traces, breadcrumbs, request bodies,
-headers, query strings, tags, attachments, event users, IP addresses, or event
-contexts. The parser retains an assignee's display name but discards email and
-unselected response fields. It also avoids N+1 detail requests.
+The Worker requests issue-group metadata, project metadata, release metadata,
+and aggregate session totals. It does not request raw events, stack traces,
+breadcrumbs, request bodies, headers, query strings, tags, attachments, event
+users, IP addresses, or event contexts. Sentry's standard release response can
+contain owners, release authors, and commit-author metadata; the parser
+discards those fields immediately and never persists them in Notion or sync
+state. The issue parser retains an assignee display name but likewise discards
+email and other unselected response fields.
 
-Issue titles and culprits can still contain customer, code, or infrastructure
-details. Review Sentry's server-side data-scrubbing settings and the Notion
-database's sharing permissions before syncing production data to a broader
-audience.
+Issue titles, culprits, project names, and release versions can still contain
+customer, code, or infrastructure details. Review Sentry's data-scrubbing
+settings and the Notion databases' sharing permissions before syncing
+production data broadly.
 
-This is a one-way mirror. Changes in Notion do not update Sentry. Sentry
-remains the system of record and every row includes a direct source link.
+This is a one-way mirror. Changes in Notion do not update Sentry.
+
+## Project structure
+
+```text
+src/
+├── index.ts      — registers all databases, schedules, phases, and shared pacer
+├── sentry.ts     — minimal REST client, strict parsing, pagination, and limits
+├── sync-state.ts — pinned issue windows and reusable cursor-loop safeguards
+├── issues.ts     — issue schema and triage transform
+├── projects.ts   — project schema and truthful issue aggregation
+├── releases.ts   — release schema and aggregate health merge
+└── helpers.ts    — bounded labels, safe values, statistics, and summaries
+```
 
 ## Local validation
 
-All tests are offline and mock `fetch`; they do not need a Sentry token or
-contact Sentry:
+All tests are offline and mock `fetch`; they do not need a Sentry token:
 
 ```sh
 cd workers/sentry-sync
@@ -253,52 +328,40 @@ npm test
 npm run build
 ```
 
-The suite covers full/minimal transforms, property order, unknown and null
-values, zero counts, bounded Markdown, explicit all-status queries, project
-and environment filters, trusted Link parsing, pinned windows, resource and
-credential scope, longer cursor loops, authentication, malformed responses,
-rate-limit resets, and a concrete Worker execution across pages.
-
 For live verification without writing to Notion, copy `.env.example` to `.env`,
-add credentials for a small test project, and stream one local execution:
+add credentials for a small test project, and run:
 
 ```sh
 ntn workers exec issuesSync --local --stream
+ntn workers exec projectsSync --local --stream
+ntn workers exec releasesSync --local --stream
 ```
 
-Then deploy to a test Worker and use `ntn workers exec issuesSync --stream` for
-an end-to-end managed-database run. Confirm that:
+Confirm that recently active resolved and unresolved issues appear; project
+totals match the scoped issue set; current/prior seven-day buckets line up with
+Sentry; newest releases remain one row each with project context; and missing
+Release Health leaves fields absent rather than creating false zeroes.
 
-- resolved and unresolved groups are both present when Sentry returns both;
-- Events (24h) matches the issue group's 24-hour chart;
-- changing a status, priority, or assignee is reflected after the next run;
-- the second page is reached in an organization with more than 100 matching
-  groups;
-- no raw event data or assignee email appears in the local output.
+## Customizing the default set
 
-## Extending the example
+To remove a view from a fork, delete its `worker.database(...)` and
+`worker.sync(...)` blocks from `src/index.ts`, then remove its schema module if
+unused. No environment flag is required.
 
-To add another issue-group field:
-
-1. Add only the selected API shape to `SentryIssue` and validate it in
-   `parseIssue()` in `src/sentry.ts`.
-2. Add the Notion property to `issueSchema` in `src/issues.ts`.
-3. Add the matching transform property in exactly the same order.
-4. Add complete, null, unknown-value, and privacy regression tests.
-5. Update the mapping and recommended views in this README.
-
-Keep raw event details out of this base example. For faster freshness, a
-separate webhook-driven example can upsert changed groups while this full
-refresh remains the reconciliation path. For a project-level database, first
-compute meaningful health aggregates; do not create relations or thin project
-rows merely because the API exposes them.
+When adding fields, retain only the selected provider shape, validate identity
+and null semantics, preserve schema/transform property order, and add complete,
+missing, zero, future-value, privacy, and pagination tests. Keep raw event data
+out of this base example. A webhook-driven fork can improve issue freshness
+while the full refresh remains reconciliation.
 
 ## Official documentation
 
 - [List an organization's issues](https://docs.sentry.io/api/events/list-an-organizations-issues/)
+- [List an organization's projects](https://docs.sentry.io/api/organizations/list-an-organizations-projects/)
+- [List an organization's releases](https://docs.sentry.io/api/releases/list-an-organizations-releases/)
+- [Retrieve Release Health session statistics](https://docs.sentry.io/api/releases/retrieve-release-health-session-statistics/)
 - [Sentry pagination](https://docs.sentry.io/api/pagination/)
-- [Sentry API rate limits](https://docs.sentry.io/api/ratelimits/)
-- [Sentry API authentication](https://docs.sentry.io/api/auth/)
-- [Sentry API permissions](https://docs.sentry.io/api/permissions/)
+- [Sentry rate limits](https://docs.sentry.io/api/ratelimits/)
+- [Sentry authentication and permissions](https://docs.sentry.io/api/auth/)
 - [Sentry data scrubbing](https://docs.sentry.io/security-legal-pii/scrubbing/)
 - [Notion Workers](https://developers.notion.com/docs/workers)

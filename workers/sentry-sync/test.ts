@@ -17,20 +17,42 @@ import {
   titleText,
 } from "./src/helpers.js"
 import worker from "./src/index.js"
+import type { ProjectSyncState } from "./src/index.js"
 import { issueToChange } from "./src/issues.js"
 import {
+  aggregateProjectIssues,
+  projectToChange,
+  type ProjectIssueAggregate,
+} from "./src/projects.js"
+import {
+  RELEASE_HEALTH_DAYS,
+  releaseHealthWindow,
+  releasesToChanges,
+  sentryReleaseUrl,
+} from "./src/releases.js"
+import {
   buildIssuesUrl,
+  buildProjectsUrl,
+  buildReleaseHealthUrl,
+  buildReleasesUrl,
   fetchIssuesPage,
+  fetchProjectsPage,
+  fetchRecentReleases,
+  fetchReleaseHealth,
   getIssueScope,
   nextCursorFromLink,
   parseRetryAfterSeconds,
   rateLimitRetryAfterSeconds,
   type SentryIssue,
   type SentryIssueScope,
+  type SentryProject,
+  type SentryRelease,
+  type SentryReleaseHealthSnapshot,
 } from "./src/sentry.js"
 import {
   ISSUE_WINDOW_DAYS,
   issueWindow,
+  nextCursorTraversal,
   nextIssueState,
   type IssueSyncState,
 } from "./src/sync-state.js"
@@ -120,6 +142,60 @@ const defaultScope: SentryIssueScope = {
   credentialFingerprint: "test-only-fingerprint",
 }
 
+const fullProject: SentryProject = {
+  id: "99",
+  name: "Checkout API",
+  slug: "checkout-api",
+  platform: "node",
+  platforms: ["node"],
+  teams: [{ id: "7", name: "Checkout", slug: "checkout" }],
+  dateCreated: "2025-01-01T00:00:00.000Z",
+  firstEvent: "2025-01-02T00:00:00.000Z",
+  hasSessions: true,
+}
+
+const fullRelease: SentryRelease = {
+  id: "501",
+  version: "checkout@2.4.0",
+  shortVersion: "2.4.0",
+  status: "open",
+  ref: "abcdef123",
+  url: "https://github.com/acme/checkout/releases/tag/2.4.0",
+  dateReleased: "2026-07-01T12:00:00.000Z",
+  dateCreated: "2026-07-01T11:00:00.000Z",
+  newGroups: 3,
+  commitCount: 12,
+  deployCount: 2,
+  firstEvent: "2026-07-01T12:01:00.000Z",
+  lastEvent: "2026-07-02T14:00:00.000Z",
+  projects: [
+    {
+      id: "99",
+      name: "Checkout API",
+      slug: "checkout-api",
+      newGroups: 3,
+      platform: "node",
+      platforms: ["node"],
+      hasHealthData: true,
+    },
+  ],
+}
+
+const fullReleaseHealth: SentryReleaseHealthSnapshot = {
+  available: true,
+  start: "2026-06-25T00:00:00.000Z",
+  end: "2026-07-02T00:00:00.000Z",
+  groups: [
+    {
+      release: "checkout@2.4.0",
+      sessions: 12_000,
+      users: 4_000,
+      crashFreeSessions: 99.95,
+      crashFreeUsers: 99.5,
+    },
+  ],
+}
+
 function propertyText(value: unknown): string {
   return JSON.stringify(value)
 }
@@ -189,7 +265,49 @@ function rawIssue(overrides: Record<string, unknown> = {}) {
   }
 }
 
-test("manifest exposes one value-first rolling issue database", () => {
+function rawProject(overrides: Record<string, unknown> = {}) {
+  return {
+    id: fullProject.id,
+    name: fullProject.name,
+    slug: fullProject.slug,
+    platform: fullProject.platform,
+    platforms: fullProject.platforms,
+    teams: fullProject.teams,
+    dateCreated: fullProject.dateCreated,
+    firstEvent: fullProject.firstEvent,
+    hasSessions: fullProject.hasSessions,
+    access: ["project:read"],
+    features: ["releases"],
+    ...overrides,
+  }
+}
+
+function rawRelease(overrides: Record<string, unknown> = {}) {
+  return {
+    id: Number(fullRelease.id),
+    version: fullRelease.version,
+    shortVersion: fullRelease.shortVersion,
+    status: fullRelease.status,
+    ref: fullRelease.ref,
+    url: fullRelease.url,
+    dateReleased: fullRelease.dateReleased,
+    dateCreated: fullRelease.dateCreated,
+    newGroups: fullRelease.newGroups,
+    commitCount: fullRelease.commitCount,
+    deployCount: fullRelease.deployCount,
+    firstEvent: fullRelease.firstEvent,
+    lastEvent: fullRelease.lastEvent,
+    projects: fullRelease.projects.map((project) => ({
+      ...project,
+      id: Number(project.id),
+    })),
+    authors: [{ id: "person", email: "private@example.com" }],
+    data: { sensitive: true },
+    ...overrides,
+  }
+}
+
+test("manifest enables all three value-first databases by default", () => {
   assert.deepEqual(
     worker.manifest.databases.map((database) => ({
       key: database.key,
@@ -201,7 +319,7 @@ test("manifest exposes one value-first rolling issue database", () => {
     [
       {
         key: "issues",
-        title: "Sentry Issues — Last 30 Days",
+        title: "Sentry Issues",
         primaryKey: "Sentry Issue ID",
         icon: { type: "notion", icon: "bug", color: "gray" },
         firstSix: [
@@ -211,6 +329,34 @@ test("manifest exposes one value-first rolling issue database", () => {
           "Issue Link",
           "Last Seen",
           "Priority",
+        ],
+      },
+      {
+        key: "projects",
+        title: "Sentry Projects",
+        primaryKey: "Sentry Project ID",
+        icon: { type: "notion", icon: "chart-line", color: "gray" },
+        firstSix: [
+          "Project",
+          "Unresolved Issues (30d)",
+          "Events (7d)",
+          "Most Active Issue (7d)",
+          "Issue Link",
+          "Last Seen",
+        ],
+      },
+      {
+        key: "releases",
+        title: "Sentry Releases",
+        primaryKey: "Sentry Release ID",
+        icon: { type: "notion", icon: "shield", color: "gray" },
+        firstSix: [
+          "Release",
+          "Projects",
+          "Crash-Free Users",
+          "Crash-Free Sessions",
+          "New Issues",
+          "Status",
         ],
       },
     ]
@@ -235,6 +381,18 @@ test("manifest exposes one value-first rolling issue database", () => {
       {
         key: "issuesSync",
         databaseKey: "issues",
+        mode: "replace",
+        schedule: { type: "interval", intervalMs: 15 * 60_000 },
+      },
+      {
+        key: "projectsSync",
+        databaseKey: "projects",
+        mode: "replace",
+        schedule: { type: "interval", intervalMs: 24 * 60 * 60_000 },
+      },
+      {
+        key: "releasesSync",
+        databaseKey: "releases",
         mode: "replace",
         schedule: { type: "interval", intervalMs: 15 * 60_000 },
       },
@@ -312,6 +470,292 @@ test("zero counts and false unhandled values remain meaningful", () => {
   assertPropertyContains(properties.Unhandled, "No")
 })
 
+test("project aggregation answers service-risk questions without double-counting users", () => {
+  const window = {
+    start: "2026-06-02T15:00:00.000Z",
+    end: "2026-07-02T15:00:00.000Z",
+  }
+  const previous = Date.parse("2026-06-24T15:00:00.000Z") / 1_000
+  const current = Date.parse("2026-07-01T15:00:00.000Z") / 1_000
+  const aggregates = aggregateProjectIssues(
+    {},
+    [
+      {
+        ...fullIssue,
+        count: 100,
+        userCount: 80,
+        stats: {
+          "14d": [
+            [previous, 4],
+            [current, 10],
+          ],
+        },
+      },
+      {
+        ...fullIssue,
+        id: "4500000000000003",
+        title: "Resolved checkout warning",
+        status: "resolved",
+        substatus: null,
+        priority: "low",
+        isUnhandled: false,
+        assignedTo: null,
+        count: 50,
+        userCount: 80,
+        stats: {
+          "14d": [
+            [previous, 6],
+            [current, 5],
+          ],
+        },
+      },
+    ],
+    window
+  )
+
+  const aggregate = aggregates["99"]
+  assert.equal(aggregate.issueGroups, 2)
+  assert.equal(aggregate.unresolvedIssues, 1)
+  assert.equal(aggregate.highPriorityUnresolved, 1)
+  assert.equal(aggregate.regressedUnresolved, 1)
+  assert.equal(aggregate.unassignedUnresolved, 0)
+  assert.equal(aggregate.previous7dEvents, 10)
+  assert.equal(aggregate.events7d, 15)
+  assert.equal(aggregate.events30d, 150)
+  assert.equal(aggregate.mostActiveIssue?.id, fullIssue.id)
+  assert.equal("users" in aggregate, false)
+
+  const change = projectToChange(
+    fullProject,
+    aggregate,
+    window.end,
+    defaultScope
+  )
+  const properties = change.properties as Record<string, unknown>
+  assert.deepEqual(Object.keys(properties).slice(0, 6), [
+    "Project",
+    "Unresolved Issues (30d)",
+    "Events (7d)",
+    "Most Active Issue (7d)",
+    "Issue Link",
+    "Last Seen",
+  ])
+  assertPropertyContains(properties["Events (7d)"], "15")
+  assertPropertyContains(properties["Previous 7d Events"], "10")
+  assertPropertyContains(properties["Event Change vs Prior 7d"], "5")
+  assertPropertyContains(properties["Environment Scope"], "All environments")
+  assert.equal(properties["Users (30d)"], undefined)
+  assert.match(change.pageContentMarkdown, /Ownership gaps/)
+})
+
+test("project event buckets use exact seven-day boundaries and omit incomplete totals", () => {
+  const window = {
+    start: "2026-06-02T15:00:00.000Z",
+    end: "2026-07-02T15:00:00.000Z",
+  }
+  const start14d = Date.parse("2026-06-18T15:00:00.000Z") / 1_000
+  const split7d = Date.parse("2026-06-25T15:00:00.000Z") / 1_000
+  const end = Date.parse(window.end) / 1_000
+  const complete = aggregateProjectIssues(
+    {},
+    [
+      {
+        ...fullIssue,
+        stats: {
+          "14d": [
+            [start14d, 2],
+            [split7d, 3],
+            [end, 5],
+          ],
+        },
+      },
+    ],
+    window
+  )["99"]
+  assert.equal(complete.previous7dEvents, 2)
+  assert.equal(complete.events7d, 8)
+
+  const incomplete = aggregateProjectIssues(
+    {},
+    [{ ...fullIssue, stats: null, count: null }],
+    window
+  )["99"]
+  const change = projectToChange(
+    fullProject,
+    incomplete,
+    window.end,
+    defaultScope
+  )
+  const properties = change.properties as Record<string, unknown>
+  assert.equal(properties["Events (7d)"], undefined)
+  assert.equal(properties["Previous 7d Events"], undefined)
+  assert.equal(properties["Event Change"], undefined)
+  assert.equal(properties["Events (30d)"], undefined)
+  assert.equal(properties["Most Active Issue (7d)"], undefined)
+})
+
+test("project aggregation fails closed without immutable or consistent identity", () => {
+  const window = {
+    start: "2026-06-02T15:00:00.000Z",
+    end: "2026-07-02T15:00:00.000Z",
+  }
+  assert.throws(
+    () =>
+      aggregateProjectIssues(
+        {},
+        [{ ...fullIssue, project: { ...fullIssue.project!, id: null } }],
+        window
+      ),
+    /immutable project ID/
+  )
+  assert.throws(
+    () =>
+      aggregateProjectIssues(
+        {},
+        [
+          fullIssue,
+          {
+            ...fullIssue,
+            id: "different-issue",
+            project: { ...fullIssue.project!, slug: "different-slug" },
+          },
+        ],
+        window
+      ),
+    /conflicting slugs/
+  )
+})
+
+test("release transform combines metadata and aggregate health with stable identity", () => {
+  const changes = releasesToChanges(
+    [fullRelease],
+    fullReleaseHealth,
+    defaultScope
+  )
+  assert.equal(changes.length, 1)
+  const change = changes[0]
+  const properties = change.properties as Record<string, unknown>
+  assert.equal(change.key, "501")
+  assert.deepEqual(Object.keys(properties).slice(0, 6), [
+    "Release",
+    "Projects",
+    "Crash-Free Users",
+    "Crash-Free Sessions",
+    "New Issues",
+    "Status",
+  ])
+  assertPropertyContains(properties["Crash-Free Sessions"], "0.9995")
+  assertPropertyContains(properties["Crash-Free Users"], "0.995")
+  assertPropertyContains(properties["Sessions (7d)"], "12000")
+  assertPropertyContains(properties["New Issues"], "3")
+  assertPropertyContains(
+    properties["Health Project Scope"],
+    "All accessible projects"
+  )
+  assertPropertyContains(properties["Environment Scope"], "All environments")
+  assert.doesNotMatch(change.pageContentMarkdown, /private@example\.com/)
+})
+
+test("release rows remain useful when health is absent and preserve explicit zeroes", () => {
+  const noHealth = releasesToChanges(
+    [
+      {
+        ...fullRelease,
+        newGroups: 0,
+        projects: [
+          {
+            ...fullRelease.projects[0],
+            hasHealthData: false,
+            newGroups: 0,
+          },
+        ],
+      },
+    ],
+    { ...fullReleaseHealth, groups: [] },
+    defaultScope
+  )[0]
+  const noHealthProperties = noHealth.properties as Record<string, unknown>
+  assertPropertyContains(noHealthProperties["Health Data (7d)"], "No")
+  assertPropertyContains(noHealthProperties["New Issues"], "0")
+  assert.equal(noHealthProperties["Crash-Free Sessions"], undefined)
+  assert.equal(noHealthProperties["Sessions (7d)"], undefined)
+
+  const zeroHealth = releasesToChanges(
+    [fullRelease],
+    {
+      ...fullReleaseHealth,
+      groups: [
+        {
+          ...fullReleaseHealth.groups[0],
+          sessions: 0,
+          users: 0,
+          crashFreeSessions: 0,
+          crashFreeUsers: 0,
+        },
+      ],
+    },
+    defaultScope
+  )[0].properties as Record<string, unknown>
+  assertPropertyContains(zeroHealth["Sessions (7d)"], "0")
+  assertPropertyContains(zeroHealth["Crash-Free Sessions"], "0")
+})
+
+test("release links encode opaque versions and crash-free percentages are bounded", () => {
+  const link = sentryReleaseUrl(defaultScope, "mobile/1.0 @ 日本?")
+  assert.match(link, /mobile%2F1\.0%20%40%20%E6%97%A5%E6%9C%AC%3F/)
+  const parenthesized = releasesToChanges(
+    [{ ...fullRelease, version: "mobile)1.0" }],
+    { ...fullReleaseHealth, groups: [] },
+    defaultScope
+  )[0]
+  assert.match(parenthesized.pageContentMarkdown, /mobile%291\.0/)
+  assert.throws(
+    () =>
+      releasesToChanges(
+        [fullRelease],
+        {
+          ...fullReleaseHealth,
+          groups: [{ ...fullReleaseHealth.groups[0], crashFreeSessions: 101 }],
+        },
+        defaultScope
+      ),
+    /invalid crash-free percentage/
+  )
+  assert.throws(
+    () =>
+      releasesToChanges(
+        [
+          {
+            ...fullRelease,
+            projects: Array.from({ length: 101 }, (_, index) => ({
+              ...fullRelease.projects[0],
+              id: String(index),
+              name: `Project ${index}`,
+              slug: `project-${index}`,
+            })),
+          },
+        ],
+        fullReleaseHealth,
+        defaultScope
+      ),
+    /more than 100 projects/
+  )
+})
+
+test("a project with no recent issues remains visible with truthful zeroes", () => {
+  const change = projectToChange(
+    fullProject,
+    undefined,
+    "2026-07-02T15:00:00.000Z",
+    defaultScope
+  )
+  const properties = change.properties as Record<string, unknown>
+  assertPropertyContains(properties["Unresolved Issues (30d)"], "0")
+  assertPropertyContains(properties["Events (7d)"], "0")
+  assertPropertyContains(properties["Issue Groups (30d)"], "0")
+  assertPropertyContains(properties["Events (30d)"], "0")
+})
+
 test("display helpers preserve unknown values and bound provider text", () => {
   assert.equal(
     formatSentryLabel("archived_until_escalating"),
@@ -368,6 +812,16 @@ test("issue window is exactly 30 days and remains pinned between pages", () => {
   assert.deepEqual(issueWindow(state, now + 7 * 86_400_000), window)
 })
 
+test("release health window is exactly seven days", () => {
+  const now = Date.parse("2026-07-02T15:00:00.000Z")
+  const window = releaseHealthWindow(now)
+  assert.equal(
+    Date.parse(window.end) - Date.parse(window.start),
+    RELEASE_HEALTH_DAYS * 86_400_000
+  )
+  assert.throws(() => releaseHealthWindow(Number.NaN), /invalid time/)
+})
+
 test("cursor state catches immediate and longer pagination loops", () => {
   const window = {
     start: "2026-06-02T15:00:00.000Z",
@@ -389,6 +843,16 @@ test("cursor state catches immediate and longer pagination loops", () => {
   assert.throws(
     () => nextIssueState(second, window, defaultScope, undefined),
     /missing/
+  )
+  assert.throws(
+    () =>
+      nextCursorTraversal(
+        "project-b",
+        ["project-a", "project-b"],
+        "project-a",
+        "project"
+      ),
+    /project pagination repeated/
   )
 })
 
@@ -416,6 +880,58 @@ test("request URL explicitly includes all statuses and repeatable filters", () =
     "staging",
   ])
   assert.equal(url.searchParams.get("cursor"), "opaque:100:0")
+
+  const projectHealthUrl = buildIssuesUrl({
+    start: "2026-06-02T15:00:00.000Z",
+    end: "2026-07-02T15:00:00.000Z",
+    statsPeriod: "14d",
+  })
+  assert.equal(projectHealthUrl.searchParams.get("groupStatsPeriod"), "14d")
+})
+
+test("project and release URLs are bounded and carry the configured scope", () => {
+  configureEnvironment()
+  process.env.SENTRY_PROJECTS = "checkout-api,99"
+  process.env.SENTRY_ENVIRONMENTS = "production,staging"
+
+  const projects = buildProjectsUrl("project:100:0")
+  assert.equal(projects.pathname, "/api/0/organizations/acme/projects/")
+  assert.equal(projects.searchParams.get("per_page"), "100")
+  assert.equal(projects.searchParams.get("cursor"), "project:100:0")
+
+  const releases = buildReleasesUrl()
+  assert.equal(releases.pathname, "/api/0/organizations/acme/releases/")
+  assert.equal(releases.searchParams.get("per_page"), "100")
+  assert.equal(releases.searchParams.has("status"), true)
+  assert.equal(releases.searchParams.get("status"), "")
+  assert.deepEqual(releases.searchParams.getAll("project"), [
+    "checkout-api",
+    "99",
+  ])
+  assert.deepEqual(releases.searchParams.getAll("environment"), [
+    "production",
+    "staging",
+  ])
+  assert.equal(releases.searchParams.has("cursor"), false)
+
+  const health = buildReleaseHealthUrl(
+    "2026-06-25T15:00:00.000Z",
+    "2026-07-02T15:00:00.000Z"
+  )
+  assert.equal(health.pathname, "/api/0/organizations/acme/sessions/")
+  assert.deepEqual(health.searchParams.getAll("field"), [
+    "sum(session)",
+    "count_unique(user)",
+    "crash_free_rate(session)",
+    "crash_free_rate(user)",
+  ])
+  assert.deepEqual(health.searchParams.getAll("groupBy"), ["release"])
+  assert.equal(health.searchParams.get("includeSeries"), "0")
+  assert.equal(health.searchParams.get("per_page"), "250")
+  assert.deepEqual(health.searchParams.getAll("environment"), [
+    "production",
+    "staging",
+  ])
 })
 
 test("base URL validation rejects unsafe or ambiguous configuration", () => {
@@ -604,6 +1120,166 @@ test("API client trusts Link results rather than page length", async () => {
   assert.equal(page.nextCursor, "cursor-b")
 })
 
+test("project and release clients retain selected fields and pace every request", async () => {
+  configureEnvironment()
+  let waits = 0
+  const urls: URL[] = []
+  globalThis.fetch = (async (input, init) => {
+    const request = new Request(input, init)
+    const url = new URL(request.url)
+    urls.push(url)
+    if (url.pathname.endsWith("/projects/")) {
+      return new Response(JSON.stringify([rawProject()]), {
+        status: 200,
+        headers: { Link: terminalLink(url) },
+      })
+    }
+    if (url.pathname.endsWith("/releases/")) {
+      return new Response(JSON.stringify([rawRelease()]), { status: 200 })
+    }
+    if (url.pathname.endsWith("/sessions/")) {
+      return new Response(
+        JSON.stringify({
+          start: fullReleaseHealth.start,
+          end: fullReleaseHealth.end,
+          intervals: [],
+          query: "",
+          groups: [
+            {
+              by: { project: 99, release: fullRelease.version },
+              totals: {
+                "sum(session)": 12_000,
+                "count_unique(user)": 4_000,
+                "crash_free_rate(session)": 99.95,
+                "crash_free_rate(user)": 99.5,
+              },
+              series: {},
+              ignored: "not retained",
+            },
+          ],
+        }),
+        { status: 200 }
+      )
+    }
+    throw new Error(`unexpected request ${url}`)
+  }) as typeof fetch
+  const wait = async () => {
+    waits += 1
+  }
+
+  const projectPage = await fetchProjectsPage(wait, undefined)
+  const releases = await fetchRecentReleases(wait)
+  const health = await fetchReleaseHealth(
+    wait,
+    fullReleaseHealth.start!,
+    fullReleaseHealth.end!
+  )
+
+  assert.equal(waits, 3)
+  assert.equal(urls.length, 3)
+  assert.equal(projectPage.resources[0].teams[0].name, "Checkout")
+  assert.equal("access" in projectPage.resources[0], false)
+  assert.equal(releases[0].id, "501")
+  assert.equal(releases[0].projects[0].id, "99")
+  assert.equal("authors" in releases[0], false)
+  assert.equal("data" in releases[0], false)
+  assert.deepEqual(health, fullReleaseHealth)
+})
+
+test("release client accepts documented name-and-slug-only project references", async () => {
+  configureEnvironment()
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify([
+        rawRelease({
+          projects: [{ name: "Checkout API", slug: "checkout-api" }],
+        }),
+      ]),
+      { status: 200 }
+    )) as typeof fetch
+
+  const releases = await fetchRecentReleases(async () => undefined)
+  assert.equal(releases[0].projects[0].id, null)
+  assert.equal(releases[0].projects[0].name, "Checkout API")
+})
+
+test("new clients fail closed on malformed identity, shape, and health truncation", async () => {
+  configureEnvironment()
+
+  globalThis.fetch = (async (input, init) => {
+    const request = new Request(input, init)
+    return new Response(JSON.stringify([rawProject({ id: null })]), {
+      status: 200,
+      headers: { Link: terminalLink(new URL(request.url)) },
+    })
+  }) as typeof fetch
+  await assert.rejects(
+    fetchProjectsPage(async () => undefined, undefined),
+    /immutable id/
+  )
+
+  globalThis.fetch = (async () =>
+    new Response(JSON.stringify([rawRelease({ projects: undefined })]), {
+      status: 200,
+    })) as typeof fetch
+  await assert.rejects(
+    fetchRecentReleases(async () => undefined),
+    /projects/
+  )
+
+  const groups = Array.from({ length: 250 }, (_, index) => ({
+    by: { project: index + 1, release: `release-${index}` },
+    totals: { "sum(session)": 1 },
+    series: {},
+  }))
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        start: fullReleaseHealth.start,
+        end: fullReleaseHealth.end,
+        groups,
+      }),
+      { status: 200 }
+    )) as typeof fetch
+  await assert.rejects(
+    fetchReleaseHealth(
+      async () => undefined,
+      fullReleaseHealth.start!,
+      fullReleaseHealth.end!
+    ),
+    /250-group safety limit/
+  )
+
+  globalThis.fetch = (async (input, init) => {
+    const request = new Request(input, init)
+    return new Response(
+      JSON.stringify({
+        start: fullReleaseHealth.start,
+        end: fullReleaseHealth.end,
+        groups: [
+          {
+            by: { release: "checkout@2.4.0" },
+            totals: { "sum(session)": 1 },
+            series: {},
+          },
+        ],
+      }),
+      {
+        status: 200,
+        headers: { Link: nextLink(new URL(request.url), "health-page-2") },
+      }
+    )
+  }) as typeof fetch
+  await assert.rejects(
+    fetchReleaseHealth(
+      async () => undefined,
+      fullReleaseHealth.start!,
+      fullReleaseHealth.end!
+    ),
+    /returned another page/
+  )
+})
+
 test("API client fails closed if credentials change between pages", async () => {
   configureEnvironment()
   const scope = getIssueScope()
@@ -730,13 +1406,17 @@ test("429 becomes a platform-aware RateLimitError while ordinary 403 remains gen
   assert.match(permissionError.message, /Sentry API error \(403\)/)
 })
 
-type WorkerRunResult = {
-  changes: Array<{ key: string; targetDatabaseKey: string }>
+type WorkerRunResult<State = unknown> = {
+  changes: Array<{
+    key: string
+    targetDatabaseKey: string
+    properties?: Record<string, unknown>
+  }>
   hasMore: boolean
-  nextUserContext?: IssueSyncState
+  nextUserContext?: State
 }
 
-function sentryPacerContext(state?: IssueSyncState) {
+function sentryPacerContext<State>(state?: State) {
   return {
     state,
     pacers: {
@@ -766,9 +1446,11 @@ test("Worker run pins its 30-day window and advances opaque cursor state", async
     })
   }) as typeof fetch
 
-  const first = (await worker.run("issuesSync", sentryPacerContext(), {
-    concreteOutput: true,
-  })) as WorkerRunResult
+  const first = (await worker.run(
+    "issuesSync",
+    sentryPacerContext<IssueSyncState>(),
+    { concreteOutput: true }
+  )) as WorkerRunResult<IssueSyncState>
 
   assert.equal(first.hasMore, true)
   assert.equal(first.changes.length, 1)
@@ -800,7 +1482,7 @@ test("Worker run pins its 30-day window and advances opaque cursor state", async
     "issuesSync",
     sentryPacerContext(first.nextUserContext),
     { concreteOutput: true }
-  )) as WorkerRunResult
+  )) as WorkerRunResult<IssueSyncState>
 
   assert.equal(second.hasMore, false)
   assert.equal(second.nextUserContext, undefined)
@@ -820,4 +1502,210 @@ test("Worker run pins its 30-day window and advances opaque cursor state", async
     requestUrls[0].searchParams.get("end")
   )
   assert.equal(requestUrls.length, 2, "one request is made for each API page")
+})
+
+test("projects Worker aggregates all issues before emitting enriched project rows", async () => {
+  configureEnvironment()
+  process.env.SENTRY_PROJECTS = "checkout-api"
+  process.env.SENTRY_ENVIRONMENTS = "production"
+  const now = Date.parse("2026-07-02T15:00:00.000Z")
+  Date.now = () => now
+  const requestUrls: URL[] = []
+  globalThis.fetch = (async (input, init) => {
+    const request = new Request(input, init)
+    const url = new URL(request.url)
+    requestUrls.push(url)
+    if (url.pathname.endsWith("/issues/")) {
+      const secondPage = url.searchParams.has("cursor")
+      return new Response(
+        JSON.stringify([
+          rawIssue({
+            id: secondPage ? "4500000000000003" : fullIssue.id,
+            title: secondPage ? "Second checkout issue" : fullIssue.title,
+            count: secondPage ? 50 : 100,
+            stats: {
+              "14d": [
+                [
+                  Date.parse("2026-06-24T15:00:00.000Z") / 1_000,
+                  secondPage ? 6 : 4,
+                ],
+                [
+                  Date.parse("2026-07-01T15:00:00.000Z") / 1_000,
+                  secondPage ? 5 : 10,
+                ],
+              ],
+            },
+          }),
+        ]),
+        {
+          status: 200,
+          headers: {
+            Link: secondPage
+              ? terminalLink(url)
+              : nextLink(url, "project-issues-page-2"),
+          },
+        }
+      )
+    }
+    if (url.pathname.endsWith("/projects/")) {
+      return new Response(JSON.stringify([rawProject()]), {
+        status: 200,
+        headers: { Link: terminalLink(url) },
+      })
+    }
+    throw new Error(`unexpected request ${url}`)
+  }) as typeof fetch
+
+  const first = (await worker.run(
+    "projectsSync",
+    sentryPacerContext<ProjectSyncState>(),
+    { concreteOutput: true }
+  )) as WorkerRunResult<ProjectSyncState>
+  assert.equal(first.hasMore, true)
+  assert.equal(first.changes.length, 0)
+  assert.equal(first.nextUserContext?.phase, "issues")
+  assert.equal(requestUrls[0].searchParams.get("groupStatsPeriod"), "14d")
+
+  process.env.SENTRY_PROJECTS = "another-project"
+  process.env.SENTRY_ENVIRONMENTS = "staging"
+  const second = (await worker.run(
+    "projectsSync",
+    sentryPacerContext(first.nextUserContext),
+    { concreteOutput: true }
+  )) as WorkerRunResult<ProjectSyncState>
+  assert.equal(second.hasMore, true)
+  assert.equal(second.changes.length, 0)
+  assert.equal(second.nextUserContext?.phase, "projects")
+  assert.deepEqual(requestUrls[1].searchParams.getAll("project"), [
+    "checkout-api",
+  ])
+  assert.deepEqual(requestUrls[1].searchParams.getAll("environment"), [
+    "production",
+  ])
+
+  const third = (await worker.run(
+    "projectsSync",
+    sentryPacerContext(second.nextUserContext),
+    { concreteOutput: true }
+  )) as WorkerRunResult<ProjectSyncState>
+  assert.equal(third.hasMore, false)
+  assert.equal(third.changes.length, 1)
+  assert.equal(third.changes[0].key, "99")
+  assert.equal(third.changes[0].targetDatabaseKey, "projects")
+  assertPropertyContains(third.changes[0].properties?.["Events (7d)"], "15")
+  assertPropertyContains(
+    third.changes[0].properties?.["Issue Groups (30d)"],
+    "2"
+  )
+  assertPropertyContains(
+    third.changes[0].properties?.["Environment Scope"],
+    "production"
+  )
+  assert.equal(requestUrls.length, 3)
+})
+
+test("projects Worker validates a resumed snapshot before making requests", async () => {
+  configureEnvironment()
+  let fetched = false
+  globalThis.fetch = (async () => {
+    fetched = true
+    throw new Error("fetch should not be called")
+  }) as typeof fetch
+  const invalidState: ProjectSyncState = {
+    phase: "projects",
+    start: "2026-07-03T00:00:00.000Z",
+    end: "2026-07-02T00:00:00.000Z",
+    scope: defaultScope,
+    aggregates: {},
+    unmatchedProjectIds: [],
+  }
+
+  await assert.rejects(
+    worker.run("projectsSync", sentryPacerContext(invalidState), {
+      concreteOutput: true,
+    }),
+    /must start before/
+  )
+  assert.equal(fetched, false)
+})
+
+test("releases Worker uses one bounded list and one aggregate health request", async () => {
+  configureEnvironment()
+  process.env.SENTRY_PROJECTS = "checkout-api"
+  process.env.SENTRY_ENVIRONMENTS = "production"
+  const now = Date.parse("2026-07-02T15:00:00.000Z")
+  Date.now = () => now
+  const requestUrls: URL[] = []
+  globalThis.fetch = (async (input, init) => {
+    const request = new Request(input, init)
+    const url = new URL(request.url)
+    requestUrls.push(url)
+    if (url.pathname.endsWith("/releases/")) {
+      return new Response(JSON.stringify([rawRelease()]), { status: 200 })
+    }
+    if (url.pathname.endsWith("/sessions/")) {
+      return new Response(
+        JSON.stringify({
+          start: url.searchParams.get("start"),
+          end: url.searchParams.get("end"),
+          groups: [
+            {
+              by: { project: 99, release: fullRelease.version },
+              totals: {
+                "sum(session)": 12_000,
+                "count_unique(user)": 4_000,
+                "crash_free_rate(session)": 99.95,
+                "crash_free_rate(user)": 99.5,
+              },
+              series: {},
+            },
+          ],
+        }),
+        { status: 200 }
+      )
+    }
+    throw new Error(`unexpected request ${url}`)
+  }) as typeof fetch
+
+  const result = (await worker.run("releasesSync", sentryPacerContext(), {
+    concreteOutput: true,
+  })) as WorkerRunResult
+  assert.equal(result.hasMore, false)
+  assert.equal(result.changes.length, 1)
+  assert.equal(result.changes[0].key, "501")
+  assert.equal(result.changes[0].targetDatabaseKey, "releases")
+  assertPropertyContains(
+    result.changes[0].properties?.["Health Project Scope"],
+    "checkout-api"
+  )
+  assertPropertyContains(
+    result.changes[0].properties?.["Environment Scope"],
+    "production"
+  )
+  assert.equal(requestUrls.length, 2)
+  assert.equal(requestUrls[0].searchParams.get("per_page"), "100")
+  assert.equal(requestUrls[0].searchParams.has("cursor"), false)
+  assert.equal(requestUrls[1].searchParams.get("includeSeries"), "0")
+})
+
+test("releases Worker preserves metadata when an older server lacks sessions", async () => {
+  configureEnvironment()
+  globalThis.fetch = (async (input, init) => {
+    const request = new Request(input, init)
+    const url = new URL(request.url)
+    if (url.pathname.endsWith("/releases/")) {
+      return new Response(JSON.stringify([rawRelease()]), { status: 200 })
+    }
+    return new Response("not found", { status: 404 })
+  }) as typeof fetch
+
+  const result = (await worker.run("releasesSync", sentryPacerContext(), {
+    concreteOutput: true,
+  })) as WorkerRunResult
+  assert.equal(result.hasMore, false)
+  assert.equal(result.changes.length, 1)
+  assert.equal(result.changes[0].targetDatabaseKey, "releases")
+  assert.equal(result.changes[0].properties?.["Health Data (7d)"], undefined)
+  assert.equal(result.changes[0].properties?.["Window Start"], undefined)
+  assert.equal(result.changes[0].properties?.["Window End"], undefined)
 })
