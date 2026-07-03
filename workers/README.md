@@ -6,7 +6,7 @@ and deployable project.
 
 - A **sync** imports external records into a managed Notion database on a
   schedule or on demand.
-- A **tool** gives a Notion agent a callable capability.
+- A **tool** gives a Notion Agent a callable capability.
 - A **webhook** verifies and handles events sent by another service.
 
 For local programs built directly on the Notion API, see the

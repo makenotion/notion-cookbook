@@ -1,6 +1,6 @@
 # Worker tool: Snowflake query
 
-**TL;DR:** Connect a read-only slice of Snowflake to a Notion agent so it can
+**TL;DR:** Connect a read-only slice of Snowflake to a Notion Agent so it can
 discover warehouse tables, write SQL, and answer data questions in the
 conversation.
 

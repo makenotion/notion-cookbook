@@ -1,6 +1,6 @@
 # Worker tool: Postgres query
 
-**TL;DR:** Connect a read-only slice of Postgres to a Notion agent so it can
+**TL;DR:** Connect a read-only slice of Postgres to a Notion Agent so it can
 discover your schema, write SQL, and answer data questions in the conversation.
 
 ## Quickstart

@@ -142,7 +142,7 @@
     {
       "id": "airflow",
       "title": "Airflow agent tool",
-      "summary": "Let a Notion agent inspect Airflow DAGs, runs, tasks, logs, and service health through the stable REST API.",
+      "summary": "Let a Notion Agent inspect Airflow DAGs, runs, tasks, logs, and service health through the stable REST API.",
       "path": "workers/airflow",
       "kind": "worker-tool",
       "status": "ready",
@@ -161,7 +161,7 @@
     {
       "id": "chart-generator",
       "title": "Chart generator agent tool",
-      "summary": "Render a Vega-Lite specification to PNG and let a Notion agent insert the image into a page.",
+      "summary": "Render a Vega-Lite specification to PNG and let a Notion Agent insert the image into a page.",
       "path": "workers/chart-generator",
       "kind": "worker-tool",
       "status": "ready",
@@ -180,7 +180,7 @@
     {
       "id": "cloudwatch-logs",
       "title": "CloudWatch Logs agent tool",
-      "summary": "Let a Notion agent find AWS CloudWatch log groups and streams and read their events.",
+      "summary": "Let a Notion Agent find AWS CloudWatch log groups and streams and read their events.",
       "path": "workers/cloudwatch-logs",
       "kind": "worker-tool",
       "status": "ready",
@@ -351,7 +351,7 @@
     {
       "id": "postgres-query",
       "title": "Postgres query agent tool",
-      "summary": "Let a Notion agent discover PostgreSQL tables and execute bounded, read-only SQL queries.",
+      "summary": "Let a Notion Agent discover PostgreSQL tables and execute bounded, read-only SQL queries.",
       "path": "workers/postgres-query",
       "kind": "worker-tool",
       "status": "ready",
@@ -426,7 +426,7 @@
     {
       "id": "snowflake-query",
       "title": "Snowflake query agent tool",
-      "summary": "Let a Notion agent discover Snowflake tables and execute bounded, read-only SQL queries.",
+      "summary": "Let a Notion Agent discover Snowflake tables and execute bounded, read-only SQL queries.",
       "path": "workers/snowflake-query",
       "kind": "worker-tool",
       "status": "ready",

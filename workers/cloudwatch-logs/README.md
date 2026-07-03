@@ -1,6 +1,6 @@
 # Worker tool: CloudWatch Logs
 
-**TL;DR:** Connect AWS CloudWatch Logs to a Notion agent so it can find the right log stream and investigate recent errors without opening the AWS console.
+**TL;DR:** Connect AWS CloudWatch Logs to a Notion Agent so it can find the right log stream and investigate recent errors without opening the AWS console.
 
 ## Quickstart
 

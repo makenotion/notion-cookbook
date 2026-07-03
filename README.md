@@ -21,7 +21,7 @@ directory.
   [Linear](workers/linear-sync/), [PagerDuty](workers/pagerduty-sync/),
   [Salesforce](workers/salesforce-sync/), [Sentry](workers/sentry-sync/),
   [Snowflake](workers/snowflake-sync/), or [Zendesk](workers/zendesk-sync/).
-- **Give a Notion agent a new tool:** connect it to
+- **Give a Notion Agent a new tool:** connect it to
   [Airflow](workers/airflow/), [CloudWatch Logs](workers/cloudwatch-logs/),
   [Postgres](workers/postgres-query/), or one of the other Worker tools below.
 - **React to external events:** receive and verify
@@ -100,7 +100,7 @@ See the [API examples guide](examples/) for shared setup information.
 ## Worker examples
 
 Workers are server-side extensions deployed to Notion. A **sync** maintains a
-managed Notion database, a **tool** gives a Notion agent a callable capability,
+managed Notion database, a **tool** gives a Notion Agent a callable capability,
 and a **webhook** handles events from another service. See the complete
 [Workers guide](workers/) for setup and deployment.
 
@@ -120,7 +120,7 @@ and a **webhook** handles events from another service. See the complete
 | Sync the result of a warehouse query                        | [Snowflake sync](workers/snowflake-sync/)   | Snowflake  |
 | Sync tickets, users, organizations, and support metrics     | [Zendesk sync](workers/zendesk-sync/)       | Zendesk    |
 
-### Add tools to a Notion agent
+### Add tools to a Notion Agent
 
 | Task                                                | Worker                                            | Integration         |
 | --------------------------------------------------- | ------------------------------------------------- | ------------------- |

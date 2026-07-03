@@ -1,6 +1,6 @@
 # Worker tool: Airflow
 
-**TL;DR:** Connect Airflow to a Notion agent so it can inspect DAGs, trace failed runs down to task logs, and check platform health without sending you to the Airflow UI.
+**TL;DR:** Connect Airflow to a Notion Agent so it can inspect DAGs, trace failed runs down to task logs, and check platform health without sending you to the Airflow UI.
 
 ## Quickstart
 

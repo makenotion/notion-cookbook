@@ -56,7 +56,7 @@ Create `workers/<integration>-<capability>/`, with the integration or domain
 first so related capabilities sort together. Use one of these catalog kinds:
 
 - `worker-sync` for an external-data sync into a managed Notion database.
-- `worker-tool` for a capability callable by a Notion agent.
+- `worker-tool` for a capability callable by a Notion Agent.
 - `worker-webhook` for an externally triggered event handler.
 
 New Workers should:

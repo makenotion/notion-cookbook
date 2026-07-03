@@ -1,6 +1,6 @@
 # Worker tool: Chart generator
 
-**TL;DR:** Let a Notion agent turn data into a polished chart and place the image directly on a page.
+**TL;DR:** Let a Notion Agent turn data into a polished chart and place the image directly on a page.
 
 ## Quickstart
 

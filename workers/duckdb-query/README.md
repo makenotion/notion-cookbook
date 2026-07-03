@@ -1,6 +1,6 @@
 # Worker tool: DuckDB query
 
-**TL;DR:** Give a Notion agent an instant, zero-configuration SQL sandbox with
+**TL;DR:** Give a Notion Agent an instant, zero-configuration SQL sandbox with
 sample sales data. It is ideal for demos, workshops, and learning how agents
 discover tables and answer questions with DuckDB.
 
