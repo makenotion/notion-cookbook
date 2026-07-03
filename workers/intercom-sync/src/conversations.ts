@@ -18,6 +18,7 @@ import {
   unixSecondsToIso,
 } from "./helpers.js"
 import {
+  lastAscendingRecordId,
   nextCursorState,
   validatedPageCount,
   validatedRecentCursors,
@@ -308,6 +309,13 @@ export type ConversationIncrementalState = {
   after?: string
   recentCursors?: string[]
   pageCount?: number
+  lastRecordId?: string
+}
+
+export type ConversationReconciliationState = CursorSyncState & {
+  expectedTotalCount: number
+  seenCount: number
+  recentRecordIds: string[]
 }
 
 export const INITIAL_CONVERSATION_WATERMARK = 0
@@ -373,20 +381,48 @@ export async function runConversationIncrementalPage(
   state: ConversationIncrementalState | undefined,
   now: () => Date = () => new Date()
 ) {
-  const { since, until } = conversationIncrementalWindow(state, now)
-  const page = await client.searchConversations(since, until, state?.after)
+  // State written before record-order checkpoints existed cannot prove the
+  // ordering across its next page. Restarting the window is safe because
+  // incremental changes are keyed upserts and the overlap already permits
+  // replay.
+  const effectiveState =
+    state?.after && state.lastRecordId === undefined
+      ? { since: state.since }
+      : state
+  const { since, until } = conversationIncrementalWindow(effectiveState, now)
+  const page = await client.searchConversations(
+    since,
+    until,
+    effectiveState?.after
+  )
+  const recordIds = page.records.map(conversationId)
+  const lastRecordId = lastAscendingRecordId(
+    recordIds,
+    effectiveState?.lastRecordId,
+    "conversation search"
+  )
   const changes = page.records.map((conversation) =>
     conversationToChange(conversation, directory)
   )
 
   if (page.nextCursor) {
+    if (recordIds.length === 0 || lastRecordId === undefined) {
+      throw new Error(
+        "Intercom conversation search returned a cursor without records."
+      )
+    }
     return {
       changes,
       hasMore: true as const,
       nextState: {
         since,
         until,
-        ...nextCursorState(state, page.nextCursor, "conversation search"),
+        ...nextCursorState(
+          effectiveState,
+          page.nextCursor,
+          "conversation search"
+        ),
+        lastRecordId,
       },
     }
   }
@@ -398,26 +434,112 @@ export async function runConversationIncrementalPage(
   }
 }
 
+const MAX_RECENT_CONVERSATION_IDS = 300
+
+function expectedConversationCount(
+  value: number | undefined,
+  state: ConversationReconciliationState | undefined
+): number {
+  if (!Number.isSafeInteger(value) || value == null || value < 0) {
+    throw new Error(
+      "Intercom conversation reconciliation has an invalid total_count."
+    )
+  }
+  if (state && state.expectedTotalCount !== value) {
+    throw new Error(
+      "Intercom conversation total changed during replacement; retry the full sweep."
+    )
+  }
+  return value
+}
+
 export async function runConversationReconciliationPage(
   client: IntercomClient,
   directory: AssignmentDirectory,
-  state: CursorSyncState | undefined
+  state: ConversationReconciliationState | undefined
 ) {
-  const page = await client.listConversations(state?.after)
+  // A deployment can resume state written before reconciliation guards were
+  // added. Restart that sweep from page one; keyed upserts make replay safe,
+  // while completing from unverified state could make replace deletion unsafe.
+  const guardState = state as
+    | (Partial<ConversationReconciliationState> &
+        Pick<CursorSyncState, "after">)
+    | undefined
+  const effectiveState =
+    guardState?.after &&
+    (guardState.expectedTotalCount === undefined ||
+      guardState.seenCount === undefined ||
+      guardState.recentRecordIds === undefined)
+      ? undefined
+      : state
+  const page = await client.listConversations(effectiveState?.after)
+  const totalCount = expectedConversationCount(page.totalCount, effectiveState)
+  const recentRecordIds = effectiveState?.recentRecordIds ?? []
+  if (
+    !Array.isArray(recentRecordIds) ||
+    recentRecordIds.length > MAX_RECENT_CONVERSATION_IDS ||
+    recentRecordIds.some((id) => typeof id !== "string" || !id.trim())
+  ) {
+    throw new Error(
+      "Intercom conversation reconciliation has invalid recent record state."
+    )
+  }
+  const previousSeenCount = effectiveState?.seenCount ?? 0
+  if (
+    !Number.isSafeInteger(previousSeenCount) ||
+    previousSeenCount < 0 ||
+    previousSeenCount > totalCount
+  ) {
+    throw new Error(
+      "Intercom conversation reconciliation has invalid seen record state."
+    )
+  }
+
+  const recordIds = page.records.map(conversationId)
+  const seenRecordIds = new Set(recentRecordIds)
+  for (const id of recordIds) {
+    if (seenRecordIds.has(id)) {
+      throw new Error("Intercom conversation reconciliation repeated a record.")
+    }
+    seenRecordIds.add(id)
+  }
   const changes = page.records.map((conversation) =>
     conversationToChange(conversation, directory)
   )
+  const seenCount = previousSeenCount + page.records.length
+  if (seenCount > totalCount) {
+    throw new Error(
+      "Intercom conversation reconciliation returned more records than total_count."
+    )
+  }
 
   if (page.nextCursor) {
+    if (recordIds.length === 0) {
+      throw new Error(
+        "Intercom conversation reconciliation returned a cursor without records."
+      )
+    }
     return {
       changes,
       hasMore: true as const,
-      nextState: nextCursorState(
-        state,
-        page.nextCursor,
-        "conversation reconciliation"
-      ),
+      nextState: {
+        ...nextCursorState(
+          effectiveState,
+          page.nextCursor,
+          "conversation reconciliation"
+        ),
+        expectedTotalCount: totalCount,
+        seenCount,
+        recentRecordIds: [...recentRecordIds, ...recordIds].slice(
+          -MAX_RECENT_CONVERSATION_IDS
+        ),
+      },
     }
+  }
+  if (seenCount !== totalCount) {
+    throw new Error(
+      "Intercom conversation replacement ended before total_count was reached."
+    )
   }
   return { changes, hasMore: false as const }
 }

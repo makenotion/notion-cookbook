@@ -17,6 +17,7 @@ import {
   unixSecondsToIso,
 } from "./helpers.js"
 import {
+  lastAscendingRecordId,
   nextCursorState,
   validatedPageCount,
   validatedRecentCursors,
@@ -79,6 +80,7 @@ export type TicketIncrementalState = {
   after?: string
   recentCursors?: string[]
   pageCount?: number
+  lastRecordId?: string
 }
 
 export type TicketReconciliationState = CursorSyncState & {
@@ -86,6 +88,7 @@ export type TicketReconciliationState = CursorSyncState & {
   expectedTotalCount: number
   seenCount: number
   recentRecordIds: string[]
+  lastRecordId?: string
 }
 
 export const INITIAL_TICKET_WATERMARK = 0
@@ -251,20 +254,36 @@ export async function runTicketIncrementalPage(
   state: TicketIncrementalState | undefined,
   now: () => Date = () => new Date()
 ) {
-  const { since, until } = ticketIncrementalWindow(state, now)
-  const page = await client.searchTickets(since, until, state?.after)
+  const effectiveState =
+    state?.after && state.lastRecordId === undefined
+      ? { since: state.since }
+      : state
+  const { since, until } = ticketIncrementalWindow(effectiveState, now)
+  const page = await client.searchTickets(since, until, effectiveState?.after)
+  const recordIds = page.records.map(ticketId)
+  const lastRecordId = lastAscendingRecordId(
+    recordIds,
+    effectiveState?.lastRecordId,
+    "ticket search"
+  )
   const changes = page.records.map((ticket) =>
     ticketToChange(ticket, directory)
   )
 
   if (page.nextCursor) {
+    if (recordIds.length === 0 || lastRecordId === undefined) {
+      throw new Error(
+        "Intercom ticket search returned a cursor without records."
+      )
+    }
     return {
       changes,
       hasMore: true as const,
       nextState: {
         since,
         until,
-        ...nextCursorState(state, page.nextCursor, "ticket search"),
+        ...nextCursorState(effectiveState, page.nextCursor, "ticket search"),
+        lastRecordId,
       },
     }
   }
@@ -298,11 +317,15 @@ export async function runTicketReconciliationPage(
   state: TicketReconciliationState | undefined,
   now: () => Date = () => new Date()
 ) {
-  // Deployments preserve continuation state. A run started by a version before
-  // createdBefore existed safely restarts from page one; keyed upserts make
-  // replay harmless and a complete restart preserves replacement semantics.
+  // Deployments preserve continuation state. A run started before the pinned
+  // membership or record-order guards existed safely restarts from page one;
+  // keyed upserts make replay harmless and a complete restart preserves
+  // replacement semantics.
   const effectiveState =
-    state?.after && state.createdBefore == null ? undefined : state
+    state?.after &&
+    (state.createdBefore == null || state.lastRecordId === undefined)
+      ? undefined
+      : state
   const nowSeconds = Math.floor(now().getTime() / 1_000)
   // Intercom documents its Ticket Search `<` operator as inclusive. Keep the
   // cutoff behind the same indexing buffer as incremental syncs so tickets
@@ -333,6 +356,11 @@ export async function runTicketReconciliationPage(
     )
   }
   const recordIds = page.records.map(ticketId)
+  const lastRecordId = lastAscendingRecordId(
+    recordIds,
+    effectiveState?.lastRecordId,
+    "ticket reconciliation"
+  )
   const seenRecordIds = new Set(recentRecordIds)
   for (const id of recordIds) {
     if (seenRecordIds.has(id)) {
@@ -352,8 +380,7 @@ export async function runTicketReconciliationPage(
   }
 
   if (page.nextCursor) {
-    const lastRecord = page.records.at(-1)
-    if (!lastRecord) {
+    if (recordIds.length === 0 || lastRecordId === undefined) {
       throw new Error(
         "Intercom ticket reconciliation returned a cursor without records."
       )
@@ -370,6 +397,7 @@ export async function runTicketReconciliationPage(
         createdBefore,
         expectedTotalCount: totalCount,
         seenCount,
+        lastRecordId,
         recentRecordIds: [...recentRecordIds, ...recordIds].slice(
           -MAX_RECENT_TICKET_IDS
         ),

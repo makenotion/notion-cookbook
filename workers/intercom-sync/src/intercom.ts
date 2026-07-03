@@ -343,6 +343,21 @@ function nextCursor(body: Record<string, unknown>, label: string) {
   return cursor
 }
 
+function requiredTotalCount(
+  body: Record<string, unknown>,
+  label: string
+): number {
+  const totalCount = body.total_count
+  if (
+    typeof totalCount !== "number" ||
+    !Number.isSafeInteger(totalCount) ||
+    totalCount < 0
+  ) {
+    throw new Error(`Intercom ${label} response is missing total_count.`)
+  }
+  return totalCount
+}
+
 function displayName(value: {
   name?: unknown
   email?: unknown
@@ -474,6 +489,7 @@ export function createIntercomClient(
         "conversations"
       ),
       nextCursor: nextCursor(body, "conversations"),
+      totalCount: requiredTotalCount(body, "conversation reconciliation"),
     }
   }
 
@@ -541,16 +557,6 @@ export function createIntercomClient(
         }),
       }
     )
-    const totalCount = body.total_count
-    if (
-      typeof totalCount !== "number" ||
-      !Number.isSafeInteger(totalCount) ||
-      totalCount < 0
-    ) {
-      throw new Error(
-        "Intercom ticket reconciliation response is missing total_count."
-      )
-    }
     return {
       records: recordsValue<IntercomTicket>(
         body,
@@ -558,7 +564,7 @@ export function createIntercomClient(
         "ticket reconciliation"
       ),
       nextCursor: nextCursor(body, "ticket reconciliation"),
-      totalCount,
+      totalCount: requiredTotalCount(body, "ticket reconciliation"),
     }
   }
 

@@ -5,8 +5,9 @@ four related databases—**Companies**, **Contacts**, **Conversations**, and
 **Tickets**—so support and customer-success teams can triage work, spot account
 risk, and understand service quality without assembling separate recipes.
 
-The sync is read-only. Intercom remains the system of record, and later syncs
-overwrite edits to managed properties in Notion.
+The Worker only reads from Intercom. It writes to managed Notion databases;
+Intercom remains the system of record, and later syncs overwrite edits to
+managed properties in Notion.
 
 ## Quickstart
 
@@ -16,7 +17,6 @@ and a token from a
 Grant only these permissions:
 
 - **Read and list users and companies**
-- **Read tags**
 - **Read conversations**
 - **Read admins**
 - **Read tickets**—only when you intend to sync Tickets
@@ -156,13 +156,13 @@ Conversations and Tickets. Each related property is visible from both sides.
 | `ticketsSync`                 | Tickets       | incremental | 5 min    | Deliver changed Tickets quickly with the same overlap strategy.       |
 | `ticketsReconciliation`       | Tickets       | replace     | manual   | Repair drift and remove Tickets no longer returned by Intercom.       |
 
-Incremental searches pin their upper timestamp across every page, sort by
-immutable Intercom ID, wait one minute for indexing, and replay a five-minute
-overlap. Manual replacement is still necessary because Intercom search cursors
-are not snapshots and deleted records do not appear in search results. Ticket
-replacement also aborts if Intercom's `total_count` changes or the completed
-sweep does not match it, preventing an incomplete run from removing Notion
-rows.
+Incremental searches pin their upper timestamp across every page, request and
+verify ascending order by immutable Intercom ID, wait one minute for indexing,
+and replay a five-minute overlap. Manual replacement is still necessary because
+Intercom search cursors are not snapshots and deleted records do not appear in
+search results. Conversation and Ticket replacements pin Intercom's
+`total_count` and abort if it changes or the completed sweep does not match it,
+so incomplete or count-drifting runs fail before replacement deletion.
 
 Trigger the manual reconciliations when you need to repair drift or remove
 deleted or newly hidden records, such as after an outage or access change.
@@ -216,7 +216,7 @@ before granting broader access, and store the Intercom token only with
 src/
 ├── index.ts          — database registration, schedules, pacing, and caches
 ├── intercom.ts       — regional Intercom client, API types, and lookups
-├── pagination.ts     — bounded starting_after cursor protection
+├── pagination.ts     — bounded cursor and record-order protection
 ├── companies.ts      — Company schema, transform, and scroll execution
 ├── contacts.ts       — Contact schema, transform, and replacement execution
 ├── conversations.ts  — Conversation schema, transform, windows, and execution
@@ -247,6 +247,10 @@ format, so this example does not invent one.
   token. The Worker detects expired/repeated pages, performs at most two full
   restarts, and fails before replacement deletion if it cannot finish safely.
 - Company Scroll omits Companies with no associated users.
+- Companies and Contacts use hourly replacement sweeps. Notion recommends
+  replacement for sources with fewer than roughly 10,000 records; above that,
+  validate runtime and API load, then lower the cadence or adapt the example
+  before production use.
 - A Contact embeds at most ten Companies and ten Tags; those relation/tag lists
   can therefore be partial. Filter **Incomplete Associations** for affected
   Contacts before relying on either list as exhaustive.

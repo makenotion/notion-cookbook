@@ -25,6 +25,7 @@ import {
   runConversationIncrementalPage,
   runConversationReconciliationPage,
   type ConversationIncrementalState,
+  type ConversationReconciliationState,
 } from "./conversations.js"
 import {
   createIntercomClient,
@@ -172,7 +173,7 @@ worker.sync("conversationsReconciliation", {
   database: conversations,
   mode: "replace",
   schedule: "manual",
-  execute: async (state: CursorSyncState | undefined) => {
+  execute: async (state: ConversationReconciliationState | undefined) => {
     if (!state) reconciliationConversationDirectories.clear()
     const client = createClient()
     const directory = await reconciliationConversationDirectories.get(() =>

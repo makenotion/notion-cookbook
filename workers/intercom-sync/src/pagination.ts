@@ -16,6 +16,38 @@ export type PaginationGuardState = {
 export const MAX_CURSOR_HISTORY = 128
 export const MAX_CURSOR_PAGES = 10_000
 
+export function lastAscendingRecordId(
+  recordIds: string[],
+  previousRecordId: string | undefined,
+  resourceName: string
+): string | undefined {
+  let lastRecordId = previousRecordId
+  if (lastRecordId !== undefined && !lastRecordId.trim()) {
+    throw new Error(
+      `Intercom ${resourceName} pagination has an invalid record-order checkpoint.`
+    )
+  }
+
+  for (const recordId of recordIds) {
+    if (typeof recordId !== "string" || !recordId.trim()) {
+      throw new Error(
+        `Intercom ${resourceName} pagination returned an invalid record id.`
+      )
+    }
+    // Intercom models these API IDs as strings. If its service applies a
+    // different collation, fail closed instead of completing a replacement
+    // whose requested ordering cannot be verified.
+    if (lastRecordId !== undefined && recordId <= lastRecordId) {
+      throw new Error(
+        `Intercom ${resourceName} did not return records in strictly ascending id order.`
+      )
+    }
+    lastRecordId = recordId
+  }
+
+  return lastRecordId
+}
+
 export function validatedRecentCursors(value: string[] | undefined): string[] {
   if (value === undefined) return []
   if (

@@ -22,6 +22,7 @@ import {
   nextConversationWatermark,
   runConversationIncrementalPage,
   runConversationReconciliationPage,
+  type ConversationReconciliationState,
 } from "./src/conversations.js"
 import {
   escapeMarkdown,
@@ -51,6 +52,7 @@ import {
 import {
   MAX_CURSOR_HISTORY,
   MAX_CURSOR_PAGES,
+  lastAscendingRecordId,
   nextCursorState,
 } from "./src/pagination.js"
 import {
@@ -782,6 +784,34 @@ test("cursor state keeps bounded history and enforces a maximum page count", () 
   )
 })
 
+test("search ordering checkpoints immutable IDs across pages", () => {
+  assert.equal(
+    lastAscendingRecordId(
+      ["conversation-1", "conversation-2"],
+      undefined,
+      "search"
+    ),
+    "conversation-2"
+  )
+  assert.equal(
+    lastAscendingRecordId(["conversation-3"], "conversation-2", "search"),
+    "conversation-3"
+  )
+  assert.throws(
+    () => lastAscendingRecordId(["conversation-2"], "conversation-2", "search"),
+    /strictly ascending/
+  )
+  assert.throws(
+    () =>
+      lastAscendingRecordId(
+        ["conversation-3", "conversation-2"],
+        undefined,
+        "search"
+      ),
+    /strictly ascending/
+  )
+})
+
 type FakeClientCalls = {
   contacts: Array<string | undefined>
   searches: Array<{ since: number; until: number; cursor?: string }>
@@ -1059,14 +1089,76 @@ test("conversation incremental pages pin bounds and checkpoint with overlap", as
     { since: 0, until: 1_940, cursor: undefined },
     { since: 0, until: 1_940, cursor: "search-next" },
   ])
-  assert.equal(first.hasMore, true)
+  if (!first.hasMore) assert.fail("Expected another conversation page")
+  assert.equal(first.nextState.lastRecordId, fullConversation.id)
   assert.equal(second.hasMore, false)
   assert.deepEqual(second.nextState, {
     since: 1_940 - WATERMARK_OVERLAP_SECONDS,
   })
+
+  const outOfOrder = fakeClient(
+    {
+      searches: [{ records: [minimalConversation, fullConversation] }],
+    },
+    calls
+  )
+  await assert.rejects(
+    () =>
+      runConversationIncrementalPage(
+        outOfOrder,
+        assignmentDirectory,
+        undefined,
+        () => new Date(2_000_000)
+      ),
+    /strictly ascending/
+  )
+
+  const emptyPage = fakeClient(
+    {
+      searches: [{ records: [], nextCursor: "empty-page" }],
+    },
+    calls
+  )
+  await assert.rejects(
+    () =>
+      runConversationIncrementalPage(
+        emptyPage,
+        assignmentDirectory,
+        undefined,
+        () => new Date(2_000_000)
+      ),
+    /cursor without records/
+  )
 })
 
-test("conversation reconciliation uses canonical listing and replace termination", async () => {
+test("incremental searches restart legacy cursor state before checking order", async () => {
+  const calls: FakeClientCalls = {
+    contacts: [],
+    searches: [],
+    conversations: [],
+  }
+  const client = fakeClient(
+    { searches: [{ records: [minimalConversation] }] },
+    calls
+  )
+  await runConversationIncrementalPage(
+    client,
+    assignmentDirectory,
+    {
+      since: 500,
+      until: 700,
+      after: "legacy-cursor",
+      recentCursors: ["legacy-cursor"],
+      pageCount: 1,
+    },
+    () => new Date(1_000_000)
+  )
+  assert.deepEqual(calls.searches, [
+    { since: 500, until: 940, cursor: undefined },
+  ])
+})
+
+test("conversation replacement pins total count before allowing deletion", async () => {
   const calls: FakeClientCalls = {
     contacts: [],
     searches: [],
@@ -1075,8 +1167,12 @@ test("conversation reconciliation uses canonical listing and replace termination
   const client = fakeClient(
     {
       conversations: [
-        { records: [fullConversation], nextCursor: "reconcile-next" },
-        { records: [] },
+        {
+          records: [fullConversation],
+          nextCursor: "reconcile-next",
+          totalCount: 1,
+        },
+        { records: [], totalCount: 1 },
       ],
     },
     calls
@@ -1092,8 +1188,94 @@ test("conversation reconciliation uses canonical listing and replace termination
     first.nextState
   )
   assert.deepEqual(calls.conversations, [undefined, "reconcile-next"])
-  assert.equal(first.hasMore, true)
+  if (!first.hasMore) assert.fail("Expected another reconciliation page")
+  assert.equal(first.nextState.expectedTotalCount, 1)
+  assert.equal(first.nextState.seenCount, 1)
+  assert.deepEqual(first.nextState.recentRecordIds, [fullConversation.id])
   assert.deepEqual(second, { changes: [], hasMore: false })
+
+  const changedTotal = fakeClient(
+    { conversations: [{ records: [], totalCount: 2 }] },
+    calls
+  )
+  await assert.rejects(
+    () =>
+      runConversationReconciliationPage(
+        changedTotal,
+        assignmentDirectory,
+        first.nextState
+      ),
+    /total changed/
+  )
+
+  const prematureEnd = fakeClient(
+    { conversations: [{ records: [], totalCount: 1 }] },
+    calls
+  )
+  await assert.rejects(
+    () =>
+      runConversationReconciliationPage(prematureEnd, assignmentDirectory, {
+        ...first.nextState,
+        seenCount: 0,
+        recentRecordIds: [],
+      }),
+    /before total_count was reached/
+  )
+
+  const repeatedRecord = fakeClient(
+    { conversations: [{ records: [fullConversation], totalCount: 1 }] },
+    calls
+  )
+  await assert.rejects(
+    () =>
+      runConversationReconciliationPage(
+        repeatedRecord,
+        assignmentDirectory,
+        first.nextState
+      ),
+    /repeated a record/
+  )
+
+  const emptyPage = fakeClient(
+    {
+      conversations: [{ records: [], nextCursor: "empty-page", totalCount: 0 }],
+    },
+    calls
+  )
+  await assert.rejects(
+    () =>
+      runConversationReconciliationPage(
+        emptyPage,
+        assignmentDirectory,
+        undefined
+      ),
+    /cursor without records/
+  )
+})
+
+test("conversation replacement restarts continuation state without guards", async () => {
+  const calls: FakeClientCalls = {
+    contacts: [],
+    searches: [],
+    conversations: [],
+  }
+  const client = fakeClient(
+    {
+      conversations: [{ records: [minimalConversation], totalCount: 1 }],
+    },
+    calls
+  )
+  const result = await runConversationReconciliationPage(
+    client,
+    assignmentDirectory,
+    {
+      after: "legacy-cursor",
+      recentCursors: ["legacy-cursor"],
+      pageCount: 3,
+    } as unknown as ConversationReconciliationState
+  )
+  assert.deepEqual(calls.conversations, [undefined])
+  assert.equal(result.hasMore, false)
 })
 
 test("ticket incremental pages pin bounds and checkpoint with overlap", async () => {
@@ -1127,7 +1309,8 @@ test("ticket incremental pages pin bounds and checkpoint with overlap", async ()
     { since: 0, until: 1_940, cursor: undefined },
     { since: 0, until: 1_940, cursor: "ticket-next" },
   ])
-  assert.equal(first.hasMore, true)
+  if (!first.hasMore) assert.fail("Expected another ticket page")
+  assert.equal(first.nextState.lastRecordId, fullTicket.id)
   assert.deepEqual(second.nextState, {
     since: 1_940 - TICKET_WATERMARK_OVERLAP_SECONDS,
   })
@@ -1166,6 +1349,7 @@ test("ticket replacement pins total count before allowing reconciliation", async
   ])
   assert.equal(first.nextState.createdBefore, 1_940)
   assert.equal(first.nextState.expectedTotalCount, 2)
+  assert.equal(first.nextState.lastRecordId, fullTicket.id)
   assert.deepEqual(second.hasMore, false)
 
   const changedTotal = fakeClient(
@@ -1182,7 +1366,7 @@ test("ticket replacement pins total count before allowing reconciliation", async
     /total changed/
   )
 
-  const overlapping = fakeClient(
+  const outOfOrder = fakeClient(
     {
       tickets: [{ records: [minimalTicket, fullTicket], totalCount: 2 }],
     },
@@ -1191,11 +1375,11 @@ test("ticket replacement pins total count before allowing reconciliation", async
   await assert.rejects(
     () =>
       runTicketReconciliationPage(
-        overlapping,
+        outOfOrder,
         assignmentDirectory,
         first.nextState
       ),
-    /repeated a record/
+    /strictly ascending/
   )
 })
 
@@ -1300,6 +1484,24 @@ test("client uses regional host, auth, version, page size, and safe redirects", 
   assert.equal(capturedInit?.redirect, "error")
   assert.equal(beforeRequests, 1)
   assert.equal(page.nextCursor, "next-contact")
+})
+
+test("conversation listing requires the reconciliation total count", async () => {
+  process.env.INTERCOM_ACCESS_TOKEN = "secret-token"
+  globalThis.fetch = async () =>
+    jsonResponse({
+      conversations: [minimalConversation],
+      total_count: 1,
+      pages: { next: null },
+    })
+
+  const client = createIntercomClient(async () => {})
+  const page = await client.listConversations()
+  assert.equal(page.totalCount, 1)
+
+  globalThis.fetch = async () =>
+    jsonResponse({ conversations: [], pages: { next: null } })
+  await assert.rejects(() => client.listConversations(), /missing total_count/)
 })
 
 test("conversation search sends pinned bounds, immutable sort, and cursor", async () => {
