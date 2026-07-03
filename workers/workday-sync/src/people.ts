@@ -3,12 +3,13 @@ import * as Builder from "@notionhq/workers/builder"
 import * as Schema from "@notionhq/workers/schema"
 
 import { directoryKey } from "./keys.js"
+import { normalizedWorkEmail } from "./validation.js"
 
 export const INITIAL_TITLE = "Workday People"
 export const PRIMARY_KEY = "Directory Key"
 export const MAX_MANAGER_RELATIONS = 100
 
-export type DirectoryTeamReference = {
+export type DirectoryOrganizationReference = {
   workdayWid: string
   name: string
 }
@@ -16,7 +17,8 @@ export type DirectoryTeamReference = {
 export type DirectoryPerson = {
   workdayWid: string
   name: string
-  team: DirectoryTeamReference
+  workEmail?: string
+  supervisoryOrganization: DirectoryOrganizationReference
   managerWorkdayWids: string[]
 }
 
@@ -25,12 +27,16 @@ export const peopleSchema = {
   properties: {
     Name: Schema.title(),
 
-    Team: Schema.relation("teams", {
+    "Work Email": Schema.email(),
+
+    "Notion Profile": Schema.people(),
+
+    "Supervisory Organization": Schema.relation("organizations", {
       twoWay: true,
-      relatedPropertyName: "Members",
+      relatedPropertyName: "Organization Members",
     }),
 
-    Managers: Schema.relation("people", {
+    "Supervisory Managers": Schema.relation("people", {
       twoWay: true,
       relatedPropertyName: "Direct Reports",
     }),
@@ -43,6 +49,9 @@ export function personToChange(
   person: DirectoryPerson
 ): SyncChangeUpsert<typeof PRIMARY_KEY, typeof peopleSchema.properties> {
   const personKey = directoryKey("person", person.workdayWid)
+  const workEmail = person.workEmail
+    ? normalizedWorkEmail(person.workEmail, "Workday public primary work email")
+    : undefined
   const managerKeys = [
     ...new Set(
       person.managerWorkdayWids
@@ -62,8 +71,17 @@ export function personToChange(
     key: personKey,
     properties: {
       Name: Builder.title(person.name),
-      Team: [Builder.relation(directoryKey("team", person.team.workdayWid))],
-      Managers: managerKeys.map((key) => Builder.relation(key)),
+      "Work Email": workEmail ? Builder.email(workEmail) : [],
+      "Notion Profile": workEmail ? Builder.people(workEmail) : [],
+      "Supervisory Organization": [
+        Builder.relation(
+          directoryKey(
+            "organization",
+            person.supervisoryOrganization.workdayWid
+          )
+        ),
+      ],
+      "Supervisory Managers": managerKeys.map((key) => Builder.relation(key)),
       "Directory Key": Builder.richText(personKey),
     },
   }

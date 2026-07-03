@@ -1,5 +1,5 @@
-// Workday org chart — a privacy-minimal directory of active employees,
-// supervisory organizations (called Teams in Notion), and manager relations.
+// Workday employee directory — active employees, supervisory organizations,
+// optional work email/profile identity, and supervisory manager relations.
 //
 // Workday remains authoritative. Both databases are complete replace-mode
 // snapshots: fixed as-of values keep every WWS page consistent, and Notion
@@ -13,16 +13,16 @@ import {
   peopleSchema,
 } from "./people.js"
 import {
+  runOrganizationsSyncPage,
   runPeopleSyncPage,
-  runTeamsSyncPage,
   type DirectorySyncState,
   type WorkdayDirectoryClient,
 } from "./sync.js"
 import {
-  INITIAL_TITLE as TEAMS_TITLE,
-  PRIMARY_KEY as TEAMS_PRIMARY_KEY,
-  teamSchema,
-} from "./teams.js"
+  INITIAL_TITLE as ORGANIZATIONS_TITLE,
+  PRIMARY_KEY as ORGANIZATIONS_PRIMARY_KEY,
+  organizationSchema,
+} from "./organizations.js"
 import {
   createWorkdayClient,
   createWorkdayTokenProvider,
@@ -53,11 +53,11 @@ function workdayClient() {
   })())
 }
 
-const teams = worker.database("teams", {
+const organizations = worker.database("organizations", {
   type: "managed",
-  initialTitle: TEAMS_TITLE,
-  primaryKeyProperty: TEAMS_PRIMARY_KEY,
-  schema: teamSchema,
+  initialTitle: ORGANIZATIONS_TITLE,
+  primaryKeyProperty: ORGANIZATIONS_PRIMARY_KEY,
+  schema: organizationSchema,
 })
 
 const people = worker.database("people", {
@@ -67,14 +67,14 @@ const people = worker.database("people", {
   schema: peopleSchema,
 })
 
-// Register teams first so the recommended initial manual trigger order creates
-// Team relation targets before People rows reference them.
-worker.sync("teamsSync", {
-  database: teams,
+// Register organizations first so the recommended initial manual trigger order
+// creates relation targets before People rows reference them.
+worker.sync("organizationsSync", {
+  database: organizations,
   mode: "replace",
   schedule: "1h",
   execute: (state: DirectorySyncState | undefined) =>
-    runTeamsSyncPage(workdayClient(), state),
+    runOrganizationsSyncPage(workdayClient(), state),
 })
 
 worker.sync("peopleSync", {

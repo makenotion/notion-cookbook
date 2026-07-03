@@ -482,8 +482,8 @@
     },
     {
       "id": "workday-sync",
-      "title": "Workday org chart sync",
-      "summary": "Sync an employee-facing Workday org chart of people, supervisory organizations, and management relations into Notion.",
+      "title": "Workday employee directory sync",
+      "summary": "Sync an employee-facing directory of Workday people, supervisory organizations, work email, Notion profiles, and manager relations.",
       "path": "workers/workday-sync",
       "kind": "worker-sync",
       "status": "ready",

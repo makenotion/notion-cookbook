@@ -1,6 +1,9 @@
 import type { DirectoryPerson } from "./people.js"
 import { personToChange } from "./people.js"
-import { teamToChange, teamsFromPeople } from "./teams.js"
+import {
+  organizationToChange,
+  organizationsFromPeople,
+} from "./organizations.js"
 import { isoDate, isoDateTime, positiveInteger } from "./validation.js"
 
 // Notion recommends replace-mode syncs for datasets below roughly 10,000
@@ -11,8 +14,10 @@ export const MAX_SNAPSHOT_PAGES = 100
 // Bump the state version for serialization changes. Bump the contract version
 // whenever source selection, parsing, keys, output schemas, or paging semantics
 // change in a way that makes an in-flight snapshot unsafe to resume.
-export const DIRECTORY_SYNC_STATE_VERSION = 1
-export const DIRECTORY_SYNC_CONTRACT_VERSION = 1
+export const DIRECTORY_SYNC_STATE_VERSION = 2
+export const DIRECTORY_SYNC_CONTRACT_VERSION = 2
+export const WORK_EMAIL_FINGERPRINT_LENGTH = 16
+const WORK_EMAIL_FINGERPRINT_PATTERN = /^[A-Za-z0-9_-]{16}$/
 
 export type DirectorySyncState = {
   stateVersion: typeof DIRECTORY_SYNC_STATE_VERSION
@@ -22,6 +27,7 @@ export type DirectorySyncState = {
   asOfEffectiveDate: string
   totalPages: number
   totalResults: number
+  seenWorkEmailFingerprints?: string
 }
 
 export type WorkdayPageRequest = {
@@ -40,7 +46,47 @@ export type WorkdayWorkersPage = {
 export type WorkdayDirectoryClient = {
   effectiveTimeZone: string
   sourceContractFingerprint: string
-  fetchWorkersPage(request: WorkdayPageRequest): Promise<WorkdayWorkersPage>
+  workEmailFingerprint(email: string): string
+  fetchWorkersPage(
+    request: WorkdayPageRequest,
+    options: { includeWorkEmail: boolean }
+  ): Promise<WorkdayWorkersPage>
+}
+
+function previousWorkEmailFingerprints(
+  state: DirectorySyncState | undefined
+): string[] {
+  if (!state) return []
+  const packed = state.seenWorkEmailFingerprints
+  if (
+    typeof packed !== "string" ||
+    packed.length % WORK_EMAIL_FINGERPRINT_LENGTH !== 0 ||
+    packed.length >
+      MAX_SNAPSHOT_PAGES * WORKDAY_PAGE_SIZE * WORK_EMAIL_FINGERPRINT_LENGTH
+  ) {
+    throw new Error(
+      "Workday People sync state has invalid work-email fingerprints."
+    )
+  }
+  const fingerprints = Array.from(
+    { length: packed.length / WORK_EMAIL_FINGERPRINT_LENGTH },
+    (_, index) =>
+      packed.slice(
+        index * WORK_EMAIL_FINGERPRINT_LENGTH,
+        (index + 1) * WORK_EMAIL_FINGERPRINT_LENGTH
+      )
+  )
+  if (
+    fingerprints.some(
+      (fingerprint) => !WORK_EMAIL_FINGERPRINT_PATTERN.test(fingerprint)
+    ) ||
+    new Set(fingerprints).size !== fingerprints.length
+  ) {
+    throw new Error(
+      "Workday People sync state has invalid work-email fingerprints."
+    )
+  }
+  return fingerprints
 }
 
 export function effectiveDateInTimeZone(date: Date, timeZone: string): string {
@@ -185,28 +231,57 @@ export async function runPeopleSyncPage(
   now?: () => Date
 ) {
   const request = snapshotRequest(state, client, now)
-  const page = await client.fetchWorkersPage(request)
+  const fingerprints = previousWorkEmailFingerprints(state)
+  const page = await client.fetchWorkersPage(request, {
+    includeWorkEmail: true,
+  })
   const result = pageResult(
     state,
     request,
     page,
     client.sourceContractFingerprint
   )
+  const seen = new Set(fingerprints)
+  for (const person of page.people) {
+    if (!person.workEmail) continue
+    const fingerprint = client.workEmailFingerprint(person.workEmail)
+    if (
+      fingerprint.length !== WORK_EMAIL_FINGERPRINT_LENGTH ||
+      !WORK_EMAIL_FINGERPRINT_PATTERN.test(fingerprint)
+    ) {
+      throw new Error("Workday client returned an invalid email fingerprint.")
+    }
+    if (seen.has(fingerprint)) {
+      throw new Error(
+        "Workday returned one public work email for multiple employees."
+      )
+    }
+    seen.add(fingerprint)
+  }
+
+  const nextState = result.nextState
+    ? {
+        ...result.nextState,
+        seenWorkEmailFingerprints: [...seen].join(""),
+      }
+    : undefined
 
   return {
     changes: page.people.map(personToChange),
     hasMore: result.hasMore,
-    ...(result.nextState ? { nextState: result.nextState } : {}),
+    ...(nextState ? { nextState } : {}),
   }
 }
 
-export async function runTeamsSyncPage(
+export async function runOrganizationsSyncPage(
   client: WorkdayDirectoryClient,
   state: DirectorySyncState | undefined,
   now?: () => Date
 ) {
   const request = snapshotRequest(state, client, now)
-  const page = await client.fetchWorkersPage(request)
+  const page = await client.fetchWorkersPage(request, {
+    includeWorkEmail: false,
+  })
   const result = pageResult(
     state,
     request,
@@ -215,7 +290,7 @@ export async function runTeamsSyncPage(
   )
 
   return {
-    changes: teamsFromPeople(page.people).map(teamToChange),
+    changes: organizationsFromPeople(page.people).map(organizationToChange),
     hasMore: result.hasMore,
     ...(result.nextState ? { nextState: result.nextState } : {}),
   }

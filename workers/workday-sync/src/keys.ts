@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto"
 
-export type DirectoryKeyKind = "person" | "team"
+export type DirectoryKeyKind = "person" | "organization"
 
 /**
  * Workday WIDs are stable integration identifiers, but they are not useful to

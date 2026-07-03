@@ -7,6 +7,11 @@ import { RateLimitError } from "@notionhq/workers"
 import worker from "./src/index.js"
 import { directoryKey } from "./src/keys.js"
 import {
+  organizationSchema,
+  organizationToChange,
+  organizationsFromPeople,
+} from "./src/organizations.js"
+import {
   type DirectoryPerson,
   MAX_MANAGER_RELATIONS,
   peopleSchema,
@@ -16,25 +21,26 @@ import {
   DIRECTORY_SYNC_STATE_VERSION,
   MAX_SNAPSHOT_PAGES,
   effectiveDateInTimeZone,
+  runOrganizationsSyncPage,
   runPeopleSyncPage,
-  runTeamsSyncPage,
   snapshotRequest,
   type DirectorySyncState,
   type WorkdayDirectoryClient,
   type WorkdayPageRequest,
   type WorkdayWorkersPage,
 } from "./src/sync.js"
-import { teamSchema, teamToChange, teamsFromPeople } from "./src/teams.js"
 import {
   DEFAULT_WORKDAY_WWS_VERSION,
   WORKDAY_PAGE_SIZE,
   WORKDAY_REQUEST_TIMEOUT_MS,
   WORKDAY_SOAP_MAX_RESPONSE_BYTES,
   WORKDAY_TOKEN_MAX_RESPONSE_BYTES,
+  buildGetWorkContactRequest,
   buildGetWorkersRequest,
   createWorkdayClient,
   createWorkdayTokenProvider,
   getWorkdayConfig,
+  parseGetWorkContactResponse,
   parseGetWorkersResponse,
   parseRetryAfterSeconds,
   type WorkdayConfig,
@@ -52,6 +58,16 @@ const stateIdentity = {
   stateVersion: DIRECTORY_SYNC_STATE_VERSION,
   sourceContractFingerprint: TEST_SOURCE_CONTRACT_FINGERPRINT,
 } as const
+
+function testWorkEmailFingerprint(email: string): string {
+  return createHash("sha256")
+    .update(
+      `notion-workday-directory:work-email:${email.toLowerCase()}`,
+      "utf8"
+    )
+    .digest("base64url")
+    .slice(0, 16)
+}
 
 function snapshotContext(effectiveTimeZone = "UTC") {
   return {
@@ -74,8 +90,9 @@ const baseConfig: WorkdayConfig = {
 const ada: DirectoryPerson = {
   workdayWid: "wid-person-ada-private",
   name: "Ada Lovelace",
-  team: {
-    workdayWid: "wid-team-engineering-private",
+  workEmail: "ada@example.com",
+  supervisoryOrganization: {
+    workdayWid: "wid-organization-engineering-private",
     name: "Engineering",
   },
   managerWorkdayWids: [
@@ -131,13 +148,13 @@ type WorkerFixture = {
   wid: string
   name?: string | null
   referenceDescriptor?: string
-  teamWid?: string
-  teamName?: string
+  organizationWid?: string
+  organizationName?: string
   managerWids?: string[]
   managerReferences?: Array<{ wid: string; idTypes: string[] }>
   workerIdTypes?: string[]
   membershipCount?: number
-  chainTeamWids?: string[]
+  chainOrganizationWids?: string[]
   omitManagementChain?: boolean
   omitSupervisoryManagementChain?: boolean
   sensitiveData?: boolean
@@ -147,35 +164,36 @@ function fixtureWorker({
   wid,
   name = "Ada Lovelace",
   referenceDescriptor,
-  teamWid = "team-engineering-wid",
-  teamName = "Engineering",
+  organizationWid = "organization-engineering-wid",
+  organizationName = "Engineering",
   managerWids = ["manager-grace-wid"],
   managerReferences,
   workerIdTypes = ["Employee_ID", "WID"],
   membershipCount = 1,
-  chainTeamWids = [teamWid],
+  chainOrganizationWids = [organizationWid],
   omitManagementChain = false,
   omitSupervisoryManagementChain = false,
   sensitiveData = false,
 }: WorkerFixture): string {
   const memberships = Array.from({ length: membershipCount }, (_, index) => {
-    const membershipWid = index === 0 ? teamWid : `${teamWid}-${index + 1}`
+    const membershipWid =
+      index === 0 ? organizationWid : `${organizationWid}-${index + 1}`
     return [
       "<bsvc:Worker_Organization_Data>",
-      widReference("Organization_Reference", membershipWid, teamName),
+      widReference("Organization_Reference", membershipWid, organizationName),
       "<bsvc:Organization_Data>",
-      `<bsvc:Organization_Name>${teamName}</bsvc:Organization_Name>`,
+      `<bsvc:Organization_Name>${organizationName}</bsvc:Organization_Name>`,
       "<bsvc:Organization_Code>sensitive-org-code</bsvc:Organization_Code>",
       "</bsvc:Organization_Data>",
       "</bsvc:Worker_Organization_Data>",
     ].join("")
   }).join("")
 
-  const chainEntries = chainTeamWids
+  const chainEntries = chainOrganizationWids
     .map((chainWid) =>
       [
         "<bsvc:Management_Chain_Data>",
-        widReference("Organization_Reference", chainWid, teamName),
+        widReference("Organization_Reference", chainWid, organizationName),
         ...(
           managerReferences ??
           managerWids.map((wid) => ({
@@ -195,11 +213,29 @@ function fixtureWorker({
     )
     .join("")
 
+  const personalData = sensitiveData
+    ? [
+        "<bsvc:Personal_Data>",
+        "<bsvc:Contact_Data>",
+        "<bsvc:Email_Address_Data>",
+        "<bsvc:Email_Address>ada.secret@example.com</bsvc:Email_Address>",
+        "</bsvc:Email_Address_Data>",
+        "</bsvc:Contact_Data>",
+        "<bsvc:Name_Data>private-name-structure</bsvc:Name_Data>",
+        "<bsvc:Personal_Information_Data>",
+        "<bsvc:National_ID>999-00-1234</bsvc:National_ID>",
+        "<bsvc:Date_of_Birth>1815-12-10</bsvc:Date_of_Birth>",
+        "</bsvc:Personal_Information_Data>",
+        "</bsvc:Personal_Data>",
+      ].join("")
+    : ""
+
   return [
     "<bsvc:Worker>",
     typedReference("Worker_Reference", wid, workerIdTypes, referenceDescriptor),
     name ? `<bsvc:Worker_Descriptor>${name}</bsvc:Worker_Descriptor>` : "",
     "<bsvc:Worker_Data>",
+    personalData,
     `<bsvc:Organization_Data>${memberships}</bsvc:Organization_Data>`,
     omitManagementChain
       ? ""
@@ -212,15 +248,19 @@ function fixtureWorker({
                 chainEntries,
                 "</bsvc:Worker_Supervisory_Management_Chain_Data>",
               ].join(""),
+          sensitiveData
+            ? [
+                "<bsvc:Worker_Matrix_Management_Chain_Data>",
+                "<bsvc:Management_Chain_Data>",
+                "<bsvc:Private_Matrix_Context>matrix-private-context</bsvc:Private_Matrix_Context>",
+                "</bsvc:Management_Chain_Data>",
+                "</bsvc:Worker_Matrix_Management_Chain_Data>",
+              ].join("")
+            : "",
           "</bsvc:Management_Chain_Data>",
         ].join(""),
     sensitiveData
       ? [
-          "<bsvc:Personal_Data>",
-          "<bsvc:Email_Address>ada.secret@example.com</bsvc:Email_Address>",
-          "<bsvc:National_ID>999-00-1234</bsvc:National_ID>",
-          "<bsvc:Date_of_Birth>1815-12-10</bsvc:Date_of_Birth>",
-          "</bsvc:Personal_Data>",
           "<bsvc:Employment_Data>",
           "<bsvc:Business_Title>Principal Secret Keeper</bsvc:Business_Title>",
           "<bsvc:Hire_Date>2020-01-02</bsvc:Hire_Date>",
@@ -269,6 +309,114 @@ function fixtureResponse(
   ].join("")
 }
 
+type ContactEmailFixture = {
+  email?: string
+  public?: string | boolean
+  primary?: string | boolean
+  usageType?: string
+  includeUsageTypeId?: boolean
+  emailDataCount?: number
+}
+
+function fixtureContactEmail({
+  email = "ada@example.com",
+  public: isPublic = true,
+  primary = true,
+  usageType = "WORK",
+  includeUsageTypeId = true,
+  emailDataCount = 1,
+}: ContactEmailFixture = {}): string {
+  const emailData = Array.from({ length: emailDataCount }, () =>
+    email === undefined
+      ? "<bsvc:Email_Data/>"
+      : `<bsvc:Email_Data><bsvc:Email_Address>${email}</bsvc:Email_Address></bsvc:Email_Data>`
+  ).join("")
+  return [
+    "<bsvc:Email_Information_Data>",
+    emailData,
+    `<bsvc:Usage_Data bsvc:Public="${String(isPublic)}">`,
+    `<bsvc:Type_Data bsvc:Primary="${String(primary)}">`,
+    "<bsvc:Type_Reference>",
+    includeUsageTypeId
+      ? `<bsvc:ID bsvc:type="Communication_Usage_Type_ID">${usageType}</bsvc:ID>`
+      : '<bsvc:ID bsvc:type="WID">usage-type-wid</bsvc:ID>',
+    "</bsvc:Type_Reference>",
+    "</bsvc:Type_Data>",
+    "</bsvc:Usage_Data>",
+    "</bsvc:Email_Information_Data>",
+  ].join("")
+}
+
+function fixtureContactPerson({
+  wid,
+  emails = [{}],
+  changeDataCount = 1,
+  sensitiveData = false,
+}: {
+  wid: string
+  emails?: ContactEmailFixture[]
+  changeDataCount?: number
+  sensitiveData?: boolean
+}): string {
+  const changeData = Array.from({ length: changeDataCount }, () =>
+    [
+      "<bsvc:Change_Work_Contact_Information_Data>",
+      "<bsvc:Person_Contact_Information_Data>",
+      sensitiveData
+        ? [
+            "<bsvc:Person_Address_Information_Data>",
+            "<bsvc:Address_Information_Data>",
+            "<bsvc:Address_Data><bsvc:Address_Line_Data>private address</bsvc:Address_Line_Data></bsvc:Address_Data>",
+            "</bsvc:Address_Information_Data>",
+            "</bsvc:Person_Address_Information_Data>",
+            "<bsvc:Person_Phone_Information_Data>",
+            "<bsvc:Phone_Information_Data><bsvc:Phone_Data><bsvc:Phone_Number>555-private</bsvc:Phone_Number></bsvc:Phone_Data></bsvc:Phone_Information_Data>",
+            "</bsvc:Person_Phone_Information_Data>",
+          ].join("")
+        : "",
+      "<bsvc:Person_Email_Information_Data>",
+      emails.map(fixtureContactEmail).join(""),
+      "</bsvc:Person_Email_Information_Data>",
+      "</bsvc:Person_Contact_Information_Data>",
+      "</bsvc:Change_Work_Contact_Information_Data>",
+    ].join("")
+  ).join("")
+
+  return [
+    "<bsvc:Change_Work_Contact_Information>",
+    widReference("Person_Reference", wid, "Private descriptor"),
+    changeData,
+    "</bsvc:Change_Work_Contact_Information>",
+  ].join("")
+}
+
+function fixtureContactResponse(
+  contacts: string[],
+  {
+    page = 1,
+    totalPages = 1,
+    totalResults = contacts.length,
+    pageResults = contacts.length,
+  }: ResponseFixture = {}
+): string {
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:bsvc="urn:com.workday/bsvc">',
+    "<soapenv:Body>",
+    "<bsvc:Get_Change_Work_Contact_Information_Response>",
+    "<bsvc:Response_Results>",
+    `<bsvc:Page>${page}</bsvc:Page>`,
+    `<bsvc:Total_Pages>${totalPages}</bsvc:Total_Pages>`,
+    `<bsvc:Total_Results>${totalResults}</bsvc:Total_Results>`,
+    `<bsvc:Page_Results>${pageResults}</bsvc:Page_Results>`,
+    "</bsvc:Response_Results>",
+    `<bsvc:Response_Data>${contacts.join("")}</bsvc:Response_Data>`,
+    "</bsvc:Get_Change_Work_Contact_Information_Response>",
+    "</soapenv:Body>",
+    "</soapenv:Envelope>",
+  ].join("")
+}
+
 function clientWithPages(
   pages: WorkdayWorkersPage[],
   requests: WorkdayPageRequest[] = [],
@@ -278,7 +426,8 @@ function clientWithPages(
   return {
     effectiveTimeZone,
     sourceContractFingerprint,
-    async fetchWorkersPage(request) {
+    workEmailFingerprint: testWorkEmailFingerprint,
+    async fetchWorkersPage(request, _options) {
       requests.push(request)
       const page = pages.shift()
       assert.ok(page, "mock Workday page queue was exhausted")
@@ -296,7 +445,7 @@ async function captureError(action: () => unknown | Promise<unknown>) {
   assert.fail("expected action to throw")
 }
 
-test("worker manifest declares Teams before People with exact schemas", () => {
+test("worker manifest declares organizations before people with exact schemas", () => {
   assert.deepEqual(
     worker.manifest.databases.map((database) => ({
       key: database.key,
@@ -308,9 +457,9 @@ test("worker manifest declares Teams before People with exact schemas", () => {
     })),
     [
       {
-        key: "teams",
+        key: "organizations",
         type: "managed",
-        title: "Workday Teams",
+        title: "Workday Supervisory Organizations",
         primaryKey: "Directory Key",
         icon: { type: "notion", icon: "briefcase", color: "gray" },
         properties: ["Name", "Directory Key"],
@@ -321,23 +470,35 @@ test("worker manifest declares Teams before People with exact schemas", () => {
         title: "Workday People",
         primaryKey: "Directory Key",
         icon: { type: "notion", icon: "people", color: "gray" },
-        properties: ["Name", "Team", "Managers", "Directory Key"],
+        properties: [
+          "Name",
+          "Work Email",
+          "Notion Profile",
+          "Supervisory Organization",
+          "Supervisory Managers",
+          "Directory Key",
+        ],
       },
     ]
   )
 
-  assert.deepEqual(teamSchema.properties, {
+  assert.deepEqual(organizationSchema.properties, {
     Name: { type: "title" },
     "Directory Key": { type: "text" },
   })
   assert.deepEqual(peopleSchema.properties, {
     Name: { type: "title" },
-    Team: {
+    "Work Email": { type: "email" },
+    "Notion Profile": { type: "people" },
+    "Supervisory Organization": {
       type: "relation",
-      relatedDatabaseKey: "teams",
-      config: { twoWay: true, relatedPropertyName: "Members" },
+      relatedDatabaseKey: "organizations",
+      config: {
+        twoWay: true,
+        relatedPropertyName: "Organization Members",
+      },
     },
-    Managers: {
+    "Supervisory Managers": {
       type: "relation",
       relatedDatabaseKey: "people",
       config: { twoWay: true, relatedPropertyName: "Direct Reports" },
@@ -364,8 +525,8 @@ test("worker manifest pins replace-mode hourly syncs behind one shared pacer", (
     }),
     [
       {
-        key: "teamsSync",
-        databaseKey: "teams",
+        key: "organizationsSync",
+        databaseKey: "organizations",
         primaryKeyProperty: "Directory Key",
         mode: "replace",
         schedule: { type: "interval", intervalMs: 60 * 60_000 },
@@ -392,11 +553,17 @@ test("directory keys are deterministic, trimmed, and domain separated", () => {
   )
   assert.notEqual(
     directoryKey("person", "shared-wid"),
-    directoryKey("team", "shared-wid")
+    directoryKey("organization", "shared-wid")
   )
-  assert.match(directoryKey("team", "shared-wid"), /^wd-team-[a-f0-9]{32}$/)
+  assert.match(
+    directoryKey("organization", "shared-wid"),
+    /^wd-organization-[a-f0-9]{32}$/
+  )
   assert.throws(() => directoryKey("person", "  "), /person WID is empty/)
-  assert.throws(() => directoryKey("team", ""), /team WID is empty/)
+  assert.throws(
+    () => directoryKey("organization", ""),
+    /organization WID is empty/
+  )
 })
 
 test("person transform hashes identifiers, filters self, and emits co-managers", () => {
@@ -406,7 +573,10 @@ test("person transform hashes identifiers, filters self, and emits co-managers",
   }
   const change = personToChange(person)
   const personKey = directoryKey("person", ada.workdayWid)
-  const teamKey = directoryKey("team", ada.team.workdayWid)
+  const organizationKey = directoryKey(
+    "organization",
+    ada.supervisoryOrganization.workdayWid
+  )
   const managerKeys = [
     directoryKey("person", "manager-a"),
     directoryKey("person", "manager-z"),
@@ -417,15 +587,22 @@ test("person transform hashes identifiers, filters self, and emits co-managers",
     key: personKey,
     properties: {
       Name: [["Ada Lovelace"]],
-      Team: [{ type: "primaryKey", value: teamKey }],
-      Managers: managerKeys.map((value) => ({ type: "primaryKey", value })),
+      "Work Email": [["ada@example.com"]],
+      "Notion Profile": [{ email: "ada@example.com" }],
+      "Supervisory Organization": [
+        { type: "primaryKey", value: organizationKey },
+      ],
+      "Supervisory Managers": managerKeys.map((value) => ({
+        type: "primaryKey",
+        value,
+      })),
       "Directory Key": [[personKey]],
     },
   })
   const serialized = JSON.stringify(change)
   for (const rawWid of [
     ada.workdayWid,
-    ada.team.workdayWid,
+    ada.supervisoryOrganization.workdayWid,
     "manager-a",
     "manager-z",
   ]) {
@@ -436,7 +613,28 @@ test("person transform hashes identifiers, filters self, and emits co-managers",
 test("person transform emits an explicit empty manager relation", () => {
   const ceo = { ...ada, managerWorkdayWids: [] }
   const person = personToChange(ceo)
-  assert.deepEqual(person.properties.Managers, [])
+  assert.deepEqual(person.properties["Supervisory Managers"], [])
+})
+
+test("person transform keeps name when work email and profile are unavailable", () => {
+  const person = personToChange({ ...ada, workEmail: undefined })
+  assert.deepEqual(person.properties.Name, [["Ada Lovelace"]])
+  assert.deepEqual(person.properties["Work Email"], [])
+  assert.deepEqual(person.properties["Notion Profile"], [])
+})
+
+test("person transform enforces Notion's email property limit", () => {
+  const atLimit = `${"a".repeat(188)}@example.com`
+  assert.equal(atLimit.length, 200)
+  assert.deepEqual(
+    personToChange({ ...ada, workEmail: atLimit }).properties["Work Email"],
+    [[atLimit]]
+  )
+
+  assert.throws(
+    () => personToChange({ ...ada, workEmail: `a${atLimit}` }),
+    /valid email address/
+  )
 })
 
 test("person transform fails rather than truncating manager relations", () => {
@@ -448,7 +646,7 @@ test("person transform fails rather than truncating manager relations", () => {
     ),
   })
   assert.equal(
-    (atLimit.properties.Managers as unknown[]).length,
+    (atLimit.properties["Supervisory Managers"] as unknown[]).length,
     MAX_MANAGER_RELATIONS
   )
 
@@ -465,23 +663,25 @@ test("person transform fails rather than truncating manager relations", () => {
   )
 })
 
-test("team transform emits only its employee-visible name and opaque key", () => {
-  const change = teamToChange({
-    workdayWid: "team-private-wid",
+test("organization transform emits only its employee-visible name and opaque key", () => {
+  const change = organizationToChange({
+    workdayWid: "organization-private-wid",
     name: "Platform",
   })
   assert.deepEqual(change, {
     type: "upsert",
-    key: directoryKey("team", "team-private-wid"),
+    key: directoryKey("organization", "organization-private-wid"),
     properties: {
       Name: [["Platform"]],
-      "Directory Key": [[directoryKey("team", "team-private-wid")]],
+      "Directory Key": [
+        [directoryKey("organization", "organization-private-wid")],
+      ],
     },
   })
-  assert.doesNotMatch(JSON.stringify(change), /team-private-wid/)
+  assert.doesNotMatch(JSON.stringify(change), /organization-private-wid/)
 })
 
-test("team derivation dedupes by WID and validates only the team name", () => {
+test("organization derivation dedupes by WID and validates only its name", () => {
   const people: DirectoryPerson[] = [
     {
       ...ada,
@@ -496,28 +696,34 @@ test("team derivation dedupes by WID and validates only the team name", () => {
     {
       ...ada,
       workdayWid: "person-3",
-      team: { workdayWid: "team-accounting", name: "Accounting" },
+      supervisoryOrganization: {
+        workdayWid: "organization-accounting",
+        name: "Accounting",
+      },
       managerWorkdayWids: [],
     },
   ]
-  assert.deepEqual(teamsFromPeople(people), [
+  assert.deepEqual(organizationsFromPeople(people), [
     {
-      workdayWid: "team-accounting",
+      workdayWid: "organization-accounting",
       name: "Accounting",
     },
     {
-      workdayWid: ada.team.workdayWid,
+      workdayWid: ada.supervisoryOrganization.workdayWid,
       name: "Engineering",
     },
   ])
   assert.throws(
     () =>
-      teamsFromPeople([
+      organizationsFromPeople([
         ada,
         {
           ...ada,
           workdayWid: "other-person",
-          team: { ...ada.team, name: "R&D" },
+          supervisoryOrganization: {
+            ...ada.supervisoryOrganization,
+            name: "R&D",
+          },
         },
       ]),
     /inconsistent supervisory organization data/
@@ -530,7 +736,7 @@ function leafElements(xml: string): Array<[string, string]> {
   )
 }
 
-test("Get_Workers request is an exact privacy allowlist for active employees", () => {
+test("Get_Workers request enables only required directory sections", () => {
   const xml = buildGetWorkersRequest("v46.1", pageRequest)
   assert.match(
     xml,
@@ -628,6 +834,163 @@ test("Get_Workers request is an exact privacy allowlist for active employees", (
   ])
 })
 
+test("work-contact request batches exact WIDs at the pinned snapshot", () => {
+  const xml = buildGetWorkContactRequest("v46.1", pageRequest, [
+    "worker-one",
+    "worker&two",
+  ])
+  assert.match(
+    xml,
+    /<bsvc:Get_Change_Work_Contact_Information_Request bsvc:version="v46\.1">/
+  )
+  assert.match(xml, /<bsvc:ID bsvc:type="WID">worker-one<\/bsvc:ID>/)
+  assert.match(xml, /<bsvc:ID bsvc:type="WID">worker&amp;two<\/bsvc:ID>/)
+  const filter = xml.match(
+    /<bsvc:Response_Filter>(.*?)<\/bsvc:Response_Filter>/
+  )?.[1]
+  assert.ok(filter)
+  assert.deepEqual(leafElements(filter), [
+    ["As_Of_Effective_Date", pageRequest.asOfEffectiveDate],
+    ["As_Of_Entry_DateTime", pageRequest.asOfEntryDateTime],
+    ["Page", "1"],
+    ["Count", String(WORKDAY_PAGE_SIZE)],
+  ])
+
+  for (const workdayWids of [
+    [],
+    ["duplicate", " duplicate "],
+    [""],
+    Array.from({ length: WORKDAY_PAGE_SIZE + 1 }, (_, index) => `wid-${index}`),
+  ]) {
+    assert.throws(
+      () => buildGetWorkContactRequest("v46.1", pageRequest, workdayWids),
+      /invalid worker references/
+    )
+  }
+})
+
+test("work-contact parser selects one public primary WORK email", () => {
+  const xml = fixtureContactResponse([
+    fixtureContactPerson({
+      wid: "worker-ada",
+      sensitiveData: true,
+      emails: [
+        {
+          email: "home@example.com",
+          public: true,
+          primary: true,
+          usageType: "HOME",
+        },
+        {
+          email: "private-work@example.com",
+          public: false,
+          primary: true,
+        },
+        {
+          email: "secondary@example.com",
+          public: true,
+          primary: false,
+        },
+        { email: " ADA@EXAMPLE.COM ", public: "1", primary: "1" },
+      ],
+    }),
+    fixtureContactPerson({
+      wid: "worker-grace",
+      emails: [{ email: "grace@example.com" }],
+    }),
+  ])
+  const emails = parseGetWorkContactResponse(xml, [
+    "worker-ada",
+    "worker-grace",
+  ])
+  assert.deepEqual(
+    [...emails],
+    [
+      ["worker-ada", "ada@example.com"],
+      ["worker-grace", "grace@example.com"],
+    ]
+  )
+  assert.doesNotMatch(
+    JSON.stringify([...emails]),
+    /home@example|private-work@example|secondary@example|private address|555-private/
+  )
+})
+
+test("work-contact parser allows no work email but fails on ambiguity", () => {
+  const oneWorker = (emails: ContactEmailFixture[]) =>
+    fixtureContactResponse([
+      fixtureContactPerson({ wid: "worker-ada", emails }),
+    ])
+
+  for (const emails of [
+    [{ email: "home@example.com", usageType: "HOME" }],
+    [{ email: "work@example.com", public: false }],
+    [{ email: "work@example.com", primary: false }],
+  ]) {
+    assert.deepEqual(
+      [...parseGetWorkContactResponse(oneWorker(emails), ["worker-ada"])],
+      [["worker-ada", undefined]]
+    )
+  }
+
+  assert.throws(
+    () =>
+      parseGetWorkContactResponse(
+        oneWorker([{ email: "one@example.com" }, { email: "two@example.com" }]),
+        ["worker-ada"]
+      ),
+    /multiple public primary work email/
+  )
+  assert.throws(
+    () =>
+      parseGetWorkContactResponse(
+        oneWorker([{ email: "work@example.com", public: "yes" }]),
+        ["worker-ada"]
+      ),
+    /invalid email Public attribute/
+  )
+  assert.throws(
+    () =>
+      parseGetWorkContactResponse(
+        oneWorker([{ email: "work@example.com", includeUsageTypeId: false }]),
+        ["worker-ada"]
+      ),
+    /cannot classify a public primary email usage/
+  )
+})
+
+test("work-contact parser enforces a complete one-to-one employee join", () => {
+  const duplicatePerson = fixtureContactResponse([
+    fixtureContactPerson({ wid: "worker-one" }),
+    fixtureContactPerson({ wid: "worker-one" }),
+  ])
+  assert.throws(
+    () =>
+      parseGetWorkContactResponse(duplicatePerson, [
+        "worker-one",
+        "worker-two",
+      ]),
+    /unexpected or duplicate work contact person/
+  )
+
+  const unexpected = fixtureContactResponse([
+    fixtureContactPerson({ wid: "worker-other" }),
+  ])
+  assert.throws(
+    () => parseGetWorkContactResponse(unexpected, ["worker-one"]),
+    /unexpected or duplicate work contact person/
+  )
+
+  const incomplete = fixtureContactResponse(
+    [fixtureContactPerson({ wid: "worker-one" })],
+    { totalResults: 2 }
+  )
+  assert.throws(
+    () => parseGetWorkContactResponse(incomplete, ["worker-one"]),
+    /incomplete work contact response/
+  )
+})
+
 test("Get_Workers request validates version, page, and pinned dates", () => {
   for (const version of ["46.1", "v46", "v46.1-beta", "v 46.1"]) {
     assert.throws(
@@ -675,14 +1038,14 @@ test("Get_Workers request validates version, page, and pinned dates", () => {
   }
 })
 
-test("XML parser reads allowlisted names and ignores generic reference descriptors", () => {
+test("XML parser reads the directory allowlist and ignores nearby private data", () => {
   const xml = fixtureResponse([
     fixtureWorker({
       wid: "employee-ada-wid",
       name: "Ada Lovelace",
       referenceDescriptor: "Ada Lovelace (sensitive-employee-id)",
-      teamWid: "team-platform-wid",
-      teamName: "Platform",
+      organizationWid: "organization-platform-wid",
+      organizationName: "Platform",
       managerWids: ["manager-z-wid", "manager-a-wid", "manager-z-wid"],
       sensitiveData: true,
     }),
@@ -696,7 +1059,10 @@ test("XML parser reads allowlisted names and ignores generic reference descripto
       {
         workdayWid: "employee-ada-wid",
         name: "Ada Lovelace",
-        team: { workdayWid: "team-platform-wid", name: "Platform" },
+        supervisoryOrganization: {
+          workdayWid: "organization-platform-wid",
+          name: "Platform",
+        },
         managerWorkdayWids: ["manager-a-wid", "manager-z-wid"],
       },
     ],
@@ -710,6 +1076,7 @@ test("XML parser reads allowlisted names and ignores generic reference descripto
     "ada.secret@example.com",
     "999-00-1234",
     "1815-12-10",
+    "matrix-private-context",
     "Principal Secret Keeper",
     "2020-01-02",
     "999999",
@@ -719,10 +1086,13 @@ test("XML parser reads allowlisted names and ignores generic reference descripto
       new RegExp(sensitiveValue.replace(/\./g, "\\."))
     )
   }
-  const change = personToChange(page.people[0]!)
+  const change = personToChange({
+    ...page.people[0]!,
+    workEmail: "ada@example.com",
+  })
   assert.doesNotMatch(
     JSON.stringify(change),
-    /employee-ada-wid|team-platform-wid|manager-[az]-wid/
+    /employee-ada-wid|organization-platform-wid|manager-[az]-wid/
   )
 })
 
@@ -732,8 +1102,8 @@ test("XML parser supports a CEO with no manager references", () => {
       fixtureWorker({
         wid: "ceo-wid",
         name: "Chief Executive",
-        teamWid: "executive-team-wid",
-        teamName: "Executive Office",
+        organizationWid: "executive-organization-wid",
+        organizationName: "Executive Office",
         managerWids: [],
       }),
     ])
@@ -741,27 +1111,26 @@ test("XML parser supports a CEO with no manager references", () => {
   assert.deepEqual(page.people[0]?.managerWorkdayWids, [])
 })
 
-test("XML parser includes only employee manager references with a WID", () => {
-  const page = parseGetWorkersResponse(
-    fixtureResponse([
-      fixtureWorker({
-        wid: "employee-with-mixed-managers",
-        managerReferences: [
-          {
-            wid: "employee-manager-wid",
-            idTypes: ["Employee_ID", "WID"],
-          },
-          { wid: "wid-only-manager", idTypes: ["WID"] },
-          {
-            wid: "contingent-manager-wid",
-            idTypes: ["Contingent_Worker_ID", "WID"],
-          },
-          { wid: "employee-id-only", idTypes: ["Employee_ID"] },
-        ],
-      }),
-    ])
-  )
-  assert.deepEqual(page.people[0]?.managerWorkdayWids, ["employee-manager-wid"])
+test("XML parser fails closed on unclassifiable manager references", () => {
+  for (const idTypes of [
+    ["WID"],
+    ["Contingent_Worker_ID", "WID"],
+    ["Employee_ID"],
+    ["Employee_ID", "Contingent_Worker_ID", "WID"],
+  ]) {
+    assert.throws(
+      () =>
+        parseGetWorkersResponse(
+          fixtureResponse([
+            fixtureWorker({
+              wid: "employee-with-unclassifiable-manager",
+              managerReferences: [{ wid: "manager-wid", idTypes }],
+            }),
+          ])
+        ),
+      /unclassifiable or non-employee manager reference/
+    )
+  }
 })
 
 test("XML parser rejects non-employee top-level worker references", () => {
@@ -805,11 +1174,11 @@ test("XML parser rejects non-employee top-level worker references", () => {
           }),
         ])
       ),
-    /missing Worker_Reference WID/
+    /duplicate Worker_Reference ID type/
   )
 })
 
-test("XML parser rejects duplicate workers and ambiguous team membership", () => {
+test("XML parser rejects duplicate workers and ambiguous organization membership", () => {
   const duplicate = fixtureWorker({ wid: "duplicate-worker-wid" })
   assert.throws(
     () => parseGetWorkersResponse(fixtureResponse([duplicate, duplicate])),
@@ -819,7 +1188,7 @@ test("XML parser rejects duplicate workers and ambiguous team membership", () =>
     () =>
       parseGetWorkersResponse(
         fixtureResponse([
-          fixtureWorker({ wid: "no-team-worker", membershipCount: 0 }),
+          fixtureWorker({ wid: "no-organization-worker", membershipCount: 0 }),
         ])
       ),
     /missing Organization_Data|exactly one in-scope supervisory organization/
@@ -828,7 +1197,7 @@ test("XML parser rejects duplicate workers and ambiguous team membership", () =>
     () =>
       parseGetWorkersResponse(
         fixtureResponse([
-          fixtureWorker({ wid: "two-team-worker", membershipCount: 2 }),
+          fixtureWorker({ wid: "two-organization-worker", membershipCount: 2 }),
         ])
       ),
     /exactly one in-scope supervisory organization/
@@ -842,8 +1211,8 @@ test("XML parser requires one matching supervisory management-chain entry", () =
         fixtureResponse([
           fixtureWorker({
             wid: "mismatch-worker",
-            teamWid: "current-team",
-            chainTeamWids: ["other-team"],
+            organizationWid: "current-organization",
+            chainOrganizationWids: ["other-organization"],
           }),
         ])
       ),
@@ -855,8 +1224,11 @@ test("XML parser requires one matching supervisory management-chain entry", () =
         fixtureResponse([
           fixtureWorker({
             wid: "duplicate-chain-worker",
-            teamWid: "current-team",
-            chainTeamWids: ["current-team", "current-team"],
+            organizationWid: "current-organization",
+            chainOrganizationWids: [
+              "current-organization",
+              "current-organization",
+            ],
           }),
         ])
       ),
@@ -892,7 +1264,7 @@ test("XML parser requires one matching supervisory management-chain entry", () =
         fixtureResponse([
           fixtureWorker({
             wid: "empty-chain-worker",
-            chainTeamWids: [],
+            chainOrganizationWids: [],
           }),
         ])
       ),
@@ -946,8 +1318,8 @@ test("XML parser fails closed on SOAP faults, malformed, and incomplete payloads
       parseGetWorkersResponse(
         fixtureResponse([
           fixtureWorker({
-            wid: "missing-team-name",
-            teamName: "",
+            wid: "missing-organization-name",
+            organizationName: "",
           }),
         ])
       ),
@@ -1226,6 +1598,7 @@ test("people sync reuses snapshot state across pages and finalizes cleanly", asy
     ...ada,
     workdayWid: "wid-person-second",
     name: "Grace Hopper",
+    workEmail: "grace@example.com",
   }
   const client = clientWithPages(
     [
@@ -1249,6 +1622,7 @@ test("people sync reuses snapshot state across pages and finalizes cleanly", asy
     asOfEffectiveDate: "2025-12-31",
     totalPages: 2,
     totalResults: 101,
+    seenWorkEmailFingerprints: testWorkEmailFingerprint("ada@example.com"),
   })
 
   const second = await runPeopleSyncPage(client, first.nextState)
@@ -1269,21 +1643,81 @@ test("people sync reuses snapshot state across pages and finalizes cleanly", asy
   ])
 })
 
-test("teams sync publishes one deterministic team change per page", async () => {
+test("people sync rejects duplicate work email across Workday pages", async () => {
+  const duplicateEmailPerson: DirectoryPerson = {
+    ...ada,
+    workdayWid: "wid-person-duplicate-email",
+    workEmail: "ADA@EXAMPLE.COM",
+  }
+  const client = clientWithPages([
+    { page: 1, totalPages: 2, totalResults: 101, people: [ada] },
+    {
+      page: 2,
+      totalPages: 2,
+      totalResults: 101,
+      people: [duplicateEmailPerson],
+    },
+  ])
+  const first = await runPeopleSyncPage(
+    client,
+    undefined,
+    () => new Date("2026-01-01T00:30:00.000Z")
+  )
+  await assert.rejects(
+    () => runPeopleSyncPage(client, first.nextState),
+    /one public work email for multiple employees/
+  )
+})
+
+test("people sync rejects malformed email-fingerprint state before fetching", async () => {
+  const validState = {
+    ...stateIdentity,
+    page: 2,
+    asOfEntryDateTime: "2026-07-02T14:15:16.000Z",
+    asOfEffectiveDate: "2026-07-02",
+    totalPages: 2,
+    totalResults: 101,
+  }
+  for (const seenWorkEmailFingerprints of [
+    undefined,
+    "short",
+    "!".repeat(16),
+    testWorkEmailFingerprint("ada@example.com").repeat(2),
+  ]) {
+    const requests: WorkdayPageRequest[] = []
+    const client = clientWithPages(
+      [{ page: 2, totalPages: 2, totalResults: 101, people: [ada] }],
+      requests
+    )
+    await assert.rejects(
+      () =>
+        runPeopleSyncPage(client, {
+          ...validState,
+          ...(seenWorkEmailFingerprints === undefined
+            ? {}
+            : { seenWorkEmailFingerprints }),
+        }),
+      /invalid work-email fingerprints/
+    )
+    assert.equal(requests.length, 0)
+  }
+})
+
+test("organization sync publishes one deterministic change per page", async () => {
   const teammate = { ...ada, workdayWid: "other-person" }
   const client = clientWithPages([
     { page: 1, totalPages: 1, totalResults: 2, people: [teammate, ada] },
   ])
-  const result = await runTeamsSyncPage(
+  const result = await runOrganizationsSyncPage(
     client,
     undefined,
     () => new Date("2026-07-02T14:15:16Z")
   )
   assert.deepEqual(result, {
     changes: [
-      teamToChange({
-        workdayWid: ada.team.workdayWid,
-        name: ada.team.name,
+      organizationToChange({
+        workdayWid: ada.supervisoryOrganization.workdayWid,
+        name: ada.supervisoryOrganization.name,
       }),
     ],
     hasMore: false,
@@ -1298,6 +1732,7 @@ test("sync rejects wrong pages, drifting totals, empty pages, and page overflow"
     asOfEffectiveDate: "2026-07-02",
     totalPages: 3,
     totalResults: 201,
+    seenWorkEmailFingerprints: "",
   }
   const failures: Array<[WorkdayWorkersPage, RegExp]> = [
     [
@@ -1740,7 +2175,6 @@ test("source contract fingerprint is stable but source-bound", () => {
       ...baseConfig,
       apiUrl: `${baseConfig.apiUrl}/`,
       tokenUrl: "https://tenant1.myworkday.com/ccx/oauth2/acme/new-token",
-      clientSecret: "rotated-secret",
       refreshToken: "rotated-refresh-token",
       externalApplicationId: "new-observability-label",
     }),
@@ -1752,6 +2186,7 @@ test("source contract fingerprint is stable but source-bound", () => {
       apiUrl:
         "https://tenant2.myworkday.com/ccx/service/acme/Human_Resources/v46.1",
     },
+    { ...baseConfig, clientSecret: "rotated-client-secret" },
     {
       ...baseConfig,
       apiUrl:
@@ -1763,6 +2198,27 @@ test("source contract fingerprint is stable but source-bound", () => {
   ]) {
     assert.notEqual(fingerprint(changedSource), baseline)
   }
+})
+
+test("work email fingerprints are keyed, normalized, and compact", () => {
+  const client = createWorkdayClient(
+    baseConfig,
+    staticTokenProvider(["unused-token"]),
+    async () => {},
+    queuedFetch([])
+  )
+  const normalized = client.workEmailFingerprint("ada@example.com")
+  assert.equal(client.workEmailFingerprint(" ADA@EXAMPLE.COM "), normalized)
+  assert.match(normalized, /^[A-Za-z0-9_-]{16}$/)
+  assert.notEqual(
+    createWorkdayClient(
+      { ...baseConfig, clientSecret: "rotated-client-secret" },
+      staticTokenProvider(["unused-token"]),
+      async () => {},
+      queuedFetch([])
+    ).workEmailFingerprint("ada@example.com"),
+    normalized
+  )
 })
 
 test("SOAP page 1 omits the strict client timeout", async () => {
@@ -1784,7 +2240,10 @@ test("SOAP page 1 omits the strict client timeout", async () => {
     )
   )
 
-  await client.fetchWorkersPage({ ...pageRequest, page: 1 })
+  await client.fetchWorkersPage(
+    { ...pageRequest, page: 1 },
+    { includeWorkEmail: false }
+  )
   assert.equal(calls[0]?.init?.signal, undefined)
 })
 
@@ -1802,7 +2261,9 @@ test("SOAP client sends pinned request with bearer auth and privacy headers", as
     },
     queuedFetch([new Response(xml, { status: 200 })], calls)
   )
-  const page = await client.fetchWorkersPage(pageRequest)
+  const page = await client.fetchWorkersPage(pageRequest, {
+    includeWorkEmail: false,
+  })
   assert.equal(page.people[0]?.name, "Ada Lovelace")
   assert.equal(pacingCalls, 1)
   assert.equal(String(calls[0]?.input), baseConfig.apiUrl)
@@ -1834,6 +2295,48 @@ test("SOAP client sends pinned request with bearer auth and privacy headers", as
   assert.doesNotMatch(String(calls[0]?.init?.body), /soap-access-token/)
 })
 
+test("People page batches and joins public work email before emitting changes", async () => {
+  const calls: FetchCall[] = []
+  let pacingCalls = 0
+  const workersXml = fixtureResponse([
+    fixtureWorker({ wid: "worker-with-email", managerWids: [] }),
+  ])
+  const contactsXml = fixtureContactResponse([
+    fixtureContactPerson({
+      wid: "worker-with-email",
+      emails: [{ email: " PERSON@EXAMPLE.COM " }],
+    }),
+  ])
+  const client = createWorkdayClient(
+    baseConfig,
+    staticTokenProvider(["soap-access-token"]),
+    async () => {
+      pacingCalls++
+    },
+    queuedFetch(
+      [
+        new Response(workersXml, { status: 200 }),
+        new Response(contactsXml, { status: 200 }),
+      ],
+      calls
+    )
+  )
+
+  const page = await client.fetchWorkersPage(pageRequest, {
+    includeWorkEmail: true,
+  })
+  assert.equal(page.people[0]?.workEmail, "person@example.com")
+  assert.equal(pacingCalls, 2)
+  assert.equal(calls.length, 2)
+  assert.equal(
+    calls[1]?.init?.body,
+    buildGetWorkContactRequest(baseConfig.apiVersion, pageRequest, [
+      "worker-with-email",
+    ])
+  )
+  assert.ok(calls[1]?.init?.signal instanceof AbortSignal)
+})
+
 test("SOAP client refreshes once after 401 and retries the identical snapshot", async () => {
   const calls: FetchCall[] = []
   const invalidated: string[] = []
@@ -1853,7 +2356,9 @@ test("SOAP client refreshes once after 401 and retries the identical snapshot", 
       calls
     )
   )
-  const page = await client.fetchWorkersPage(pageRequest)
+  const page = await client.fetchWorkersPage(pageRequest, {
+    includeWorkEmail: false,
+  })
   assert.equal(page.people[0]?.workdayWid, "refreshed-worker")
   assert.deepEqual(invalidated, ["stale-token"])
   assert.equal(pacingCalls, 2)
@@ -1891,7 +2396,9 @@ test("SOAP client does not retry authorization or ordinary server errors", async
       async () => {},
       queuedFetch([new Response(privateBody, { status })], calls)
     )
-    const error = await captureError(() => client.fetchWorkersPage(pageRequest))
+    const error = await captureError(() =>
+      client.fetchWorkersPage(pageRequest, { includeWorkEmail: false })
+    )
     assert.ok(error instanceof Error)
     assert.equal(error instanceof RateLimitError, false)
     assert.match(error.message, new RegExp(`failed \\(${status}\\)`))
@@ -1924,7 +2431,9 @@ test("SOAP overload statuses and recognized 500 bodies become rate limits", asyn
         }),
       ])
     )
-    const error = await captureError(() => client.fetchWorkersPage(pageRequest))
+    const error = await captureError(() =>
+      client.fetchWorkersPage(pageRequest, { includeWorkEmail: false })
+    )
     assert.ok(error instanceof RateLimitError, `${status}: ${body}`)
     assert.equal(error.retryAfter, 9)
     assert.doesNotMatch(error.message, new RegExp(body, "i"))
@@ -1953,7 +2462,9 @@ test("SOAP transport and malformed-success errors do not leak raw data", async (
       async () => {},
       queuedFetch([response])
     )
-    const error = await captureError(() => client.fetchWorkersPage(pageRequest))
+    const error = await captureError(() =>
+      client.fetchWorkersPage(pageRequest, { includeWorkEmail: false })
+    )
     assert.ok(error instanceof Error)
     assert.match(error.message, expected)
     assert.doesNotMatch(
@@ -1978,7 +2489,9 @@ test("SOAP rejects oversized declared bodies before parsing or leaking them", as
       }),
     ])
   )
-  const error = await captureError(() => client.fetchWorkersPage(pageRequest))
+  const error = await captureError(() =>
+    client.fetchWorkersPage(pageRequest, { includeWorkEmail: false })
+  )
   assert.ok(error instanceof Error)
   assert.equal(error instanceof RateLimitError, false)
   assert.match(error.message, /SOAP response exceeded the allowed size/)
@@ -1999,7 +2512,9 @@ test("SOAP client renews at most once after repeated 401 responses", async () =>
       new Response("second private body", { status: 401 }),
     ])
   )
-  const error = await captureError(() => client.fetchWorkersPage(pageRequest))
+  const error = await captureError(() =>
+    client.fetchWorkersPage(pageRequest, { includeWorkEmail: false })
+  )
   assert.ok(error instanceof Error)
   assert.equal(error instanceof RateLimitError, false)
   assert.match(

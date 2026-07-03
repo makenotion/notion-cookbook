@@ -1,11 +1,12 @@
-// Privacy-minimal Workday Human Resources WWS client.
+// Employee-directory Workday Human Resources WWS client.
 //
 // Workday recommends SOAP for scheduled, high-volume system-to-system reads.
-// Get_Workers is requested as a pinned snapshot and the Response_Group turns
-// off every broad HR section. Only worker reference, supervisory organization,
-// and supervisory management-chain data are parsed into the directory model.
+// Get_Workers is requested as a pinned snapshot with broad HR sections off.
+// People pages add one batched Get_Change_Work_Contact_Information request and
+// retain only the public primary WORK email. Raw source payloads are never
+// written to Notion, state, or logs.
 
-import { createHash, randomUUID } from "node:crypto"
+import { createHash, createHmac, randomUUID } from "node:crypto"
 
 import { RateLimitError } from "@notionhq/workers"
 import { XMLParser, XMLValidator } from "fast-xml-parser"
@@ -13,12 +14,13 @@ import { XMLParser, XMLValidator } from "fast-xml-parser"
 import type { DirectoryPerson } from "./people.js"
 import {
   DIRECTORY_SYNC_CONTRACT_VERSION,
+  WORK_EMAIL_FINGERPRINT_LENGTH,
   WORKDAY_PAGE_SIZE,
   type WorkdayDirectoryClient,
   type WorkdayPageRequest,
   type WorkdayWorkersPage,
 } from "./sync.js"
-import { validatePageRequest } from "./validation.js"
+import { normalizedWorkEmail, validatePageRequest } from "./validation.js"
 
 export { WORKDAY_PAGE_SIZE } from "./sync.js"
 
@@ -437,6 +439,60 @@ export function buildGetWorkersRequest(
   ].join("")
 }
 
+function xmlText(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;")
+}
+
+export function buildGetWorkContactRequest(
+  version: string,
+  request: WorkdayPageRequest,
+  workdayWids: string[]
+): string {
+  if (!/^v\d+\.\d+$/.test(version)) {
+    throw new Error("Workday SOAP version is invalid.")
+  }
+  validatePageRequest(request)
+  const normalizedWids = workdayWids.map((wid) => wid.trim())
+  if (
+    normalizedWids.length === 0 ||
+    normalizedWids.length > WORKDAY_PAGE_SIZE ||
+    new Set(normalizedWids).size !== normalizedWids.length ||
+    normalizedWids.some((wid) => !wid)
+  ) {
+    throw new Error("Workday contact request has invalid worker references.")
+  }
+
+  const references = normalizedWids
+    .map(
+      (wid) =>
+        `<bsvc:Person_Reference><bsvc:ID bsvc:type="WID">${xmlText(wid)}</bsvc:ID></bsvc:Person_Reference>`
+    )
+    .join("")
+
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:bsvc="urn:com.workday/bsvc">',
+    "<soapenv:Header/>",
+    "<soapenv:Body>",
+    `<bsvc:Get_Change_Work_Contact_Information_Request bsvc:version="${version}">`,
+    `<bsvc:Request_References>${references}</bsvc:Request_References>`,
+    "<bsvc:Response_Filter>",
+    xmlElement("As_Of_Effective_Date", request.asOfEffectiveDate),
+    xmlElement("As_Of_Entry_DateTime", request.asOfEntryDateTime),
+    xmlElement("Page", 1),
+    xmlElement("Count", WORKDAY_PAGE_SIZE),
+    "</bsvc:Response_Filter>",
+    "</bsvc:Get_Change_Work_Contact_Information_Request>",
+    "</soapenv:Body>",
+    "</soapenv:Envelope>",
+  ].join("")
+}
+
 function asObject(value: unknown, label: string): JsonObject {
   if (!isObject(value)) throw new Error(`Workday response is missing ${label}.`)
   return value
@@ -472,28 +528,104 @@ function responseInteger(value: unknown, label: string): number {
   return number
 }
 
-function referenceWid(value: unknown, label: string): string {
-  const reference = asObject(value, label)
-  const candidates = asArray(reference.ID).filter(
-    (candidate) => isObject(candidate) && candidate["@type"] === "WID"
-  )
-  if (candidates.length !== 1) {
-    throw new Error(`Workday response is missing ${label} WID.`)
-  }
-  return requiredText(candidates[0], `${label} WID`)
-}
-
-function referenceHasIdType(value: unknown, idType: string): boolean {
-  if (!isObject(value)) return false
+function referenceId(
+  value: unknown,
+  idType: string,
+  label: string
+): string | undefined {
+  if (!isObject(value)) return undefined
   const candidates = asArray(value.ID).filter(
     (candidate) => isObject(candidate) && candidate["@type"] === idType
   )
   if (candidates.length > 1) {
-    throw new Error("Workday response has a duplicate reference ID type.")
+    throw new Error(`Workday response has a duplicate ${label} ID type.`)
   }
-  if (candidates.length === 0) return false
-  requiredText(candidates[0], "reference ID")
-  return true
+  if (candidates.length === 0) return undefined
+  return requiredText(candidates[0], `${label} ${idType}`)
+}
+
+function referenceWid(value: unknown, label: string): string {
+  const wid = referenceId(value, "WID", label)
+  if (!wid) throw new Error(`Workday response is missing ${label} WID.`)
+  return wid
+}
+
+function referenceHasIdType(value: unknown, idType: string): boolean {
+  return referenceId(value, idType, "reference") !== undefined
+}
+
+function booleanAttribute(value: unknown, label: string): boolean {
+  if (value === undefined) return false
+  if (value === true || value === "true" || value === "1") return true
+  if (value === false || value === "false" || value === "0") return false
+  throw new Error(`Workday response has an invalid ${label}.`)
+}
+
+function isPublicPrimaryWorkUsage(value: unknown): boolean {
+  const usage = asObject(value, "email Usage_Data")
+  if (!booleanAttribute(usage["@Public"], "email Public attribute")) {
+    return false
+  }
+
+  for (const typeValue of asArray(usage.Type_Data)) {
+    const type = asObject(typeValue, "email Type_Data")
+    if (!booleanAttribute(type["@Primary"], "email Primary attribute")) {
+      continue
+    }
+    const usageType = referenceId(
+      type.Type_Reference,
+      "Communication_Usage_Type_ID",
+      "email usage type"
+    )
+    if (!usageType) {
+      throw new Error(
+        "Workday response cannot classify a public primary email usage."
+      )
+    }
+    if (usageType === "WORK") return true
+  }
+  return false
+}
+
+function publicPrimaryWorkEmail(value: unknown): string | undefined {
+  if (value === undefined) return undefined
+  const emailInformation = asObject(value, "Person_Email_Information_Data")
+  const candidates = asArray(emailInformation.Email_Information_Data).filter(
+    (value) => {
+      const email = asObject(value, "Email_Information_Data")
+      return asArray(email.Usage_Data).some(isPublicPrimaryWorkUsage)
+    }
+  )
+  if (candidates.length > 1) {
+    throw new Error(
+      "Workday response has multiple public primary work email addresses."
+    )
+  }
+  if (candidates.length === 0) return undefined
+
+  const email = asObject(candidates[0], "Email_Information_Data")
+  const emailData = asArray(email.Email_Data)
+  if (emailData.length !== 1) {
+    throw new Error("Workday response has invalid work email data.")
+  }
+  const core = asObject(emailData[0], "Email_Data")
+  return normalizedWorkEmail(
+    requiredText(core.Email_Address, "public primary work email"),
+    "Workday public primary work email"
+  )
+}
+
+function employeeManagerWid(value: unknown): string {
+  const reference = asObject(value, "Manager_Reference")
+  const isEmployee = referenceHasIdType(reference, "Employee_ID")
+  const isContingent = referenceHasIdType(reference, "Contingent_Worker_ID")
+  const wid = referenceId(reference, "WID", "Manager_Reference")
+  if (!isEmployee || isContingent || !wid) {
+    throw new Error(
+      "Workday returned an unclassifiable or non-employee manager reference."
+    )
+  }
+  return wid
 }
 
 function parseDirectoryPerson(value: unknown): DirectoryPerson {
@@ -525,11 +657,17 @@ function parseDirectoryPerson(value: unknown): DirectoryPerson {
   }
 
   const membership = asObject(memberships[0], "Worker_Organization_Data")
-  const teamReference = membership.Organization_Reference
-  const teamData = asObject(membership.Organization_Data, "Organization_Data")
-  const teamWid = referenceWid(teamReference, "Organization_Reference")
-  const teamName = valueText(teamData.Organization_Name)
-  if (!teamName) {
+  const organizationReference = membership.Organization_Reference
+  const currentOrganizationData = asObject(
+    membership.Organization_Data,
+    "Organization_Data"
+  )
+  const organizationWid = referenceWid(
+    organizationReference,
+    "Organization_Reference"
+  )
+  const organizationName = valueText(currentOrganizationData.Organization_Name)
+  if (!organizationName) {
     throw new Error(
       "Workday response is missing supervisory organization name."
     )
@@ -555,7 +693,7 @@ function parseDirectoryPerson(value: unknown): DirectoryPerson {
     try {
       return (
         referenceWid(entry.Organization_Reference, "Organization_Reference") ===
-        teamWid
+        organizationWid
       )
     } catch {
       return false
@@ -567,27 +705,25 @@ function parseDirectoryPerson(value: unknown): DirectoryPerson {
     )
   }
 
-  const currentTeamChain = asObject(
+  const currentOrganizationChain = asObject(
     matchingChainEntries[0],
     "Management_Chain_Data"
   )
   const managerWorkdayWids = [
     ...new Set(
-      asArray(currentTeamChain.Manager_Reference)
-        .filter(
-          (reference) =>
-            referenceHasIdType(reference, "Employee_ID") &&
-            !referenceHasIdType(reference, "Contingent_Worker_ID") &&
-            referenceHasIdType(reference, "WID")
-        )
-        .map((reference) => referenceWid(reference, "Manager_Reference"))
+      asArray(currentOrganizationChain.Manager_Reference).map(
+        employeeManagerWid
+      )
     ),
   ].sort()
 
   return {
     workdayWid,
     name,
-    team: { workdayWid: teamWid, name: teamName },
+    supervisoryOrganization: {
+      workdayWid: organizationWid,
+      name: organizationName,
+    },
     managerWorkdayWids,
   }
 }
@@ -602,7 +738,7 @@ const xmlParser = new XMLParser({
   trimValues: true,
 })
 
-export function parseGetWorkersResponse(xml: string): WorkdayWorkersPage {
+function parseSoapBody(xml: string): JsonObject {
   if (XMLValidator.validate(xml) !== true) {
     throw new Error("Workday returned malformed XML.")
   }
@@ -619,6 +755,80 @@ export function parseGetWorkersResponse(xml: string): WorkdayWorkersPage {
   if (body.Fault !== undefined) {
     throw new Error("Workday returned a SOAP fault.")
   }
+  return body
+}
+
+export function parseGetWorkContactResponse(
+  xml: string,
+  requestedWorkdayWids: string[]
+): Map<string, string | undefined> {
+  if (
+    requestedWorkdayWids.length === 0 ||
+    requestedWorkdayWids.length > WORKDAY_PAGE_SIZE ||
+    new Set(requestedWorkdayWids).size !== requestedWorkdayWids.length
+  ) {
+    throw new Error("Workday contact response has invalid requested workers.")
+  }
+
+  const body = parseSoapBody(xml)
+  const response = asObject(
+    body.Get_Change_Work_Contact_Information_Response,
+    "Get_Change_Work_Contact_Information_Response"
+  )
+  const results = asObject(response.Response_Results, "Response_Results")
+  const responseData = asObject(response.Response_Data, "Response_Data")
+  const contacts = asArray(responseData.Change_Work_Contact_Information)
+  const expected = requestedWorkdayWids.length
+  if (
+    responseInteger(results.Page, "Page") !== 1 ||
+    responseInteger(results.Total_Pages, "Total_Pages") !== 1 ||
+    responseInteger(results.Total_Results, "Total_Results") !== expected ||
+    responseInteger(results.Page_Results, "Page_Results") !== expected ||
+    contacts.length !== expected
+  ) {
+    throw new Error("Workday returned an incomplete work contact response.")
+  }
+
+  const requested = new Set(requestedWorkdayWids)
+  const emails = new Map<string, string | undefined>()
+  for (const value of contacts) {
+    const contact = asObject(value, "Change_Work_Contact_Information")
+    const workdayWid = referenceWid(
+      contact.Person_Reference,
+      "Person_Reference"
+    )
+    if (!requested.has(workdayWid) || emails.has(workdayWid)) {
+      throw new Error(
+        "Workday returned an unexpected or duplicate work contact person."
+      )
+    }
+
+    const contactData = asArray(contact.Change_Work_Contact_Information_Data)
+    if (contactData.length !== 1) {
+      throw new Error("Workday response has invalid work contact data.")
+    }
+    const changeData = asObject(
+      contactData[0],
+      "Change_Work_Contact_Information_Data"
+    )
+    const personContact = asObject(
+      changeData.Person_Contact_Information_Data,
+      "Person_Contact_Information_Data"
+    )
+    const workEmail = publicPrimaryWorkEmail(
+      personContact.Person_Email_Information_Data
+    )
+    emails.set(workdayWid, workEmail)
+  }
+
+  if (emails.size !== requested.size) {
+    throw new Error("Workday returned an incomplete work contact response.")
+  }
+  return emails
+}
+
+export function parseGetWorkersResponse(xml: string): WorkdayWorkersPage {
+  const body = parseSoapBody(xml)
   const response = asObject(body.Get_Workers_Response, "Get_Workers_Response")
   const results = asObject(response.Response_Results, "Response_Results")
   const responseData = asObject(response.Response_Data, "Response_Data")
@@ -675,6 +885,9 @@ export function createWorkdayClient(
   beforeRequest: BeforeRequest,
   fetchImplementation: FetchImplementation = fetch
 ): WorkdayDirectoryClient {
+  const emailFingerprintKeyVersion = createHmac("sha256", config.clientSecret)
+    .update("notion-workday-directory:work-email-key-version", "utf8")
+    .digest("base64url")
   const sourceContractFingerprint = createHash("sha256")
     .update(
       JSON.stringify({
@@ -682,6 +895,7 @@ export function createWorkdayClient(
         apiUrl: config.apiUrl.replace(/\/+$/, ""),
         apiVersion: config.apiVersion,
         clientId: config.clientId,
+        emailFingerprintKeyVersion,
         effectiveTimeZone: config.effectiveTimeZone,
         pageSize: WORKDAY_PAGE_SIZE,
       }),
@@ -689,70 +903,109 @@ export function createWorkdayClient(
     )
     .digest("hex")
 
+  async function postSoap(
+    body: string,
+    withoutClientTimeout: boolean
+  ): Promise<string> {
+    for (let authAttempt = 0; authAttempt < 2; authAttempt++) {
+      const accessToken = await tokenProvider.getAccessToken()
+      await beforeRequest()
+
+      let response: Response
+      try {
+        response = await fetchImplementation(config.apiUrl, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: "application/xml, text/xml",
+            "Content-Type": "text/xml; charset=utf-8",
+            ...(config.externalApplicationId
+              ? {
+                  "wd-external-application-id": config.externalApplicationId,
+                  // Workday recommends a unique ID for each HTTP attempt.
+                  "wd-external-request-id": randomUUID(),
+                }
+              : {}),
+          },
+          body,
+          redirect: "error",
+          ...(withoutClientTimeout
+            ? {}
+            : { signal: AbortSignal.timeout(WORKDAY_REQUEST_TIMEOUT_MS) }),
+        })
+      } catch {
+        throw new Error(
+          "Workday SOAP request failed before receiving a response."
+        )
+      }
+
+      const responseBody = await readBoundedResponseText(
+        response,
+        WORKDAY_SOAP_MAX_RESPONSE_BYTES,
+        "Workday SOAP"
+      )
+      if (response.status === 401 && authAttempt === 0) {
+        tokenProvider.invalidate(accessToken)
+        continue
+      }
+      if (isOverloadResponse(response.status, responseBody)) {
+        throw new RateLimitError({
+          retryAfter: parseRetryAfterSeconds(
+            response.headers.get("retry-after")
+          ),
+        })
+      }
+      if (!response.ok) {
+        throw new Error(`Workday SOAP request failed (${response.status}).`)
+      }
+      return responseBody
+    }
+
+    throw new Error("Workday SOAP authentication failed after token renewal.")
+  }
+
   return {
     effectiveTimeZone: config.effectiveTimeZone,
     sourceContractFingerprint,
-    async fetchWorkersPage(request) {
-      const body = buildGetWorkersRequest(config.apiVersion, request)
+    workEmailFingerprint(email) {
+      const normalized = normalizedWorkEmail(
+        email,
+        "Workday public primary work email"
+      )
+      return createHmac("sha256", config.clientSecret)
+        .update(`notion-workday-directory:work-email:${normalized}`, "utf8")
+        .digest("base64url")
+        .slice(0, WORK_EMAIL_FINGERPRINT_LENGTH)
+    },
+    async fetchWorkersPage(request, { includeWorkEmail }) {
+      const workersResponse = await postSoap(
+        buildGetWorkersRequest(config.apiVersion, request),
+        // Page 1 builds Workday's paging cache and can legitimately take
+        // longer; Workday explicitly advises against a strict timeout.
+        request.page === 1
+      )
+      const page = parseGetWorkersResponse(workersResponse)
+      if (!includeWorkEmail) return page
 
-      for (let authAttempt = 0; authAttempt < 2; authAttempt++) {
-        const accessToken = await tokenProvider.getAccessToken()
-        await beforeRequest()
-
-        let response: Response
-        try {
-          response = await fetchImplementation(config.apiUrl, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              Accept: "application/xml, text/xml",
-              "Content-Type": "text/xml; charset=utf-8",
-              ...(config.externalApplicationId
-                ? {
-                    "wd-external-application-id": config.externalApplicationId,
-                    // Workday recommends a unique ID for each HTTP attempt.
-                    "wd-external-request-id": randomUUID(),
-                  }
-                : {}),
-            },
-            body,
-            redirect: "error",
-            // Page 1 builds Workday's paging cache and can legitimately take
-            // longer; Workday explicitly advises against a strict timeout.
-            ...(request.page > 1
-              ? { signal: AbortSignal.timeout(WORKDAY_REQUEST_TIMEOUT_MS) }
-              : {}),
-          })
-        } catch {
-          throw new Error(
-            "Workday SOAP request failed before receiving a response."
-          )
-        }
-
-        const responseBody = await readBoundedResponseText(
-          response,
-          WORKDAY_SOAP_MAX_RESPONSE_BYTES,
-          "Workday SOAP"
-        )
-        if (response.status === 401 && authAttempt === 0) {
-          tokenProvider.invalidate(accessToken)
-          continue
-        }
-        if (isOverloadResponse(response.status, responseBody)) {
-          throw new RateLimitError({
-            retryAfter: parseRetryAfterSeconds(
-              response.headers.get("retry-after")
-            ),
-          })
-        }
-        if (!response.ok) {
-          throw new Error(`Workday SOAP request failed (${response.status}).`)
-        }
-
-        return parseGetWorkersResponse(responseBody)
+      const workdayWids = page.people.map((person) => person.workdayWid)
+      const contactResponse = await postSoap(
+        buildGetWorkContactRequest(config.apiVersion, request, workdayWids),
+        false
+      )
+      const workEmails = parseGetWorkContactResponse(
+        contactResponse,
+        workdayWids
+      )
+      return {
+        ...page,
+        people: page.people.map((person) => {
+          const workEmail = workEmails.get(person.workdayWid)
+          return {
+            ...person,
+            ...(workEmail ? { workEmail } : {}),
+          }
+        }),
       }
-
-      throw new Error("Workday SOAP authentication failed after token renewal.")
     },
   }
 }

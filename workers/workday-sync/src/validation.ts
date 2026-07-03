@@ -41,6 +41,24 @@ export function isoDate(value: unknown, label: string): string {
   return value
 }
 
+export function normalizedWorkEmail(value: unknown, label: string): string {
+  if (typeof value !== "string") {
+    throw new Error(`${label} must be a valid email address.`)
+  }
+
+  const normalized = value.trim().toLowerCase()
+  if (
+    normalized.length === 0 ||
+    // Notion rejects email property values above 200 characters.
+    normalized.length > 200 ||
+    /[\u0000-\u0020\u007f]/u.test(normalized) ||
+    !/^[^@]+@[^@]+$/u.test(normalized)
+  ) {
+    throw new Error(`${label} must be a valid email address.`)
+  }
+  return normalized
+}
+
 export function validatePageRequest(request: PageRequest): void {
   positiveInteger(request.page, "Workday page")
   isoDate(request.asOfEffectiveDate, "Workday effective date")
