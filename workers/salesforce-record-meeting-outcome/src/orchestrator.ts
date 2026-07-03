@@ -1,7 +1,11 @@
 import { createHash } from "node:crypto"
 
 import type { RuntimePolicy } from "./policy.js"
-import { NotionRequestTimeoutError } from "./notion.js"
+import {
+  NotionProviderError,
+  NotionRequestTimeoutError,
+  NotionWriteError,
+} from "./notion.js"
 import {
   PolicyError,
   inputFingerprint,
@@ -50,6 +54,7 @@ type ResultOptions = {
   steps: ReceiptStep[]
   warnings?: string[]
   retryable?: boolean
+  retryAfterSeconds?: number | null
   resumeToken?: string | null
   repairInstruction?: string | null
 }
@@ -68,6 +73,7 @@ function result(options: ResultOptions): RecordMeetingOutcomeResult {
     steps: options.steps,
     warnings: options.warnings ?? [],
     retryable: options.retryable ?? false,
+    retryAfterSeconds: options.retryAfterSeconds ?? null,
     resumeToken: options.resumeToken ?? null,
     repairInstruction: options.repairInstruction ?? null,
   }
@@ -82,6 +88,7 @@ function failureResult(
   options: {
     changed?: boolean
     retryable?: boolean
+    retryAfterSeconds?: number | null
     replay?: boolean
     records?: RecordReceipt[]
     changedFields?: string[]
@@ -97,6 +104,7 @@ function failureResult(
     steps: [...steps, { name: "terminal", status: "failed", detail }],
     changed: options.changed,
     retryable: options.retryable,
+    retryAfterSeconds: options.retryAfterSeconds,
     replay: options.replay,
     records: options.records,
     changedFields: options.changedFields,
@@ -108,23 +116,46 @@ function failureResult(
 function providerFailureDisposition(error: unknown): {
   status: TerminalStatus
   retryable: boolean
+  retryAfterSeconds: number | null
 } {
-  if (!(error instanceof SalesforceFailure)) {
-    if (error instanceof NotionRequestTimeoutError) {
-      return { status: "blocked", retryable: true }
+  if (error instanceof NotionProviderError) {
+    return {
+      status: "blocked",
+      retryable: error.kind === "retryable",
+      retryAfterSeconds: error.retryAfterSeconds,
     }
-    return { status: "blocked", retryable: false }
+  }
+  if (
+    error instanceof NotionRequestTimeoutError ||
+    error instanceof NotionWriteError
+  ) {
+    return {
+      status: "blocked",
+      retryable: true,
+      retryAfterSeconds: null,
+    }
+  }
+  if (!(error instanceof SalesforceFailure)) {
+    return { status: "blocked", retryable: false, retryAfterSeconds: null }
   }
   if (error.kind === "conflict") {
-    return { status: "conflict", retryable: false }
+    return {
+      status: "conflict",
+      retryable: false,
+      retryAfterSeconds: null,
+    }
   }
   if (error.kind === "retryable") {
-    return { status: "blocked", retryable: true }
+    return {
+      status: "blocked",
+      retryable: true,
+      retryAfterSeconds: error.retryAfterSeconds,
+    }
   }
   if (error.kind === "ambiguous") {
-    return { status: "ambiguous", retryable: true }
+    return { status: "ambiguous", retryable: true, retryAfterSeconds: null }
   }
-  return { status: "blocked", retryable: false }
+  return { status: "blocked", retryable: false, retryAfterSeconds: null }
 }
 
 function changedFields(ledger: OperationLedger): string[] {
@@ -354,6 +385,12 @@ async function finishFromLedger(
         }
       )
     }
+    const disposition = providerFailureDisposition(error)
+    // The gateway turns known HTTP/SDK failures into NotionProviderError. An
+    // untyped gateway exception is still safe to retry here because Salesforce
+    // is already durably committed and ensureReceipt is read-before-write.
+    const retryable =
+      !(error instanceof NotionProviderError) || disposition.retryable
     return failureResult(
       "partial_failure",
       "Salesforce committed, but the Notion receipt was not confirmed.",
@@ -362,13 +399,15 @@ async function finishFromLedger(
       steps,
       {
         changed: !replay,
-        retryable: true,
+        retryable,
+        retryAfterSeconds: disposition.retryAfterSeconds,
         replay,
         records: providerReceipt,
         changedFields: changedFields(ledger),
         resumeToken: operationId,
-        repairInstruction:
-          "Retry the exact same input; the Worker will resume at Notion writeback without creating Salesforce records again.",
+        repairInstruction: retryable
+          ? "Retry the exact same input after any returned delay; the Worker will resume at Notion writeback without creating Salesforce records again."
+          : "Restore the Worker's Notion page access or property configuration, then retry the exact same input.",
       }
     )
   }
@@ -405,7 +444,10 @@ async function finishFromLedger(
         detail: "Marked the durable operation ledger completed.",
       })
       ledgerCompletedNow = true
-    } catch {
+    } catch (error) {
+      const disposition = providerFailureDisposition(error)
+      const retryable =
+        !(error instanceof SalesforceFailure) || disposition.retryable
       return failureResult(
         "partial_failure",
         "Salesforce records and the Notion receipt are complete, but ledger finalization was not confirmed.",
@@ -414,13 +456,15 @@ async function finishFromLedger(
         steps,
         {
           changed: !replay || notionAction === "written",
-          retryable: true,
+          retryable,
+          retryAfterSeconds: disposition.retryAfterSeconds,
           replay,
           records,
           changedFields: changedFields(ledger),
           resumeToken: operationId,
-          repairInstruction:
-            "Retry the exact same input; the Worker will verify both systems and finalize the ledger only.",
+          repairInstruction: retryable
+            ? "Retry the exact same input after any returned delay; the Worker will verify both systems and finalize the ledger only."
+            : "Restore Salesforce permission to finalize the operation ledger, then retry the exact same input.",
         }
       )
     }
@@ -520,6 +564,22 @@ async function reconcileAmbiguousMutation(
         }
       )
     }
+    const disposition = providerFailureDisposition(error)
+    return failureResult(
+      "ambiguous",
+      "Salesforce did not confirm the mutation, and reconciliation evidence could not be read.",
+      operationId,
+      fingerprint,
+      steps,
+      {
+        retryable: disposition.retryable,
+        retryAfterSeconds: disposition.retryAfterSeconds,
+        resumeToken: operationId,
+        repairInstruction: disposition.retryable
+          ? "Retry the exact same input after any returned delay to reconcile the provider-unique ledger and Task keys."
+          : "Restore Salesforce read access to the operation ledger and Task key, then retry the exact same input.",
+      }
+    )
   }
   return failureResult(
     "ambiguous",
@@ -595,7 +655,10 @@ export async function recordMeetingOutcome(
       operationId,
       fingerprint,
       steps,
-      { retryable: disposition.retryable }
+      {
+        retryable: disposition.retryable,
+        retryAfterSeconds: disposition.retryAfterSeconds,
+      }
     )
   }
   if (existingLedger) {
@@ -630,6 +693,7 @@ export async function recordMeetingOutcome(
         steps,
         {
           retryable: disposition.retryable,
+          retryAfterSeconds: disposition.retryAfterSeconds,
           resumeToken: disposition.retryable ? operationId : null,
           repairInstruction: disposition.retryable
             ? "Retry the exact same input to reconcile the durable ledger."
@@ -671,16 +735,21 @@ export async function recordMeetingOutcome(
     const detail =
       error instanceof PolicyError
         ? error.message
-        : error instanceof NotionRequestTimeoutError
-          ? "The Notion approval page timed out before any provider write."
-          : "The Notion approval page could not be verified."
+        : error instanceof NotionProviderError
+          ? error.message
+          : error instanceof NotionRequestTimeoutError
+            ? "The Notion approval page timed out before any provider write."
+            : "The Notion approval page could not be verified."
     return failureResult(
       disposition.status,
       detail,
       operationId,
       fingerprint,
       steps,
-      { retryable: disposition.retryable }
+      {
+        retryable: disposition.retryable,
+        retryAfterSeconds: disposition.retryAfterSeconds,
+      }
     )
   }
   if (!page.approved) {
@@ -767,7 +836,10 @@ export async function recordMeetingOutcome(
       operationId,
       fingerprint,
       steps,
-      { retryable: disposition.retryable }
+      {
+        retryable: disposition.retryable,
+        retryAfterSeconds: disposition.retryAfterSeconds,
+      }
     )
   }
 
@@ -805,7 +877,10 @@ export async function recordMeetingOutcome(
       operationId,
       fingerprint,
       steps,
-      { retryable: disposition.retryable }
+      {
+        retryable: disposition.retryable,
+        retryAfterSeconds: disposition.retryAfterSeconds,
+      }
     )
   }
 
@@ -859,7 +934,10 @@ export async function recordMeetingOutcome(
       operationId,
       fingerprint,
       steps,
-      { retryable: disposition.retryable }
+      {
+        retryable: disposition.retryable,
+        retryAfterSeconds: disposition.retryAfterSeconds,
+      }
     )
   }
 
@@ -915,7 +993,10 @@ export async function recordMeetingOutcome(
       operationId,
       fingerprint,
       steps,
-      { retryable: disposition.retryable }
+      {
+        retryable: disposition.retryable,
+        retryAfterSeconds: disposition.retryAfterSeconds,
+      }
     )
   }
 
@@ -965,7 +1046,10 @@ export async function recordMeetingOutcome(
         operationId,
         fingerprint,
         steps,
-        { retryable: error.kind === "retryable" }
+        {
+          retryable: error.kind === "retryable",
+          retryAfterSeconds: error.retryAfterSeconds,
+        }
       )
     }
     return reconcileAmbiguousMutation(
@@ -977,13 +1061,51 @@ export async function recordMeetingOutcome(
     )
   }
 
-  return finishFromLedger(
-    input,
-    transaction.ledger,
-    operationId,
-    fingerprint,
-    deps,
-    steps,
-    false
-  )
+  try {
+    return await finishFromLedger(
+      input,
+      transaction.ledger,
+      operationId,
+      fingerprint,
+      deps,
+      steps,
+      false
+    )
+  } catch (error) {
+    const disposition = providerFailureDisposition(error)
+    const committedReceipt: NotionReceipt = {
+      version: 1,
+      operationId,
+      idempotencyKey: operationId,
+      inputFingerprint: fingerprint,
+      opportunityId: input.opportunityId,
+      activityId: transaction.activityId,
+      followUpIds: transaction.followUpIds,
+    }
+    return failureResult(
+      "partial_failure",
+      error instanceof PolicyError || error instanceof SalesforceFailure
+        ? error.message
+        : "Salesforce committed, but its durable receipt could not be reconciled.",
+      operationId,
+      fingerprint,
+      steps,
+      {
+        changed: true,
+        retryable: disposition.retryable,
+        retryAfterSeconds: disposition.retryAfterSeconds,
+        records: providerRecords(
+          deps.salesforce,
+          committedReceipt,
+          transaction.opportunityChanged ? "updated" : "verified",
+          "created"
+        ),
+        changedFields: Object.keys(opportunityChanges).sort(),
+        resumeToken: operationId,
+        repairInstruction: disposition.retryable
+          ? "Retry the exact same input after any returned delay; provider-unique keys prevent duplicate Salesforce records."
+          : "Inspect and repair the durable Salesforce ledger with the returned record IDs, then retry the exact same input.",
+      }
+    )
+  }
 }

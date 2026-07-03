@@ -3,7 +3,8 @@ import {
   SALESFORCE_API_VERSION,
   type RuntimeConfig,
 } from "./config.js"
-import { isSalesforceId } from "./policy.js"
+import { isApprovedRevision, isSalesforceId } from "./policy.js"
+import { boundedRetryAfterSeconds } from "./retry.js"
 import type {
   OperationLedger,
   OpportunityRecord,
@@ -120,15 +121,7 @@ export function parseOperationLedger(value: unknown): OperationLedger {
       )
     )
   const approvedRevision =
-    record &&
-    requiredString(
-      record,
-      "ApprovedRevision__c",
-      (item) =>
-        item.trim().length > 0 &&
-        item.length <= 100 &&
-        !/[\u0000-\u001f\u007f]/.test(item)
-    )
+    record && requiredString(record, "ApprovedRevision__c", isApprovedRevision)
   const opportunityId =
     record &&
     requiredString(record, "OpportunityId__c", (item) =>
@@ -270,16 +263,6 @@ function providerError(value: unknown): { code: string } {
   }
 }
 
-function retryAfterSeconds(response: Response): number | null {
-  const value = response.headers.get("Retry-After")
-  if (!value) return null
-  const seconds = Number(value)
-  if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds)
-  const at = Date.parse(value)
-  if (Number.isNaN(at)) return null
-  return Math.max(0, Math.ceil((at - Date.now()) / 1_000))
-}
-
 function recordUrl(
   instanceUrl: string,
   objectName: string,
@@ -318,11 +301,12 @@ function requestBodyDescription(summary: string, notionUrl: string): string {
 
 type CompositeRequest = {
   allOrNone: true
+  collateSubrequests: false
   compositeRequest: Array<{
-    method: "POST" | "PATCH"
+    method: "GET" | "POST" | "PATCH"
     url: string
     referenceId: string
-    body: Record<string, unknown>
+    body?: Record<string, unknown>
     httpHeaders?: Record<string, string>
   }>
 }
@@ -344,6 +328,14 @@ export function buildCompositeRequest(
         NotionPageId__c: plan.notionPageId,
         ApprovedRevision__c: plan.approvedRevision,
         OpportunityId__c: plan.opportunity.Id,
+      },
+    },
+    {
+      method: "GET",
+      url: `${apiRoot}/sobjects/Opportunity/${plan.opportunity.Id}?fields=Id`,
+      referenceId: "opportunityPrecondition",
+      httpHeaders: {
+        "If-Unmodified-Since": plan.opportunity.lastModifiedHeader,
       },
     },
   ]
@@ -417,7 +409,11 @@ export function buildCompositeRequest(
     body: ledgerUpdate,
   })
 
-  return { allOrNone: true, compositeRequest: requests }
+  return {
+    allOrNone: true,
+    collateSubrequests: false,
+    compositeRequest: requests,
+  }
 }
 
 function subresponseId(response: CompositeSubresponse | undefined): string {
@@ -476,11 +472,28 @@ function exactCompositeResponses(
   return responses
 }
 
-function classifyCompositeFailure(responses: CompositeSubresponse[]): never {
-  const failed = responses.find(
+const COMPOSITE_ROLLBACK_CODES = new Set([
+  "ALL_OR_NONE_OPERATION_ROLLED_BACK",
+  "PROCESSING_HALTED",
+])
+
+function rootCompositeFailure(
+  responses: CompositeSubresponse[]
+): CompositeSubresponse | undefined {
+  const failed = responses.filter(
     (response) =>
       response.httpStatusCode < 200 || response.httpStatusCode >= 300
   )
+  return (
+    failed.find(
+      (response) =>
+        !COMPOSITE_ROLLBACK_CODES.has(providerError(response.body).code)
+    ) ?? failed[0]
+  )
+}
+
+function classifyCompositeFailure(responses: CompositeSubresponse[]): never {
+  const failed = rootCompositeFailure(responses)
   const error = providerError(failed?.body)
   if (
     failed?.referenceId === "operationClaim" &&
@@ -506,7 +519,8 @@ function classifyCompositeFailure(responses: CompositeSubresponse[]): never {
   ) {
     throw new SalesforceFailure(
       "Salesforce rate-limited the transaction before completion.",
-      "retryable"
+      "retryable",
+      boundedRetryAfterSeconds(failed?.httpHeaders)
     )
   }
   throw new SalesforceFailure(
@@ -592,6 +606,15 @@ export function createSalesforceGateway(
         MAX_OAUTH_RESPONSE_CHARS
       )
       const body = parseJson(text)
+      if ([408, 425, 429].includes(response.status) || response.status >= 500) {
+        throw new SalesforceFailure(
+          response.status === 429
+            ? "Salesforce rate-limited OAuth authentication."
+            : "Salesforce OAuth is temporarily unavailable.",
+          "retryable",
+          boundedRetryAfterSeconds(response.headers)
+        )
+      }
       if (!response.ok || body == null || typeof body !== "object") {
         const error = providerError(body)
         throw new SalesforceFailure(
@@ -683,7 +706,7 @@ export function createSalesforceGateway(
         return { response, text, json }
       }
       if (response.status === 429 || response.status >= 500) {
-        const retryAfter = retryAfterSeconds(response)
+        const retryAfter = boundedRetryAfterSeconds(response.headers)
         if (
           optionsForRequest.safeRead &&
           attempt === 0 &&

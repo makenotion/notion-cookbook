@@ -2,6 +2,7 @@ import type { Client } from "@notionhq/client"
 
 import type { RuntimeConfig } from "./config.js"
 import { PolicyError } from "./policy.js"
+import { boundedRetryAfterSeconds } from "./retry.js"
 import type { NotionGateway, NotionPageState, NotionReceipt } from "./types.js"
 
 type PageProperty = Record<string, unknown> & { type?: unknown }
@@ -27,6 +28,72 @@ export class NotionWriteError extends Error {
     super(message)
     this.name = "NotionWriteError"
   }
+}
+
+export class NotionProviderError extends Error {
+  constructor(
+    message: string,
+    readonly kind: "blocked" | "retryable",
+    readonly retryAfterSeconds: number | null = null
+  ) {
+    super(message)
+    this.name = "NotionProviderError"
+  }
+}
+
+function errorRecord(value: unknown): Record<string, unknown> | null {
+  return value != null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
+}
+
+function normalizeNotionProviderError(
+  error: unknown,
+  action: "read" | "write"
+): Error {
+  if (
+    error instanceof PolicyError ||
+    error instanceof NotionRequestTimeoutError ||
+    error instanceof NotionProviderError
+  ) {
+    return error
+  }
+
+  const record = errorRecord(error)
+  const status = typeof record?.status === "number" ? record.status : null
+  const code = typeof record?.code === "string" ? record.code.toLowerCase() : ""
+  const retryableCodes = new Set([
+    "bad_gateway",
+    "conflict_error",
+    "database_connection_unavailable",
+    "gateway_timeout",
+    "internal_server_error",
+    "notionhq_client_request_timeout",
+    "rate_limited",
+    "service_overload",
+    "service_unavailable",
+  ])
+  const transientStatus =
+    status === 408 ||
+    status === 409 ||
+    status === 425 ||
+    status === 429 ||
+    (status !== null && status >= 500)
+  const retryable =
+    transientStatus ||
+    retryableCodes.has(code) ||
+    // A raw transport exception has neither an HTTP status nor a Notion API
+    // error code. Known API/SDK codes that are not in the transient set are
+    // permanent and must not be retried blindly.
+    (status === null && code === "")
+
+  return new NotionProviderError(
+    retryable
+      ? `Notion could not complete the page ${action}; retry is safe.`
+      : `Notion rejected the page ${action}; access or page configuration must be repaired.`,
+    retryable ? "retryable" : "blocked",
+    retryable ? boundedRetryAfterSeconds(record?.headers) : null
+  )
 }
 
 async function withNotionTimeout<T>(
@@ -189,10 +256,15 @@ async function retrievePage(
   config: RuntimeConfig,
   timeoutMs: number
 ): Promise<NotionPageState> {
-  const page = (await withNotionTimeout(
-    () => notion.pages.retrieve({ page_id: pageId }),
-    timeoutMs
-  )) as PageResponse
+  let page: PageResponse
+  try {
+    page = (await withNotionTimeout(
+      () => notion.pages.retrieve({ page_id: pageId }),
+      timeoutMs
+    )) as PageResponse
+  } catch (error) {
+    throw normalizeNotionProviderError(error, "read")
+  }
   assertMatchingPageId(page, pageId, "read")
   if (page.archived === true || page.in_trash === true) {
     throw new PolicyError("The approved Notion page is archived or in trash.")
@@ -313,20 +385,13 @@ export function createNotionGateway(
         )
         assertMatchingPageId(updated, pageId, "update")
       } catch (error) {
-        updateError = error
+        updateError = normalizeNotionProviderError(error, "write")
       }
 
       // Always re-read after the assignment, including after an HTTP success.
       // This closes response-identity mistakes and races where another writer
       // changes approval metadata or the reserved receipt property.
-      let after: NotionPageState
-      try {
-        after = await retrievePage(notion, pageId, config, timeoutMs)
-      } catch {
-        throw new NotionWriteError(
-          "Salesforce committed, but the Notion receipt could not be confirmed."
-        )
-      }
+      const after = await retrievePage(notion, pageId, config, timeoutMs)
       if (!after.approved) {
         throw new PolicyError(
           "The Notion meeting outcome is no longer approved.",
@@ -352,7 +417,7 @@ export function createNotionGateway(
           "conflict"
         )
       }
-      if (updateError instanceof PolicyError) throw updateError
+      if (updateError instanceof Error) throw updateError
       throw new NotionWriteError(
         "Salesforce committed, but the Notion receipt could not be confirmed."
       )

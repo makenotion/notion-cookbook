@@ -17,7 +17,7 @@ export const recordMeetingOutcomeInputSchema = j.object({
   approvedRevision: j
     .string()
     .describe(
-      "Exact value in the page's configured Approved Revision property, at most 100 characters."
+      "Exact single-line plain-text value in the page's configured Approved Revision property, at most 100 characters."
     ),
   approvalFingerprint: j
     .string()
@@ -27,7 +27,7 @@ export const recordMeetingOutcomeInputSchema = j.object({
   opportunityId: j
     .string()
     .describe(
-      "Exact Salesforce Opportunity ID; names and URLs are not accepted."
+      "Exact 18-character case-safe Salesforce Opportunity ID; names, URLs, and 15-character UI IDs are not accepted."
     ),
   expectedOpportunityLastModifiedAt: j
     .datetime()
@@ -49,7 +49,7 @@ export const recordMeetingOutcomeInputSchema = j.object({
     .string()
     .nullable()
     .describe(
-      "Optional Contact ID that must already be an Opportunity Contact Role."
+      "Optional 18-character Contact ID that must already be an Opportunity Contact Role."
     ),
   opportunityUpdates: j.object({
     nextStep: j
@@ -78,12 +78,14 @@ export const recordMeetingOutcomeInputSchema = j.object({
           .nullable()
           .describe("Optional approved detail, at most 1,000 characters."),
         dueDate: j.date().describe("Due date within the next 180 days."),
-        ownerId: j.string().describe("Active, allowlisted Salesforce User ID."),
+        ownerId: j
+          .string()
+          .describe("Active, allowlisted 18-character Salesforce User ID."),
         contactId: j
           .string()
           .nullable()
           .describe(
-            "Optional Contact ID that must already be an Opportunity Contact Role."
+            "Optional 18-character Contact ID that must already be an Opportunity Contact Role."
           ),
       })
     )
@@ -124,6 +126,12 @@ export const recordMeetingOutcomeOutputSchema = j.object({
   steps: j.array(stepSchema),
   warnings: j.array(j.string()),
   retryable: j.boolean(),
+  retryAfterSeconds: j
+    .number()
+    .nullable()
+    .describe(
+      "Bounded provider-directed delay before an exact retry, in seconds, or null."
+    ),
   resumeToken: j.string().nullable(),
   repairInstruction: j.string().nullable(),
 })

@@ -3,8 +3,13 @@ import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
 
 import worker from "./src/index.js"
-import { createNotionGateway, NotionRequestTimeoutError } from "./src/notion.js"
 import {
+  NotionProviderError,
+  createNotionGateway,
+  NotionRequestTimeoutError,
+} from "./src/notion.js"
+import {
+  loadConfig,
   normalizeSalesforceOrigin,
   parseStageTransitions,
 } from "./src/config.js"
@@ -22,6 +27,10 @@ import {
   buildCompositeRequest,
   createSalesforceGateway,
 } from "./src/salesforce.js"
+import {
+  MAX_RETRY_AFTER_SECONDS,
+  boundedRetryAfterSeconds,
+} from "./src/retry.js"
 import type {
   NotionGateway,
   NotionPageState,
@@ -387,6 +396,36 @@ test("stage transition configuration is bounded and exact", () => {
     "https://acme--dev.sandbox.my.salesforce.com"
   )
   assert.throws(() => normalizeSalesforceOrigin("https://attacker.example"))
+  assert.throws(
+    () =>
+      loadConfig({
+        SALESFORCE_ORG_URL: "https://acme.my.salesforce.com",
+        SALESFORCE_CLIENT_ID: "client-id",
+        SALESFORCE_CLIENT_SECRET: "client-secret",
+        SALESFORCE_ALLOWED_TASK_OWNER_IDS: OWNER_ID.slice(0, 15),
+      }),
+    /18-character/
+  )
+})
+
+test("Retry-After parsing is case-insensitive, deterministic, and bounded", () => {
+  const now = Date.parse("2026-07-03T12:00:00.000Z")
+  assert.equal(
+    boundedRetryAfterSeconds(
+      { "retry-after": "Fri, 03 Jul 2026 12:00:09 GMT" },
+      now
+    ),
+    9
+  )
+  assert.equal(
+    boundedRetryAfterSeconds({ "Retry-After": "999999" }, now),
+    MAX_RETRY_AFTER_SECONDS
+  )
+  assert.equal(boundedRetryAfterSeconds({ "Retry-After": "-1" }, now), null)
+  assert.equal(
+    boundedRetryAfterSeconds({ "Retry-After": "not-a-delay" }, now),
+    null
+  )
 })
 
 test("stable operation key excludes mutable approval revision while fingerprint binds it", () => {
@@ -403,6 +442,50 @@ test("stable operation key excludes mutable approval revision while fingerprint 
   assert.equal(operationKey(first), operationKey(revised))
   assert.notEqual(inputFingerprint(first), inputFingerprint(revised))
   assert.equal(first.approvalFingerprint, inputFingerprint(first))
+})
+
+test("canonical fingerprint ignores nested JSON property insertion order", () => {
+  const input = approvedInput()
+  const reordered: RecordMeetingOutcomeInput = {
+    ...input,
+    opportunityUpdates: {
+      stageName: input.opportunityUpdates.stageName,
+      closeDate: input.opportunityUpdates.closeDate,
+      nextStep: input.opportunityUpdates.nextStep,
+    },
+    followUps: input.followUps.map((followUp) => ({
+      contactId: followUp.contactId,
+      ownerId: followUp.ownerId,
+      dueDate: followUp.dueDate,
+      description: followUp.description,
+      subject: followUp.subject,
+    })),
+  }
+  assert.equal(inputFingerprint(reordered), inputFingerprint(input))
+})
+
+test("canonical input requires case-safe IDs and a single-line revision", () => {
+  const input = approvedInput()
+  const invalidInputs = [
+    approvedInput({ opportunityId: OPPORTUNITY_ID.slice(0, 15) }),
+    approvedInput({ primaryContactId: CONTACT_ID.slice(0, 15) }),
+    approvedInput({
+      followUps: [{ ...input.followUps[0], ownerId: OWNER_ID.slice(0, 15) }],
+    }),
+    approvedInput({
+      followUps: [
+        { ...input.followUps[0], contactId: CONTACT_ID.slice(0, 15) },
+      ],
+    }),
+  ]
+  for (const invalid of invalidInputs) {
+    assert.throws(() => validateInput(invalid, policy, NOW), /18-character/)
+  }
+  assert.throws(
+    () =>
+      validateInput(approvedInput({ approvedRevision: "rev\n8" }), policy, NOW),
+    /single-line/
+  )
 })
 
 test("input policy rejects a sixth follow-up and unallowlisted owner", () => {
@@ -485,10 +568,19 @@ test("Composite starts with unique ledger claim and closes with ledger receipt",
     followUpTaskStatus: "Not Started",
   })
   assert.equal(composite.allOrNone, true)
+  assert.equal(composite.collateSubrequests, false)
   assert.equal(composite.compositeRequest[0].referenceId, "operationClaim")
   assert.equal(
-    composite.compositeRequest[0].body.OperationKey__c,
+    composite.compositeRequest[0].body?.OperationKey__c,
     operationKey(input)
+  )
+  const precondition = composite.compositeRequest.find(
+    (request) => request.referenceId === "opportunityPrecondition"
+  )
+  assert.equal(precondition?.method, "GET")
+  assert.equal(
+    precondition?.httpHeaders?.["If-Unmodified-Since"],
+    LAST_MODIFIED_HEADER
   )
   const update = composite.compositeRequest.find(
     (request) => request.referenceId === "opportunityUpdate"
@@ -501,7 +593,7 @@ test("Composite starts with unique ledger claim and closes with ledger receipt",
     (request) => request.referenceId === "meetingActivity"
   )
   assert.equal(
-    meeting?.body.Notion_Operation_Item_Key__c,
+    meeting?.body?.Notion_Operation_Item_Key__c,
     `${operationKey(input)}:meeting`
   )
   assert.equal(
@@ -509,10 +601,30 @@ test("Composite starts with unique ledger claim and closes with ledger receipt",
     "finalizeSalesforce"
   )
   assert.equal(
-    composite.compositeRequest.at(-1)?.body.ActivityId__c,
+    composite.compositeRequest.at(-1)?.body?.ActivityId__c,
     "@{meetingActivity.id}"
   )
   assert.ok(composite.compositeRequest.length <= 15)
+
+  const noOpportunityUpdate = buildCompositeRequest(
+    { ...plan, opportunityChanges: {} },
+    {
+      meetingTaskStatus: "Completed",
+      followUpTaskStatus: "Not Started",
+    }
+  )
+  assert.equal(
+    noOpportunityUpdate.compositeRequest.some(
+      (request) => request.referenceId === "opportunityUpdate"
+    ),
+    false
+  )
+  assert.equal(
+    noOpportunityUpdate.compositeRequest.find(
+      (request) => request.referenceId === "opportunityPrecondition"
+    )?.httpHeaders?.["If-Unmodified-Since"],
+    LAST_MODIFIED_HEADER
+  )
 })
 
 test("Salesforce metadata grants every runtime ledger field through universal requirement or explicit FLS", () => {
@@ -924,7 +1036,18 @@ test("corrupt ledger fields, Task positions, and changed-field evidence block re
     {
       name: "invalid ledger ID",
       input: defaultInput,
-      ledger: { ...ledgerFor(defaultInput, "Completed"), Id: "not-an-id" },
+      ledger: {
+        ...ledgerFor(defaultInput, "Completed"),
+        Id: LEDGER_ID.slice(0, 15),
+      },
+    },
+    {
+      name: "invalid multiline approved revision",
+      input: defaultInput,
+      ledger: {
+        ...ledgerFor(defaultInput, "Completed"),
+        ApprovedRevision__c: "rev\n7",
+      },
     },
     {
       name: "unexpected follow-up position",
@@ -1267,6 +1390,58 @@ test("Notion conflict after Salesforce commit is a known partial outcome", async
   assert.ok(output.records.some((record) => record.id === ACTIVITY_ID))
 })
 
+test("permanent Notion receipt failure preserves committed Salesforce evidence without retry", async () => {
+  const input = approvedInput()
+  const output = await recordMeetingOutcome(input, {
+    notion: fakeNotion(input, {
+      receiptError: new NotionProviderError(
+        "Notion rejected the page write.",
+        "blocked"
+      ),
+    }),
+    salesforce: fakeSalesforce(input),
+    policy,
+    now: () => NOW,
+  })
+  assert.equal(output.status, "partial_failure")
+  assert.equal(output.changed, true)
+  assert.equal(output.retryable, false)
+  assert.equal(output.retryAfterSeconds, null)
+  assert.equal(output.resumeToken, operationKey(input))
+  assert.ok(output.records.some((record) => record.id === ACTIVITY_ID))
+  assert.match(output.repairInstruction ?? "", /Notion page access/)
+})
+
+test("post-commit ledger contract failure resolves to a typed partial receipt", async () => {
+  const input = approvedInput()
+  const salesforce = fakeSalesforce(input)
+  const executeTransaction = salesforce.executeTransaction.bind(salesforce)
+  salesforce.executeTransaction = async (plan) => {
+    const receipt = await executeTransaction(plan)
+    return {
+      ...receipt,
+      ledger: {
+        ...receipt.ledger,
+        ApprovedRevision__c: "rev\n7",
+      },
+    }
+  }
+
+  const output = await recordMeetingOutcome(input, {
+    notion: fakeNotion(input),
+    salesforce,
+    policy,
+    now: () => NOW,
+  })
+  assert.equal(output.status, "partial_failure")
+  assert.equal(output.changed, true)
+  assert.equal(output.retryable, false)
+  assert.equal(output.retryAfterSeconds, null)
+  assert.equal(output.resumeToken, operationKey(input))
+  assert.ok(output.records.some((record) => record.id === ACTIVITY_ID))
+  assert.match(output.repairInstruction ?? "", /durable Salesforce ledger/)
+})
+
 test("ledger-finalization failure is a resumable partial success", async () => {
   const input = approvedInput()
   const output = await recordMeetingOutcome(input, {
@@ -1406,6 +1581,11 @@ test("expired OAuth is refreshed once before safely retrying Composite", async (
         referenceId: "operationClaim",
       },
       {
+        body: { Id: OPPORTUNITY_ID },
+        httpStatusCode: 200,
+        referenceId: "opportunityPrecondition",
+      },
+      {
         body: null,
         httpStatusCode: 204,
         referenceId: "opportunityUpdate",
@@ -1485,6 +1665,11 @@ test("Composite success requires the exact unique planned reference set and nume
       referenceId: "operationClaim",
     },
     {
+      body: { Id: OPPORTUNITY_ID },
+      httpStatusCode: 200,
+      referenceId: "opportunityPrecondition",
+    },
+    {
       body: null,
       httpStatusCode: 204,
       referenceId: "opportunityUpdate",
@@ -1508,7 +1693,7 @@ test("Composite success requires the exact unique planned reference set and nume
   const cases: Array<{ name: string; responses: unknown[] }> = [
     {
       name: "truncated IDs only",
-      responses: [complete[0], complete[2]],
+      responses: [complete[0], complete[3]],
     },
     {
       name: "missing planned opportunity update",
@@ -1518,20 +1703,20 @@ test("Composite success requires the exact unique planned reference set and nume
     },
     {
       name: "duplicate reference",
-      responses: [...complete.slice(0, 4), { ...complete[2] }],
+      responses: [...complete.slice(0, 5), { ...complete[3] }],
     },
     {
       name: "unexpected reference",
       responses: [
-        ...complete.slice(0, 4),
-        { ...complete[4], referenceId: "unexpectedWrite" },
+        ...complete.slice(0, 5),
+        { ...complete[5], referenceId: "unexpectedWrite" },
       ],
     },
     {
       name: "nonnumeric success status",
       responses: [
-        ...complete.slice(0, 4),
-        { ...complete[4], httpStatusCode: "204" },
+        ...complete.slice(0, 5),
+        { ...complete[5], httpStatusCode: "204" },
       ],
     },
   ]
@@ -1562,6 +1747,106 @@ test("Composite success requires the exact unique planned reference set and nume
     )
     assert.ok(error instanceof SalesforceFailure, scenario.name)
     assert.equal(error.kind, "ambiguous", scenario.name)
+    assert.equal(calls, 2, scenario.name)
+  }
+})
+
+test("Composite failure classification finds the root error behind rollback markers", async () => {
+  const input = approvedInput()
+  const rollback = (referenceId: string) => ({
+    body: [
+      {
+        errorCode: "ALL_OR_NONE_OPERATION_ROLLED_BACK",
+        message: "rolled back",
+      },
+    ],
+    httpStatusCode: 400,
+    referenceId,
+  })
+  const halted = (referenceId: string) => ({
+    body: [{ errorCode: "PROCESSING_HALTED", message: "not executed" }],
+    httpStatusCode: 400,
+    referenceId,
+  })
+  const scenarios = [
+    {
+      name: "stale unconditional Opportunity guard",
+      responses: [
+        rollback("operationClaim"),
+        {
+          body: [
+            {
+              errorCode: "PRECONDITION_FAILED",
+              message: "stale Opportunity",
+            },
+          ],
+          httpStatusCode: 412,
+          referenceId: "opportunityPrecondition",
+        },
+        halted("opportunityUpdate"),
+        halted("meetingActivity"),
+        halted("followUp1"),
+        halted("finalizeSalesforce"),
+      ],
+      expectedKind: "conflict",
+      expectedRetryAfter: null,
+    },
+    {
+      name: "rate-limited meeting write",
+      responses: [
+        rollback("operationClaim"),
+        rollback("opportunityPrecondition"),
+        rollback("opportunityUpdate"),
+        {
+          body: [
+            {
+              errorCode: "REQUEST_LIMIT_EXCEEDED",
+              message: "slow down",
+            },
+          ],
+          httpHeaders: { "Retry-After": "17" },
+          httpStatusCode: 429,
+          referenceId: "meetingActivity",
+        },
+        halted("followUp1"),
+        halted("finalizeSalesforce"),
+      ],
+      expectedKind: "retryable",
+      expectedRetryAfter: 17,
+    },
+  ] as const
+
+  for (const scenario of scenarios) {
+    let calls = 0
+    const gateway = createSalesforceGateway(runtimeConfig(), {
+      fetch: async () => {
+        calls++
+        if (calls === 1) {
+          return new Response(
+            JSON.stringify({
+              access_token: "token",
+              instance_url: "https://acme.my.salesforce.com",
+            }),
+            { status: 200 }
+          )
+        }
+        return new Response(
+          JSON.stringify({ compositeResponse: scenario.responses }),
+          { status: 200 }
+        )
+      },
+      sleep: async () => {},
+    })
+    const error = await capture(() =>
+      gateway.executeTransaction(transactionPlan(input))
+    )
+    assert.ok(error instanceof SalesforceFailure, scenario.name)
+    assert.equal(error.kind, scenario.expectedKind, scenario.name)
+    assert.equal(
+      error.retryAfterSeconds,
+      scenario.expectedRetryAfter,
+      scenario.name
+    )
     assert.equal(calls, 2, scenario.name)
   }
 })
@@ -1660,6 +1945,67 @@ test("provider 403 and 404 block while HTTP 409 and 412 are conflicts", async ()
     const error = await capture(() => gateway.getOpportunity(OPPORTUNITY_ID))
     assert.ok(error instanceof SalesforceFailure)
     assert.equal(error.kind, expectedKind)
+  }
+})
+
+test("Salesforce OAuth distinguishes transient status from permanent rejection", async () => {
+  const cases = [
+    {
+      name: "rate limit",
+      status: 429,
+      headers: { "Retry-After": "999999" },
+      expectedKind: "retryable",
+      expectedRetryAfter: MAX_RETRY_AFTER_SECONDS,
+    },
+    {
+      name: "service unavailable",
+      status: 503,
+      headers: { "Retry-After": "3" },
+      expectedKind: "retryable",
+      expectedRetryAfter: 3,
+    },
+    {
+      name: "request timeout",
+      status: 408,
+      headers: {},
+      expectedKind: "retryable",
+      expectedRetryAfter: null,
+    },
+    {
+      name: "invalid client",
+      status: 401,
+      headers: {},
+      expectedKind: "blocked",
+      expectedRetryAfter: null,
+    },
+  ] as const
+
+  for (const scenario of cases) {
+    let calls = 0
+    const gateway = createSalesforceGateway(runtimeConfig(), {
+      fetch: async () => {
+        calls++
+        return new Response(
+          JSON.stringify({
+            error:
+              scenario.name === "invalid client"
+                ? "invalid_client"
+                : "temporarily_unavailable",
+          }),
+          { status: scenario.status, headers: scenario.headers }
+        )
+      },
+      sleep: async () => {},
+    })
+    const error = await capture(() => gateway.getOpportunity(OPPORTUNITY_ID))
+    assert.ok(error instanceof SalesforceFailure, scenario.name)
+    assert.equal(error.kind, scenario.expectedKind, scenario.name)
+    assert.equal(
+      error.retryAfterSeconds,
+      scenario.expectedRetryAfter,
+      scenario.name
+    )
+    assert.equal(calls, 1, scenario.name)
   }
 })
 
@@ -1830,6 +2176,67 @@ test("Composite response-body stall is ambiguous and never retried", async () =>
   )
 })
 
+test("Notion API statuses preserve bounded transient and permanent semantics", async () => {
+  const input = approvedInput()
+  const cases = [
+    {
+      name: "rate limit",
+      error: {
+        status: 429,
+        code: "rate_limited",
+        headers: { "retry-after": "17" },
+      },
+      retryable: true,
+      retryAfterSeconds: 17,
+    },
+    {
+      name: "conflict",
+      error: { status: 409, code: "conflict_error" },
+      retryable: true,
+      retryAfterSeconds: null,
+    },
+    {
+      name: "forbidden",
+      error: { status: 403, code: "restricted_resource" },
+      retryable: false,
+      retryAfterSeconds: null,
+    },
+    {
+      name: "permanent SDK code without status",
+      error: { code: "validation_error" },
+      retryable: false,
+      retryAfterSeconds: null,
+    },
+  ] as const
+
+  for (const scenario of cases) {
+    const notionClient = {
+      pages: {
+        retrieve: async () => {
+          throw scenario.error
+        },
+        update: async () => ({}),
+      },
+    } as unknown as Parameters<typeof createNotionGateway>[0]
+    const salesforce = fakeSalesforce(input)
+    const output = await recordMeetingOutcome(input, {
+      notion: createNotionGateway(notionClient, runtimeConfig()),
+      salesforce,
+      policy,
+      now: () => NOW,
+    })
+    assert.equal(output.status, "blocked", scenario.name)
+    assert.equal(output.retryable, scenario.retryable, scenario.name)
+    assert.equal(
+      output.retryAfterSeconds,
+      scenario.retryAfterSeconds,
+      scenario.name
+    )
+    assert.equal(output.changed, false, scenario.name)
+    assert.equal(salesforce.transactionCalls, 0, scenario.name)
+  }
+})
+
 test("hanging Notion approval read times out after only the recovery ledger check", async () => {
   const input = approvedInput()
   const notionClient = {
@@ -1849,6 +2256,7 @@ test("hanging Notion approval read times out after only the recovery ledger chec
   })
   assert.equal(output.status, "blocked")
   assert.equal(output.retryable, true)
+  assert.equal(output.retryAfterSeconds, null)
   assert.equal(output.changed, false)
   assert.equal(salesforce.ledgerCalls, 1)
   assert.equal(salesforce.transactionCalls, 0)
@@ -1967,6 +2375,7 @@ test("definite Composite rate limit is retryable blocked, not partial", async ()
   })
   assert.equal(output.status, "blocked")
   assert.equal(output.retryable, true)
+  assert.equal(output.retryAfterSeconds, 17)
   assert.equal(output.changed, false)
   assert.equal(output.records.length, 0)
   assert.equal(salesforce.transactionCalls, 1)

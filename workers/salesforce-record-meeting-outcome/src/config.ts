@@ -69,8 +69,8 @@ function parseIdSet(
     throw new Error(`${name} can contain at most ${maximum} IDs.`)
   }
   for (const value of values) {
-    if (!/^[a-zA-Z0-9]{15}(?:[a-zA-Z0-9]{3})?$/.test(value)) {
-      throw new Error(`${name} contains an invalid Salesforce ID.`)
+    if (!/^[a-zA-Z0-9]{18}$/.test(value)) {
+      throw new Error(`${name} contains an invalid 18-character Salesforce ID.`)
     }
   }
   return new Set(values)

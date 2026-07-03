@@ -32,8 +32,8 @@ Call the tool only when all of these are true:
 - one Notion meeting page is the approval source;
 - its approval property is approved;
 - its revision and SHA-256 fingerprint match the exact semantic tool input;
-- the target is one explicit Salesforce Opportunity ID with an approved
-  `LastModifiedDate` precondition;
+- the target is one exact 18-character case-safe Salesforce Opportunity ID with
+  an approved `LastModifiedDate` precondition;
 - every requested field change and follow-up is visible in the approved packet;
 - every follow-up owner is in the Worker's configured allowlist.
 
@@ -110,7 +110,7 @@ the types are not.
 | Default property         | Type                        | Purpose                                                       |
 | ------------------------ | --------------------------- | ------------------------------------------------------------- |
 | `Meeting Outcome Status` | status, select, or checkbox | Human approval gate; the default approved value is `Approved` |
-| `Approved Revision`      | rich text or title          | Immutable revision identifier, at most 100 characters         |
+| `Approved Revision`      | rich text or title          | Immutable single-line revision, at most 100 characters        |
 | `Approved Fingerprint`   | rich text or title          | Lowercase SHA-256 of the exact semantic packet                |
 | `Salesforce Receipt`     | rich text                   | Initially empty; reserved for this Worker's compact receipt   |
 
@@ -163,9 +163,13 @@ An input packet has this shape:
 }
 ```
 
-Replace every example ID and date. The Opportunity `LastModifiedDate` belongs
-in the approved packet; the Worker rejects the call if Salesforce no longer
-matches it.
+Replace every example ID and date. Every Salesforce Opportunity, Contact, User,
+Task, and ledger ID consumed by the Worker must use Salesforce's exact
+18-character case-safe form. Fifteen-character UI IDs are rejected rather than
+silently compared or hashed with case-dependent meaning. `approvedRevision`
+must be non-empty single-line plain text of at most 100 characters. The
+Opportunity `LastModifiedDate` belongs in the approved packet; the Worker
+rejects the call if Salesforce no longer matches it.
 
 ### 3. Configure and deploy the Worker
 
@@ -194,7 +198,8 @@ Optional overrides are listed in [`.env.example`](.env.example):
 
 The stage-transition JSON maps each current stage to the only permitted target
 stages. An empty map means no stage changes are allowed. The owner list accepts
-at most 25 User IDs; an empty list means no follow-up Tasks are allowed.
+at most 25 exact 18-character User IDs; an empty list means no follow-up Tasks
+are allowed.
 
 ### 4. Connect and instruct the agent
 
@@ -212,7 +217,9 @@ Call it only for one exact meeting-outcome packet that is already marked
 Approved on its Notion source page. Read the page first. Require its Approved
 Revision and Approved Fingerprint, one explicit Opportunity ID, the approved
 Opportunity LastModifiedDate, and only the listed NextStep, CloseDate,
-allowlisted StageName, meeting activity, and zero to five follow-up Tasks.
+allowlisted StageName, meeting activity, and zero to five follow-up Tasks. Use
+only exact 18-character case-safe Salesforce IDs; never pass a 15-character UI
+ID.
 
 Before the first call, show the user the Opportunity ID, proposed field changes,
 meeting Task, and follow-up owners/dates, then ask for explicit confirmation.
@@ -245,19 +252,23 @@ The mutation is bounded in code:
 
 Canonical limits include a 32 KiB input, 255-character subjects, a
 4,000-character outcome summary, 1,000-character follow-up descriptions, and no
-duplicate follow-up tuple. Fresh writes additionally require a meeting date
-within the past 365 days, follow-up due dates within 180 days, and currently
-allowlisted owners. Contact IDs must already be Opportunity Contact Roles. IDs,
-not names or URLs, are required for every Salesforce identity.
+duplicate follow-up tuple. The revision is non-empty, single-line plain text of
+at most 100 characters. Fresh writes additionally require a meeting date within
+the past 365 days, follow-up due dates within 180 days, and currently allowlisted
+owners. Contact IDs must already be Opportunity Contact Roles. Exact
+18-character case-safe IDs, not 15-character UI IDs, names, or URLs, are
+required for every Salesforce identity.
 Every Salesforce fetch and every Notion page retrieve/update has a fixed
 10-second request budget. The Salesforce budget stays active through response
 body consumption, not only until headers arrive.
 
 ## How reliability works
 
-1. The Worker validates every bounded canonical field, derives the stable
-   operation key, recomputes the packet hash, and requires the caller's explicit
-   approval fingerprint to match before any provider call.
+1. The Worker validates every bounded canonical field, including exact
+   18-character Salesforce IDs and the single-line revision, derives the stable
+   operation key, and serializes every nested object in a fixed key order before
+   hashing. It requires the caller's explicit approval fingerprint to match
+   before any provider call.
 2. It then looks up and validates the durable Salesforce ledger by that stable
    operation key derived from the Notion page and Opportunity. An existing
    matching checkpoint is reported truthfully even if the current Notion page
@@ -271,12 +282,15 @@ body consumption, not only until headers arrive.
    Opportunity state.
 5. After identity resolution, it immediately re-reads both the Notion approval
    and Salesforce Opportunity.
-6. One Salesforce Composite request with `allOrNone: true` creates the unique
-   ledger claim first, conditionally updates the Opportunity with
-   `If-Unmodified-Since`, creates the meeting/follow-up Tasks, and saves their
-   canonical IDs to the ledger. A 2xx response is accepted only when it contains
-   the exact unique planned reference set, numeric successful statuses, the
-   conditional Opportunity update when planned, and the final ledger update.
+6. One Salesforce Composite request with `allOrNone: true` and
+   `collateSubrequests: false` creates the unique ledger claim first. It always
+   performs an `If-Unmodified-Since` Opportunity guard, even when no Opportunity
+   field needs updating, then conditionally patches changed fields, creates the
+   meeting/follow-up Tasks, and saves their canonical IDs to the ledger. A 2xx
+   response is accepted only when it contains the exact unique planned
+   reference set and numeric successful statuses. On failure, the Worker scans
+   every subresponse for the root provider error and ignores synthetic
+   all-or-none rollback/processing markers when a real cause is present.
 7. The Worker re-reads approval before assigning the Notion receipt, validates
    the update response page ID, and always performs a bounded exact readback of
    the receipt, revision, and fingerprint before marking the Salesforce ledger
@@ -296,7 +310,10 @@ correction or a genuinely new meeting.
 
 Every response contains `operationId`/`idempotencyKey`, `inputFingerprint`,
 canonical record IDs and URLs when known, changed fields, step receipts,
-`retryable`, `resumeToken`, and an actionable repair instruction when needed.
+`retryable`, a bounded `retryAfterSeconds` provider delay when supplied,
+`resumeToken`, and an actionable repair instruction when needed. Retry delays
+are clamped to 0–3,600 seconds; `null` means the provider supplied no usable
+delay.
 
 | Status            | Meaning                                                                                                       | Agent action                                                                                |
 | ----------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
@@ -409,6 +426,7 @@ than the sample Opportunity are illustrative):
   ],
   "warnings": [],
   "retryable": false,
+  "retryAfterSeconds": null,
   "resumeToken": null,
   "repairInstruction": null
 }
@@ -416,23 +434,26 @@ than the sample Opportunity are illustrative):
 
 Provider and race failures map to explicit behavior:
 
-| Scenario                                                  | Returned behavior                                                                                        | Safe next action                                             |
-| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| Completed exact replay                                    | `no_op`, `ok: true`, same canonical IDs, no Composite write                                              | Report that nothing new was created                          |
-| Delayed replay after date/owner policy changed            | Validate the exact packet and ledger first; return canonical `no_op`/`partial_failure` records           | Resume only missing cross-system work; never recreate        |
-| Concurrent identical call                                 | The unique ledger claim chooses one winner; the other reconciles to `completed`/`no_op`                  | Use the winning receipt; do not retry with changed input     |
-| Approval revoked or revision/fingerprint changed          | `blocked`/`conflict` before Salesforce; `partial_failure` with records if Salesforce already committed   | Obtain a new human review; do not reuse the old hash         |
-| Opportunity changed after approval                        | `conflict`, with zero committed writes because of the immediate reread or HTTP precondition              | Refresh the packet and approval                              |
-| Provider returns 403                                      | `blocked`, not retryable                                                                                 | Fix the integration user's minimum permissions               |
-| Provider returns 409 or 412                               | `conflict`, not retryable                                                                                | Re-read provider state and renew approval                    |
-| Provider returns 429                                      | Retryable `blocked`, with no committed Composite write; a bounded `Retry-After` is honored on safe reads | Retry the exact input after the provider window              |
-| Composite returns HTTP 5xx                                | No retry; treat as ambiguous and reconcile the exact ledger and Task keys                                | Use recovered records or follow the ambiguity repair         |
-| Composite 2xx omits/duplicates an expected reference      | `ambiguous`; never synthesize a committed receipt from a truncated body                                  | Reconcile the ledger and Task keys; never resend blindly     |
-| Notion or Salesforce read timeout before any mutation     | Retryable `blocked`, no Composite request, and no partial success                                        | Retry the exact input                                        |
-| Transport fails after the Composite was sent              | Reconcile the ledger and Task keys; return recovered `completed` or `ambiguous`                          | Follow `repairInstruction`; never create substitute records  |
-| Salesforce committed but a later cross-system step failed | `partial_failure` with known Salesforce records and an output-only resume token                          | Retry the exact original input                               |
-| Notion receipt write could not be confirmed               | Re-read the page; if still unknown, `partial_failure` without recreating Salesforce records              | Restore approval/empty receipt if needed, then retry exactly |
-| Safe resume after partial completion                      | Ledger IDs are verified, missing Notion/finalization work is completed, then `completed` or `no_op`      | Report the reconciled receipt                                |
+| Scenario                                                  | Returned behavior                                                                                      | Safe next action                                             |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ |
+| Completed exact replay                                    | `no_op`, `ok: true`, same canonical IDs, no Composite write                                            | Report that nothing new was created                          |
+| Delayed replay after date/owner policy changed            | Validate the exact packet and ledger first; return canonical `no_op`/`partial_failure` records         | Resume only missing cross-system work; never recreate        |
+| Concurrent identical call                                 | The unique ledger claim chooses one winner; the other reconciles to `completed`/`no_op`                | Use the winning receipt; do not retry with changed input     |
+| Approval revoked or revision/fingerprint changed          | `blocked`/`conflict` before Salesforce; `partial_failure` with records if Salesforce already committed | Obtain a new human review; do not reuse the old hash         |
+| Opportunity changed after approval                        | `conflict`, with zero committed writes because of the immediate reread or HTTP precondition            | Refresh the packet and approval                              |
+| Salesforce returns 403 or 404                             | `blocked`, not retryable                                                                               | Fix the integration user's minimum permissions or record ID  |
+| Salesforce returns 409/412 or the Opportunity guard fails | `conflict`, not retryable, with zero Composite writes committed                                        | Re-read provider state and renew approval                    |
+| Salesforce OAuth/API or Notion returns 429                | Retryable `blocked` before commit or `partial_failure` after commit; `retryAfterSeconds` is bounded    | Retry the exact input after the returned provider delay      |
+| Notion returns 409 or 5xx                                 | Retryable `blocked` before commit or `partial_failure` with committed Salesforce records               | Retry the exact input; never recreate Salesforce records     |
+| Notion returns 400/401/403/404                            | Permanent `blocked`, or non-retryable `partial_failure` if Salesforce already committed                | Repair page access/configuration, then retry the exact input |
+| Composite returns HTTP 5xx                                | No retry; treat as ambiguous and reconcile the exact ledger and Task keys                              | Use recovered records or follow the ambiguity repair         |
+| Composite root error follows rollback marker responses    | Classify the root stale/rate-limit/permission error, not the synthetic rollback marker                 | Follow the root error's retry or renewed-review instruction  |
+| Composite 2xx omits/duplicates an expected reference      | `ambiguous`; never synthesize a committed receipt from a truncated body                                | Reconcile the ledger and Task keys; never resend blindly     |
+| Notion or Salesforce read timeout before any mutation     | Retryable `blocked`, no Composite request, and no partial success                                      | Retry the exact input                                        |
+| Transport fails after the Composite was sent              | Reconcile the ledger and Task keys; return recovered `completed` or `ambiguous`                        | Follow `repairInstruction`; never create substitute records  |
+| Salesforce committed but a later cross-system step failed | `partial_failure` with known Salesforce records and an output-only resume token                        | Retry the exact original input                               |
+| Notion receipt write could not be confirmed               | Re-read the page; if still unknown, `partial_failure` without recreating Salesforce records            | Restore approval/empty receipt if needed, then retry exactly |
+| Safe resume after partial completion                      | Ledger IDs are verified, missing Notion/finalization work is completed, then `completed` or `no_op`    | Report the reconciled receipt                                |
 
 The compact Notion receipt contains only version, operation/fingerprint keys,
 Opportunity ID, meeting Task ID, and follow-up Task IDs. It does not duplicate
@@ -465,6 +486,11 @@ meeting content or credentials.
   network/5xx failure. A Composite mutation is never retried after a transport
   failure, stalled body, or any HTTP 5xx because its commit state may be unknown;
   the Worker reconciles the ledger and Task keys instead.
+- Salesforce OAuth 408/425/429/5xx and documented transient Notion statuses are
+  typed retryable; permanent authentication, access, validation, and
+  missing-resource statuses are typed non-retryable. Provider `Retry-After`
+  values are parsed case-insensitively and clamped before they reach
+  `retryAfterSeconds`.
 
 The Notion pre-write check, receipt assignment, and readback are not an atomic
 transaction. Another actor can still edit the page after the final read. The
@@ -534,14 +560,18 @@ npm run build
 
 The suite covers success, exact and delayed replay after date/owner policy
 changes, provider-first recovery after approval revocation/revision/timeout,
-concurrent duplicate claims, stale Opportunities, occupied receipts, correlated
-orphan evidence, unrelated Contacts, corrupt ledgers, exact Composite reference
-contracts, truncated/duplicate 2xx responses, HTTP 500 reconciliation, ambiguous
-commits, partial writeback/finalization, token renewal, 403/404, 409/412, 429
-`Retry-After`, 5xx/read timeouts, stalled OAuth/safe-read/Composite bodies,
-successful and late Notion readback, wrong page identity and receipt races,
-metadata/FLS coverage, ordered cross-system prefixes, error redaction, malicious
-and oversized inputs, and every terminal status.
+concurrent duplicate claims, stale Opportunities including no-op update plans,
+occupied receipts, correlated orphan evidence, unrelated Contacts, strict
+18-character IDs and revision parity, stable nested fingerprints, corrupt
+ledgers, exact Composite reference contracts, root errors hidden behind rollback
+markers, truncated/duplicate 2xx responses, HTTP 500 reconciliation, ambiguous
+commits, typed post-commit reconciliation failures, partial
+writeback/finalization, token renewal, OAuth and Notion transient/permanent
+statuses, bounded 429 `Retry-After`, 5xx/read timeouts, stalled
+OAuth/safe-read/Composite bodies, successful and late Notion readback, wrong
+page identity and receipt races, metadata/FLS coverage, ordered cross-system
+prefixes, error redaction, malicious and oversized inputs, and every terminal
+status.
 
 For a sandbox smoke test:
 
@@ -610,6 +640,7 @@ src/orchestrator.ts   — approval, preconditions, transaction, replay, receipts
 src/policy.ts         — canonical hash, bounds, IDs, dates, stage/owner policy
 src/salesforce.ts     — OAuth, fixed reads, Composite request, reconciliation
 src/notion.ts         — typed approval reads and idempotent receipt writeback
+src/retry.ts          — shared bounded Retry-After parsing
 src/config.ts         — bounded environment configuration
 src/types.ts          — gateway and receipt contracts
 salesforce/force-app/ — ledger, unique Task key, and narrow permission metadata

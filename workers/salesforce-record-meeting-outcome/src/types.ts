@@ -70,6 +70,7 @@ export type RecordMeetingOutcomeResult = {
   steps: ReceiptStep[]
   warnings: string[]
   retryable: boolean
+  retryAfterSeconds: number | null
   resumeToken: string | null
   repairInstruction: string | null
 }

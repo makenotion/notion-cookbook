@@ -25,8 +25,16 @@ export class PolicyError extends Error {
 
 export function isSalesforceId(value: string, prefix?: string): boolean {
   return (
-    /^[a-zA-Z0-9]{15}(?:[a-zA-Z0-9]{3})?$/.test(value) &&
+    /^[a-zA-Z0-9]{18}$/.test(value) &&
     (prefix === undefined || value.startsWith(prefix))
+  )
+}
+
+export function isApprovedRevision(value: string): boolean {
+  return (
+    value.trim().length > 0 &&
+    value.length <= 100 &&
+    !/[\u0000-\u001f\u007f]/.test(value)
   )
 }
 
@@ -94,14 +102,20 @@ export function validateCanonicalInput(input: RecordMeetingOutcomeInput): void {
   }
 
   normalizeNotionPageId(input.notionPageId)
-  assertPlainText("approvedRevision", input.approvedRevision, 100)
+  if (!isApprovedRevision(input.approvedRevision)) {
+    throw new PolicyError(
+      "approvedRevision must be single-line plain text of at most 100 characters."
+    )
+  }
   if (!/^[a-f0-9]{64}$/.test(input.approvalFingerprint)) {
     throw new PolicyError(
       "approvalFingerprint must be the lowercase SHA-256 fingerprint of the approved packet."
     )
   }
   if (!isSalesforceId(input.opportunityId, "006")) {
-    throw new PolicyError("opportunityId must be a Salesforce Opportunity ID.")
+    throw new PolicyError(
+      "opportunityId must be an 18-character Salesforce Opportunity ID."
+    )
   }
   normalizeTimestamp(
     "expectedOpportunityLastModifiedAt",
@@ -116,7 +130,9 @@ export function validateCanonicalInput(input: RecordMeetingOutcomeInput): void {
     input.primaryContactId !== null &&
     !isSalesforceId(input.primaryContactId, "003")
   ) {
-    throw new PolicyError("primaryContactId must be null or a Contact ID.")
+    throw new PolicyError(
+      "primaryContactId must be null or an 18-character Contact ID."
+    )
   }
 
   if (input.opportunityUpdates.nextStep !== null) {
@@ -158,14 +174,16 @@ export function validateCanonicalInput(input: RecordMeetingOutcomeInput): void {
       )
     }
     if (!isSalesforceId(followUp.ownerId, "005")) {
-      throw new PolicyError(`followUps[${index}].ownerId must be a User ID.`)
+      throw new PolicyError(
+        `followUps[${index}].ownerId must be an 18-character User ID.`
+      )
     }
     if (
       followUp.contactId !== null &&
       !isSalesforceId(followUp.contactId, "003")
     ) {
       throw new PolicyError(
-        `followUps[${index}].contactId must be null or a Contact ID.`
+        `followUps[${index}].contactId must be null or an 18-character Contact ID.`
       )
     }
     parseDateOnly(`followUps[${index}].dueDate`, followUp.dueDate)
@@ -316,8 +334,18 @@ function canonicalInput(input: RecordMeetingOutcomeInput): unknown {
     occurredOn: input.occurredOn,
     outcomeSummary: input.outcomeSummary,
     primaryContactId: input.primaryContactId,
-    opportunityUpdates: input.opportunityUpdates,
-    followUps: input.followUps,
+    opportunityUpdates: {
+      nextStep: input.opportunityUpdates.nextStep,
+      closeDate: input.opportunityUpdates.closeDate,
+      stageName: input.opportunityUpdates.stageName,
+    },
+    followUps: input.followUps.map((followUp) => ({
+      subject: followUp.subject,
+      description: followUp.description,
+      dueDate: followUp.dueDate,
+      ownerId: followUp.ownerId,
+      contactId: followUp.contactId,
+    })),
   }
 }
 
