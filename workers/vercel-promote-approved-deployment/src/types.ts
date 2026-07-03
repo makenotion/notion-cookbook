@@ -10,6 +10,19 @@ export const APPROVAL_PROPERTIES = {
   fingerprint: "Approval fingerprint",
 } as const
 
+export const ROLLBACK_APPROVAL_PROPERTIES = {
+  status: "Rollback approval status",
+  revision: "Rollback approval revision",
+  originalPromotionOperationId: "Original promotion operation ID",
+  promotionIncidentPageId: "Promotion incident page ID",
+  originalIncidentReceiptHash: "Original incident receipt hash",
+  teamId: "Rollback Vercel team ID",
+  projectId: "Rollback Vercel project ID",
+  candidateDeploymentId: "Rollback candidate deployment ID",
+  rollbackDeploymentId: "Rollback target deployment ID",
+  fingerprint: "Rollback approval fingerprint",
+} as const
+
 export type JsonValue =
   | string
   | number
@@ -84,6 +97,8 @@ export interface WorkerConfig {
   redisToken: string
   protectionBypassSecret: string | null
   receiptProperty: string
+  incidentProperty?: string
+  rollbackReceiptProperty?: string
   pollTimeoutMs: number
   pollIntervalMs: number
   pollMaxAttempts: number
@@ -102,6 +117,39 @@ export type ResultStatus =
   | "conflict"
   | "partial_failure"
   | "ambiguous"
+  | "rollback_recommended"
+
+export interface HealthFailureEvidence extends Record<string, JsonValue> {
+  path: string
+  outcome: "transport_error" | "http_status"
+  status: number | null
+}
+
+export interface AliasStateEvidence extends Record<string, JsonValue> {
+  domain: string
+  deploymentId: string | null
+}
+
+export interface PromotionIncidentReceipt {
+  version: 1
+  operationId: string
+  status: "promotion_health_failed"
+  teamId: string
+  projectId: string
+  candidateDeploymentId: string
+  expectedPriorDeploymentId: string
+  promotionApprovalPageId: string
+  promotionApprovalRevision: string
+  promotionApprovalFingerprint: string
+  candidateGitSha: string
+  candidateGitBranch: string
+  rollbackTargetGitSha: string
+  rollbackTargetGitBranch: string
+  healthFailure: HealthFailureEvidence
+  productionDomains: string[]
+  aliasState: AliasStateEvidence[]
+  observedAt: string
+}
 
 export interface PromotionResult extends Record<string, JsonValue> {
   ok: boolean
@@ -135,6 +183,14 @@ export interface PromotionResult extends Record<string, JsonValue> {
   checkNames: string[]
   healthPaths: string[]
   productionDomains: string[]
+  aliasState: AliasStateEvidence[]
+  healthFailure: HealthFailureEvidence | null
+  rollbackRequested: boolean
+  incidentReceiptHash: string | null
+  freshApprovalInstruction: string | null
+  rollbackTargetGitSha: string | null
+  rollbackTargetGitBranch: string | null
+  residualRaceWarning: string
   startedAt: string
   completedAt: string | null
   message: string
@@ -177,6 +233,167 @@ export interface OperationRecord {
   result: PromotionResult | null
 }
 
+export interface RollbackInput {
+  rollbackApprovalPageId: string
+  rollbackApprovalRevision: string
+  rollbackApprovalFingerprint: string
+  originalPromotionOperationId: string
+  promotionIncidentPageId: string
+  originalIncidentReceiptHash: string
+  teamId: string
+  projectId: string
+  candidateDeploymentId: string
+  rollbackDeploymentId: string
+}
+
+export interface RollbackApprovalPacket {
+  approvalStatus: "Approved"
+  approvalRevision: string
+  originalPromotionOperationId: string
+  promotionIncidentPageId: string
+  originalIncidentReceiptHash: string
+  teamId: string
+  projectId: string
+  candidateDeploymentId: string
+  rollbackDeploymentId: string
+}
+
+export interface RollbackApprovalSnapshot {
+  pageId: string
+  revision: string
+  pageLastEditedTime: string
+  fingerprint: string
+  packet: RollbackApprovalPacket
+  receiptText: string
+}
+
+export type RollbackResultStatus =
+  | "completed"
+  | "no_op"
+  | "blocked"
+  | "conflict"
+  | "partial_failure"
+  | "ambiguous"
+
+export interface RollbackResult extends Record<string, JsonValue> {
+  ok: boolean
+  operationId: string
+  idempotencyKey: string
+  status: RollbackResultStatus
+  changed: boolean
+  replay: boolean
+  preconditionsVerified: boolean
+  rollbackRequested: boolean
+  receiptWritten: boolean
+  causality: "provider_accepted" | "observed_only" | "none"
+  disposition:
+    | "rolled_back"
+    | "observed_restored"
+    | "candidate_unchanged"
+    | "split"
+    | "third_deployment"
+    | "unknown"
+  rollbackRequestAccepted: boolean
+  requestDisposition: "accepted" | "outcome_unknown" | "not_sent"
+  resumeMode: "none" | "reconcile_only" | "receipt_only" | "complete"
+  retryable: boolean
+  retryAfterMs: number | null
+  resumeToken: string | null
+  repairInstruction: string | null
+  originalPromotionOperationId: string
+  originalIncidentReceiptHash: string
+  teamId: string
+  projectId: string
+  candidateDeploymentId: string
+  rollbackDeploymentId: string
+  currentDeploymentId: string | null
+  rollbackDeploymentUrl: string | null
+  rollbackGitSha: string
+  rollbackGitBranch: string
+  promotionApprovalPageId: string
+  promotionIncidentPageId: string
+  rollbackApprovalPageId: string
+  rollbackApprovalRevision: string
+  rollbackApprovalFingerprint: string
+  productionDomains: string[]
+  aliasState: AliasStateEvidence[]
+  healthPaths: string[]
+  healthFailure: HealthFailureEvidence | null
+  receiptWrittenAt: string | null
+  startedAt: string
+  completedAt: string | null
+  warnings: string[]
+  residualRaceWarning: string
+  steps: Array<{
+    name:
+      | "incident"
+      | "approval"
+      | "preflight"
+      | "rollback"
+      | "reconciliation"
+      | "receipt"
+    state: "completed" | "skipped" | "blocked" | "failed" | "pending"
+  }>
+  message: string
+}
+
+export type RollbackOperationState =
+  | "prepared"
+  | "rollback_started"
+  | "reconciliation_only"
+  | "receipt_pending"
+  | "complete"
+
+export interface RollbackOperationRecord {
+  version: 2
+  kind: "rollback"
+  operationId: string
+  state: RollbackOperationState
+  input: RollbackInput
+  policy: TargetPolicy
+  incident: PromotionIncidentReceipt
+  claimId: string
+  promotionOperationId: string
+  promotionIncidentHash: string
+  createdAt: string
+  updatedAt: string
+  rollbackStartedAt: string | null
+  rollbackAcceptedAt: string | null
+  mutationAttempts: 0 | 1
+  requestDisposition: "accepted" | "outcome_unknown" | "not_sent"
+  lastMutationStatus: number | null
+  lastRetryAfterMs: number | null
+  lastIssue: string | null
+  result: RollbackResult | null
+}
+
+export type RollbackMutationClaimState =
+  | "available"
+  | "operation_fenced"
+  | "sent"
+  | "definitely_rejected"
+
+export interface RollbackMutationClaim {
+  version: 1
+  kind: "rollback_mutation_claim"
+  claimId: string
+  state: RollbackMutationClaimState
+  promotionOperationId: string
+  promotionIncidentHash: string
+  teamId: string
+  projectId: string
+  candidateDeploymentId: string
+  rollbackDeploymentId: string
+  activeOperationId: string | null
+  attempts: number
+  createdAt: string
+  updatedAt: string
+  sentAt: string | null
+  definitelyRejectedAt: string | null
+  lastMutationStatus: number | null
+  lastRetryAfterMs: number | null
+}
+
 export interface NotionClientLike {
   pages: {
     retrieve(args: { page_id: string }): Promise<unknown>
@@ -196,6 +413,18 @@ export interface RedisOperationStoreLike {
     record: OperationRecord,
     ttlSeconds: number | null
   ): Promise<void>
+}
+
+export interface RollbackRedisOperationStoreLike
+  extends RedisOperationStoreLike {
+  getRollbackOperation(
+    operationId: string
+  ): Promise<RollbackOperationRecord | null>
+  putRollbackOperation(record: RollbackOperationRecord): Promise<void>
+  getRollbackMutationClaim(
+    claimId: string
+  ): Promise<RollbackMutationClaim | null>
+  putRollbackMutationClaim(claim: RollbackMutationClaim): Promise<void>
 }
 
 export interface VercelDeployment {
@@ -277,6 +506,15 @@ export interface VercelClientLike {
   checkHealth(deploymentUrl: string, paths: string[]): Promise<void>
 }
 
+export interface RollbackVercelClientLike extends VercelClientLike {
+  getRollingRelease(teamId: string, projectId: string): Promise<unknown | null>
+  requestRollback(
+    teamId: string,
+    projectId: string,
+    deploymentId: string
+  ): Promise<{ status: 201 }>
+}
+
 export interface RuntimeDependencies {
   notion: NotionClientLike
   store: RedisOperationStoreLike
@@ -286,6 +524,12 @@ export interface RuntimeDependencies {
   randomToken: () => string
 }
 
+export interface RollbackRuntimeDependencies
+  extends Omit<RuntimeDependencies, "store" | "vercel"> {
+  store: RollbackRedisOperationStoreLike
+  vercel: RollbackVercelClientLike
+}
+
 export class SafetyError extends Error {
   readonly code: string
 
@@ -293,6 +537,21 @@ export class SafetyError extends Error {
     super(message)
     this.name = "SafetyError"
     this.code = code
+  }
+}
+
+export class HealthCheckFailure extends SafetyError {
+  readonly evidence: HealthFailureEvidence
+
+  constructor(evidence: HealthFailureEvidence) {
+    super(
+      "HEALTH_CHECK_FAILED",
+      evidence.outcome === "transport_error"
+        ? `The fixed health path ${JSON.stringify(evidence.path)} timed out or failed.`
+        : `The fixed health path ${JSON.stringify(evidence.path)} returned HTTP ${evidence.status}.`
+    )
+    this.name = "HealthCheckFailure"
+    this.evidence = { ...evidence }
   }
 }
 

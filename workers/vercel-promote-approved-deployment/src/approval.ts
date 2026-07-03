@@ -1,11 +1,17 @@
 import { createHash } from "node:crypto"
 import {
   APPROVAL_PROPERTIES,
+  ROLLBACK_APPROVAL_PROPERTIES,
   type ApprovalPacket,
   type ApprovalSnapshot,
   type NotionClientLike,
   type PromoteInput,
   type PromotionResult,
+  type PromotionIncidentReceipt,
+  type RollbackApprovalPacket,
+  type RollbackApprovalSnapshot,
+  type RollbackInput,
+  type RollbackResult,
   SafetyError,
 } from "./types.js"
 
@@ -90,7 +96,8 @@ function textProperty(
 
 function optionalRichTextProperty(
   properties: Record<string, unknown>,
-  name: string
+  name: string,
+  maximum = 1_900
 ): string {
   const raw = properties[name]
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
@@ -111,7 +118,7 @@ function optionalRichTextProperty(
     if (!fragment || typeof fragment !== "object") continue
     const object = fragment as Record<string, unknown>
     if (typeof object.plain_text === "string") value += object.plain_text
-    if (value.length > 1_900) {
+    if (value.length > maximum) {
       throw new SafetyError(
         "RECEIPT_SCHEMA",
         `${JSON.stringify(name)} exceeds the receipt length bound.`
@@ -121,8 +128,10 @@ function optionalRichTextProperty(
   return value
 }
 
-function statusProperty(properties: Record<string, unknown>): "Approved" {
-  const name = APPROVAL_PROPERTIES.status
+function statusProperty(
+  properties: Record<string, unknown>,
+  name: string = APPROVAL_PROPERTIES.status
+): "Approved" {
   const raw = properties[name]
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     throw new SafetyError(
@@ -174,6 +183,266 @@ export function canonicalApprovalJson(packet: ApprovalPacket): string {
   })
 }
 
+export function canonicalRollbackApprovalJson(
+  packet: RollbackApprovalPacket
+): string {
+  return JSON.stringify({
+    approvalStatus: packet.approvalStatus,
+    approvalRevision: packet.approvalRevision,
+    originalPromotionOperationId: packet.originalPromotionOperationId,
+    promotionIncidentPageId: packet.promotionIncidentPageId,
+    originalIncidentReceiptHash: packet.originalIncidentReceiptHash,
+    teamId: packet.teamId,
+    projectId: packet.projectId,
+    candidateDeploymentId: packet.candidateDeploymentId,
+    rollbackDeploymentId: packet.rollbackDeploymentId,
+  })
+}
+
+export function rollbackApprovalFingerprint(
+  packet: RollbackApprovalPacket
+): string {
+  return createHash("sha256")
+    .update(canonicalRollbackApprovalJson(packet))
+    .digest("hex")
+}
+
+export function canonicalPromotionIncidentJson(
+  result: PromotionResult
+): string {
+  if (
+    result.status !== "rollback_recommended" ||
+    !result.healthFailure ||
+    result.currentDeploymentId !== result.deploymentId ||
+    result.previousDeploymentId === null
+  ) {
+    throw new SafetyError(
+      "INCIDENT_INVALID",
+      "The promotion result is not a canonical rollback recommendation."
+    )
+  }
+  return JSON.stringify({
+    version: 1,
+    operationId: result.operationId,
+    status: "promotion_health_failed",
+    teamId: result.teamId,
+    projectId: result.projectId,
+    candidateDeploymentId: result.deploymentId,
+    expectedPriorDeploymentId: result.previousDeploymentId,
+    promotionApprovalPageId: result.approvalPageId,
+    promotionApprovalRevision: result.approvalRevision,
+    promotionApprovalFingerprint: result.approvalFingerprint,
+    candidateGitSha: result.gitSha,
+    candidateGitBranch: result.gitBranch,
+    rollbackTargetGitSha: result.rollbackTargetGitSha,
+    rollbackTargetGitBranch: result.rollbackTargetGitBranch,
+    healthFailure: result.healthFailure,
+    productionDomains: result.productionDomains,
+    aliasState: result.aliasState,
+    observedAt: result.completedAt,
+  })
+}
+
+export function promotionIncidentReceiptHash(result: PromotionResult): string {
+  return createHash("sha256")
+    .update(canonicalPromotionIncidentJson(result))
+    .digest("hex")
+}
+
+const PROMOTION_INCIDENT_KEYS = new Set([
+  "version",
+  "operationId",
+  "status",
+  "teamId",
+  "projectId",
+  "candidateDeploymentId",
+  "expectedPriorDeploymentId",
+  "promotionApprovalPageId",
+  "promotionApprovalRevision",
+  "promotionApprovalFingerprint",
+  "rollbackTargetGitSha",
+  "rollbackTargetGitBranch",
+  "candidateGitSha",
+  "candidateGitBranch",
+  "healthFailure",
+  "productionDomains",
+  "aliasState",
+  "observedAt",
+])
+
+export function parsePromotionIncidentReceipt(
+  text: string,
+  expectedHash: string
+): PromotionIncidentReceipt {
+  if (
+    !text ||
+    text.length > 16_000 ||
+    createHash("sha256").update(text).digest("hex") !== expectedHash
+  ) {
+    throw new SafetyError(
+      "INCIDENT_RECEIPT_MISMATCH",
+      "The promotion incident text does not match its approved canonical hash."
+    )
+  }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    throw new SafetyError(
+      "INCIDENT_RECEIPT_INVALID",
+      "The promotion incident is not valid JSON."
+    )
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new SafetyError(
+      "INCIDENT_RECEIPT_INVALID",
+      "The promotion incident must be an object."
+    )
+  }
+  const object = parsed as Record<string, unknown>
+  if (
+    Object.keys(object).length !== PROMOTION_INCIDENT_KEYS.size ||
+    Object.keys(object).some((key) => !PROMOTION_INCIDENT_KEYS.has(key))
+  ) {
+    throw new SafetyError(
+      "INCIDENT_RECEIPT_INVALID",
+      "The promotion incident has unsupported fields."
+    )
+  }
+  const incident = object as unknown as PromotionIncidentReceipt
+  const health = incident.healthFailure
+  const observed = new Date(incident.observedAt)
+  if (
+    incident.version !== 1 ||
+    incident.status !== "promotion_health_failed" ||
+    !/^vpa_[0-9a-f]{32}$/.test(incident.operationId) ||
+    typeof incident.teamId !== "string" ||
+    typeof incident.projectId !== "string" ||
+    typeof incident.candidateDeploymentId !== "string" ||
+    typeof incident.expectedPriorDeploymentId !== "string" ||
+    typeof incident.promotionApprovalPageId !== "string" ||
+    typeof incident.promotionApprovalRevision !== "string" ||
+    !/^[0-9a-f]{64}$/.test(incident.promotionApprovalFingerprint) ||
+    !/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/.test(incident.candidateGitSha) ||
+    typeof incident.candidateGitBranch !== "string" ||
+    !incident.candidateGitBranch ||
+    incident.candidateGitBranch.length > 256 ||
+    incident.candidateGitBranch.trim() !== incident.candidateGitBranch ||
+    /[\u0000-\u001f\u007f]/.test(incident.candidateGitBranch) ||
+    !/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/.test(incident.rollbackTargetGitSha) ||
+    typeof incident.rollbackTargetGitBranch !== "string" ||
+    !incident.rollbackTargetGitBranch ||
+    incident.rollbackTargetGitBranch.length > 256 ||
+    incident.rollbackTargetGitBranch.trim() !==
+      incident.rollbackTargetGitBranch ||
+    /[\u0000-\u001f\u007f]/.test(incident.rollbackTargetGitBranch) ||
+    !health ||
+    typeof health.path !== "string" ||
+    (health.outcome !== "transport_error" &&
+      health.outcome !== "http_status") ||
+    (health.status !== null &&
+      (!Number.isInteger(health.status) ||
+        health.status < 100 ||
+        health.status > 599)) ||
+    !Array.isArray(incident.productionDomains) ||
+    incident.productionDomains.length < 1 ||
+    incident.productionDomains.length > 100 ||
+    !incident.productionDomains.every((domain) => typeof domain === "string") ||
+    !Array.isArray(incident.aliasState) ||
+    incident.aliasState.length !== incident.productionDomains.length ||
+    !incident.aliasState.every(
+      (entry, index) =>
+        entry &&
+        typeof entry === "object" &&
+        !Array.isArray(entry) &&
+        Object.keys(entry).length === 2 &&
+        Object.hasOwn(entry, "domain") &&
+        Object.hasOwn(entry, "deploymentId") &&
+        entry.domain === incident.productionDomains[index] &&
+        (entry.deploymentId === null ||
+          (typeof entry.deploymentId === "string" &&
+            /^dpl_[A-Za-z0-9]{1,96}$/.test(entry.deploymentId)))
+    ) ||
+    typeof incident.observedAt !== "string" ||
+    Number.isNaN(observed.getTime()) ||
+    observed.toISOString() !== incident.observedAt
+  ) {
+    throw new SafetyError(
+      "INCIDENT_RECEIPT_INVALID",
+      "The promotion incident failed strict semantic validation."
+    )
+  }
+  if (JSON.stringify(object) !== text) {
+    throw new SafetyError(
+      "INCIDENT_RECEIPT_INVALID",
+      "The promotion incident is not canonical JSON."
+    )
+  }
+  return incident
+}
+
+export async function writePromotionIncidentReceipt(
+  notion: NotionClientLike,
+  input: PromoteInput,
+  incidentProperty: string,
+  result: PromotionResult
+): Promise<"written" | "already_written"> {
+  const encoded = canonicalPromotionIncidentJson(result)
+  const hash = createHash("sha256").update(encoded).digest("hex")
+  if (result.incidentReceiptHash !== hash || encoded.length > 16_000) {
+    throw new SafetyError(
+      "INCIDENT_INVALID",
+      "The bounded promotion incident/hash pair is not canonical."
+    )
+  }
+  const snapshot = await retrieveApproval(
+    notion,
+    input.approvalPageId,
+    incidentProperty,
+    16_000
+  )
+  verifyApproval(snapshot, input, { requireRevision: false })
+  if (snapshot.receiptText) {
+    if (snapshot.receiptText === encoded) return "already_written"
+    throw new SafetyError(
+      "INCIDENT_RECEIPT_OCCUPIED",
+      `${JSON.stringify(incidentProperty)} contains different content.`
+    )
+  }
+  await notionRequest(() =>
+    notion.pages.update({
+      page_id: input.approvalPageId,
+      properties: {
+        [incidentProperty]: {
+          rich_text: Array.from(
+            { length: Math.ceil(encoded.length / 1_900) },
+            (_, index) => ({
+              type: "text",
+              text: {
+                content: encoded.slice(index * 1_900, (index + 1) * 1_900),
+              },
+            })
+          ),
+        },
+      },
+    })
+  )
+  const readback = await retrieveApproval(
+    notion,
+    input.approvalPageId,
+    incidentProperty,
+    16_000
+  )
+  verifyApproval(readback, input, { requireRevision: true })
+  if (readback.receiptText !== encoded) {
+    throw new SafetyError(
+      "INCIDENT_READBACK_FAILED",
+      "Notion did not return the exact canonical promotion incident."
+    )
+  }
+  return "written"
+}
+
 export function approvalFingerprint(packet: ApprovalPacket): string {
   return createHash("sha256")
     .update(canonicalApprovalJson(packet))
@@ -211,10 +480,67 @@ export function operationIdentity(input: PromoteInput): {
   }
 }
 
+export function rollbackOperationIdentity(input: RollbackInput): {
+  operationId: string
+  operationKey: string
+  leaseKey: string
+} {
+  const digest = createHash("sha256")
+    .update(
+      JSON.stringify({
+        rollbackApprovalPageId: normalizedId(input.rollbackApprovalPageId),
+        rollbackApprovalRevision: input.rollbackApprovalRevision,
+        rollbackApprovalFingerprint: input.rollbackApprovalFingerprint,
+        originalPromotionOperationId: input.originalPromotionOperationId,
+        promotionIncidentPageId: normalizedId(input.promotionIncidentPageId),
+        originalIncidentReceiptHash: input.originalIncidentReceiptHash,
+        teamId: input.teamId,
+        projectId: input.projectId,
+        candidateDeploymentId: input.candidateDeploymentId,
+        rollbackDeploymentId: input.rollbackDeploymentId,
+      })
+    )
+    .digest("hex")
+  const projectDigest = createHash("sha256")
+    .update(`${input.teamId}:${input.projectId}`)
+    .digest("hex")
+  const operationId = `vrb_${digest.slice(0, 32)}`
+  return {
+    operationId,
+    operationKey: `vercel-rollback:v2:operation:${operationId}`,
+    // Promotion and rollback deliberately contend on the same project lease.
+    leaseKey: `vercel-promotion:project-lease:${projectDigest}`,
+  }
+}
+
+export function rollbackMutationClaimIdentity(input: RollbackInput): {
+  claimId: string
+  claimKey: string
+} {
+  const digest = createHash("sha256")
+    .update(
+      JSON.stringify({
+        originalPromotionOperationId: input.originalPromotionOperationId,
+        originalIncidentReceiptHash: input.originalIncidentReceiptHash,
+        teamId: input.teamId,
+        projectId: input.projectId,
+        candidateDeploymentId: input.candidateDeploymentId,
+        rollbackDeploymentId: input.rollbackDeploymentId,
+      })
+    )
+    .digest("hex")
+  const claimId = `rmc_${digest.slice(0, 32)}`
+  return {
+    claimId,
+    claimKey: `vercel-rollback:v2:mutation-claim:${claimId}`,
+  }
+}
+
 export async function retrieveApproval(
   notion: NotionClientLike,
   pageId: string,
-  receiptProperty: string
+  receiptProperty: string,
+  receiptMaximum = 1_900
 ): Promise<ApprovalSnapshot> {
   const raw = await notionRequest(() =>
     notion.pages.retrieve({ page_id: pageId })
@@ -295,7 +621,11 @@ export async function retrieveApproval(
     pageLastEditedTime: revision.toISOString(),
     fingerprint: storedFingerprint,
     packet,
-    receiptText: optionalRichTextProperty(properties, receiptProperty),
+    receiptText: optionalRichTextProperty(
+      properties,
+      receiptProperty,
+      receiptMaximum
+    ),
   }
 }
 
@@ -336,6 +666,160 @@ export function verifyApproval(
     throw new SafetyError(
       "APPROVAL_PACKET_MISMATCH",
       "The exact approved target does not match the tool input."
+    )
+  }
+}
+
+export async function retrieveRollbackApproval(
+  notion: NotionClientLike,
+  pageId: string,
+  receiptProperty: string
+): Promise<RollbackApprovalSnapshot> {
+  const raw = await notionRequest(() =>
+    notion.pages.retrieve({ page_id: pageId })
+  )
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new SafetyError(
+      "APPROVAL_SCHEMA",
+      "Notion returned an invalid rollback approval page."
+    )
+  }
+  const page = raw as Record<string, unknown>
+  if (
+    page.object !== "page" ||
+    page.archived === true ||
+    page.in_trash === true
+  ) {
+    throw new SafetyError(
+      "APPROVAL_SCHEMA",
+      "The rollback approval must be an active Notion page."
+    )
+  }
+  if (
+    typeof page.id !== "string" ||
+    normalizedId(page.id) !== normalizedId(pageId)
+  ) {
+    throw new SafetyError(
+      "APPROVAL_SCHEMA",
+      "Notion returned a different rollback approval page ID."
+    )
+  }
+  if (typeof page.last_edited_time !== "string") {
+    throw new SafetyError(
+      "APPROVAL_SCHEMA",
+      "The rollback approval page has no revision timestamp."
+    )
+  }
+  const edited = new Date(page.last_edited_time)
+  if (
+    Number.isNaN(edited.getTime()) ||
+    !page.properties ||
+    typeof page.properties !== "object"
+  ) {
+    throw new SafetyError(
+      "APPROVAL_SCHEMA",
+      "The rollback approval page is malformed."
+    )
+  }
+  const properties = page.properties as Record<string, unknown>
+  const packet: RollbackApprovalPacket = {
+    approvalStatus: statusProperty(
+      properties,
+      ROLLBACK_APPROVAL_PROPERTIES.status
+    ),
+    approvalRevision: textProperty(
+      properties,
+      ROLLBACK_APPROVAL_PROPERTIES.revision,
+      100
+    ),
+    originalPromotionOperationId: textProperty(
+      properties,
+      ROLLBACK_APPROVAL_PROPERTIES.originalPromotionOperationId,
+      40
+    ),
+    promotionIncidentPageId: textProperty(
+      properties,
+      ROLLBACK_APPROVAL_PROPERTIES.promotionIncidentPageId,
+      36
+    ),
+    originalIncidentReceiptHash: textProperty(
+      properties,
+      ROLLBACK_APPROVAL_PROPERTIES.originalIncidentReceiptHash,
+      64
+    ),
+    teamId: textProperty(properties, ROLLBACK_APPROVAL_PROPERTIES.teamId, 100),
+    projectId: textProperty(
+      properties,
+      ROLLBACK_APPROVAL_PROPERTIES.projectId,
+      100
+    ),
+    candidateDeploymentId: textProperty(
+      properties,
+      ROLLBACK_APPROVAL_PROPERTIES.candidateDeploymentId,
+      100
+    ),
+    rollbackDeploymentId: textProperty(
+      properties,
+      ROLLBACK_APPROVAL_PROPERTIES.rollbackDeploymentId,
+      100
+    ),
+  }
+  return {
+    pageId,
+    revision: packet.approvalRevision,
+    pageLastEditedTime: edited.toISOString(),
+    fingerprint: textProperty(
+      properties,
+      ROLLBACK_APPROVAL_PROPERTIES.fingerprint,
+      64
+    ),
+    packet,
+    receiptText: optionalRichTextProperty(properties, receiptProperty),
+  }
+}
+
+export function verifyRollbackApproval(
+  snapshot: RollbackApprovalSnapshot,
+  input: RollbackInput,
+  options: { requireRevision: boolean }
+): void {
+  if (
+    options.requireRevision &&
+    snapshot.revision !== input.rollbackApprovalRevision
+  ) {
+    throw new SafetyError(
+      "APPROVAL_REVISION_MISMATCH",
+      "The rollback approval revision changed."
+    )
+  }
+  const calculated = rollbackApprovalFingerprint(snapshot.packet)
+  if (
+    snapshot.fingerprint !== input.rollbackApprovalFingerprint ||
+    calculated !== input.rollbackApprovalFingerprint
+  ) {
+    throw new SafetyError(
+      "APPROVAL_FINGERPRINT_MISMATCH",
+      "The supplied, stored, and calculated rollback fingerprints must match."
+    )
+  }
+  const expected: RollbackApprovalPacket = {
+    approvalStatus: "Approved",
+    approvalRevision: input.rollbackApprovalRevision,
+    originalPromotionOperationId: input.originalPromotionOperationId,
+    promotionIncidentPageId: input.promotionIncidentPageId,
+    originalIncidentReceiptHash: input.originalIncidentReceiptHash,
+    teamId: input.teamId,
+    projectId: input.projectId,
+    candidateDeploymentId: input.candidateDeploymentId,
+    rollbackDeploymentId: input.rollbackDeploymentId,
+  }
+  if (
+    canonicalRollbackApprovalJson(snapshot.packet) !==
+    canonicalRollbackApprovalJson(expected)
+  ) {
+    throw new SafetyError(
+      "APPROVAL_PACKET_MISMATCH",
+      "The exact approved rollback target does not match the tool input."
     )
   }
 }
@@ -503,6 +987,191 @@ export async function writePromotionReceipt(
     throw new SafetyError(
       "RECEIPT_READBACK_FAILED",
       "Notion did not return the exact receipt after writeback."
+    )
+  }
+  return "written"
+}
+
+export interface StoredRollbackReceipt {
+  version: 1
+  operationId: string
+  status: "restored"
+  requestDisposition: "accepted" | "outcome_unknown" | "not_sent"
+  originalPromotionOperationId: string
+  originalIncidentReceiptHash: string
+  teamId: string
+  projectId: string
+  candidateDeploymentId: string
+  rollbackDeploymentId: string
+  rollbackGitSha: string
+  rollbackApprovalFingerprint: string
+  verifiedAt: string
+}
+
+const STORED_ROLLBACK_RECEIPT_KEYS = new Set([
+  "version",
+  "operationId",
+  "status",
+  "requestDisposition",
+  "originalPromotionOperationId",
+  "originalIncidentReceiptHash",
+  "teamId",
+  "projectId",
+  "candidateDeploymentId",
+  "rollbackDeploymentId",
+  "rollbackGitSha",
+  "rollbackApprovalFingerprint",
+  "verifiedAt",
+])
+
+function rollbackReceipt(result: RollbackResult): StoredRollbackReceipt {
+  if (!result.completedAt) {
+    throw new SafetyError(
+      "RECEIPT_INVALID",
+      "A rollback receipt needs a verified completion time."
+    )
+  }
+  return {
+    version: 1,
+    operationId: result.operationId,
+    status: "restored",
+    requestDisposition: result.requestDisposition,
+    originalPromotionOperationId: result.originalPromotionOperationId,
+    originalIncidentReceiptHash: result.originalIncidentReceiptHash,
+    teamId: result.teamId,
+    projectId: result.projectId,
+    candidateDeploymentId: result.candidateDeploymentId,
+    rollbackDeploymentId: result.rollbackDeploymentId,
+    rollbackGitSha: result.rollbackGitSha,
+    rollbackApprovalFingerprint: result.rollbackApprovalFingerprint,
+    verifiedAt: result.completedAt,
+  }
+}
+
+function canonicalStoredRollbackReceipt(
+  receipt: StoredRollbackReceipt
+): string {
+  return JSON.stringify({
+    version: receipt.version,
+    operationId: receipt.operationId,
+    status: receipt.status,
+    requestDisposition: receipt.requestDisposition,
+    originalPromotionOperationId: receipt.originalPromotionOperationId,
+    originalIncidentReceiptHash: receipt.originalIncidentReceiptHash,
+    teamId: receipt.teamId,
+    projectId: receipt.projectId,
+    candidateDeploymentId: receipt.candidateDeploymentId,
+    rollbackDeploymentId: receipt.rollbackDeploymentId,
+    rollbackGitSha: receipt.rollbackGitSha,
+    rollbackApprovalFingerprint: receipt.rollbackApprovalFingerprint,
+    verifiedAt: receipt.verifiedAt,
+  })
+}
+
+export function matchingStoredRollbackReceipt(
+  snapshot: RollbackApprovalSnapshot,
+  input: RollbackInput,
+  operationId: string,
+  rollbackGitSha: string,
+  expectedDisposition?: StoredRollbackReceipt["requestDisposition"]
+): StoredRollbackReceipt | null {
+  if (!snapshot.receiptText) return null
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(snapshot.receiptText)
+  } catch {
+    return null
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+    return null
+  const object = parsed as Record<string, unknown>
+  if (
+    Object.keys(object).length !== STORED_ROLLBACK_RECEIPT_KEYS.size ||
+    Object.keys(object).some((key) => !STORED_ROLLBACK_RECEIPT_KEYS.has(key))
+  )
+    return null
+  const receipt = object as Partial<StoredRollbackReceipt>
+  if (
+    receipt.version !== 1 ||
+    receipt.operationId !== operationId ||
+    receipt.status !== "restored" ||
+    (receipt.requestDisposition !== "accepted" &&
+      receipt.requestDisposition !== "outcome_unknown" &&
+      receipt.requestDisposition !== "not_sent") ||
+    (expectedDisposition !== undefined &&
+      receipt.requestDisposition !== expectedDisposition) ||
+    receipt.originalPromotionOperationId !==
+      input.originalPromotionOperationId ||
+    receipt.originalIncidentReceiptHash !== input.originalIncidentReceiptHash ||
+    receipt.teamId !== input.teamId ||
+    receipt.projectId !== input.projectId ||
+    receipt.candidateDeploymentId !== input.candidateDeploymentId ||
+    receipt.rollbackDeploymentId !== input.rollbackDeploymentId ||
+    typeof receipt.rollbackGitSha !== "string" ||
+    !/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/.test(receipt.rollbackGitSha) ||
+    receipt.rollbackGitSha !== rollbackGitSha ||
+    receipt.rollbackApprovalFingerprint !== input.rollbackApprovalFingerprint ||
+    typeof receipt.verifiedAt !== "string"
+  )
+    return null
+  const verifiedAt = new Date(receipt.verifiedAt)
+  if (
+    Number.isNaN(verifiedAt.getTime()) ||
+    verifiedAt.toISOString() !== receipt.verifiedAt
+  )
+    return null
+  return canonicalStoredRollbackReceipt(receipt as StoredRollbackReceipt) ===
+    snapshot.receiptText
+    ? (receipt as StoredRollbackReceipt)
+    : null
+}
+
+export async function writeRollbackReceipt(
+  notion: NotionClientLike,
+  input: RollbackInput,
+  receiptProperty: string,
+  result: RollbackResult
+): Promise<"written" | "already_written"> {
+  const snapshot = await retrieveRollbackApproval(
+    notion,
+    input.rollbackApprovalPageId,
+    receiptProperty
+  )
+  verifyRollbackApproval(snapshot, input, { requireRevision: false })
+  const encoded = canonicalStoredRollbackReceipt(rollbackReceipt(result))
+  if (encoded.length > 1_900) {
+    throw new SafetyError(
+      "RECEIPT_TOO_LARGE",
+      "The compact rollback receipt exceeds the Notion rich-text bound."
+    )
+  }
+  if (snapshot.receiptText) {
+    if (snapshot.receiptText === encoded) return "already_written"
+    throw new SafetyError(
+      "RECEIPT_OCCUPIED",
+      `${JSON.stringify(receiptProperty)} contains a different receipt.`
+    )
+  }
+  await notionRequest(() =>
+    notion.pages.update({
+      page_id: input.rollbackApprovalPageId,
+      properties: {
+        [receiptProperty]: {
+          rich_text: [{ type: "text", text: { content: encoded } }],
+        },
+      },
+    })
+  )
+  const readback = await retrieveRollbackApproval(
+    notion,
+    input.rollbackApprovalPageId,
+    receiptProperty
+  )
+  verifyRollbackApproval(readback, input, { requireRevision: true })
+  if (readback.receiptText !== encoded) {
+    throw new SafetyError(
+      "RECEIPT_READBACK_FAILED",
+      "Notion did not return the exact rollback receipt after writeback."
     )
   }
   return "written"

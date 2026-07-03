@@ -482,8 +482,8 @@
     },
     {
       "id": "vercel-promote-approved-deployment",
-      "title": "Vercel approved deployment promotion",
-      "summary": "Promote one exact Notion-approved staged Vercel deployment after revalidating release evidence, then reconcile production domains and record a resumable receipt.",
+      "title": "Vercel approved promotion and incident rollback",
+      "summary": "Use promoteApprovedDeployment for one exact Notion-approved staged Vercel release, or rollbackApprovedDeployment to restore its exact prior deployment only from a canonical failed-health incident and separate fresh approval, with durable one-POST fencing and resumable receipts.",
       "path": "workers/vercel-promote-approved-deployment",
       "kind": "worker-tool",
       "status": "ready",

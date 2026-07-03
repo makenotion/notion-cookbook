@@ -1,6 +1,7 @@
 import type {
   DeploymentCheckPolicy,
   PromoteInput,
+  RollbackInput,
   TargetPolicy,
   WorkerConfig,
 } from "./types.js"
@@ -12,8 +13,9 @@ import { SafetyError } from "./types.js"
 export const TEAM_ID = /^team_[A-Za-z0-9]{1,95}$/
 export const PROJECT_ID = /^prj_[A-Za-z0-9]{1,96}$/
 export const DEPLOYMENT_ID = /^dpl_[A-Za-z0-9]{1,96}$/
-const GIT_SHA = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/
-const FINGERPRINT = /^[0-9a-f]{64}$/
+export const GIT_SHA = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/
+export const FINGERPRINT = /^[0-9a-f]{64}$/
+export const PROMOTION_OPERATION_ID = /^vpa_[0-9a-f]{32}$/
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export const HOSTNAME =
   /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))+$/
@@ -301,6 +303,37 @@ export function loadConfig(env: Environment = process.env): WorkerConfig {
       "NOTION_PROMOTION_RECEIPT_PROPERTY must be at most 100 characters."
     )
   }
+  const rollbackReceiptProperty =
+    env.NOTION_ROLLBACK_RECEIPT_PROPERTY?.trim() || "Rollback receipt"
+  if (
+    rollbackReceiptProperty.length > 100 ||
+    /[\u0000-\u001f]/.test(rollbackReceiptProperty)
+  ) {
+    throw new SafetyError(
+      "CONFIGURATION",
+      "NOTION_ROLLBACK_RECEIPT_PROPERTY must be at most 100 characters."
+    )
+  }
+  const incidentProperty =
+    env.NOTION_PROMOTION_INCIDENT_PROPERTY?.trim() || "Promotion incident"
+  if (
+    incidentProperty.length > 100 ||
+    /[\u0000-\u001f]/.test(incidentProperty)
+  ) {
+    throw new SafetyError(
+      "CONFIGURATION",
+      "NOTION_PROMOTION_INCIDENT_PROPERTY must be at most 100 characters."
+    )
+  }
+  if (
+    new Set([receiptProperty, incidentProperty, rollbackReceiptProperty])
+      .size !== 3
+  ) {
+    throw new SafetyError(
+      "CONFIGURATION",
+      "Promotion receipt, promotion incident, and rollback receipt property names must be distinct."
+    )
+  }
 
   return {
     vercelToken: required(env, "VERCEL_ACCESS_TOKEN"),
@@ -308,6 +341,8 @@ export function loadConfig(env: Environment = process.env): WorkerConfig {
     redisToken: required(env, "UPSTASH_REDIS_REST_TOKEN"),
     protectionBypassSecret: env.VERCEL_PROTECTION_BYPASS_SECRET?.trim() || null,
     receiptProperty,
+    incidentProperty,
+    rollbackReceiptProperty,
     pollTimeoutMs: boundedInteger(
       env,
       "VERCEL_PROMOTION_POLL_TIMEOUT_MS",
@@ -413,9 +448,80 @@ export function validatePromoteInput(input: PromoteInput): void {
   exactString(input.expectedGitBranch, "expectedGitBranch")
 }
 
+export function validateRollbackInput(input: RollbackInput): void {
+  if (
+    typeof input.rollbackApprovalPageId !== "string" ||
+    !UUID.test(input.rollbackApprovalPageId)
+  ) {
+    throw new SafetyError(
+      "INVALID_INPUT",
+      "rollbackApprovalPageId must be a UUID."
+    )
+  }
+  if (
+    typeof input.promotionIncidentPageId !== "string" ||
+    !UUID.test(input.promotionIncidentPageId)
+  ) {
+    throw new SafetyError(
+      "INVALID_INPUT",
+      "promotionIncidentPageId must be a UUID."
+    )
+  }
+  if (
+    input.rollbackApprovalPageId.replaceAll("-", "").toLowerCase() ===
+    input.promotionIncidentPageId.replaceAll("-", "").toLowerCase()
+  ) {
+    throw new SafetyError(
+      "INVALID_INPUT",
+      "rollbackApprovalPageId must differ from promotionIncidentPageId."
+    )
+  }
+  exactString(input.rollbackApprovalRevision, "rollbackApprovalRevision", 100)
+  for (const [label, value] of [
+    ["rollbackApprovalFingerprint", input.rollbackApprovalFingerprint],
+    ["originalIncidentReceiptHash", input.originalIncidentReceiptHash],
+  ] as const) {
+    if (typeof value !== "string" || !FINGERPRINT.test(value)) {
+      throw new SafetyError(
+        "INVALID_INPUT",
+        `${label} must be a lowercase SHA-256 digest.`
+      )
+    }
+  }
+  if (!PROMOTION_OPERATION_ID.test(input.originalPromotionOperationId)) {
+    throw new SafetyError(
+      "INVALID_INPUT",
+      "originalPromotionOperationId must be a vpa_ operation ID."
+    )
+  }
+  if (!TEAM_ID.test(input.teamId) || !PROJECT_ID.test(input.projectId)) {
+    throw new SafetyError(
+      "INVALID_INPUT",
+      "teamId and projectId must be bounded Vercel IDs."
+    )
+  }
+  for (const [label, value] of [
+    ["candidateDeploymentId", input.candidateDeploymentId],
+    ["rollbackDeploymentId", input.rollbackDeploymentId],
+  ] as const) {
+    if (!DEPLOYMENT_ID.test(value)) {
+      throw new SafetyError(
+        "INVALID_INPUT",
+        `${label} must be a Vercel dpl_ ID.`
+      )
+    }
+  }
+  if (input.candidateDeploymentId === input.rollbackDeploymentId) {
+    throw new SafetyError(
+      "INVALID_INPUT",
+      "candidateDeploymentId and rollbackDeploymentId must differ."
+    )
+  }
+}
+
 export function findTargetPolicy(
   config: WorkerConfig,
-  input: PromoteInput
+  input: Pick<PromoteInput, "teamId" | "projectId">
 ): TargetPolicy {
   const policy = config.targets.find(
     (candidate) =>

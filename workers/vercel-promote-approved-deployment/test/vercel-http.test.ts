@@ -47,6 +47,150 @@ test("promotion uses the exact v10 endpoint and never sends a body", async () =>
   assert.equal(calls, 1)
 })
 
+test("rollback uses the exact v1 endpoint, fixed description, manual redirects, and no body", async () => {
+  let calls = 0
+  const fetchImpl = (async (
+    request: string | URL | Request,
+    init?: RequestInit
+  ) => {
+    calls++
+    assert.equal(
+      String(request),
+      "https://api.vercel.com/v1/projects/prj_checkout/rollback/dpl_previous?teamId=team_acme&description=Notion-approved%20incident%20rollback%20to%20dpl_previous"
+    )
+    assert.equal(init?.method, "POST")
+    assert.equal(init?.redirect, "manual")
+    assert.equal(init?.body, undefined)
+    assert.equal(
+      (init?.headers as Record<string, string>).Authorization,
+      "Bearer vercel-secret-token"
+    )
+    return new Response(null, { status: 201 })
+  }) as typeof fetch
+  assert.deepEqual(
+    await client(fetchImpl).requestRollback(
+      "team_acme",
+      "prj_checkout",
+      "dpl_previous"
+    ),
+    { status: 201 }
+  )
+  assert.equal(calls, 1)
+})
+
+test("rollback never retries any response and classifies the frozen definite set", async () => {
+  for (const status of [
+    200, 302, 307, 308, 400, 401, 402, 403, 404, 408, 409, 422, 429, 500,
+  ]) {
+    let calls = 0
+    const fetchImpl = (async () => {
+      calls++
+      return new Response('{"error":"provider-secret-detail"}', {
+        status,
+        headers: status === 429 ? { "retry-after": "9999" } : undefined,
+      })
+    }) as typeof fetch
+    await assert.rejects(
+      () =>
+        client(fetchImpl).requestRollback(
+          "team_acme",
+          "prj_checkout",
+          "dpl_previous"
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof VercelHttpError)
+        assert.equal(error.status, status)
+        assert.equal(
+          error.ambiguous,
+          ![400, 401, 402, 403, 422, 429].includes(status)
+        )
+        assert.ok((error.retryAfterMs ?? 0) <= 300_000)
+        assert.doesNotMatch(
+          error.message,
+          /provider-secret-detail|vercel-secret-token/
+        )
+        return true
+      }
+    )
+    assert.equal(calls, 1)
+  }
+})
+
+test("rollback transport loss is ambiguous with no hidden retry", async () => {
+  let calls = 0
+  const fetchImpl = (async () => {
+    calls++
+    throw new Error("socket reset with provider-secret-detail")
+  }) as typeof fetch
+  await assert.rejects(
+    () =>
+      client(fetchImpl).requestRollback(
+        "team_acme",
+        "prj_checkout",
+        "dpl_previous"
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof VercelHttpError)
+      assert.equal(error.status, null)
+      assert.equal(error.ambiguous, true)
+      assert.doesNotMatch(error.message, /provider-secret-detail/)
+      return true
+    }
+  )
+  assert.equal(calls, 1)
+})
+
+test("rolling-release read uses the documented ACTIVE query and 404 fails closed", async () => {
+  let calls = 0
+  const fetchImpl = (async (
+    request: string | URL | Request,
+    init?: RequestInit
+  ) => {
+    calls++
+    assert.equal(
+      String(request),
+      "https://api.vercel.com/v1/projects/prj_checkout/rolling-release?teamId=team_acme&state=ACTIVE"
+    )
+    assert.equal(init?.redirect, "manual")
+    return new Response(null, { status: 404 })
+  }) as typeof fetch
+  await assert.rejects(
+    () => client(fetchImpl).getRollingRelease("team_acme", "prj_checkout"),
+    (error: unknown) => error instanceof VercelHttpError && error.status === 404
+  )
+  assert.equal(calls, 1)
+})
+
+test("rolling-release read returns the strict provider wrapper", async () => {
+  const fetchImpl = (async () =>
+    new Response(JSON.stringify({ rollingRelease: null }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    })) as typeof fetch
+  assert.deepEqual(
+    await client(fetchImpl).getRollingRelease("team_acme", "prj_checkout"),
+    { rollingRelease: null }
+  )
+})
+
+test("rollback response-body disposal is bounded after headers", async () => {
+  const stalled = new ReadableStream({
+    cancel: () => new Promise<void>(() => undefined),
+  })
+  const fetchImpl = (async () =>
+    new Response(stalled, { status: 201 })) as typeof fetch
+  const started = Date.now()
+  assert.deepEqual(
+    await client(fetchImpl).requestRollback(
+      "team_acme",
+      "prj_checkout",
+      "dpl_previous"
+    ),
+    { status: 201 }
+  )
+  assert.ok(Date.now() - started < 1_000)
+})
+
 test("promotion never retries 401, 403, 429, or 5xx", async () => {
   for (const status of [401, 403, 429, 500]) {
     let calls = 0

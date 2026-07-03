@@ -1,4 +1,4 @@
-# Vercel approved deployment promotion
+# Vercel approved deployment promotion and incident rollback
 
 Promote one exact, staged Vercel production deployment only while its Notion
 approval, Git identity, current production owner, Deployment Checks, and fixed
@@ -6,10 +6,19 @@ health checks still match an operator-owned policy. The tool then reconciles
 the exact complete production-domain set and writes a compact receipt back to the
 approval page.
 
+If that candidate reaches production but a fixed post-promotion health check
+fails, `promoteApprovedDeployment` does **not** roll back. It persists a
+canonical `promotion_health_failed` incident on the original page and returns
+`rollback_recommended` with the exact candidate, exact prior deployment, both
+Git identities, bounded health evidence, and the complete alias state.
+`rollbackApprovedDeployment` is a separate tool with a separate fresh Notion
+approval, fingerprint, `vrb_` idempotency key, durable state machine, and
+receipt.
+
 This is a governed release outcome, not a convenience wrapper around
 `vercel promote`. It is deliberately unable to choose a deployment, accept a
-URL from an agent, bypass a failed check, rebuild, force, roll back, or retry an
-unobserved mutation.
+URL from an agent, bypass a failed check, rebuild, force, automatically roll
+back, or retry an unobserved mutation.
 
 ## When to use this tool
 
@@ -18,10 +27,17 @@ already-approved production cutover and return one durable, machine-readable
 result. The approval page and server-side allowlist remain authoritative; the
 agent repeats their exact values but cannot widen them.
 
-Do not use it for preview deployments, selecting a release candidate,
+Do not use either tool for preview deployments, selecting a release candidate,
 progressive or rolling releases, automatic rollback, or projects with more
 than 20 production domains. Those outcomes need separate review and a distinct
 tool contract.
+
+Use `rollbackApprovedDeployment` only after `promoteApprovedDeployment`
+returned `rollback_recommended`, the canonical incident is still present on
+the original page, and a human created and explicitly confirmed a separate
+rollback approval bound to that incident page and SHA-256 hash. The rollback
+target is never caller-selected: it is the exact prior deployment captured by
+the incident.
 
 Also do not use it for bulk promotions, long-running release orchestration or
 monitoring, actions that require the model to judge which candidate or risk is
@@ -38,6 +54,9 @@ Realistic requests that should trigger this tool are:
   deployment still match.”
 - “Resume operation `vpa_4bcbe90c4e39db80e8bdc41bc63a98d1`. Reconcile it;
   do not send another promotion request if the outcome is unknown.”
+- “The approved release failed its fixed production health check. Verify the
+  canonical incident and this separate rollback approval, then restore only the
+  exact prior deployment without repeating an uncertain request.”
 
 ## Why this Worker exists
 
@@ -58,11 +77,15 @@ For the agent, the positioning is:
 
 > Promote this exact Notion-approved staged Production deployment only while
 > its pinned release evidence remains valid, then return an authoritative,
-> resumable receipt.
+> resumable receipt. If that promotion creates a canonical failed-health
+> incident, use a separate fresh approval to restore only the incident-recorded
+> prior deployment and report whether Vercel accepted a request or restoration
+> was merely observed.
 
 For the maintainer, the boundary is equally important: keep provider reads,
 policy validation, the one-way mutation boundary, durable state, and receipt
-semantics separate. A raw `requestPromote` tool would not preserve the outcome.
+semantics separate for both capabilities. Raw `requestPromote` or
+`requestRollback` wrappers would not preserve either compound outcome.
 
 ## Safety contract
 
@@ -129,23 +152,101 @@ One call follows this sequence:
    success.
 9. Persist a non-expiring completed record and return the typed receipt.
 
-## Notion approval page
+On confirmed post-promotion health failure, step 8 instead re-observes the
+complete alias set, reads and validates the exact prior deployment and its Git
+identity, persists a durable recommendation, writes canonical incident JSON to
+the separate `Promotion incident` property, reads it back, and returns
+`rollback_recommended`. The promotion tool always reports
+`rollbackRequested=false`.
 
-Create these properties on the approval page's database. Names and types are
-part of the recipe contract.
+The separately confirmed rollback follows a new authority boundary:
 
-| Property                         | Type             | Required value                    |
-| -------------------------------- | ---------------- | --------------------------------- |
-| `Approval status`                | Status or select | Exactly `Approved`                |
-| `Approval revision`              | Rich text        | Immutable release revision token  |
-| `Vercel team ID`                 | Rich text        | Exact `team_...` ID               |
-| `Vercel project ID`              | Rich text        | Exact `prj_...` ID                |
-| `Vercel deployment ID`           | Rich text        | Exact staged `dpl_...` ID         |
-| `Git SHA`                        | Rich text        | Lowercase full 40- or 64-char SHA |
-| `Git branch`                     | Rich text        | Exact branch                      |
-| `Expected current deployment ID` | Rich text        | Exact current `dpl_...` ID        |
-| `Approval fingerprint`           | Rich text        | Canonical lowercase SHA-256       |
-| `Promotion receipt`              | Rich text        | Empty; Worker-owned               |
+1. Read the non-expiring promotion incident record and both Notion pages.
+2. Verify the fresh rollback revision/fingerprint binds the original `vpa_`
+   operation, incident page/hash, team/project, candidate, and prior target.
+   Candidate and prior Git identities are derived from the canonical incident,
+   then verified live; callers cannot supply substitute Git identities.
+3. Verify the complete production alias set still points unanimously to the
+   incident candidate and the prior target is the same team/project,
+   production, `READY`, canonically hosted, and healthy.
+4. Request
+   `GET /v1/projects/{projectId}/rolling-release?state=ACTIVE&teamId={teamId}`
+   and strictly parse the official `{ "rollingRelease": ... }` wrapper. A
+   successful response with `rollingRelease: null` or a terminal `ABORTED` or
+   `COMPLETED` state proves there is no active rollout. An `ACTIVE` object blocks
+   rollback; 404, any other read failure, malformed JSON, a missing wrapper, or
+   an unsupported state all fail closed.
+5. Under the exact project-wide lease used by promotion, inspect a separate,
+   non-expiring incident mutation claim keyed to the immutable incident,
+   project, candidate, and rollback target—not the rollback approval page or
+   revision. A prior accepted or outcome-unknown attempt makes every later
+   approval read-only. The claim may be re-armed for a new fresh approval only
+   after the preceding definite rejection is durably recorded, or after both
+   durable fences prove that incident-claim persistence failed before any
+   rollback request was dispatched.
+6. Repeat both pages and every mutable provider gate, then persist both the
+   incident claim and the per-approval `rollback_started` fence before issuing
+   at most one `POST /v1/projects/{projectId}/rollback/{deploymentId}` with a
+   fixed, Worker-generated description and manual redirects.
+7. After the durable boundary, every invocation is reconciliation-only. HTTP
+   201, documented rejections, 409, 429, redirects, unexpected 2xx, 5xx,
+   transport loss, and timeouts can never cause a second POST.
+8. Reconcile the exact full alias state and target health, then write/read back
+   the fresh rollback receipt. If restoration is observed after an ambiguous
+   response without a durably recorded HTTP 201, disposition is
+   `observed_restored` with `causality=observed_only`; the tool never invents
+   causal proof.
+
+The per-approval `vrb_` operation ID is therefore a receipt/replay identity,
+not the only mutation fence. Changing the rollback page, revision, or
+fingerprint cannot bypass an accepted or uncertain attempt for the same
+incident. A new approval can authorize another POST only after one of the
+closed definite-rejection statuses (400, 401, 402, 403, 422, or 429) and the
+incident claim records that rejection durably. The only other re-arm path is a
+durably classified `CLAIM_WRITE_FAILED` boundary: the operation fence exists,
+the sent claim never committed, and zero POSTs are proven. That approval stays
+reconciliation-only, while a genuinely new approval may re-arm. Unknown or
+partially persisted boundary histories remain read-only.
+
+Vercel exposes no rollback idempotency key or compare-and-swap condition on the
+current production deployment. The Redis lease serializes these two Worker
+tools, not dashboard, CLI, or unrelated API writers. Immediate revalidation
+reduces that exposure but cannot eliminate it; receipts explicitly retain this
+residual no-CAS race and never promise absolute no-clobber or exactly-once
+provider execution. The cross-approval incident claim prevents this Worker
+from blindly repeating its own uncertain request; it does not make Vercel's
+mutation conditional or fence external writers. Successful Vercel rollback also restores historical
+deployment configuration/cron behavior and disables automatic production-domain
+assignment, so operators must account for those provider semantics.
+
+## Notion approval pages
+
+The tools have separate input schemas and use separate approval pages. Do not
+put the union of both tools' fields on every page: the promotion page uses the
+first table, while the fresh rollback page uses the second. Property-name
+environment variables only rename Worker-owned rich-text properties; they do
+not make a property optional when its corresponding workflow path is used.
+
+Create these properties on the promotion approval page's database. The
+`Promotion receipt` property is required by `promoteApprovedDeployment`.
+`Promotion incident` is required only when enabling the canonical
+failed-health handoff to `rollbackApprovedDeployment`; without it, a failed
+post-promotion health check cannot produce usable rollback authority. Rollback
+approval fields and `Rollback receipt` do not belong on this page.
+
+| Property                         | Type             | Required value                       |
+| -------------------------------- | ---------------- | ------------------------------------ |
+| `Approval status`                | Status or select | Exactly `Approved`                   |
+| `Approval revision`              | Rich text        | Immutable release revision token     |
+| `Vercel team ID`                 | Rich text        | Exact `team_...` ID                  |
+| `Vercel project ID`              | Rich text        | Exact `prj_...` ID                   |
+| `Vercel deployment ID`           | Rich text        | Exact staged `dpl_...` ID            |
+| `Git SHA`                        | Rich text        | Lowercase full 40- or 64-char SHA    |
+| `Git branch`                     | Rich text        | Exact branch                         |
+| `Expected current deployment ID` | Rich text        | Exact current `dpl_...` ID           |
+| `Approval fingerprint`           | Rich text        | Canonical lowercase SHA-256          |
+| `Promotion receipt`              | Rich text        | Empty; Worker-owned                  |
+| `Promotion incident`             | Rich text        | Empty; Worker-owned rollback handoff |
 
 The fingerprint is SHA-256 over this exact compact JSON field order:
 
@@ -173,6 +274,43 @@ Worker's exact field order before hashing. Writing a receipt changes Notion's
 `last_edited_time`, so replay safety uses the explicit `Approval revision`
 property instead.
 
+To enable `rollbackApprovedDeployment`, create a separate rollback approval
+page/database with these exact properties. All fields in this table are
+required for that tool, and none is required by a promotion-only deployment.
+The original promotion page remains the source of the canonical incident.
+
+| Property                           | Type             | Required value                      |
+| ---------------------------------- | ---------------- | ----------------------------------- |
+| `Rollback approval status`         | Status or select | Exactly `Approved`                  |
+| `Rollback approval revision`       | Rich text        | New immutable rollback revision     |
+| `Original promotion operation ID`  | Rich text        | Exact incident `vpa_...` ID         |
+| `Promotion incident page ID`       | Rich text        | Original promotion page UUID        |
+| `Original incident receipt hash`   | Rich text        | Canonical incident SHA-256          |
+| `Rollback Vercel team ID`          | Rich text        | Exact incident `team_...` ID        |
+| `Rollback Vercel project ID`       | Rich text        | Exact incident `prj_...` ID         |
+| `Rollback candidate deployment ID` | Rich text        | Exact unhealthy candidate `dpl_...` |
+| `Rollback target deployment ID`    | Rich text        | Exact incident prior `dpl_...` ID   |
+| `Rollback approval fingerprint`    | Rich text        | Canonical lowercase SHA-256         |
+| `Rollback receipt`                 | Rich text        | Empty; Worker-owned                 |
+
+The rollback fingerprint hashes this exact compact field order. Both Git
+identities are already inside the hash-bound incident and intentionally are
+not caller inputs:
+
+```json
+{
+  "approvalStatus": "Approved",
+  "approvalRevision": "rollback-42-r1",
+  "originalPromotionOperationId": "vpa_11111111111111111111111111111111",
+  "promotionIncidentPageId": "11111111-1111-4111-8111-111111111111",
+  "originalIncidentReceiptHash": "replace-with-64-char-incident-hash",
+  "teamId": "team_example",
+  "projectId": "prj_example",
+  "candidateDeploymentId": "dpl_candidate",
+  "rollbackDeploymentId": "dpl_previous"
+}
+```
+
 ## Vercel and Redis prerequisites
 
 Use a dedicated Vercel automation identity. On Enterprise, prefer a
@@ -196,13 +334,22 @@ token is a coordination credential, not an agent input. The Worker uses:
 
 - `SET key token NX PX ttl` for the project-wide lease;
 - token-checked Lua `PEXPIRE` and `DEL` for renewal and release;
-- a stable operation key derived from the approval and target identities;
+- a per-approval operation key for each promotion or rollback receipt/replay;
+- a separate non-expiring rollback incident mutation claim whose identity does
+  not change with a new rollback approval page or revision;
 - expiring prepared records, plus non-expiring records after the mutation
   boundary and for completed operations.
 
 If Redis is unavailable, acquisition or renewal fails closed before any new
 mutation. A provider/Notion reconstruction path can restore a missing
 completed record without another POST.
+
+The incident mutation claim is re-armed only when the previous attempt's
+definite rejection is itself durable or when a durable `CLAIM_WRITE_FAILED`
+record proves the sent claim never committed and no request was dispatched. An
+accepted response, ambiguous response, transport loss, unclassified persistence
+loss after the boundary, or unknown claim state can only reconcile; a new
+approval identity cannot unlock another POST.
 
 The lease TTL is longer than the worst uninterrupted bounded preflight. The
 Worker renews before and after durable record writes, after `mutation_started`
@@ -247,13 +394,19 @@ ntn workers env set VERCEL_PROTECTION_BYPASS_SECRET=replace-with-bypass-secret
 
 Optional settings are:
 
-| Variable                                 | Default            | Bound                   |
-| ---------------------------------------- | ------------------ | ----------------------- |
-| `NOTION_PROMOTION_RECEIPT_PROPERTY`      | Receipt name above | 100 chars               |
-| `VERCEL_PROMOTION_POLL_TIMEOUT_MS`       | `90000`            | 5,000–90,000 ms         |
-| `VERCEL_PROMOTION_LEASE_TTL_MS`          | `120000`           | 90,000–300,000 ms       |
-| `VERCEL_PROMOTION_OPERATION_TTL_SECONDS` | `604800`           | 1 hour–30 days prepared |
-| `VERCEL_PROMOTION_CHECK_MAX_AGE_MS`      | `3600000`          | 1 minute–1 hour         |
+| Variable                                 | Default              | Bound                   |
+| ---------------------------------------- | -------------------- | ----------------------- |
+| `NOTION_PROMOTION_RECEIPT_PROPERTY`      | `Promotion receipt`  | 100 chars               |
+| `NOTION_PROMOTION_INCIDENT_PROPERTY`     | `Promotion incident` | 100 chars               |
+| `NOTION_ROLLBACK_RECEIPT_PROPERTY`       | `Rollback receipt`   | 100 chars               |
+| `VERCEL_PROMOTION_POLL_TIMEOUT_MS`       | `90000`              | 5,000–90,000 ms         |
+| `VERCEL_PROMOTION_LEASE_TTL_MS`          | `120000`             | 90,000–300,000 ms       |
+| `VERCEL_PROMOTION_OPERATION_TTL_SECONDS` | `604800`             | 1 hour–30 days prepared |
+| `VERCEL_PROMOTION_CHECK_MAX_AGE_MS`      | `3600000`            | 1 minute–1 hour         |
+
+The incident and rollback-receipt overrides are relevant only when the rollback
+handoff is enabled. Their named Notion properties must still exist and be
+empty before their respective first write.
 
 The JSON policy allows 1–20 team/project pairs. `team_`, `prj_`, and `dpl_`
 identifiers are capped at 100 characters including their prefix. Each policy allows 1–20
@@ -319,12 +472,24 @@ Paste the following instruction into the Custom Agent:
 When a user asks to promote a Vercel release, first read the referenced Notion approval page. Extract Approval revision, Approval fingerprint, Vercel team ID, Vercel project ID, Vercel deployment ID, Git SHA, Git branch, and Expected current deployment ID exactly; never normalize, shorten, infer, or substitute them. Summarize the candidate deployment, SHA/branch, expected current deployment, and approval revision, then obtain explicit user confirmation before calling promoteApprovedDeployment. Call the tool at most once for that confirmation. Do not call when Approval status is not exactly Approved, a required field is missing, the user asks you to choose a deployment, the request is for preview/rollback/force/rolling release, or confirmation is absent. Interpret every non-success receipt from retryable, retryAfterMs, and repairInstruction rather than from the status name alone. If retryable is true, explain the receipt, wait at least retryAfterMs when present, and call again with the exact same nine inputs only after the user explicitly asks to resume. If retryable is false, do not repeat the call until a human completes repairInstruction and explicitly confirms a new call; treat conflict as terminal and require a new approval for any new promotion. Retain resumeToken only as correlation evidence. Never pass resumeToken as a tool argument, change an approval revision to bypass a result, or invoke another Vercel mutation tool for the same release.
 ```
 
+Add this rollback-specific instruction immediately after it:
+
+```text
+When promoteApprovedDeployment returns rollback_recommended, explain that no rollback occurred and show the exact candidate, prior deployment, bounded failed-health evidence, complete alias state, incident page/hash, and residual no-CAS race. Never call rollbackApprovedDeployment from that receipt alone. Require a separate active Notion rollback page whose exact revision and fingerprint bind the original promotion operation, incident page/hash, team/project, candidate, and prior target; summarize those values and obtain a new explicit user confirmation. Call rollbackApprovedDeployment at most once for that confirmation with its exact ten inputs. Never supply or choose Git identity: the Worker derives both identities from the canonical incident and verifies them live. On retryable output, resume only the identical vrb_ operation and honor resumeMode; reconcile_only and receipt_only can never issue another POST. A different approval page or revision cannot bypass the incident mutation claim after an accepted or outcome-unknown request. Authorize a new attempt only when the Worker explicitly permits a fresh approval after either a durable definite rejection or a durable pre-request claim-write failure proving zero POSTs. Interpret requestDisposition=accepted as a durably observed HTTP 201, outcome_unknown as a sent request without response-level causal proof, and not_sent as zero rollback POSTs. A completed not_sent result is fresh adoption of an already-restored target; it returns completed, while no_op is reserved for a completed replay. Always disclose residualRaceWarning; the incident claim fences this Worker, not dashboard, CLI, or unrelated API writers, so never claim absolute no-clobber or exactly-once rollback.
+```
+
 The agent should read the approval page, repeat the exact nine inputs, call the
 tool once after user confirmation, and interpret the structured receipt. It
 must reuse the same nine inputs for reconciliation; `resumeToken` is output-only
 correlation evidence, not an accepted argument. It must branch on `retryable`
 for every status and never invent a new revision to work around a blocked
 result.
+
+The rollback tool has its own ten-field input schema. Promotion-only fields such
+as Git identity are not optional rollback inputs; they are absent because the
+Worker derives them from the incident. Conversely, rollback incident and fresh
+approval fields are not accepted by `promoteApprovedDeployment`. Follow the
+published schema for the selected tool rather than constructing a union object.
 
 For a sandbox-only live smoke test, create a local environment file and keep it
 out of deployed Worker state:
@@ -372,14 +537,49 @@ unset NOTION_API_TOKEN
 rm -f .env packet.json
 ```
 
-This Worker never performs cleanup or rollback.
+Neither tool performs cleanup. Only `rollbackApprovedDeployment` performs
+rollback, and only through the separate fresh authority and one-POST contract
+above; promotion never invokes it automatically.
 
 ## Receipt contract
 
-Every returned object includes `ok`, `idempotencyKey`, `changed`, `replay`,
-`preconditionsVerified`, canonical `records` with IDs/URLs/actions, per-step
-`steps`, `warnings`, `retryable`, `retryAfterMs`, `resumeToken`, and
-`repairInstruction`, plus the verified Vercel and approval identities.
+The two tools publish separate strict output schemas; their fields are not one
+large optional union. Both identify the exact operation, approval, Vercel
+project, live deployment/domain evidence, completion state, and safe next
+action.
+
+- Promotion output owns `promotionRequested`, canonical `records`, promotion
+  `steps`, `retryAfterMs`, Deployment Check identity, bounded `healthFailure`,
+  `incidentReceiptHash`, and `rollbackRequested=false` on a recommendation.
+- Rollback output owns `rollbackRequested`, `requestDisposition`, `causality`,
+  `disposition`, `rollbackRequestAccepted`, rollback `steps`, `resumeMode`, the
+  original incident identifiers, exact full `aliasState`, and
+  `residualRaceWarning`.
+
+Fields belonging to the other tool are not optional caller inputs and should
+not be synthesized. In particular, rollback Git identity comes from the
+canonical incident rather than the rollback caller.
+
+The compact canonical rollback receipt separates restored state from request
+causality. Its `status` is always `restored` after exact aliases and target
+health are verified. `requestDisposition` has exactly these meanings:
+
+| `requestDisposition` | Meaning                                                                                           |
+| -------------------- | ------------------------------------------------------------------------------------------------- |
+| `accepted`           | This operation durably observed Vercel HTTP 201 for its sole POST.                                |
+| `outcome_unknown`    | The sole POST had no durable accepted response, but exact live state was later observed restored. |
+| `not_sent`           | A fresh approved operation found the exact healthy target already restored and sent zero POSTs.   |
+
+The public rollback result mirrors that distinction:
+`requestDisposition=accepted` is the only case with
+`rollbackRequestAccepted=true` and `causality=provider_accepted`.
+For a completed restoration, `outcome_unknown` and `not_sent` use
+`causality=observed_only`; neither claims which external action caused
+restoration. A preflight-blocked zero-POST result can also be `not_sent` but has
+no restored receipt or causal claim. A fresh completed `not_sent` adoption
+writes/reads back its own canonical receipt and returns `status=completed`,
+`replay=false`, and `changed=false`. `status=no_op` is reserved for a later
+read-only replay of an already-completed operation and its matching receipt.
 
 Example request:
 
@@ -532,6 +732,18 @@ arbitrary response text never appear in output or logs.
   one, fresh Deployment Check evidence is also required before the Worker may
   write a replacement receipt. Non-canonical or occupied receipt content fails
   closed without POST.
+- Rollback uses its incident mutation claim across approval identities. An
+  accepted or uncertain attempt under approval A prevents approval B from
+  sending another POST for the same incident. A durable definite rejection, or
+  a durable claim-write failure that proves zero POSTs, permits a separately
+  approved re-arm; an unavailable or contradictory claim fails closed.
+- Fresh already-restored rollback authority is adopted as a new `completed`
+  operation with `requestDisposition=not_sent`. Only subsequent verification of
+  that completed operation returns `no_op`.
+- A canonical rollback receipt always records `status=restored`; its
+  `requestDisposition` preserves whether the request was accepted, had an
+  unknown outcome, or was not sent. Receipt replay never upgrades
+  `outcome_unknown` or `not_sent` into provider-accepted causality.
 
 External dashboard, CLI, and unrelated credentials do not participate in the
 Redis lease. The Worker therefore re-reads approval and Vercel state immediately
@@ -550,11 +762,27 @@ before mutation and treats any later divergence as a conflict or partial state.
 | The promotion response times out or the socket resets                                                 | One POST maximum, then reads                          | `completed` if observed; otherwise `ambiguous`                              | Retain the token as correlation evidence and resume with the same nine inputs  |
 | Production aliases split                                                                              | No second POST                                        | `partial_failure`                                                           | Repair Vercel alias state manually, then resume reconciliation                 |
 | Another deployment owns all domains                                                                   | No second POST                                        | `conflict`                                                                  | Investigate the external promotion and require a new approval for a new action |
-| Candidate owns production but final health or verification fails                                      | No second POST                                        | `partial_failure`, `changed=true`                                           | Do not promote again; investigate the incident, then resume read-only checks   |
+| Candidate owns production but fixed post-promotion health fails                                       | No second promotion POST; zero rollback POSTs         | `rollback_recommended`, canonical incident, `changed=true`                  | Create a separate fresh rollback approval or investigate without mutation      |
 | Promotion converges but Notion write or readback fails                                                | No second POST                                        | `partial_failure`, durable `receipt_pending`                                | Resume; the Worker writes and verifies only the receipt                        |
 | Receipt/provider confirmation succeeds but final Redis completion write fails                         | No second POST                                        | `partial_failure`, `receiptWritten=true`                                    | Restore Redis and resume; never promote again                                  |
 | A completed replay observes rollback or receipt removal                                               | Zero POST                                             | Live `conflict`, or verified receipt repair                                 | Investigate rollback; never reuse the completed approval for another promote   |
 | A receipt-only resume succeeds                                                                        | Zero POST                                             | `completed`, `receiptWritten=true`                                          | No further action; later calls are `no_op`                                     |
+
+Rollback-specific outcomes:
+
+| Scenario                                                                                | Mutation behavior                                         | Typed outcome                                                                |
+| --------------------------------------------------------------------------------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Approval/incident/Git/health/rolling-release gate fails                                 | Zero rollback POSTs                                       | `blocked`, `resumeMode=none`                                                 |
+| Exact target is already current for a fresh approval                                    | Zero rollback POSTs                                       | `completed`, `requestDisposition=not_sent`, `replay=false`                   |
+| HTTP 201 and exact target converges healthy                                             | Exactly one rollback POST                                 | `completed`, `requestDisposition=accepted`, `rollbackRequestAccepted=true`   |
+| Response is lost but target converges healthy                                           | Exactly one rollback POST                                 | `completed`, `requestDisposition=outcome_unknown`, `causality=observed_only` |
+| A later approval follows an accepted or uncertain attempt for the incident              | Zero additional rollback POSTs                            | `blocked`; resume the incident-owning operation read-only                    |
+| A prior attempt has a durably recorded definite rejection and a new approval re-arms it | At most one new rollback POST                             | New per-approval operation, still fenced by the same incident claim          |
+| Sent-claim persistence durably fails before dispatch; a new approval re-arms it         | Zero POSTs for the failed approval; at most one for new   | Failed approval stays read-only; new approval gets a newly fenced attempt    |
+| Candidate remains after rejection/uncertain response                                    | Exactly one rollback POST, never repeated by that attempt | `blocked` for durable 400/401/402/403/422/429; otherwise `ambiguous`         |
+| Aliases split or a third deployment owns all domains                                    | Zero POST before mutation, or no second POST after it     | `partial_failure` or `conflict` with exact `aliasState`                      |
+| Target converges but Notion receipt fails                                               | No second rollback POST                                   | `partial_failure`, `resumeMode=receipt_only`                                 |
+| Completed rollback operation is called again                                            | Zero rollback POSTs                                       | `no_op`, `replay=true`, stored `requestDisposition` preserved                |
 
 ## Staged deployment caveat and sandbox qualification
 
@@ -594,12 +822,14 @@ qualification when changing check providers or Vercel project behavior.
 | `src/redis.ts`    | REST operation records and token-owned lease        |
 | `src/vercel.ts`   | Fixed-origin API client, gates, health, observation |
 | `src/promote.ts`  | Durable state machine and receipt semantics         |
+| `src/rollback.ts` | Separately approved one-POST rollback state machine |
 | `src/types.ts`    | Typed provider, operation, and public contracts     |
 | `test/`           | Deterministic mocked API and reliability cases      |
 
-Keep new release outcomes separate. For example, a rolling release or automatic
-rollback changes authority, concurrency, and receipt semantics and should not
-be added as a mode flag. If Vercel adds operation IDs or conditional promotion,
+Keep new release outcomes separate. Rolling release and automatic rollback
+remain out of scope; rollback is a distinct tool, approval, operation key, and
+receipt rather than a promotion mode flag. If Vercel adds operation IDs or
+conditional mutation,
 adopt them without removing the current project-wide lease and pre-mutation
 revalidation until their concurrency guarantees are explicit.
 
@@ -616,7 +846,7 @@ npm test
 npm run build
 ```
 
-Tests cover strict schemas, typed validation failures, all six receipt statuses,
+Tests cover strict schemas, typed validation failures, promotion and rollback receipt statuses,
 approval drift, allowlist and identity failures, stale/failed/missing checks,
 post-promotion health incidents, final provider drift, Redis
 acquisition/contention/expiry/ownership and overlap fencing, provider
@@ -624,6 +854,15 @@ acquisition/contention/expiry/ownership and overlap fencing, provider
 conflicts, completed-record rollback and receipt removal, lost operation
 records, receipt-only resume, Notion write failure/readback, hard bounds,
 malicious inputs, and credential/error redaction.
+Rollback coverage includes fresh authority, incident/Git binding, exact one-POST
+fencing within and across approval identities, accepted and lost responses,
+400/401/402/403/409/422/429/5xx, durable definite-rejection re-arming,
+redirects, candidate-unchanged/split/third-deployment observations, unhealthy
+targets, the official rolling-release wrapper and ACTIVE query, fail-closed 404
+and malformed rolling-release responses, fresh already-restored adoption versus
+completed replay, canonical restored receipts and all three request
+dispositions, receipt-only recovery, lost completed records, manual redirects,
+fixed descriptions, and explicit no-CAS language.
 
 ## Official references
 
@@ -633,6 +872,8 @@ API and native-workflow audit date: **2026-07-03**.
 - [Vercel MCP overview and authorization](https://vercel.com/docs/agent-resources/vercel-mcp)
 - [Point production traffic to a deployment](https://vercel.com/docs/rest-api/projects/point-production-traffic-to-a-given-deployment)
 - [Get a project](https://vercel.com/docs/rest-api/projects/find-a-project-by-id-or-name)
+- [Rollback a project to a previous deployment](https://vercel.com/docs/rest-api/reference/endpoints/projects/rollback-a-project-to-a-previous-deployment)
+- [Get the active rolling release information for a project](https://vercel.com/docs/rest-api/rolling-release/get-the-active-rolling-release-information-for-a-project)
 - [Get a deployment](https://vercel.com/docs/rest-api/deployments/get-a-deployment-by-id-or-url)
 - [List project checks](https://vercel.com/docs/rest-api/checks-v2/list-all-checks-for-a-project)
 - [List deployment check runs](https://vercel.com/docs/rest-api/checks-v2/list-check-runs-for-a-deployment)

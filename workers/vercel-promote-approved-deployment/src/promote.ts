@@ -1,8 +1,11 @@
 import {
+  canonicalPromotionIncidentJson,
   matchingStoredReceipt,
   operationIdentity,
+  promotionIncidentReceiptHash,
   retrieveApproval,
   verifyApproval,
+  writePromotionIncidentReceipt,
   writePromotionReceipt,
 } from "./approval.js"
 import {
@@ -15,6 +18,7 @@ import {
 } from "./config.js"
 import type {
   OperationRecord,
+  HealthFailureEvidence,
   PromoteInput,
   PromotionObservation,
   PromotionResult,
@@ -24,6 +28,7 @@ import type {
   WorkerConfig,
 } from "./types.js"
 import {
+  HealthCheckFailure,
   isDefinitePromotionRejectionStatus,
   SafetyError,
   VercelHttpError,
@@ -34,6 +39,7 @@ import {
   ProjectAliasSetMismatchError,
   verifyDeploymentChecks,
   verifyPromotedDeploymentIdentity,
+  verifyRollbackTarget,
   verifyStagedDeployment,
 } from "./vercel.js"
 
@@ -65,10 +71,21 @@ function resultFor(options: {
   repairInstruction?: string | null
   preconditionsVerified?: boolean
   changed?: boolean
+  healthFailure?: HealthFailureEvidence | null
+  incidentReceiptHash?: string | null
+  freshApprovalInstruction?: string | null
+  rollbackTargetGitSha?: string | null
+  rollbackTargetGitBranch?: string | null
 }): PromotionResult {
   const { input, policy } = options
   const productionDomains =
     options.productionDomains ?? policy.productionDomains
+  const aliasState = productionDomains.map((domain) => ({
+    domain,
+    deploymentId: options.domainDeploymentIds
+      ? (options.domainDeploymentIds[domain] ?? null)
+      : (options.currentDeploymentId ?? null),
+  }))
   if (
     (options.deploymentUrl !== undefined &&
       options.deploymentUrl !== null &&
@@ -95,7 +112,8 @@ function resultFor(options: {
     options.changed ??
     (options.status === "completed"
       ? options.promotionRequested
-      : options.status === "partial_failure" &&
+      : (options.status === "partial_failure" ||
+          options.status === "rollback_recommended") &&
         (options.completedAt != null ||
           options.currentDeploymentId === input.deploymentId))
   const retryable =
@@ -219,15 +237,20 @@ function resultFor(options: {
   const warnings =
     options.status === "ambiguous"
       ? ["Promotion outcome is unknown; never issue an unobserved retry."]
-      : options.status === "partial_failure"
+      : options.status === "rollback_recommended"
         ? [
-            "Some terminal work remains; retain the resume token as correlation evidence.",
+            "Post-promotion health failed; rollback requires a separate fresh Notion approval and a separate tool call.",
+            "Vercel exposes no compare-and-swap guard; state is revalidated immediately before rollback but a residual external race remains.",
           ]
-        : options.status === "conflict"
+        : options.status === "partial_failure"
           ? [
-              "Live production state conflicts with this operation's expected state.",
+              "Some terminal work remains; retain the resume token as correlation evidence.",
             ]
-          : []
+          : options.status === "conflict"
+            ? [
+                "Live production state conflicts with this operation's expected state.",
+              ]
+            : []
   const result: PromotionResult = {
     ok,
     operationId: options.operationId,
@@ -260,9 +283,24 @@ function resultFor(options: {
     checkNames: policy.deploymentChecks.map((check) => check.name ?? check.id),
     healthPaths: [...policy.healthPaths],
     productionDomains: [...productionDomains],
+    aliasState,
+    healthFailure: options.healthFailure ?? null,
+    rollbackRequested: false,
+    incidentReceiptHash: options.incidentReceiptHash ?? null,
+    freshApprovalInstruction: options.freshApprovalInstruction ?? null,
+    rollbackTargetGitSha: options.rollbackTargetGitSha ?? null,
+    rollbackTargetGitBranch: options.rollbackTargetGitBranch ?? null,
+    residualRaceWarning:
+      "Vercel exposes no provider compare-and-swap precondition; the project lease coordinates this Worker only, so dashboard, CLI, and other API writers can still race after the final read.",
     startedAt: options.startedAt,
     completedAt: options.completedAt ?? null,
     message: options.message,
+  }
+  if (
+    result.status === "rollback_recommended" &&
+    result.incidentReceiptHash === null
+  ) {
+    result.incidentReceiptHash = promotionIncidentReceiptHash(result)
   }
   assertPromotionResultSemantics(result)
   return result
@@ -281,11 +319,37 @@ export function assertPromotionResultSemantics(result: PromotionResult): void {
     (!result.ok && result.repairInstruction === null) ||
     result.retryable !== (result.resumeToken !== null) ||
     result.steps.length !== 5 ||
-    result.records.length < 3
+    result.records.length < 3 ||
+    (result.receiptWritten
+      ? result.records[0]?.action !== "receipt_written"
+      : result.records[0]?.action === "receipt_written")
   ) {
     throw new SafetyError(
       "RECEIPT_SEMANTICS",
       "The public receipt fields are internally inconsistent."
+    )
+  }
+  if (
+    result.rollbackRequested ||
+    (result.status === "rollback_recommended" &&
+      (!result.healthFailure ||
+        !result.incidentReceiptHash ||
+        result.retryable ||
+        !result.changed ||
+        result.currentDeploymentId !== result.deploymentId ||
+        result.freshApprovalInstruction === null ||
+        result.rollbackTargetGitSha === null ||
+        result.rollbackTargetGitBranch === null)) ||
+    (result.status !== "rollback_recommended" &&
+      (result.healthFailure !== null ||
+        result.incidentReceiptHash !== null ||
+        result.freshApprovalInstruction !== null ||
+        result.rollbackTargetGitSha !== null ||
+        result.rollbackTargetGitBranch !== null))
+  ) {
+    throw new SafetyError(
+      "RECEIPT_SEMANTICS",
+      "The rollback recommendation fields are internally inconsistent."
     )
   }
 }
@@ -554,6 +618,128 @@ async function persistPostTargetIncident(
   }
 }
 
+async function persistRollbackRecommendation(
+  record: OperationRecord,
+  observation: PromotionObservation,
+  healthFailure: HealthFailureEvidence,
+  lease: LeaseIdentity,
+  config: WorkerConfig,
+  dependencies: RuntimeDependencies
+): Promise<PromotionResult> {
+  await ensureLease(lease.key, lease.token, config, dependencies)
+  const rollbackTarget = await dependencies.vercel.getDeployment(
+    record.input.teamId,
+    record.input.expectedCurrentDeploymentId
+  )
+  await ensureLease(lease.key, lease.token, config, dependencies)
+  const rollbackGitSha = rollbackTarget.gitSource?.sha
+  const rollbackGitBranch = rollbackTarget.gitSource?.ref
+  if (!rollbackGitSha || !rollbackGitBranch) {
+    throw new SafetyError(
+      "ROLLBACK_TARGET_GIT_MISSING",
+      "The exact prior deployment has no bounded Git identity for a fresh rollback approval."
+    )
+  }
+  verifyRollbackTarget({
+    project: observation.project,
+    deployment: rollbackTarget,
+    teamId: record.input.teamId,
+    projectId: record.input.projectId,
+    deploymentId: record.input.expectedCurrentDeploymentId,
+    expectedGitSha: rollbackGitSha,
+    expectedGitBranch: rollbackGitBranch,
+  })
+  const observedAt = iso(dependencies)
+  let recommendation = resultFor({
+    operationId: record.operationId,
+    status: "rollback_recommended",
+    input: record.input,
+    policy: record.policy,
+    startedAt: record.createdAt,
+    completedAt: observedAt,
+    promotionRequested: record.mutationAttempts > 0,
+    receiptWritten: false,
+    currentDeploymentId: record.input.deploymentId,
+    productionDomains: observation.productionDomains,
+    domainDeploymentIds: observation.domainDeploymentIds,
+    deploymentUrl: observation.deployment.url ?? null,
+    changed: true,
+    retryable: false,
+    healthFailure,
+    rollbackTargetGitSha: rollbackGitSha,
+    rollbackTargetGitBranch: rollbackGitBranch,
+    freshApprovalInstruction:
+      "Create a new Notion rollback approval that binds this promotion incident page and hash, the exact candidate and prior deployment, and the incident-recorded rollback Git identity; then explicitly confirm rollbackApprovedDeployment.",
+    repairInstruction:
+      "Do not promote or roll back automatically. Obtain the separately fingerprinted fresh Notion rollback approval described in freshApprovalInstruction.",
+    message:
+      "Production is unanimously on the approved candidate, but a fixed post-promotion health check failed. A separate fresh rollback approval is required; no rollback was requested.",
+  })
+  record.state = "mutation_unknown"
+  record.lastIssue = "POST_PROMOTION_HEALTH_FAILED"
+  record.result = recommendation
+  await saveRecord(record, config, dependencies, lease)
+
+  try {
+    await writePromotionIncidentReceipt(
+      dependencies.notion,
+      record.input,
+      config.incidentProperty ?? "Promotion incident",
+      recommendation
+    )
+  } catch (error) {
+    const code =
+      error instanceof SafetyError ? error.code : "INCIDENT_WRITE_FAILED"
+    const pending = resultFor({
+      operationId: record.operationId,
+      status: "partial_failure",
+      input: record.input,
+      policy: record.policy,
+      startedAt: record.createdAt,
+      completedAt: observedAt,
+      promotionRequested: record.mutationAttempts > 0,
+      receiptWritten: false,
+      currentDeploymentId: record.input.deploymentId,
+      productionDomains: observation.productionDomains,
+      domainDeploymentIds: observation.domainDeploymentIds,
+      deploymentUrl: observation.deployment.url ?? null,
+      changed: true,
+      repairInstruction:
+        "Do not promote or roll back. Restore the Notion incident property, then resume this exact promotion operation only to persist the canonical incident receipt.",
+      message: `The health incident is durable in coordination state, but its canonical Notion incident receipt is pending (${code}).`,
+    })
+    record.result = recommendation
+    try {
+      await saveRecord(record, config, dependencies, lease)
+    } catch {
+      /* original durable recommendation remains */
+    }
+    return pending
+  }
+  recommendation = {
+    ...recommendation,
+    receiptWritten: true,
+    records: recommendation.records.map((receiptRecord, index) =>
+      index === 0
+        ? { ...receiptRecord, action: "receipt_written" as const }
+        : receiptRecord
+    ),
+  }
+  assertPromotionResultSemantics(recommendation)
+  record.result = recommendation
+  try {
+    await saveRecord(record, config, dependencies, lease)
+  } catch (error) {
+    const code =
+      error instanceof SafetyError ? error.code : "COORDINATION_UNAVAILABLE"
+    return {
+      ...recommendation,
+      message: `${recommendation.message} The canonical Notion incident is confirmed, but its final Redis update failed (${code}); do not promote or roll back without the fresh approval bound to this incident hash.`,
+    }
+  }
+  return recommendation
+}
+
 async function persistConfirmedCompletion(
   record: OperationRecord,
   completed: PromotionResult,
@@ -729,10 +915,42 @@ async function finishPromotion(
   dependencies: RuntimeDependencies
 ): Promise<PromotionResult> {
   await ensureLease(lease.key, lease.token, config, dependencies)
-  await dependencies.vercel.checkHealth(
-    observation.deployment.url!,
-    record.policy.healthPaths
-  )
+  try {
+    await dependencies.vercel.checkHealth(
+      observation.deployment.url!,
+      record.policy.healthPaths
+    )
+  } catch (error) {
+    if (!(error instanceof HealthCheckFailure)) throw error
+    await ensureLease(lease.key, lease.token, config, dependencies)
+    const incidentObservation = await observePromotion(
+      dependencies.vercel,
+      record.policy,
+      record.input.expectedCurrentDeploymentId,
+      record.input.deploymentId
+    )
+    await ensureLease(lease.key, lease.token, config, dependencies)
+    if (!isFullyPromoted(incidentObservation)) {
+      return persistPostTargetIncident(
+        record,
+        incidentObservation,
+        lease,
+        config,
+        dependencies,
+        "POST_HEALTH_PROVIDER_STATE_CHANGED",
+        false,
+        "Post-promotion health failed and production changed before an incident recommendation could be persisted."
+      )
+    }
+    return persistRollbackRecommendation(
+      record,
+      incidentObservation,
+      error.evidence,
+      lease,
+      config,
+      dependencies
+    )
+  }
   await ensureLease(lease.key, lease.token, config, dependencies)
   const finalObservation = await observePromotion(
     dependencies.vercel,
@@ -766,6 +984,89 @@ async function finishPromotion(
     message: "Vercel promotion converged; recording the Notion receipt.",
   })
   return finishReceipt(record, lease, config, dependencies, result)
+}
+
+async function resumeRollbackRecommendation(
+  record: OperationRecord,
+  lease: LeaseIdentity,
+  config: WorkerConfig,
+  dependencies: RuntimeDependencies
+): Promise<PromotionResult> {
+  const recommendation = record.result
+  if (!recommendation || recommendation.status !== "rollback_recommended") {
+    throw new SafetyError(
+      "COORDINATION_CORRUPT",
+      "The durable incident recommendation is missing."
+    )
+  }
+  await ensureLease(lease.key, lease.token, config, dependencies)
+  const approval = await retrieveApproval(
+    dependencies.notion,
+    record.input.approvalPageId,
+    config.incidentProperty ?? "Promotion incident",
+    16_000
+  )
+  verifyApproval(approval, record.input, { requireRevision: true })
+  const canonical = canonicalPromotionIncidentJson(recommendation)
+  if (approval.receiptText && approval.receiptText !== canonical) {
+    throw new SafetyError(
+      "INCIDENT_RECEIPT_MISMATCH",
+      "The canonical promotion incident changed."
+    )
+  }
+  const observation = await observePromotion(
+    dependencies.vercel,
+    record.policy,
+    record.input.expectedCurrentDeploymentId,
+    record.input.deploymentId
+  )
+  await ensureLease(lease.key, lease.token, config, dependencies)
+  if (!isFullyPromoted(observation)) {
+    return resultFor({
+      operationId: record.operationId,
+      status:
+        observation.classification === "partial"
+          ? "partial_failure"
+          : "conflict",
+      input: record.input,
+      policy: record.policy,
+      startedAt: record.createdAt,
+      completedAt: recommendation.completedAt,
+      promotionRequested: false,
+      receiptWritten: approval.receiptText === canonical,
+      currentDeploymentId: observation.currentDeploymentId,
+      productionDomains: observation.productionDomains,
+      domainDeploymentIds: observation.domainDeploymentIds,
+      deploymentUrl: observation.deployment.url ?? recommendation.deploymentUrl,
+      changed: false,
+      retryable: false,
+      repairInstruction:
+        "Do not use the stale rollback recommendation. Investigate live production state and require a new incident decision.",
+      message:
+        "Live production no longer matches the candidate state captured by the rollback recommendation.",
+    })
+  }
+  if (!approval.receiptText) {
+    await writePromotionIncidentReceipt(
+      dependencies.notion,
+      record.input,
+      config.incidentProperty ?? "Promotion incident",
+      recommendation
+    )
+  }
+  const durable = {
+    ...recommendation,
+    receiptWritten: true,
+    records: recommendation.records.map((receiptRecord, index) =>
+      index === 0
+        ? { ...receiptRecord, action: "receipt_written" as const }
+        : receiptRecord
+    ),
+  }
+  assertPromotionResultSemantics(durable)
+  record.result = durable
+  await saveRecord(record, config, dependencies, lease)
+  return durable
 }
 
 function isFullyPromoted(observation: PromotionObservation): boolean {
@@ -1429,6 +1730,14 @@ export async function promoteApprovedDeployment(
         record.state === "mutation_started" ||
         record.state === "mutation_unknown" ||
         record.state === "receipt_pending"
+      if (record.result?.status === "rollback_recommended") {
+        return await resumeRollbackRecommendation(
+          record,
+          lease,
+          config,
+          dependencies
+        )
+      }
       if (record.state === "complete" && record.result) {
         return await verifyCompletedReplay(record, lease, config, dependencies)
       }

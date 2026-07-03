@@ -11,13 +11,20 @@ import type {
 } from "./types.js"
 import {
   isDefinitePromotionRejectionStatus,
+  HealthCheckFailure,
   SafetyError,
   VercelHttpError,
 } from "./types.js"
-import { DEPLOYMENT_HOSTNAME, DEPLOYMENT_ID, HOSTNAME } from "./config.js"
+import {
+  DEPLOYMENT_HOSTNAME,
+  DEPLOYMENT_ID,
+  GIT_SHA,
+  HOSTNAME,
+} from "./config.js"
 
 const API_ORIGIN = "https://api.vercel.com"
 export const MAX_PROJECT_ALIAS_INVENTORY = 100
+const BODY_DISPOSAL_TIMEOUT_MS = 100
 
 interface ClientOptions {
   token: string
@@ -53,6 +60,21 @@ async function jsonBody(response: Response): Promise<unknown> {
       `Vercel returned invalid JSON for a successful HTTP ${response.status} response.`,
       { status: response.status }
     )
+  }
+}
+
+async function disposeBody(response: Response): Promise<void> {
+  if (!response.body) return
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    await Promise.race([
+      response.body.cancel().catch(() => undefined),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, BODY_DISPOSAL_TIMEOUT_MS)
+      }),
+    ])
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
   }
 }
 
@@ -183,10 +205,10 @@ export class VercelClient implements VercelClientLike {
     }
     if (response.status === 201 || response.status === 202) {
       // Do not parse or expose the provider response; reconciliation is authoritative.
-      await response.body?.cancel().catch(() => undefined)
+      await disposeBody(response)
       return { status: response.status }
     }
-    await response.body?.cancel().catch(() => undefined)
+    await disposeBody(response)
     throw new VercelHttpError(
       `Vercel promotion returned HTTP ${response.status}; the Worker will reconcile before any future action.`,
       {
@@ -194,6 +216,54 @@ export class VercelClient implements VercelClientLike {
         retryAfterMs: retryDelay(response, this.now()),
         ambiguous: !isDefinitePromotionRejectionStatus(response.status),
       }
+    )
+  }
+
+  async requestRollback(
+    teamId: string,
+    projectId: string,
+    deploymentId: string
+  ): Promise<{ status: 201 }> {
+    const description = `Notion-approved incident rollback to ${deploymentId}`
+    const url =
+      `${API_ORIGIN}/v1/projects/${encodeURIComponent(projectId)}/rollback/${encodeURIComponent(deploymentId)}` +
+      `?teamId=${encodeURIComponent(teamId)}&description=${encodeURIComponent(description)}`
+    let response: Response
+    try {
+      response = await this.fetchImpl(url, {
+        method: "POST",
+        redirect: "manual",
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+          Accept: "application/json",
+        },
+        signal: AbortSignal.timeout(this.requestTimeoutMs),
+      })
+    } catch {
+      throw new VercelHttpError(
+        "The rollback request outcome is unknown because the connection failed or timed out.",
+        { ambiguous: true }
+      )
+    }
+    await disposeBody(response)
+    if (response.status === 201) return { status: 201 }
+    const definite = [400, 401, 402, 403, 422, 429].includes(response.status)
+    throw new VercelHttpError(
+      `Vercel rollback returned HTTP ${response.status}; this operation will only reconcile and will never repeat the POST.`,
+      {
+        status: response.status,
+        retryAfterMs: Math.min(retryDelay(response, this.now()), 300_000),
+        ambiguous: !definite,
+      }
+    )
+  }
+
+  async getRollingRelease(
+    teamId: string,
+    projectId: string
+  ): Promise<unknown | null> {
+    return this.read(
+      `/v1/projects/${encodeURIComponent(projectId)}/rolling-release?teamId=${encodeURIComponent(teamId)}&state=ACTIVE`
     )
   }
 
@@ -217,17 +287,19 @@ export class VercelClient implements VercelClientLike {
           signal: AbortSignal.timeout(this.healthTimeoutMs),
         })
       } catch {
-        throw new SafetyError(
-          "HEALTH_CHECK_FAILED",
-          `The fixed health path ${JSON.stringify(path)} timed out or failed.`
-        )
+        throw new HealthCheckFailure({
+          path,
+          outcome: "transport_error",
+          status: null,
+        })
       }
-      await response.body?.cancel().catch(() => undefined)
+      await disposeBody(response)
       if (response.status < 200 || response.status >= 300) {
-        throw new SafetyError(
-          "HEALTH_CHECK_FAILED",
-          `The fixed health path ${JSON.stringify(path)} returned HTTP ${response.status}.`
-        )
+        throw new HealthCheckFailure({
+          path,
+          outcome: "http_status",
+          status: response.status,
+        })
       }
     }
   }
@@ -486,6 +558,55 @@ export function verifyPromotedDeploymentIdentity(options: {
     throw new SafetyError(
       "GIT_IDENTITY_MISMATCH",
       "The promoted deployment Git SHA or branch differs from the approved identity."
+    )
+  }
+}
+
+export function verifyRollbackTarget(options: {
+  project: VercelProject
+  deployment: VercelDeployment
+  teamId: string
+  projectId: string
+  deploymentId: string
+  expectedGitSha: string
+  expectedGitBranch: string
+}): void {
+  const {
+    project,
+    deployment,
+    teamId,
+    projectId,
+    deploymentId,
+    expectedGitSha,
+    expectedGitBranch,
+  } = options
+  assertProjectIdentity(project, teamId, projectId)
+  assertDeploymentIdentity(deployment, teamId, projectId, deploymentId)
+  if (deployment.target !== "production" || deployment.readyState !== "READY") {
+    throw new SafetyError(
+      "ROLLBACK_TARGET_INELIGIBLE",
+      "The exact rollback deployment must still be a READY production deployment."
+    )
+  }
+  if (
+    !GIT_SHA.test(expectedGitSha) ||
+    !expectedGitBranch ||
+    expectedGitBranch.length > 256 ||
+    expectedGitBranch.trim() !== expectedGitBranch ||
+    /[\u0000-\u001f\u007f]/.test(expectedGitBranch)
+  ) {
+    throw new SafetyError(
+      "ROLLBACK_GIT_IDENTITY_INVALID",
+      "The canonical rollback Git identity is absent or malformed."
+    )
+  }
+  if (
+    deployment.gitSource?.sha !== expectedGitSha ||
+    deployment.gitSource?.ref !== expectedGitBranch
+  ) {
+    throw new SafetyError(
+      "ROLLBACK_GIT_IDENTITY_MISMATCH",
+      "The rollback deployment Git identity differs from the canonical promotion incident."
     )
   }
 }

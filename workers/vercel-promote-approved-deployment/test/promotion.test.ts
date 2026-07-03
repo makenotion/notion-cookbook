@@ -24,6 +24,7 @@ import type {
   WorkerConfig,
 } from "../src/types.js"
 import {
+  HealthCheckFailure,
   isDefinitePromotionRejectionStatus,
   SafetyError,
   VercelHttpError,
@@ -73,6 +74,7 @@ function richText(value: string) {
 
 class FakeNotion implements NotionClientLike {
   receipt = ""
+  incident = ""
   revision = packet.approvalRevision
   fingerprint = input.approvalFingerprint
   status = "Approved"
@@ -117,6 +119,7 @@ class FakeNotion implements NotionClientLike {
             ),
             "Approval fingerprint": richText(this.fingerprint),
             "Promotion receipt": richText(this.receipt),
+            "Promotion incident": richText(this.incident),
           },
         }
       },
@@ -124,11 +127,19 @@ class FakeNotion implements NotionClientLike {
         assert.equal(page_id, PAGE_ID)
         this.updates++
         if (this.updateFailures-- > 0) throw new Error("mock Notion outage")
-        assert.deepEqual(Object.keys(properties), ["Promotion receipt"])
-        const property = properties["Promotion receipt"] as {
+        const propertyName = Object.keys(properties)[0]
+        assert.ok(
+          propertyName === "Promotion receipt" ||
+            propertyName === "Promotion incident"
+        )
+        const property = properties[propertyName] as {
           rich_text: { text: { content: string } }[]
         }
-        if (!this.dropWrites) this.receipt = property.rich_text[0].text.content
+        if (!this.dropWrites) {
+          if (propertyName === "Promotion receipt")
+            this.receipt = property.rich_text[0].text.content
+          else this.incident = property.rich_text[0].text.content
+        }
         // Real Notion edits last_edited_time; the explicit Approval revision is stable.
         this.lastEdited = "2026-07-03T14:00:05.000Z"
         this.afterUpdate?.()
@@ -311,7 +322,22 @@ class FakeVercel implements VercelClientLike {
     }
   }
 
-  async getDeployment(): Promise<VercelDeployment> {
+  async getDeployment(
+    _teamId?: string,
+    deploymentId = input.deploymentId
+  ): Promise<VercelDeployment> {
+    if (deploymentId === input.expectedCurrentDeploymentId) {
+      return {
+        id: input.expectedCurrentDeploymentId,
+        projectId: input.projectId,
+        teamId: policy.teamId,
+        target: "production",
+        readyState: "READY",
+        readySubstate: "PROMOTED",
+        url: "checkout-previous.vercel.app",
+        gitSource: { sha: "b".repeat(40), ref: "main" },
+      }
+    }
     return {
       id: input.deploymentId,
       projectId: input.projectId,
@@ -400,7 +426,11 @@ class FakeVercel implements VercelClientLike {
       (this.healthFailsAfter !== null &&
         this.healthCalls > this.healthFailsAfter)
     )
-      throw new Error("health failed")
+      throw new HealthCheckFailure({
+        path: "/healthz",
+        outcome: "http_status",
+        status: 503,
+      })
   }
 }
 
@@ -424,6 +454,7 @@ function fixture(): Fixture {
     redisToken: "not-used-by-mock",
     protectionBypassSecret: null,
     receiptProperty: "Promotion receipt",
+    incidentProperty: "Promotion incident",
     pollTimeoutMs: 2,
     pollIntervalMs: 1,
     pollMaxAttempts: 30,
@@ -893,24 +924,85 @@ test("post-POST coordination failure stays phase-safe and resumes without anothe
   assert.equal(f.vercel.promotionCalls, 1)
 })
 
-test("target-current plus final health failure is a changed partial incident and never re-promotes", async () => {
+test("target-current post-promotion health failure persists a terminal rollback recommendation", async () => {
   const f = fixture()
   // The two pre-mutation health passes succeed. Every post-promotion health
   // pass fails while production remains routed to the approved deployment.
   f.vercel.healthFailsAfter = 2
-  const partial = await f.invoke()
-  assert.equal(partial.status, "partial_failure")
-  assert.equal(partial.changed, true)
-  assert.equal(partial.currentDeploymentId, input.deploymentId)
-  assert.equal(partial.receiptWritten, false)
-  assert.match(partial.repairInstruction!, /Do not promote again/)
+  const recommendation = await f.invoke()
+  assert.equal(recommendation.status, "rollback_recommended")
+  assert.equal(recommendation.changed, true)
+  assert.equal(recommendation.currentDeploymentId, input.deploymentId)
+  assert.equal(recommendation.receiptWritten, true)
+  assert.equal(recommendation.rollbackRequested, false)
+  assert.deepEqual(recommendation.healthFailure, {
+    path: "/healthz",
+    outcome: "http_status",
+    status: 503,
+  })
+  assert.match(recommendation.incidentReceiptHash!, /^[0-9a-f]{64}$/)
+  assert.equal(JSON.parse(f.notion.incident).status, "promotion_health_failed")
   assert.equal(f.vercel.promotionCalls, 1)
 
   f.vercel.healthFailsAfter = null
-  const repaired = await f.invoke()
-  assert.equal(repaired.status, "completed")
-  assert.equal(repaired.receiptWritten, true)
+  const replay = await f.invoke()
+  assert.equal(replay.status, "rollback_recommended")
+  assert.equal(replay.incidentReceiptHash, recommendation.incidentReceiptHash)
   assert.equal(f.vercel.promotionCalls, 1)
+})
+
+test("incident-write retry makes the approval record agree with confirmed receipt state", async () => {
+  const f = fixture()
+  f.vercel.healthFailsAfter = 2
+  f.notion.updateFailures = 1
+
+  const pending = await f.invoke()
+  assert.equal(pending.status, "partial_failure")
+  assert.equal(pending.receiptWritten, false)
+  assert.notEqual(pending.records[0].action, "receipt_written")
+  assert.equal(f.vercel.promotionCalls, 1)
+
+  const resumed = await f.invoke()
+  assert.equal(resumed.status, "rollback_recommended")
+  assert.equal(resumed.receiptWritten, true)
+  assert.equal(resumed.records[0].action, "receipt_written")
+  assert.equal(JSON.parse(f.notion.incident).status, "promotion_health_failed")
+  assert.equal(f.vercel.promotionCalls, 1)
+  assertPromotionResultSemantics(resumed)
+  const stored = [...f.store.operations.values()][0]
+  assert.equal(stored.result?.receiptWritten, true)
+  assert.equal(stored.result?.records[0].action, "receipt_written")
+  validateOperationRecord(stored)
+})
+
+test("incident receipt survives its final Redis save failure and resumes consistently", async () => {
+  const f = fixture()
+  f.vercel.healthFailsAfter = 2
+  f.store.putFailureWhen = (record) =>
+    record.result?.status === "rollback_recommended" &&
+    record.result.receiptWritten === true
+
+  const confirmed = await f.invoke()
+  assert.equal(confirmed.status, "rollback_recommended")
+  assert.equal(confirmed.receiptWritten, true)
+  assert.equal(confirmed.records[0].action, "receipt_written")
+  assert.notEqual(f.notion.incident, "")
+  assert.equal(f.vercel.promotionCalls, 1)
+
+  const durableBeforeResume = [...f.store.operations.values()][0]
+  assert.equal(durableBeforeResume.result?.receiptWritten, false)
+  assert.notEqual(
+    durableBeforeResume.result?.records[0].action,
+    "receipt_written"
+  )
+
+  const resumed = await f.invoke()
+  assert.equal(resumed.status, "rollback_recommended")
+  assert.equal(resumed.receiptWritten, true)
+  assert.equal(resumed.records[0].action, "receipt_written")
+  assert.equal(f.vercel.promotionCalls, 1)
+  assertPromotionResultSemantics(resumed)
+  validateOperationRecord([...f.store.operations.values()][0])
 })
 
 test("a final provider re-observation catches drift after health without a second POST", async () => {
@@ -1504,6 +1596,7 @@ test("registered tool has strict input/output schemas and the full receipt famil
     "conflict",
     "no_op",
     "partial_failure",
+    "rollback_recommended",
   ])
   for (const field of [
     "ok",
