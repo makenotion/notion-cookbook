@@ -16,7 +16,8 @@ directory.
   [GitHub issues](examples/notion-github-sync/), or send
   [email notifications](examples/database-email-update/).
 - **Bring external data into Notion:** use a Worker sync for
-  [GitHub](workers/github-sync/), [HubSpot](workers/hubspot-sync/),
+  [GitHub issues and pull requests](workers/github-sync/),
+  [GitHub stars](workers/github-stars-sync/), [HubSpot](workers/hubspot-sync/),
   [Intercom](workers/intercom-sync/), [Jira](workers/jira-sync/),
   [Linear](workers/linear-sync/), [PagerDuty](workers/pagerduty-sync/),
   [Salesforce](workers/salesforce-sync/), [Sentry](workers/sentry-sync/),
@@ -111,6 +112,7 @@ and a **webhook** handles events from another service. See the complete
 | Task                                                        | Worker                                                   | Source     |
 | ----------------------------------------------------------- | -------------------------------------------------------- | ---------- |
 | Learn the sync pattern with seeded, in-memory data          | [DuckDB sync](workers/duckdb-sync/)                      | DuckDB     |
+| Turn starred repositories into a research library           | [GitHub stars sync](workers/github-stars-sync/)          | GitHub     |
 | Sync issues and pull requests                               | [GitHub sync](workers/github-sync/)                      | GitHub     |
 | Sync contacts, deals, and companies                         | [HubSpot sync](workers/hubspot-sync/)                    | HubSpot    |
 | Sync companies, contacts, conversations, and tickets        | [Intercom sync](workers/intercom-sync/)                  | Intercom   |

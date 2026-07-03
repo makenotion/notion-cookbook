@@ -17,6 +17,7 @@ For self-hosted integrations built directly with the Notion API, see the [API ex
 | Worker                                           | What it maintains                                                                                                                    |
 | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
 | [DuckDB sync](duckdb-sync/)                      | A self-contained managed database populated from seeded, in-memory DuckDB data; useful for learning the sync contract.               |
+| [GitHub stars sync](github-stars-sync/)          | The authenticated user's starred repositories as a current research and evaluation library.                                          |
 | [GitHub sync](github-sync/)                      | Issues, all pull requests, and open pull requests with review and CI status.                                                         |
 | [HubSpot sync](hubspot-sync/)                    | CRM contacts, deals, and companies.                                                                                                  |
 | [Intercom sync](intercom-sync/)                  | Companies, contacts, conversations, and tickets linked for support operations and customer context.                                  |

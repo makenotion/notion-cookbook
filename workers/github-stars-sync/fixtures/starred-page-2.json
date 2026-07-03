@@ -1,0 +1,34 @@
+[
+  {
+    "starred_at": "2025-06-11T16:20:00Z",
+    "repo": {
+      "id": 555000111,
+      "name": "edge-runtime",
+      "full_name": "example/edge-runtime",
+      "owner": {
+        "login": "example"
+      },
+      "private": false,
+      "html_url": "https://github.com/example/edge-runtime",
+      "description": "Experiments for a compact JavaScript runtime.",
+      "fork": false,
+      "homepage": "",
+      "language": "Rust",
+      "forks_count": 31,
+      "stargazers_count": 820,
+      "open_issues_count": 14,
+      "default_branch": "main",
+      "topics": ["edge", "runtime", "rust"],
+      "archived": false,
+      "disabled": false,
+      "visibility": "public",
+      "pushed_at": "2025-06-15T14:00:00Z",
+      "created_at": "2024-08-20T10:00:00Z",
+      "updated_at": "2025-06-15T14:05:00Z",
+      "license": {
+        "name": "Other",
+        "spdx_id": "NOASSERTION"
+      }
+    }
+  }
+]

@@ -235,6 +235,25 @@
       }
     },
     {
+      "id": "github-stars-sync",
+      "title": "GitHub starred repositories sync",
+      "summary": "Turn the authenticated GitHub user's starred repositories into a current Notion research and evaluation library.",
+      "path": "workers/github-stars-sync",
+      "kind": "worker-sync",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "github"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name github-stars-sync"
+      }
+    },
+    {
       "id": "github-sync",
       "title": "GitHub sync",
       "summary": "Sync GitHub issues and pull requests into managed Notion databases on a five-minute schedule.",
