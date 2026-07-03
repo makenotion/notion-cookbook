@@ -98,6 +98,10 @@ reconciliation. They never trigger an automatic second POST. HTTP 400, 401,
 unexpected 2xx, 3xx, 404, and 408—crosses the mutation boundary and can only be
 reconciled, never blindly re-armed.
 
+Every Vercel API fetch uses the fixed `api.vercel.com` origin with manual
+redirect handling. A 3xx response is surfaced as an ambiguous mutation outcome;
+Fetch cannot follow a 307/308 and silently send a second promotion POST.
+
 Success requires the complete provider-reported production alias set to equal
 the fixed policy exactly, every alias to point to the candidate, and the
 deployment to become `READY`/`PROMOTED`. The
@@ -175,7 +179,9 @@ Use a dedicated Vercel automation identity. On Enterprise, prefer a
 project-scoped Contributor with Project Developer and the Full Production
 Deployment extended permission. On plans without equivalent project-level
 scoping, document that the token may have broader team access. Do not use an
-owner token.
+owner token. Scope the access token to only the owning team; Vercel access
+tokens are not project-scoped, so the acting identity's project role enforces
+the project boundary.
 
 | Capability or credential               | Acting identity                              | Least privilege                                                                                   | Model exposure                                                                                |
 | -------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
@@ -310,14 +316,15 @@ it as an action tool; keep user confirmation enabled in the Custom Agent.
 Paste the following instruction into the Custom Agent:
 
 ```text
-When a user asks to promote a Vercel release, first read the referenced Notion approval page. Extract Approval revision, Approval fingerprint, Vercel team ID, Vercel project ID, Vercel deployment ID, Git SHA, Git branch, and Expected current deployment ID exactly; never normalize, shorten, infer, or substitute them. Summarize the candidate deployment, SHA/branch, expected current deployment, and approval revision, then obtain explicit user confirmation before calling promoteApprovedDeployment. Call the tool at most once for that confirmation. Do not call when Approval status is not exactly Approved, a required field is missing, the user asks you to choose a deployment, the request is for preview/rollback/force/rolling release, or confirmation is absent. Treat blocked and conflict as terminal until a human repairs the source state. For partial_failure or ambiguous, explain the receipt and repairInstruction; retain resumeToken only as correlation evidence, and call again with the exact same nine inputs only after the user explicitly asks to resume. Never pass resumeToken as a tool argument, change an approval revision to bypass a result, or invoke another Vercel mutation tool for the same release.
+When a user asks to promote a Vercel release, first read the referenced Notion approval page. Extract Approval revision, Approval fingerprint, Vercel team ID, Vercel project ID, Vercel deployment ID, Git SHA, Git branch, and Expected current deployment ID exactly; never normalize, shorten, infer, or substitute them. Summarize the candidate deployment, SHA/branch, expected current deployment, and approval revision, then obtain explicit user confirmation before calling promoteApprovedDeployment. Call the tool at most once for that confirmation. Do not call when Approval status is not exactly Approved, a required field is missing, the user asks you to choose a deployment, the request is for preview/rollback/force/rolling release, or confirmation is absent. Interpret every non-success receipt from retryable, retryAfterMs, and repairInstruction rather than from the status name alone. If retryable is true, explain the receipt, wait at least retryAfterMs when present, and call again with the exact same nine inputs only after the user explicitly asks to resume. If retryable is false, do not repeat the call until a human completes repairInstruction and explicitly confirms a new call; treat conflict as terminal and require a new approval for any new promotion. Retain resumeToken only as correlation evidence. Never pass resumeToken as a tool argument, change an approval revision to bypass a result, or invoke another Vercel mutation tool for the same release.
 ```
 
 The agent should read the approval page, repeat the exact nine inputs, call the
 tool once after user confirmation, and interpret the structured receipt. It
 must reuse the same nine inputs for reconciliation; `resumeToken` is output-only
-correlation evidence, not an accepted argument. It must never invent a new
-revision to work around a blocked result.
+correlation evidence, not an accepted argument. It must branch on `retryable`
+for every status and never invent a new revision to work around a blocked
+result.
 
 For a sandbox-only live smoke test, create a local environment file and keep it
 out of deployed Worker state:
@@ -538,6 +545,7 @@ before mutation and treats any later divergence as a conflict or partial state.
 | Vercel returns 409                                                                                    | One POST maximum, followed by reads                   | Converged result, otherwise `ambiguous`, `conflict`, or `partial_failure`   | Resume the same operation; never issue an independent promote                  |
 | Vercel returns 429                                                                                    | One definitely rejected POST                          | `blocked`, retryable, bounded `retryAfterMs`                                | Wait the stated interval and explicitly resume                                 |
 | Vercel definitely rejects but Redis cannot persist the prepared retry state                           | One definitely rejected POST                          | Truthful `blocked`, `promotionRequested=true`, with original retry metadata | Restore Redis, then follow the returned repair instruction                     |
+| Vercel responds but Redis becomes unavailable before reconciliation                                   | One POST maximum; durable `mutation_started` remains  | `ambiguous`, retryable, phase-safe diagnostic                               | Restore Redis and resume the exact operation; it cannot send another POST      |
 | A pre-mutation Vercel/Notion/Redis read times out                                                     | Zero POST                                             | `blocked`                                                                   | Retry only after the dependency recovers; all gates run again                  |
 | The promotion response times out or the socket resets                                                 | One POST maximum, then reads                          | `completed` if observed; otherwise `ambiguous`                              | Retain the token as correlation evidence and resume with the same nine inputs  |
 | Production aliases split                                                                              | No second POST                                        | `partial_failure`                                                           | Repair Vercel alias state manually, then resume reconciliation                 |

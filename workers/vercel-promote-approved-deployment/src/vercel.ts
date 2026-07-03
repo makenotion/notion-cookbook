@@ -83,6 +83,7 @@ export class VercelClient implements VercelClientLike {
       let response: Response
       try {
         response = await this.fetchImpl(`${API_ORIGIN}${path}`, {
+          redirect: "manual",
           headers: {
             Authorization: `Bearer ${this.token}`,
             Accept: "application/json",
@@ -166,6 +167,7 @@ export class VercelClient implements VercelClientLike {
         `${API_ORIGIN}/v10/projects/${encodeURIComponent(projectId)}/promote/${encodeURIComponent(deploymentId)}?teamId=${encodeURIComponent(teamId)}`,
         {
           method: "POST",
+          redirect: "manual",
           headers: {
             Authorization: `Bearer ${this.token}`,
             Accept: "application/json",

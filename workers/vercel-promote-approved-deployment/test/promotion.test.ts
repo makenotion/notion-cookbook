@@ -218,6 +218,8 @@ type MutationMode =
   | "500"
   | "200"
   | "302"
+  | "307"
+  | "308"
   | "408"
   | "404"
   | "conflict"
@@ -840,7 +842,7 @@ test("converged 409 and 5xx complete through strict durable validation", async (
 })
 
 test("unexpected mutation statuses reconcile and can never re-arm POST", async () => {
-  for (const mode of ["200", "302", "404", "408"] as const) {
+  for (const mode of ["200", "302", "307", "308", "404", "408"] as const) {
     const f = fixture()
     f.vercel.mode = mode
     const result = await f.invoke()
@@ -854,6 +856,41 @@ test("unexpected mutation statuses reconcile and can never re-arm POST", async (
     assert.equal(replay.status, "ambiguous")
     assert.equal(f.vercel.promotionCalls, 1)
   }
+})
+
+test("post-POST coordination failure stays phase-safe and resumes without another POST", async () => {
+  const f = fixture()
+  const originalPut = f.store.putOperation.bind(f.store)
+  let failAfterAcceptedPost = false
+  f.store.putOperation = async (record, ttlSeconds) => {
+    if (
+      record.state === "mutation_started" &&
+      record.lastMutationStatus === 202
+    ) {
+      failAfterAcceptedPost = true
+    }
+    if (failAfterAcceptedPost) {
+      throw new SafetyError(
+        "COORDINATION_UNAVAILABLE",
+        "The Redis coordination service is unavailable."
+      )
+    }
+    return originalPut(record, ttlSeconds)
+  }
+
+  const result = await f.invoke()
+  assert.equal(result.status, "ambiguous")
+  assert.equal(result.promotionRequested, true)
+  assert.equal(result.retryable, true)
+  assert.match(result.message, /mutation boundary was crossed/i)
+  assert.doesNotMatch(result.message, /no promotion was attempted/i)
+  assert.equal(f.vercel.promotionCalls, 1)
+
+  f.store.putOperation = originalPut
+  const resumed = await f.invoke()
+  assert.equal(resumed.status, "completed")
+  assert.equal(resumed.receiptWritten, true)
+  assert.equal(f.vercel.promotionCalls, 1)
 })
 
 test("target-current plus final health failure is a changed partial incident and never re-promotes", async () => {
@@ -1183,6 +1220,7 @@ test("final complete persistence failure preserves confirmed receipt evidence", 
   assert.equal(partial.changed, true)
   assert.match(partial.repairInstruction!, /Do not promote again/)
   assert.match(partial.message, /final durable record/)
+  assert.doesNotMatch(partial.message, /no promotion was attempted/i)
   assert.equal(f.vercel.promotionCalls, 1)
   assert.notEqual(f.notion.receipt, "")
   assert.equal([...f.store.operations.values()][0].state, "receipt_pending")

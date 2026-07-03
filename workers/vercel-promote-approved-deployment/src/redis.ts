@@ -544,13 +544,13 @@ export class RedisOperationStore implements RedisOperationStoreLike {
     } catch {
       throw new SafetyError(
         "COORDINATION_UNAVAILABLE",
-        "The Redis coordination service is unavailable; no promotion was attempted."
+        "The Redis coordination service is unavailable."
       )
     }
     if (!response.ok) {
       throw new SafetyError(
         "COORDINATION_UNAVAILABLE",
-        `The Redis coordination service returned HTTP ${response.status}; no promotion was attempted.`
+        `The Redis coordination service returned HTTP ${response.status}.`
       )
     }
     let payload: RedisResponse
@@ -559,13 +559,13 @@ export class RedisOperationStore implements RedisOperationStoreLike {
     } catch {
       throw new SafetyError(
         "COORDINATION_UNAVAILABLE",
-        "The Redis coordination service returned invalid JSON; no promotion was attempted."
+        "The Redis coordination service returned invalid JSON."
       )
     }
     if (payload.error !== undefined) {
       throw new SafetyError(
         "COORDINATION_UNAVAILABLE",
-        "The Redis coordination command failed; no promotion was attempted."
+        "The Redis coordination command failed."
       )
     }
     return payload.result

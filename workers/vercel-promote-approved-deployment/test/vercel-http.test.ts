@@ -30,6 +30,7 @@ test("promotion uses the exact v10 endpoint and never sends a body", async () =>
       "https://api.vercel.com/v10/projects/prj_checkout/promote/dpl_candidate?teamId=team_acme"
     )
     assert.equal(init?.method, "POST")
+    assert.equal(init?.redirect, "manual")
     assert.equal(init?.body, undefined)
     assert.equal(
       (init?.headers as Record<string, string>).Authorization,
@@ -76,8 +77,42 @@ test("promotion never retries 401, 403, 429, or 5xx", async () => {
   }
 })
 
+test("promotion redirects are surfaced without following or retrying", async () => {
+  for (const status of [307, 308]) {
+    let calls = 0
+    const fetchImpl = (async (
+      _request: string | URL | Request,
+      init?: RequestInit
+    ) => {
+      calls++
+      assert.equal(init?.redirect, "manual")
+      return new Response(null, {
+        status,
+        headers: { location: "https://api.vercel.com/redirected" },
+      })
+    }) as typeof fetch
+    await assert.rejects(
+      () =>
+        client(fetchImpl).requestPromotion(
+          "team_acme",
+          "prj_checkout",
+          "dpl_candidate"
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof VercelHttpError)
+        assert.equal(error.status, status)
+        assert.equal(error.ambiguous, true)
+        return true
+      }
+    )
+    assert.equal(calls, 1)
+  }
+})
+
 test("only the closed documented rejection statuses are non-ambiguous", async () => {
-  for (const status of [200, 302, 400, 401, 403, 404, 408, 409, 429, 500]) {
+  for (const status of [
+    200, 302, 307, 308, 400, 401, 403, 404, 408, 409, 429, 500,
+  ]) {
     const fetchImpl = (async () =>
       new Response(null, { status })) as typeof fetch
     await assert.rejects(
@@ -156,6 +191,7 @@ test("provider 404 reads are not retried and authorization stays in headers", as
       (init?.headers as Record<string, string>).Authorization,
       "Bearer vercel-secret-token"
     )
+    assert.equal(init?.redirect, "manual")
     return new Response('{"error":"provider-secret-detail"}', { status: 404 })
   }) as typeof fetch
   await assert.rejects(

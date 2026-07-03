@@ -212,20 +212,52 @@ test("invalid records fail closed before Redis persistence", async () => {
   )
 })
 
-test("Redis failures never disclose endpoint or token", async () => {
-  const store = new RedisOperationStore({
-    baseUrl: "https://secret-host.example.com",
-    token: "super-secret-token",
-    fetchImpl: (async () =>
-      new Response("no", { status: 503 })) as typeof fetch,
-  })
-  await assert.rejects(
-    () => store.acquireLease("lease", "owner", 1_000),
-    (error: unknown) => {
-      const message = error instanceof Error ? error.message : String(error)
-      assert.doesNotMatch(message, /secret-host|super-secret-token/)
-      assert.match(message, /HTTP 503/)
-      return true
-    }
-  )
+test("Redis failures are phase-neutral and never disclose endpoint or token", async () => {
+  const cases: Array<{ fetchImpl: typeof fetch; expected: RegExp }> = [
+    {
+      fetchImpl: (async () => {
+        throw new Error("transport secret")
+      }) as typeof fetch,
+      expected: /service is unavailable/,
+    },
+    {
+      fetchImpl: (async () =>
+        new Response("no", { status: 503 })) as typeof fetch,
+      expected: /HTTP 503/,
+    },
+    {
+      fetchImpl: (async () =>
+        new Response("not-json", { status: 200 })) as typeof fetch,
+      expected: /invalid JSON/,
+    },
+    {
+      fetchImpl: (async () =>
+        new Response(JSON.stringify({ error: "provider secret" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })) as typeof fetch,
+      expected: /command failed/,
+    },
+  ]
+
+  for (const { fetchImpl, expected } of cases) {
+    const store = new RedisOperationStore({
+      baseUrl: "https://secret-host.example.com",
+      token: "super-secret-token",
+      fetchImpl,
+    })
+    await assert.rejects(
+      () => store.acquireLease("lease", "owner", 1_000),
+      (error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error)
+        assert.doesNotMatch(
+          message,
+          /secret-host|super-secret-token|provider secret|transport secret/
+        )
+        assert.doesNotMatch(message, /promotion was attempted/i)
+        assert.match(message, expected)
+        return true
+      }
+    )
+  }
 })
