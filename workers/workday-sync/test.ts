@@ -18,6 +18,7 @@ import {
   personToChange,
 } from "./src/people.js"
 import {
+  DIRECTORY_FINGERPRINT_LENGTH,
   DIRECTORY_SYNC_STATE_VERSION,
   MAX_SNAPSHOT_PAGES,
   effectiveDateInTimeZone,
@@ -36,12 +37,12 @@ import {
   WORKDAY_SOAP_MAX_RESPONSE_BYTES,
   WORKDAY_TOKEN_MAX_RESPONSE_BYTES,
   buildGetWorkContactRequest,
-  buildGetWorkersRequest,
+  buildGetWorkersRequest as buildProjectedGetWorkersRequest,
   createWorkdayClient,
   createWorkdayTokenProvider,
   getWorkdayConfig,
   parseGetWorkContactResponse,
-  parseGetWorkersResponse,
+  parseGetWorkersResponse as parseProjectedGetWorkersResponse,
   parseRetryAfterSeconds,
   type WorkdayConfig,
   type WorkdayTokenProvider,
@@ -62,11 +63,20 @@ const stateIdentity = {
 function testWorkEmailFingerprint(email: string): string {
   return createHash("sha256")
     .update(
-      `notion-workday-directory:work-email:${email.toLowerCase()}`,
+      `notion-workday-directory:work-email:${email.trim().toLowerCase()}`,
       "utf8"
     )
-    .digest("base64url")
-    .slice(0, 16)
+    .digest()
+    .subarray(0, 8)
+    .toString("base64url")
+}
+
+function testWorkerFingerprint(workdayWid: string): string {
+  return createHash("sha256")
+    .update(`notion-workday-directory:worker:${workdayWid.trim()}`, "utf8")
+    .digest()
+    .subarray(0, 8)
+    .toString("base64url")
 }
 
 function snapshotContext(effectiveTimeZone = "UTC") {
@@ -87,6 +97,17 @@ const baseConfig: WorkdayConfig = {
   effectiveTimeZone: "America/New_York",
 }
 
+function buildPeopleWorkersRequest(
+  version: string,
+  request: WorkdayPageRequest
+): string {
+  return buildProjectedGetWorkersRequest(version, request, "people")
+}
+
+function parsePeopleWorkersResponse(xml: string): WorkdayWorkersPage {
+  return parseProjectedGetWorkersResponse(xml, "people")
+}
+
 const ada: DirectoryPerson = {
   workdayWid: "wid-person-ada-private",
   name: "Ada Lovelace",
@@ -100,6 +121,22 @@ const ada: DirectoryPerson = {
     "wid-person-alan-private",
     "wid-person-grace-private",
   ],
+}
+
+function fullPeoplePage(
+  first: DirectoryPerson,
+  prefix: string
+): DirectoryPerson[] {
+  return [
+    first,
+    ...Array.from({ length: WORKDAY_PAGE_SIZE - 1 }, (_, index) => ({
+      ...ada,
+      workdayWid: `${prefix}-worker-${index + 2}`,
+      name: `${prefix} Employee ${index + 2}`,
+      workEmail: undefined,
+      managerWorkdayWids: [],
+    })),
+  ]
 }
 
 type FetchCall = {
@@ -426,6 +463,7 @@ function clientWithPages(
   return {
     effectiveTimeZone,
     sourceContractFingerprint,
+    workerFingerprint: testWorkerFingerprint,
     workEmailFingerprint: testWorkEmailFingerprint,
     async fetchWorkersPage(request, _options) {
       requests.push(request)
@@ -737,7 +775,7 @@ function leafElements(xml: string): Array<[string, string]> {
 }
 
 test("Get_Workers request enables only required directory sections", () => {
-  const xml = buildGetWorkersRequest("v46.1", pageRequest)
+  const xml = buildPeopleWorkersRequest("v46.1", pageRequest)
   assert.match(
     xml,
     /^<\?xml version="1\.0" encoding="UTF-8"\?><soapenv:Envelope /
@@ -832,6 +870,36 @@ test("Get_Workers request enables only required directory sections", () => {
     ["Exclude_Gift_Hierarchies", "true"],
     ["Exclude_Retiree_Organizations", "true"],
   ])
+})
+
+test("Organizations projection excludes and does not require manager data", () => {
+  const xml = buildProjectedGetWorkersRequest(
+    "v46.1",
+    pageRequest,
+    "organizations"
+  )
+  const responseGroup = xml.match(
+    /<bsvc:Response_Group>(.*?)<\/bsvc:Response_Group>/
+  )?.[1]
+  assert.ok(responseGroup)
+  const managerFlags = leafElements(responseGroup).filter(([name]) =>
+    name.includes("Management_Chain_Data")
+  )
+  assert.deepEqual(managerFlags, [
+    ["Include_Management_Chain_Data", "false"],
+    ["Include_Multiple_Managers_in_Management_Chain_Data", "false"],
+  ])
+
+  const page = parseProjectedGetWorkersResponse(
+    fixtureResponse([
+      fixtureWorker({
+        wid: "organization-only-worker",
+        omitManagementChain: true,
+      }),
+    ]),
+    "organizations"
+  )
+  assert.deepEqual(page.people[0]?.managerWorkdayWids, [])
 })
 
 test("work-contact request batches exact WIDs at the pinned snapshot", () => {
@@ -994,13 +1062,13 @@ test("work-contact parser enforces a complete one-to-one employee join", () => {
 test("Get_Workers request validates version, page, and pinned dates", () => {
   for (const version of ["46.1", "v46", "v46.1-beta", "v 46.1"]) {
     assert.throws(
-      () => buildGetWorkersRequest(version, pageRequest),
+      () => buildPeopleWorkersRequest(version, pageRequest),
       /SOAP version is invalid/
     )
   }
   for (const page of [0, -1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1]) {
     assert.throws(
-      () => buildGetWorkersRequest("v46.1", { ...pageRequest, page }),
+      () => buildPeopleWorkersRequest("v46.1", { ...pageRequest, page }),
       /page must be a positive integer/
     )
   }
@@ -1012,7 +1080,7 @@ test("Get_Workers request validates version, page, and pinned dates", () => {
   ]) {
     assert.throws(
       () =>
-        buildGetWorkersRequest("v46.1", {
+        buildPeopleWorkersRequest("v46.1", {
           ...pageRequest,
           asOfEffectiveDate,
         }),
@@ -1029,7 +1097,7 @@ test("Get_Workers request validates version, page, and pinned dates", () => {
   ]) {
     assert.throws(
       () =>
-        buildGetWorkersRequest("v46.1", {
+        buildPeopleWorkersRequest("v46.1", {
           ...pageRequest,
           asOfEntryDateTime,
         }),
@@ -1050,7 +1118,7 @@ test("XML parser reads the directory allowlist and ignores nearby private data",
       sensitiveData: true,
     }),
   ])
-  const page = parseGetWorkersResponse(xml)
+  const page = parsePeopleWorkersResponse(xml)
   assert.deepEqual(page, {
     page: 1,
     totalPages: 1,
@@ -1097,7 +1165,7 @@ test("XML parser reads the directory allowlist and ignores nearby private data",
 })
 
 test("XML parser supports a CEO with no manager references", () => {
-  const page = parseGetWorkersResponse(
+  const page = parsePeopleWorkersResponse(
     fixtureResponse([
       fixtureWorker({
         wid: "ceo-wid",
@@ -1120,7 +1188,7 @@ test("XML parser fails closed on unclassifiable manager references", () => {
   ]) {
     assert.throws(
       () =>
-        parseGetWorkersResponse(
+        parsePeopleWorkersResponse(
           fixtureResponse([
             fixtureWorker({
               wid: "employee-with-unclassifiable-manager",
@@ -1141,7 +1209,7 @@ test("XML parser rejects non-employee top-level worker references", () => {
   ]) {
     assert.throws(
       () =>
-        parseGetWorkersResponse(
+        parsePeopleWorkersResponse(
           fixtureResponse([
             fixtureWorker({
               wid: "non-employee-worker",
@@ -1154,7 +1222,7 @@ test("XML parser rejects non-employee top-level worker references", () => {
   }
   assert.throws(
     () =>
-      parseGetWorkersResponse(
+      parsePeopleWorkersResponse(
         fixtureResponse([
           fixtureWorker({
             wid: "employee-without-wid",
@@ -1166,7 +1234,7 @@ test("XML parser rejects non-employee top-level worker references", () => {
   )
   assert.throws(
     () =>
-      parseGetWorkersResponse(
+      parsePeopleWorkersResponse(
         fixtureResponse([
           fixtureWorker({
             wid: "employee-with-duplicate-wids",
@@ -1181,12 +1249,12 @@ test("XML parser rejects non-employee top-level worker references", () => {
 test("XML parser rejects duplicate workers and ambiguous organization membership", () => {
   const duplicate = fixtureWorker({ wid: "duplicate-worker-wid" })
   assert.throws(
-    () => parseGetWorkersResponse(fixtureResponse([duplicate, duplicate])),
+    () => parsePeopleWorkersResponse(fixtureResponse([duplicate, duplicate])),
     /duplicate employee/
   )
   assert.throws(
     () =>
-      parseGetWorkersResponse(
+      parsePeopleWorkersResponse(
         fixtureResponse([
           fixtureWorker({ wid: "no-organization-worker", membershipCount: 0 }),
         ])
@@ -1195,7 +1263,7 @@ test("XML parser rejects duplicate workers and ambiguous organization membership
   )
   assert.throws(
     () =>
-      parseGetWorkersResponse(
+      parsePeopleWorkersResponse(
         fixtureResponse([
           fixtureWorker({ wid: "two-organization-worker", membershipCount: 2 }),
         ])
@@ -1207,7 +1275,7 @@ test("XML parser rejects duplicate workers and ambiguous organization membership
 test("XML parser requires one matching supervisory management-chain entry", () => {
   assert.throws(
     () =>
-      parseGetWorkersResponse(
+      parsePeopleWorkersResponse(
         fixtureResponse([
           fixtureWorker({
             wid: "mismatch-worker",
@@ -1220,7 +1288,7 @@ test("XML parser requires one matching supervisory management-chain entry", () =
   )
   assert.throws(
     () =>
-      parseGetWorkersResponse(
+      parsePeopleWorkersResponse(
         fixtureResponse([
           fixtureWorker({
             wid: "duplicate-chain-worker",
@@ -1236,7 +1304,7 @@ test("XML parser requires one matching supervisory management-chain entry", () =
   )
   assert.throws(
     () =>
-      parseGetWorkersResponse(
+      parsePeopleWorkersResponse(
         fixtureResponse([
           fixtureWorker({
             wid: "missing-chain-worker",
@@ -1248,7 +1316,7 @@ test("XML parser requires one matching supervisory management-chain entry", () =
   )
   assert.throws(
     () =>
-      parseGetWorkersResponse(
+      parsePeopleWorkersResponse(
         fixtureResponse([
           fixtureWorker({
             wid: "missing-supervisory-chain-worker",
@@ -1260,7 +1328,7 @@ test("XML parser requires one matching supervisory management-chain entry", () =
   )
   assert.throws(
     () =>
-      parseGetWorkersResponse(
+      parsePeopleWorkersResponse(
         fixtureResponse([
           fixtureWorker({
             wid: "empty-chain-worker",
@@ -1280,29 +1348,29 @@ test("XML parser fails closed on SOAP faults, malformed, and incomplete payloads
     "<faultstring>private upstream detail</faultstring>",
     "</soapenv:Fault></soapenv:Body></soapenv:Envelope>",
   ].join("")
-  assert.throws(() => parseGetWorkersResponse(fault), /SOAP fault/)
+  assert.throws(() => parsePeopleWorkersResponse(fault), /SOAP fault/)
   assert.throws(
-    () => parseGetWorkersResponse("<soapenv:Envelope><"),
+    () => parsePeopleWorkersResponse("<soapenv:Envelope><"),
     /malformed XML|missing Envelope|missing SOAP Body/
   )
   assert.throws(
-    () => parseGetWorkersResponse("not xml"),
+    () => parsePeopleWorkersResponse("not xml"),
     /malformed XML|missing Envelope/
   )
   assert.throws(
     () =>
-      parseGetWorkersResponse(
+      parsePeopleWorkersResponse(
         '<soapenv:Envelope xmlns:soapenv="x"><soapenv:Body/></soapenv:Envelope>'
       ),
     /missing SOAP Body|missing Get_Workers_Response/
   )
   assert.throws(
-    () => parseGetWorkersResponse(fixtureResponse([])),
+    () => parsePeopleWorkersResponse(fixtureResponse([])),
     /missing Response_Data|incomplete directory response/
   )
   assert.throws(
     () =>
-      parseGetWorkersResponse(
+      parsePeopleWorkersResponse(
         fixtureResponse([
           fixtureWorker({
             wid: "missing-person-name",
@@ -1315,7 +1383,7 @@ test("XML parser fails closed on SOAP faults, malformed, and incomplete payloads
   )
   assert.throws(
     () =>
-      parseGetWorkersResponse(
+      parsePeopleWorkersResponse(
         fixtureResponse([
           fixtureWorker({
             wid: "missing-organization-name",
@@ -1338,7 +1406,7 @@ test("XML parser validates page totals and page-result counts", () => {
     { pageResults: 2 },
   ]) {
     assert.throws(
-      () => parseGetWorkersResponse(fixtureResponse([employee], fixture)),
+      () => parsePeopleWorkersResponse(fixtureResponse([employee], fixture)),
       /incomplete directory response/
     )
   }
@@ -1350,13 +1418,13 @@ test("XML parser validates page totals and page-result counts", () => {
     { totalResults: "9007199254740993" },
   ]) {
     assert.throws(
-      () => parseGetWorkersResponse(fixtureResponse([employee], fixture)),
+      () => parsePeopleWorkersResponse(fixtureResponse([employee], fixture)),
       /invalid (Page|Total_Pages|Total_Results|Page_Results)/
     )
   }
   assert.throws(
     () =>
-      parseGetWorkersResponse(
+      parsePeopleWorkersResponse(
         fixtureResponse([employee], { totalResults: 1, totalPages: 2 })
       ),
     /incomplete directory response/
@@ -1368,7 +1436,7 @@ test("XML parser enforces Workday's page-size-derived totals", () => {
     fixtureWorker({ wid: `page-one-worker-${index}` })
   )
   assert.equal(
-    parseGetWorkersResponse(
+    parsePeopleWorkersResponse(
       fixtureResponse(hundredWorkers, {
         page: 1,
         totalPages: 2,
@@ -1380,7 +1448,7 @@ test("XML parser enforces Workday's page-size-derived totals", () => {
   )
   assert.throws(
     () =>
-      parseGetWorkersResponse(
+      parsePeopleWorkersResponse(
         fixtureResponse(hundredWorkers.slice(0, 99), {
           page: 1,
           totalPages: 2,
@@ -1392,7 +1460,7 @@ test("XML parser enforces Workday's page-size-derived totals", () => {
   )
   assert.throws(
     () =>
-      parseGetWorkersResponse(
+      parsePeopleWorkersResponse(
         fixtureResponse(
           [
             fixtureWorker({ wid: "final-worker-one" }),
@@ -1405,7 +1473,7 @@ test("XML parser enforces Workday's page-size-derived totals", () => {
   )
   assert.throws(
     () =>
-      parseGetWorkersResponse(
+      parsePeopleWorkersResponse(
         fixtureResponse([fixtureWorker({ wid: "worker-one" })], {
           page: 1,
           totalPages: 2,
@@ -1592,8 +1660,28 @@ test("snapshot ceiling is 100 pages and 10,000 employees", () => {
   )
 })
 
+test("packed identity state stays below its 225 KB design budget", () => {
+  const maximumFingerprints = MAX_SNAPSHOT_PAGES * WORKDAY_PAGE_SIZE
+  const state = {
+    ...stateIdentity,
+    page: MAX_SNAPSHOT_PAGES,
+    asOfEntryDateTime: "2026-07-02T14:15:16.000Z",
+    asOfEffectiveDate: "2026-07-02",
+    totalPages: MAX_SNAPSHOT_PAGES,
+    totalResults: maximumFingerprints,
+    seenWorkerFingerprints: "a".repeat(
+      maximumFingerprints * DIRECTORY_FINGERPRINT_LENGTH
+    ),
+    seenWorkEmailFingerprints: "b".repeat(
+      maximumFingerprints * DIRECTORY_FINGERPRINT_LENGTH
+    ),
+  }
+  assert.ok(Buffer.byteLength(JSON.stringify(state), "utf8") < 225_000)
+})
+
 test("people sync reuses snapshot state across pages and finalizes cleanly", async () => {
   const requests: WorkdayPageRequest[] = []
+  const firstPage = fullPeoplePage(ada, "first-page")
   const secondPerson: DirectoryPerson = {
     ...ada,
     workdayWid: "wid-person-second",
@@ -1602,7 +1690,7 @@ test("people sync reuses snapshot state across pages and finalizes cleanly", asy
   }
   const client = clientWithPages(
     [
-      { page: 1, totalPages: 2, totalResults: 101, people: [ada] },
+      { page: 1, totalPages: 2, totalResults: 101, people: firstPage },
       { page: 2, totalPages: 2, totalResults: 101, people: [secondPerson] },
     ],
     requests,
@@ -1614,7 +1702,8 @@ test("people sync reuses snapshot state across pages and finalizes cleanly", asy
     () => new Date("2026-01-01T00:30:00.000Z")
   )
   assert.equal(first.hasMore, true)
-  assert.deepEqual(first.changes, [personToChange(ada)])
+  assert.equal(first.changes.length, WORKDAY_PAGE_SIZE)
+  assert.deepEqual(first.changes[0], personToChange(ada))
   assert.deepEqual(first.nextState, {
     ...stateIdentity,
     page: 2,
@@ -1622,8 +1711,15 @@ test("people sync reuses snapshot state across pages and finalizes cleanly", asy
     asOfEffectiveDate: "2025-12-31",
     totalPages: 2,
     totalResults: 101,
+    seenWorkerFingerprints: firstPage
+      .map((person) => testWorkerFingerprint(person.workdayWid))
+      .join(""),
     seenWorkEmailFingerprints: testWorkEmailFingerprint("ada@example.com"),
   })
+  assert.doesNotMatch(
+    JSON.stringify(first.nextState),
+    /wid-person-ada-private|ada@example\.com/
+  )
 
   const second = await runPeopleSyncPage(client, first.nextState)
   assert.equal(second.hasMore, false)
@@ -1644,13 +1740,14 @@ test("people sync reuses snapshot state across pages and finalizes cleanly", asy
 })
 
 test("people sync rejects duplicate work email across Workday pages", async () => {
+  const firstPage = fullPeoplePage(ada, "email-page")
   const duplicateEmailPerson: DirectoryPerson = {
     ...ada,
     workdayWid: "wid-person-duplicate-email",
     workEmail: "ADA@EXAMPLE.COM",
   }
   const client = clientWithPages([
-    { page: 1, totalPages: 2, totalResults: 101, people: [ada] },
+    { page: 1, totalPages: 2, totalResults: 101, people: firstPage },
     {
       page: 2,
       totalPages: 2,
@@ -1669,7 +1766,33 @@ test("people sync rejects duplicate work email across Workday pages", async () =
   )
 })
 
-test("people sync rejects malformed email-fingerprint state before fetching", async () => {
+test("both syncs reject one employee repeated on a later page", async () => {
+  const firstPage = fullPeoplePage(ada, "duplicate-worker-page")
+  const repeatedWithoutEmail = { ...ada, workEmail: undefined }
+
+  for (const runPage of [runPeopleSyncPage, runOrganizationsSyncPage]) {
+    const client = clientWithPages([
+      { page: 1, totalPages: 2, totalResults: 101, people: firstPage },
+      {
+        page: 2,
+        totalPages: 2,
+        totalResults: 101,
+        people: [repeatedWithoutEmail],
+      },
+    ])
+    const first = await runPage(
+      client,
+      undefined,
+      () => new Date("2026-01-01T00:30:00.000Z")
+    )
+    await assert.rejects(
+      () => runPage(client, first.nextState),
+      /one employee more than once/
+    )
+  }
+})
+
+test("both syncs reject malformed employee-fingerprint state before fetching", async () => {
   const validState = {
     ...stateIdentity,
     page: 2,
@@ -1678,10 +1801,55 @@ test("people sync rejects malformed email-fingerprint state before fetching", as
     totalPages: 2,
     totalResults: 101,
   }
+  const validFingerprint = testWorkerFingerprint("one-worker")
+  for (const seenWorkerFingerprints of [
+    undefined,
+    "short",
+    "!".repeat(DIRECTORY_FINGERPRINT_LENGTH),
+    validFingerprint.repeat(WORKDAY_PAGE_SIZE),
+    validFingerprint,
+  ]) {
+    for (const runPage of [runPeopleSyncPage, runOrganizationsSyncPage]) {
+      const requests: WorkdayPageRequest[] = []
+      const client = clientWithPages(
+        [{ page: 2, totalPages: 2, totalResults: 101, people: [ada] }],
+        requests
+      )
+      await assert.rejects(
+        () =>
+          runPage(client, {
+            ...validState,
+            ...(seenWorkerFingerprints === undefined
+              ? {}
+              : { seenWorkerFingerprints }),
+            ...(runPage === runPeopleSyncPage
+              ? { seenWorkEmailFingerprints: "" }
+              : {}),
+          }),
+        /invalid employee fingerprints/
+      )
+      assert.equal(requests.length, 0)
+    }
+  }
+})
+
+test("people sync rejects malformed email-fingerprint state before fetching", async () => {
+  const priorPeople = fullPeoplePage(ada, "valid-state-page")
+  const validState = {
+    ...stateIdentity,
+    page: 2,
+    asOfEntryDateTime: "2026-07-02T14:15:16.000Z",
+    asOfEffectiveDate: "2026-07-02",
+    totalPages: 2,
+    totalResults: 101,
+    seenWorkerFingerprints: priorPeople
+      .map((person) => testWorkerFingerprint(person.workdayWid))
+      .join(""),
+  }
   for (const seenWorkEmailFingerprints of [
     undefined,
     "short",
-    "!".repeat(16),
+    "!".repeat(DIRECTORY_FINGERPRINT_LENGTH),
     testWorkEmailFingerprint("ada@example.com").repeat(2),
   ]) {
     const requests: WorkdayPageRequest[] = []
@@ -1725,6 +1893,11 @@ test("organization sync publishes one deterministic change per page", async () =
 })
 
 test("sync rejects wrong pages, drifting totals, empty pages, and page overflow", async () => {
+  const priorPeople = fullPeoplePage(ada, "prior-page")
+  const currentPeople = fullPeoplePage(
+    { ...ada, workdayWid: "current-page-first" },
+    "current-page"
+  )
   const state: DirectorySyncState = {
     ...stateIdentity,
     page: 2,
@@ -1732,19 +1905,22 @@ test("sync rejects wrong pages, drifting totals, empty pages, and page overflow"
     asOfEffectiveDate: "2026-07-02",
     totalPages: 3,
     totalResults: 201,
+    seenWorkerFingerprints: priorPeople
+      .map((person) => testWorkerFingerprint(person.workdayWid))
+      .join(""),
     seenWorkEmailFingerprints: "",
   }
   const failures: Array<[WorkdayWorkersPage, RegExp]> = [
     [
-      { page: 1, totalPages: 3, totalResults: 201, people: [ada] },
+      { page: 1, totalPages: 3, totalResults: 201, people: currentPeople },
       /different page than requested/,
     ],
     [
-      { page: 2, totalPages: 4, totalResults: 201, people: [ada] },
-      /snapshot totals changed/,
+      { page: 2, totalPages: 4, totalResults: 201, people: currentPeople },
+      /incomplete directory snapshot/,
     ],
     [
-      { page: 2, totalPages: 3, totalResults: 202, people: [ada] },
+      { page: 2, totalPages: 3, totalResults: 202, people: currentPeople },
       /snapshot totals changed/,
     ],
     [
@@ -1756,20 +1932,20 @@ test("sync rejects wrong pages, drifting totals, empty pages, and page overflow"
         page: 2,
         totalPages: MAX_SNAPSHOT_PAGES + 1,
         totalResults: 201,
-        people: [ada],
+        people: currentPeople,
       },
       /incomplete directory snapshot/,
     ],
     [
-      { page: 2, totalPages: 1, totalResults: 201, people: [ada] },
+      { page: 2, totalPages: 1, totalResults: 201, people: currentPeople },
       /incomplete directory snapshot/,
     ],
     [
-      { page: 2, totalPages: 0, totalResults: 201, people: [ada] },
+      { page: 2, totalPages: 0, totalResults: 201, people: currentPeople },
       /totalPages must be a positive integer/,
     ],
     [
-      { page: 2, totalPages: 3, totalResults: 0, people: [ada] },
+      { page: 2, totalPages: 3, totalResults: 0, people: currentPeople },
       /totalResults must be a positive integer/,
     ],
   ]
@@ -2200,25 +2376,40 @@ test("source contract fingerprint is stable but source-bound", () => {
   }
 })
 
-test("work email fingerprints are keyed, normalized, and compact", () => {
+test("directory fingerprints are keyed, normalized, and domain separated", () => {
   const client = createWorkdayClient(
     baseConfig,
     staticTokenProvider(["unused-token"]),
     async () => {},
     queuedFetch([])
   )
-  const normalized = client.workEmailFingerprint("ada@example.com")
-  assert.equal(client.workEmailFingerprint(" ADA@EXAMPLE.COM "), normalized)
-  assert.match(normalized, /^[A-Za-z0-9_-]{16}$/)
-  assert.notEqual(
-    createWorkdayClient(
-      { ...baseConfig, clientSecret: "rotated-client-secret" },
-      staticTokenProvider(["unused-token"]),
-      async () => {},
-      queuedFetch([])
-    ).workEmailFingerprint("ada@example.com"),
-    normalized
+  const emailFingerprint = client.workEmailFingerprint("ada@example.com")
+  const workerFingerprint = client.workerFingerprint("ada@example.com")
+  assert.equal(
+    client.workEmailFingerprint(" ADA@EXAMPLE.COM "),
+    emailFingerprint
   )
+  assert.equal(client.workerFingerprint(" ada@example.com "), workerFingerprint)
+  assert.match(
+    emailFingerprint,
+    new RegExp(`^[A-Za-z0-9_-]{${DIRECTORY_FINGERPRINT_LENGTH}}$`)
+  )
+  assert.notEqual(workerFingerprint, emailFingerprint)
+  const rotatedClient = createWorkdayClient(
+    { ...baseConfig, clientSecret: "rotated-client-secret" },
+    staticTokenProvider(["unused-token"]),
+    async () => {},
+    queuedFetch([])
+  )
+  assert.notEqual(
+    rotatedClient.workEmailFingerprint("ada@example.com"),
+    emailFingerprint
+  )
+  assert.notEqual(
+    rotatedClient.workerFingerprint("ada@example.com"),
+    workerFingerprint
+  )
+  assert.throws(() => client.workerFingerprint(" "), /WID is empty/)
 })
 
 test("SOAP page 1 omits the strict client timeout", async () => {
@@ -2231,7 +2422,10 @@ test("SOAP page 1 omits the strict client timeout", async () => {
       [
         new Response(
           fixtureResponse([
-            fixtureWorker({ wid: "page-one-worker", managerWids: [] }),
+            fixtureWorker({
+              wid: "page-one-worker",
+              omitManagementChain: true,
+            }),
           ]),
           { status: 200 }
         ),
@@ -2242,7 +2436,7 @@ test("SOAP page 1 omits the strict client timeout", async () => {
 
   await client.fetchWorkersPage(
     { ...pageRequest, page: 1 },
-    { includeWorkEmail: false }
+    { projection: "organizations" }
   )
   assert.equal(calls[0]?.init?.signal, undefined)
 })
@@ -2251,7 +2445,7 @@ test("SOAP client sends pinned request with bearer auth and privacy headers", as
   const calls: FetchCall[] = []
   let pacingCalls = 0
   const xml = fixtureResponse([
-    fixtureWorker({ wid: "soap-worker", managerWids: [] }),
+    fixtureWorker({ wid: "soap-worker", omitManagementChain: true }),
   ])
   const client = createWorkdayClient(
     baseConfig,
@@ -2262,7 +2456,7 @@ test("SOAP client sends pinned request with bearer auth and privacy headers", as
     queuedFetch([new Response(xml, { status: 200 })], calls)
   )
   const page = await client.fetchWorkersPage(pageRequest, {
-    includeWorkEmail: false,
+    projection: "organizations",
   })
   assert.equal(page.people[0]?.name, "Ada Lovelace")
   assert.equal(pacingCalls, 1)
@@ -2289,7 +2483,11 @@ test("SOAP client sends pinned request with bearer auth and privacy headers", as
       contentType: "text/xml; charset=utf-8",
       externalApplicationId: null,
       externalRequestId: null,
-      body: buildGetWorkersRequest(baseConfig.apiVersion, pageRequest),
+      body: buildProjectedGetWorkersRequest(
+        baseConfig.apiVersion,
+        pageRequest,
+        "organizations"
+      ),
     }
   )
   assert.doesNotMatch(String(calls[0]?.init?.body), /soap-access-token/)
@@ -2323,7 +2521,7 @@ test("People page batches and joins public work email before emitting changes", 
   )
 
   const page = await client.fetchWorkersPage(pageRequest, {
-    includeWorkEmail: true,
+    projection: "people",
   })
   assert.equal(page.people[0]?.workEmail, "person@example.com")
   assert.equal(pacingCalls, 2)
@@ -2357,7 +2555,7 @@ test("SOAP client refreshes once after 401 and retries the identical snapshot", 
     )
   )
   const page = await client.fetchWorkersPage(pageRequest, {
-    includeWorkEmail: false,
+    projection: "organizations",
   })
   assert.equal(page.people[0]?.workdayWid, "refreshed-worker")
   assert.deepEqual(invalidated, ["stale-token"])
@@ -2397,7 +2595,7 @@ test("SOAP client does not retry authorization or ordinary server errors", async
       queuedFetch([new Response(privateBody, { status })], calls)
     )
     const error = await captureError(() =>
-      client.fetchWorkersPage(pageRequest, { includeWorkEmail: false })
+      client.fetchWorkersPage(pageRequest, { projection: "organizations" })
     )
     assert.ok(error instanceof Error)
     assert.equal(error instanceof RateLimitError, false)
@@ -2432,7 +2630,7 @@ test("SOAP overload statuses and recognized 500 bodies become rate limits", asyn
       ])
     )
     const error = await captureError(() =>
-      client.fetchWorkersPage(pageRequest, { includeWorkEmail: false })
+      client.fetchWorkersPage(pageRequest, { projection: "organizations" })
     )
     assert.ok(error instanceof RateLimitError, `${status}: ${body}`)
     assert.equal(error.retryAfter, 9)
@@ -2463,7 +2661,7 @@ test("SOAP transport and malformed-success errors do not leak raw data", async (
       queuedFetch([response])
     )
     const error = await captureError(() =>
-      client.fetchWorkersPage(pageRequest, { includeWorkEmail: false })
+      client.fetchWorkersPage(pageRequest, { projection: "organizations" })
     )
     assert.ok(error instanceof Error)
     assert.match(error.message, expected)
@@ -2490,7 +2688,7 @@ test("SOAP rejects oversized declared bodies before parsing or leaking them", as
     ])
   )
   const error = await captureError(() =>
-    client.fetchWorkersPage(pageRequest, { includeWorkEmail: false })
+    client.fetchWorkersPage(pageRequest, { projection: "organizations" })
   )
   assert.ok(error instanceof Error)
   assert.equal(error instanceof RateLimitError, false)
@@ -2513,7 +2711,7 @@ test("SOAP client renews at most once after repeated 401 responses", async () =>
     ])
   )
   const error = await captureError(() =>
-    client.fetchWorkersPage(pageRequest, { includeWorkEmail: false })
+    client.fetchWorkersPage(pageRequest, { projection: "organizations" })
   )
   assert.ok(error instanceof Error)
   assert.equal(error instanceof RateLimitError, false)

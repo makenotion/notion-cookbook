@@ -14,10 +14,16 @@ export const MAX_SNAPSHOT_PAGES = 100
 // Bump the state version for serialization changes. Bump the contract version
 // whenever source selection, parsing, keys, output schemas, or paging semantics
 // change in a way that makes an in-flight snapshot unsafe to resume.
-export const DIRECTORY_SYNC_STATE_VERSION = 2
-export const DIRECTORY_SYNC_CONTRACT_VERSION = 2
-export const WORK_EMAIL_FINGERPRINT_LENGTH = 16
-const WORK_EMAIL_FINGERPRINT_PATTERN = /^[A-Za-z0-9_-]{16}$/
+export const DIRECTORY_SYNC_STATE_VERSION = 3
+export const DIRECTORY_SYNC_CONTRACT_VERSION = 3
+export const DIRECTORY_FINGERPRINT_BYTES = 8
+export const DIRECTORY_FINGERPRINT_LENGTH = Math.ceil(
+  (DIRECTORY_FINGERPRINT_BYTES * 8) / 6
+)
+const DIRECTORY_FINGERPRINT_PATTERN = new RegExp(
+  `^[A-Za-z0-9_-]{${DIRECTORY_FINGERPRINT_LENGTH}}$`
+)
+const MAX_SNAPSHOT_RECORDS = MAX_SNAPSHOT_PAGES * WORKDAY_PAGE_SIZE
 
 export type DirectorySyncState = {
   stateVersion: typeof DIRECTORY_SYNC_STATE_VERSION
@@ -27,6 +33,7 @@ export type DirectorySyncState = {
   asOfEffectiveDate: string
   totalPages: number
   totalResults: number
+  seenWorkerFingerprints?: string
   seenWorkEmailFingerprints?: string
 }
 
@@ -43,50 +50,106 @@ export type WorkdayWorkersPage = {
   people: DirectoryPerson[]
 }
 
+export type WorkdayDirectoryProjection = "organizations" | "people"
+
 export type WorkdayDirectoryClient = {
   effectiveTimeZone: string
   sourceContractFingerprint: string
+  workerFingerprint(workdayWid: string): string
   workEmailFingerprint(email: string): string
   fetchWorkersPage(
     request: WorkdayPageRequest,
-    options: { includeWorkEmail: boolean }
+    options: { projection: WorkdayDirectoryProjection }
   ): Promise<WorkdayWorkersPage>
+}
+
+function isDirectoryFingerprint(value: string): boolean {
+  if (!DIRECTORY_FINGERPRINT_PATTERN.test(value)) return false
+  const decoded = Buffer.from(value, "base64url")
+  return (
+    decoded.length === DIRECTORY_FINGERPRINT_BYTES &&
+    decoded.toString("base64url") === value
+  )
+}
+
+function unpackFingerprints(
+  packed: unknown,
+  label: string,
+  maximumCount: number,
+  expectedCount?: number
+): string[] {
+  if (
+    typeof packed !== "string" ||
+    packed.length % DIRECTORY_FINGERPRINT_LENGTH !== 0 ||
+    packed.length > maximumCount * DIRECTORY_FINGERPRINT_LENGTH
+  ) {
+    throw new Error(`Workday sync state has invalid ${label} fingerprints.`)
+  }
+  const fingerprints = Array.from(
+    { length: packed.length / DIRECTORY_FINGERPRINT_LENGTH },
+    (_, index) =>
+      packed.slice(
+        index * DIRECTORY_FINGERPRINT_LENGTH,
+        (index + 1) * DIRECTORY_FINGERPRINT_LENGTH
+      )
+  )
+  if (
+    (expectedCount !== undefined && fingerprints.length !== expectedCount) ||
+    fingerprints.some((fingerprint) => !isDirectoryFingerprint(fingerprint)) ||
+    new Set(fingerprints).size !== fingerprints.length
+  ) {
+    throw new Error(`Workday sync state has invalid ${label} fingerprints.`)
+  }
+  return fingerprints
+}
+
+function previousWorkerFingerprints(
+  state: DirectorySyncState | undefined
+): string[] {
+  if (!state) return []
+  return unpackFingerprints(
+    state.seenWorkerFingerprints,
+    "employee",
+    MAX_SNAPSHOT_RECORDS,
+    (state.page - 1) * WORKDAY_PAGE_SIZE
+  )
 }
 
 function previousWorkEmailFingerprints(
   state: DirectorySyncState | undefined
 ): string[] {
   if (!state) return []
-  const packed = state.seenWorkEmailFingerprints
-  if (
-    typeof packed !== "string" ||
-    packed.length % WORK_EMAIL_FINGERPRINT_LENGTH !== 0 ||
-    packed.length >
-      MAX_SNAPSHOT_PAGES * WORKDAY_PAGE_SIZE * WORK_EMAIL_FINGERPRINT_LENGTH
-  ) {
-    throw new Error(
-      "Workday People sync state has invalid work-email fingerprints."
-    )
-  }
-  const fingerprints = Array.from(
-    { length: packed.length / WORK_EMAIL_FINGERPRINT_LENGTH },
-    (_, index) =>
-      packed.slice(
-        index * WORK_EMAIL_FINGERPRINT_LENGTH,
-        (index + 1) * WORK_EMAIL_FINGERPRINT_LENGTH
-      )
+  return unpackFingerprints(
+    state.seenWorkEmailFingerprints,
+    "work-email",
+    (state.page - 1) * WORKDAY_PAGE_SIZE
   )
-  if (
-    fingerprints.some(
-      (fingerprint) => !WORK_EMAIL_FINGERPRINT_PATTERN.test(fingerprint)
-    ) ||
-    new Set(fingerprints).size !== fingerprints.length
-  ) {
-    throw new Error(
-      "Workday People sync state has invalid work-email fingerprints."
-    )
+}
+
+function checkedFingerprint(value: string, label: string): string {
+  if (!isDirectoryFingerprint(value)) {
+    throw new Error(`Workday client returned an invalid ${label} fingerprint.`)
   }
-  return fingerprints
+  return value
+}
+
+function addWorkerFingerprints(
+  client: WorkdayDirectoryClient,
+  people: DirectoryPerson[],
+  previous: string[]
+): Set<string> {
+  const seen = new Set(previous)
+  for (const person of people) {
+    const fingerprint = checkedFingerprint(
+      client.workerFingerprint(person.workdayWid),
+      "employee"
+    )
+    if (seen.has(fingerprint)) {
+      throw new Error("Workday returned one employee more than once.")
+    }
+    seen.add(fingerprint)
+  }
+  return seen
 }
 
 export function effectiveDateInTimeZone(date: Date, timeZone: string): string {
@@ -194,7 +257,12 @@ function pageResult(
   if (
     page.totalPages > MAX_SNAPSHOT_PAGES ||
     page.page > page.totalPages ||
-    page.people.length === 0
+    Math.ceil(page.totalResults / WORKDAY_PAGE_SIZE) !== page.totalPages ||
+    page.people.length === 0 ||
+    page.people.length !==
+      (page.page < page.totalPages
+        ? WORKDAY_PAGE_SIZE
+        : page.totalResults - WORKDAY_PAGE_SIZE * (page.totalPages - 1))
   ) {
     throw new Error("Workday returned an incomplete directory snapshot.")
   }
@@ -231,9 +299,10 @@ export async function runPeopleSyncPage(
   now?: () => Date
 ) {
   const request = snapshotRequest(state, client, now)
-  const fingerprints = previousWorkEmailFingerprints(state)
+  const workerFingerprints = previousWorkerFingerprints(state)
+  const emailFingerprints = previousWorkEmailFingerprints(state)
   const page = await client.fetchWorkersPage(request, {
-    includeWorkEmail: true,
+    projection: "people",
   })
   const result = pageResult(
     state,
@@ -241,28 +310,31 @@ export async function runPeopleSyncPage(
     page,
     client.sourceContractFingerprint
   )
-  const seen = new Set(fingerprints)
+  const seenWorkers = addWorkerFingerprints(
+    client,
+    page.people,
+    workerFingerprints
+  )
+  const seenEmails = new Set(emailFingerprints)
   for (const person of page.people) {
     if (!person.workEmail) continue
-    const fingerprint = client.workEmailFingerprint(person.workEmail)
-    if (
-      fingerprint.length !== WORK_EMAIL_FINGERPRINT_LENGTH ||
-      !WORK_EMAIL_FINGERPRINT_PATTERN.test(fingerprint)
-    ) {
-      throw new Error("Workday client returned an invalid email fingerprint.")
-    }
-    if (seen.has(fingerprint)) {
+    const fingerprint = checkedFingerprint(
+      client.workEmailFingerprint(person.workEmail),
+      "work-email"
+    )
+    if (seenEmails.has(fingerprint)) {
       throw new Error(
         "Workday returned one public work email for multiple employees."
       )
     }
-    seen.add(fingerprint)
+    seenEmails.add(fingerprint)
   }
 
   const nextState = result.nextState
     ? {
         ...result.nextState,
-        seenWorkEmailFingerprints: [...seen].join(""),
+        seenWorkerFingerprints: [...seenWorkers].join(""),
+        seenWorkEmailFingerprints: [...seenEmails].join(""),
       }
     : undefined
 
@@ -279,8 +351,9 @@ export async function runOrganizationsSyncPage(
   now?: () => Date
 ) {
   const request = snapshotRequest(state, client, now)
+  const workerFingerprints = previousWorkerFingerprints(state)
   const page = await client.fetchWorkersPage(request, {
-    includeWorkEmail: false,
+    projection: "organizations",
   })
   const result = pageResult(
     state,
@@ -288,10 +361,21 @@ export async function runOrganizationsSyncPage(
     page,
     client.sourceContractFingerprint
   )
+  const seenWorkers = addWorkerFingerprints(
+    client,
+    page.people,
+    workerFingerprints
+  )
+  const nextState = result.nextState
+    ? {
+        ...result.nextState,
+        seenWorkerFingerprints: [...seenWorkers].join(""),
+      }
+    : undefined
 
   return {
     changes: organizationsFromPeople(page.people).map(organizationToChange),
     hasMore: result.hasMore,
-    ...(result.nextState ? { nextState: result.nextState } : {}),
+    ...(nextState ? { nextState } : {}),
   }
 }

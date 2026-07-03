@@ -1,9 +1,9 @@
 // Workday employee directory — active employees, supervisory organizations,
 // optional work email/profile identity, and supervisory manager relations.
 //
-// Workday remains authoritative. Both databases are complete replace-mode
-// snapshots: fixed as-of values keep every WWS page consistent, and Notion
-// only sweeps stale rows after the final page succeeds.
+// Both databases are complete daily snapshots built from Workday. Fixed as-of
+// values keep every WWS page consistent, and Notion only sweeps stale rows
+// after the final page succeeds.
 
 import { Worker } from "@notionhq/workers"
 

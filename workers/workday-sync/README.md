@@ -48,17 +48,34 @@ ntn workers env set \
   WORKDAY_EFFECTIVE_TIME_ZONE=America/New_York
 ```
 
-Preview Organizations and then People. Previews call Workday and print employee
-data without writing the databases, so protect terminal output.
+Optionally preview Organizations and then People to check the connection and a
+sample page. Previews print employee data without writing the databases, so
+protect terminal output.
 
 ```sh
 ntn workers sync trigger organizationsSync --preview
 ntn workers sync trigger peopleSync --preview
 ```
 
-Before sharing, confirm that:
+Run the complete initial syncs while both databases are still restricted:
 
-- the preview contains only the expected employees and details;
+```sh
+ntn workers sync trigger organizationsSync
+ntn workers sync status organizationsSync
+```
+
+Watch until Organizations succeeds, then press Ctrl-C and run People:
+
+```sh
+ntn workers sync trigger peopleSync
+ntn workers sync status peopleSync
+```
+
+Watch until People succeeds, then press Ctrl-C.
+
+Review the complete private databases and confirm that:
+
+- they contain only the expected employees and details;
 - manager, direct-report, organization, and member links point to the expected
   people and organizations;
 - Name remains, and Work Email remains when Workday supplies a public primary
@@ -66,12 +83,10 @@ Before sharing, confirm that:
 - an active Notion member, an email with no Notion account, and guest,
   deactivated, alias, and case-variant examples behave as expected.
 
-Run Organizations first so the People links have somewhere to point, then start
-the daily schedules:
+Share the databases only with the approved audience, then start the daily
+schedules:
 
 ```sh
-ntn workers sync trigger organizationsSync
-ntn workers sync trigger peopleSync
 ntn workers sync resume organizationsSync
 ntn workers sync resume peopleSync
 ```
@@ -172,11 +187,11 @@ test.ts                — offline privacy, parser, paging, and failure tests
 7. Both syncs use `mode: "replace"`. Stale rows are removed only after the final
    page succeeds, so a partial failure preserves the previous complete result.
 
-The worker stops without replacing the current directory if Workday returns no
-employees, page totals change during a run, contact results do not line up, or
-organization, email, or manager data is conflicting. It also stops above 100
-manager links or 100 pages (10,000 employees). Paging state never stores raw
-Workday IDs or email addresses.
+The worker keeps the current directory if Workday returns no employees, page
+totals change during a run, an employee appears twice, contact results do not
+line up, or organization, email, or manager data conflicts. It also stops above
+100 manager links or 100 pages (10,000 employees). Paging state never stores
+raw Workday IDs or email addresses.
 
 The two databases update separately, so one can finish before the other. Run
 Organizations before People for initial loads and immediate refreshes. At the
@@ -237,11 +252,11 @@ To keep Workday access narrow:
 4. Register a dedicated API Client for Integrations, activate pending security
    changes, inspect effective access, and test as the integration user.
 
-Before sharing, preview examples such as multi-job employees, international
-assignments, top-level managers, co-managers, confidential employees, missing
-emails, and duplicate names. Workday setup differs by company, so verify what
-the service account can read instead of copying security-role names from
-another tenant.
+Before sharing, check the complete private databases for examples such as
+multi-job employees, international assignments, top-level managers,
+co-managers, confidential employees, missing emails, and duplicate names.
+Workday setup differs by company, so verify what the service account can read
+instead of copying security-role names from another tenant.
 
 ### Configuration reference
 
@@ -273,9 +288,9 @@ ntn workers sync state reset peopleSync
 ```
 
 Preview and trigger Organizations before People, then resume both schedules.
-Changing the client secret also changes how duplicate emails are tracked, so
-reset both syncs. An expired Workday paging cache needs the same reset; changing
-only the refresh token does not.
+Changing the client secret also changes how duplicate employees and emails are
+tracked, so reset both syncs. An expired Workday paging cache needs the same
+reset; changing only the refresh token does not.
 
 If the directory shows something it should not, restrict both databases and
 pause both syncs before investigating. If links are missing, inspect both runs:

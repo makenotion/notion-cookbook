@@ -13,10 +13,11 @@ import { XMLParser, XMLValidator } from "fast-xml-parser"
 
 import type { DirectoryPerson } from "./people.js"
 import {
+  DIRECTORY_FINGERPRINT_BYTES,
   DIRECTORY_SYNC_CONTRACT_VERSION,
-  WORK_EMAIL_FINGERPRINT_LENGTH,
   WORKDAY_PAGE_SIZE,
   type WorkdayDirectoryClient,
+  type WorkdayDirectoryProjection,
   type WorkdayPageRequest,
   type WorkdayWorkersPage,
 } from "./sync.js"
@@ -342,7 +343,8 @@ function xmlElement(name: string, value: boolean | string | number): string {
  */
 export function buildGetWorkersRequest(
   version: string,
-  request: WorkdayPageRequest
+  request: WorkdayPageRequest,
+  projection: WorkdayDirectoryProjection
 ): string {
   if (!/^v\d+\.\d+$/.test(version)) {
     throw new Error("Workday SOAP version is invalid.")
@@ -371,8 +373,11 @@ export function buildGetWorkersRequest(
     xmlElement("Exclude_Teams", true),
     xmlElement("Exclude_Custom_Organizations", true),
     xmlElement("Include_Roles", false),
-    xmlElement("Include_Management_Chain_Data", true),
-    xmlElement("Include_Multiple_Managers_in_Management_Chain_Data", true),
+    xmlElement("Include_Management_Chain_Data", projection === "people"),
+    xmlElement(
+      "Include_Multiple_Managers_in_Management_Chain_Data",
+      projection === "people"
+    ),
     xmlElement("Include_Benefit_Enrollments", false),
     xmlElement("Include_Benefit_Eligibility", false),
     xmlElement("Include_Related_Persons", false),
@@ -628,7 +633,59 @@ function employeeManagerWid(value: unknown): string {
   return wid
 }
 
-function parseDirectoryPerson(value: unknown): DirectoryPerson {
+function managerWorkdayWids(
+  workerData: JsonObject,
+  organizationWid: string
+): string[] {
+  const managementChain = workerData.Management_Chain_Data
+  const supervisoryChain = isObject(managementChain)
+    ? managementChain.Worker_Supervisory_Management_Chain_Data
+    : undefined
+  if (!isObject(supervisoryChain)) {
+    throw new Error(
+      "Workday response is missing requested supervisory management-chain data."
+    )
+  }
+  const chainEntries = asArray(supervisoryChain.Management_Chain_Data)
+  if (chainEntries.length === 0) {
+    throw new Error(
+      "Workday response is missing requested supervisory management-chain data."
+    )
+  }
+  const matchingChainEntries = chainEntries.filter((entry) => {
+    if (!isObject(entry)) return false
+    try {
+      return (
+        referenceWid(entry.Organization_Reference, "Organization_Reference") ===
+        organizationWid
+      )
+    } catch {
+      return false
+    }
+  })
+  if (matchingChainEntries.length !== 1) {
+    throw new Error(
+      "Workday management chain does not match the supervisory organization."
+    )
+  }
+
+  const currentOrganizationChain = asObject(
+    matchingChainEntries[0],
+    "Management_Chain_Data"
+  )
+  return [
+    ...new Set(
+      asArray(currentOrganizationChain.Manager_Reference).map(
+        employeeManagerWid
+      )
+    ),
+  ].sort()
+}
+
+function parseDirectoryPerson(
+  value: unknown,
+  projection: WorkdayDirectoryProjection
+): DirectoryPerson {
   const worker = asObject(value, "Worker")
   const workerReference = worker.Worker_Reference
   const workdayWid = referenceWid(workerReference, "Worker_Reference")
@@ -673,50 +730,6 @@ function parseDirectoryPerson(value: unknown): DirectoryPerson {
     )
   }
 
-  const managementChain = workerData.Management_Chain_Data
-  const supervisoryChain = isObject(managementChain)
-    ? managementChain.Worker_Supervisory_Management_Chain_Data
-    : undefined
-  if (!isObject(supervisoryChain)) {
-    throw new Error(
-      "Workday response is missing requested supervisory management-chain data."
-    )
-  }
-  const chainEntries = asArray(supervisoryChain.Management_Chain_Data)
-  if (chainEntries.length === 0) {
-    throw new Error(
-      "Workday response is missing requested supervisory management-chain data."
-    )
-  }
-  const matchingChainEntries = chainEntries.filter((entry) => {
-    if (!isObject(entry)) return false
-    try {
-      return (
-        referenceWid(entry.Organization_Reference, "Organization_Reference") ===
-        organizationWid
-      )
-    } catch {
-      return false
-    }
-  })
-  if (matchingChainEntries.length !== 1) {
-    throw new Error(
-      "Workday management chain does not match the supervisory organization."
-    )
-  }
-
-  const currentOrganizationChain = asObject(
-    matchingChainEntries[0],
-    "Management_Chain_Data"
-  )
-  const managerWorkdayWids = [
-    ...new Set(
-      asArray(currentOrganizationChain.Manager_Reference).map(
-        employeeManagerWid
-      )
-    ),
-  ].sort()
-
   return {
     workdayWid,
     name,
@@ -724,7 +737,10 @@ function parseDirectoryPerson(value: unknown): DirectoryPerson {
       workdayWid: organizationWid,
       name: organizationName,
     },
-    managerWorkdayWids,
+    managerWorkdayWids:
+      projection === "people"
+        ? managerWorkdayWids(workerData, organizationWid)
+        : [],
   }
 }
 
@@ -827,13 +843,18 @@ export function parseGetWorkContactResponse(
   return emails
 }
 
-export function parseGetWorkersResponse(xml: string): WorkdayWorkersPage {
+export function parseGetWorkersResponse(
+  xml: string,
+  projection: WorkdayDirectoryProjection
+): WorkdayWorkersPage {
   const body = parseSoapBody(xml)
   const response = asObject(body.Get_Workers_Response, "Get_Workers_Response")
   const results = asObject(response.Response_Results, "Response_Results")
   const responseData = asObject(response.Response_Data, "Response_Data")
   const workers = asArray(responseData.Worker)
-  const people = workers.map(parseDirectoryPerson)
+  const people = workers.map((worker) =>
+    parseDirectoryPerson(worker, projection)
+  )
 
   const page = responseInteger(results.Page, "Page")
   const totalPages = responseInteger(results.Total_Pages, "Total_Pages")
@@ -885,8 +906,8 @@ export function createWorkdayClient(
   beforeRequest: BeforeRequest,
   fetchImplementation: FetchImplementation = fetch
 ): WorkdayDirectoryClient {
-  const emailFingerprintKeyVersion = createHmac("sha256", config.clientSecret)
-    .update("notion-workday-directory:work-email-key-version", "utf8")
+  const fingerprintKeyVersion = createHmac("sha256", config.clientSecret)
+    .update("notion-workday-directory:fingerprint-key-version", "utf8")
     .digest("base64url")
   const sourceContractFingerprint = createHash("sha256")
     .update(
@@ -895,7 +916,7 @@ export function createWorkdayClient(
         apiUrl: config.apiUrl.replace(/\/+$/, ""),
         apiVersion: config.apiVersion,
         clientId: config.clientId,
-        emailFingerprintKeyVersion,
+        fingerprintKeyVersion,
         effectiveTimeZone: config.effectiveTimeZone,
         pageSize: WORKDAY_PAGE_SIZE,
       }),
@@ -964,28 +985,41 @@ export function createWorkdayClient(
     throw new Error("Workday SOAP authentication failed after token renewal.")
   }
 
+  function directoryFingerprint(
+    domain: "work-email" | "worker",
+    value: string
+  ): string {
+    return createHmac("sha256", config.clientSecret)
+      .update(`notion-workday-directory:${domain}:${value}`, "utf8")
+      .digest()
+      .subarray(0, DIRECTORY_FINGERPRINT_BYTES)
+      .toString("base64url")
+  }
+
   return {
     effectiveTimeZone: config.effectiveTimeZone,
     sourceContractFingerprint,
+    workerFingerprint(workdayWid) {
+      const normalized = workdayWid.trim()
+      if (!normalized) throw new Error("Workday employee WID is empty.")
+      return directoryFingerprint("worker", normalized)
+    },
     workEmailFingerprint(email) {
       const normalized = normalizedWorkEmail(
         email,
         "Workday public primary work email"
       )
-      return createHmac("sha256", config.clientSecret)
-        .update(`notion-workday-directory:work-email:${normalized}`, "utf8")
-        .digest("base64url")
-        .slice(0, WORK_EMAIL_FINGERPRINT_LENGTH)
+      return directoryFingerprint("work-email", normalized)
     },
-    async fetchWorkersPage(request, { includeWorkEmail }) {
+    async fetchWorkersPage(request, { projection }) {
       const workersResponse = await postSoap(
-        buildGetWorkersRequest(config.apiVersion, request),
+        buildGetWorkersRequest(config.apiVersion, request, projection),
         // Page 1 builds Workday's paging cache and can legitimately take
         // longer; Workday explicitly advises against a strict timeout.
         request.page === 1
       )
-      const page = parseGetWorkersResponse(workersResponse)
-      if (!includeWorkEmail) return page
+      const page = parseGetWorkersResponse(workersResponse, projection)
+      if (projection === "organizations") return page
 
       const workdayWids = page.people.map((person) => person.workdayWid)
       const contactResponse = await postSoap(
