@@ -22,6 +22,15 @@ export const PRIMARY_KEY = "Sentry Project ID"
 export const MAX_AGGREGATED_PROJECTS = 500
 const MAX_MULTI_SELECT_VALUES = 100
 
+export class ProjectAggregationLimitError extends Error {
+  constructor() {
+    super(
+      `Sentry project aggregation exceeded ${MAX_AGGREGATED_PROJECTS} active projects`
+    )
+    this.name = "ProjectAggregationLimitError"
+  }
+}
+
 export type MostActiveIssue = {
   id: string
   title: string
@@ -110,19 +119,6 @@ function issueEventBuckets(
   return { previous, current }
 }
 
-function sameIdentity(
-  current: string | null,
-  next: string | null,
-  field: string,
-  projectId: string
-): void {
-  if (current && next && current !== next) {
-    throw new Error(
-      `Sentry project ${projectId} returned conflicting ${field} values during one refresh`
-    )
-  }
-}
-
 function maxDate(
   current: string | null,
   candidate: string | null
@@ -168,27 +164,11 @@ export function aggregateProjectIssues(
     }
 
     const existing = aggregates[projectId]
-    if (existing) {
-      sameIdentity(
-        existing.projectName,
-        issue.project?.name ?? null,
-        "names",
-        projectId
-      )
-      sameIdentity(
-        existing.projectSlug,
-        issue.project?.slug ?? null,
-        "slugs",
-        projectId
-      )
-    }
     if (
       !existing &&
       Object.keys(aggregates).length >= MAX_AGGREGATED_PROJECTS
     ) {
-      throw new Error(
-        `Sentry project aggregation exceeded ${MAX_AGGREGATED_PROJECTS} active projects; narrow SENTRY_PROJECTS to keep sync state bounded.`
-      )
+      throw new ProjectAggregationLimitError()
     }
 
     const aggregate: ProjectIssueAggregate = existing ?? {
@@ -213,6 +193,9 @@ export function aggregateProjectIssues(
       lastSeen: null,
     }
 
+    // Names and slugs can change between issue pages. The immutable ID owns
+    // aggregation identity; issue metadata is only a fallback when the
+    // canonical project inventory record is deleted or inaccessible.
     aggregate.projectName ??= issue.project?.name ?? null
     aggregate.projectSlug ??= issue.project?.slug ?? null
     aggregate.platform ??= issue.platform ?? issue.project?.platform ?? null

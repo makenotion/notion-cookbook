@@ -1,12 +1,16 @@
 // Pure, serializable state helpers for the rolling replacement scan.
 
+import { createHash } from "node:crypto"
+
 import type { SentryScope } from "./sentry.js"
 
 export const ISSUE_WINDOW_DAYS = 30
 // Workers rejects nextState above 256 KiB. Keep explicit headroom so future
 // state fields cannot turn a useful scope error into a runtime rejection.
 export const MAX_SAFE_SYNC_STATE_LENGTH = 240 * 1024
+export const MAX_RECENT_CURSOR_FINGERPRINTS = 32
 const DAY_MS = 24 * 60 * 60 * 1_000
+const textEncoder = new TextEncoder()
 
 export type IssueSyncState = {
   start: string
@@ -21,14 +25,26 @@ export type IssueWindow = {
   end: string
 }
 
-/** Fail with scope guidance before Workers rejects an oversized continuation. */
+/** Apply a conservative UTF-8 byte budget below the runtime's string limit. */
+export function syncStateSize(state: unknown): number {
+  return textEncoder.encode(JSON.stringify(state)).byteLength
+}
+
+export function syncStateFits(
+  state: unknown,
+  limit = MAX_SAFE_SYNC_STATE_LENGTH
+): boolean {
+  return syncStateSize(state) <= limit
+}
+
+/** Fail before Workers rejects an oversized continuation. */
 export function boundedSyncState<T>(state: T, resource: string): T {
-  const serializedLength = JSON.stringify(state).length
+  const serializedLength = syncStateSize(state)
   if (serializedLength > MAX_SAFE_SYNC_STATE_LENGTH) {
     throw new Error(
       `Sentry ${resource} continuation state exceeded the 240 KiB safety budget (${Math.ceil(
         serializedLength / 1024
-      )} KiB); narrow SENTRY_PROJECTS so the refresh can continue safely.`
+      )} KiB); the current refresh cannot continue safely.`
     )
   }
   return state
@@ -65,10 +81,7 @@ export function issueWindow(
   }
 }
 
-/**
- * Persist every cursor in the current traversal so A → B → A fails closed
- * instead of leaving a replacement run alive forever.
- */
+/** Keep recent cursor fingerprints so common loops fail without growing state. */
 export function nextIssueState(
   state: IssueSyncState | undefined,
   window: IssueWindow,
@@ -100,11 +113,31 @@ export function nextCursorTraversal(
     throw new Error(`Sentry ${resource} pagination is missing its next cursor`)
   }
 
-  const seenCursors = new Set(priorCursors ?? [])
-  if (currentCursor) seenCursors.add(currentCursor)
-  if (seenCursors.has(cursor)) {
+  // Persist compact fingerprints instead of provider-controlled cursor text.
+  // A bounded recent history catches common cursor cycles without introducing
+  // an artificial maximum page count or unbounded continuation state.
+  const fingerprint = (value: string): string =>
+    /^h:[A-Za-z0-9_-]{22}$/.test(value)
+      ? value
+      : `h:${createHash("sha256").update(value).digest("base64url").slice(0, 22)}`
+  let recentCursors = (priorCursors ?? [])
+    .map(fingerprint)
+    .slice(-MAX_RECENT_CURSOR_FINGERPRINTS)
+  if (currentCursor) {
+    const currentFingerprint = fingerprint(currentCursor)
+    if (!recentCursors.includes(currentFingerprint)) {
+      recentCursors.push(currentFingerprint)
+      recentCursors = recentCursors.slice(-MAX_RECENT_CURSOR_FINGERPRINTS)
+    }
+  }
+  const nextFingerprint = fingerprint(cursor)
+  if (recentCursors.includes(nextFingerprint)) {
     throw new Error(`Sentry ${resource} pagination repeated a cursor`)
   }
-  seenCursors.add(cursor)
-  return { cursor, seenCursors: [...seenCursors] }
+  return {
+    cursor,
+    seenCursors: [...recentCursors, nextFingerprint].slice(
+      -MAX_RECENT_CURSOR_FINGERPRINTS
+    ),
+  }
 }

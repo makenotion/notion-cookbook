@@ -145,9 +145,7 @@ function releasePageContent(
             ? ""
             : ` · ${health.users.toLocaleString("en-US")} users`
         }`,
-    snapshot.available
-      ? `- **Health window:** ${snapshot.start} to ${snapshot.end}`
-      : "- **Health window:** Not available on this Sentry installation",
+    `- **Health window:** ${snapshot.start} to ${snapshot.end}`,
     `- **Health project scope:** ${escapeMarkdown(
       propertyText(scope.projects.join(", ") || "All accessible projects") ??
         "All accessible projects"
@@ -208,7 +206,7 @@ export function releasesToChanges(
     const firstEvent = dateTime(release.firstEvent)
     const lastEvent = dateTime(release.lastEvent)
     const reference = propertyText(release.ref)
-    const hasHealthData = snapshot.available ? Boolean(releaseHealth) : null
+    const hasHealthData = Boolean(releaseHealth)
 
     return {
       type: "upsert" as const,
@@ -246,8 +244,7 @@ export function releasesToChanges(
         "Sentry Link": sentryUrl ? Builder.url(sentryUrl) : [],
         "Released At": releasedAt ? Builder.dateTime(releasedAt) : [],
         "Created At": createdAt ? Builder.dateTime(createdAt) : [],
-        "Health Data (7d)":
-          hasHealthData === null ? [] : Builder.checkbox(hasHealthData),
+        "Health Data (7d)": Builder.checkbox(hasHealthData),
         "Release URL": externalUrl ? Builder.url(externalUrl) : [],
         "First Event": firstEvent ? Builder.dateTime(firstEvent) : [],
         "Last Event": lastEvent ? Builder.dateTime(lastEvent) : [],
@@ -264,8 +261,8 @@ export function releasesToChanges(
           propertyText(release.version) ?? "Unknown release"
         ),
         Reference: reference ? Builder.richText(reference) : [],
-        "Window Start": snapshot.start ? Builder.dateTime(snapshot.start) : [],
-        "Window End": snapshot.end ? Builder.dateTime(snapshot.end) : [],
+        "Window Start": Builder.dateTime(snapshot.start),
+        "Window End": Builder.dateTime(snapshot.end),
         "Health Project Scope": Builder.richText(
           propertyText(
             scope.projects.join(", ") || "All accessible projects"

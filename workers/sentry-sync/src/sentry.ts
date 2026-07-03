@@ -2,8 +2,6 @@
 // session health. It does not request raw events; parsers select only the fields
 // used by the Notion databases and do not persist unselected personal data.
 
-import { createHash } from "node:crypto"
-
 import { RateLimitError } from "@notionhq/workers"
 
 import type { SentryStats } from "./helpers.js"
@@ -76,7 +74,6 @@ export type SentryScope = {
   organization: string
   projects: string[]
   environments: string[]
-  credentialFingerprint: string
 }
 
 export type SentryIssuePage = {
@@ -139,9 +136,8 @@ export type SentryReleaseHealth = {
 }
 
 export type SentryReleaseHealthSnapshot = {
-  available: boolean
-  start: string | null
-  end: string | null
+  start: string
+  end: string
   groups: SentryReleaseHealth[]
 }
 
@@ -199,18 +195,13 @@ function sentryBaseUrl(
 }
 
 export function getSentryScope(): SentryScope {
-  const token = requireEnv("SENTRY_AUTH_TOKEN")
+  requireEnv("SENTRY_AUTH_TOKEN")
   return {
     baseUrl: sentryBaseUrl().toString(),
     organization: organizationSlug(requireEnv("SENTRY_ORG_SLUG")),
     projects: commaSeparatedEnv("SENTRY_PROJECTS"),
     environments: commaSeparatedEnv("SENTRY_ENVIRONMENTS"),
-    credentialFingerprint: tokenFingerprint(token),
   }
-}
-
-function tokenFingerprint(token: string): string {
-  return createHash("sha256").update(token).digest("hex")
 }
 
 function validateScopeValues(values: unknown, name: string): string[] {
@@ -287,9 +278,6 @@ export function buildProjectsUrl(
 export function buildReleasesUrl(scope = getSentryScope()): URL {
   const url = organizationResourceUrl(scope, "releases")
   url.searchParams.set("per_page", String(RECENT_RELEASE_LIMIT))
-  // Sentry otherwise defaults this endpoint to open releases. The explicit
-  // empty filter keeps recently archived releases in rollout history too.
-  url.searchParams.set("status", "")
   for (const project of validateScopeValues(
     scope.projects,
     "project filters"
@@ -637,11 +625,6 @@ async function fetchSentryJson(
   activity: string
 ): Promise<{ body: unknown; headers: Headers }> {
   const token = requireEnv("SENTRY_AUTH_TOKEN")
-  if (tokenFingerprint(token) !== scope.credentialFingerprint) {
-    throw new Error(
-      `SENTRY_AUTH_TOKEN changed during Sentry ${activity}; restart the full refresh with one credential.`
-    )
-  }
 
   await beforeRequest()
   let response: Response
@@ -657,10 +640,10 @@ async function fetchSentryJson(
     })
   } catch (error) {
     if (error instanceof Error && error.name === "TimeoutError") {
-      throw new Error("Sentry API request timed out after 30 seconds")
+      throw new Error(`Sentry ${activity} timed out after 30 seconds`)
     }
     throw new Error(
-      `Sentry API request failed: ${
+      `Sentry ${activity} request failed: ${
         error instanceof Error ? error.message : "unknown network error"
       }`
     )
@@ -676,7 +659,9 @@ async function fetchSentryJson(
     const detail = errorExcerpt(text)
     throw new SentryApiError(
       response.status,
-      `Sentry API error (${response.status})${detail ? `: ${detail}` : ""}`
+      `Sentry API error (${response.status}) during ${activity}${
+        detail ? `: ${detail}` : ""
+      }`
     )
   }
 
@@ -684,9 +669,7 @@ async function fetchSentryJson(
     return { body: JSON.parse(text), headers: response.headers }
   } catch {
     throw new Error(
-      `Sentry API returned invalid JSON (${response.status}): ${errorExcerpt(
-        text
-      )}`
+      `Sentry ${activity} returned invalid JSON (${response.status}): ${errorExcerpt(text)}`
     )
   }
 }
@@ -1054,7 +1037,6 @@ export async function fetchReleaseHealth(
     throw new Error("Sentry release health response has an invalid time window")
   }
   return {
-    available: true,
     start: responseStart,
     end: responseEnd,
     groups: groups.map(parseReleaseHealthGroup),

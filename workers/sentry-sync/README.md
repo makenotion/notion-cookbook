@@ -43,12 +43,12 @@ are not saved as separate partial environment updates. Start with one or two
 production projects; replace `checkout-api` with a comma-separated list of
 Sentry project IDs or slugs.
 
-Create and populate all three databases while streaming each run:
+Create and populate all three databases:
 
 ```sh
-ntn workers exec issuesSync --stream
-ntn workers exec projectsSync --stream
-ntn workers exec releasesSync --stream
+ntn workers sync trigger issuesSync
+ntn workers sync trigger projectsSync
+ntn workers sync trigger releasesSync
 ```
 
 After all three commands complete, the workspace contains managed databases
@@ -183,10 +183,24 @@ metrics.
 - **Rollout watch:** sort releases by Released At descending, then Crash-Free
   Sessions and Sessions (7d).
 - **Missing release telemetry:** filter Health Data (7d) unchecked. Empty means
-  Sentry returned no health row, no session telemetry exists, or the sessions
-  request used the Worker's 404 fallback described below.
+  a successful Sentry response returned no matching health row or no session
+  telemetry exists for that release and scope.
 
 ## How it works
+
+### Contract boundary
+
+All provider calls use the four public Sentry REST endpoints linked below and
+only parameters documented for those endpoints. The example does not use
+Sentry alpha, early-access, internal, or undocumented APIs. Sentry's `/api/0`
+path is its documented public REST namespace, not an API maturity label.
+
+On the Notion side, the example imports only public exports documented for
+`@notionhq/workers`; it does not import SDK internals. The current Notion CLI
+labels Workers as Beta, which is a platform-level constraint shared by Worker
+examples rather than a hidden dependency of this integration. The conservative
+continuation-state budget and explicit property clearing reflect current
+Workers runtime behavior and should be revalidated when upgrading the Beta SDK.
 
 ### Rolling issue triage
 
@@ -194,12 +208,15 @@ The Worker calls Sentry's current organization issue-search endpoint with an
 explicit empty `query=`. Sentry otherwise defaults the endpoint to unresolved
 issues, while this example needs recently active resolved and ignored groups
 for review as well. The first page pins an exact 30-day `start` and `end`, base
-URL, organization, filters, and a non-secret credential fingerprint.
+URL, organization, and filters. Each request reads the currently configured
+token so routine rotation cannot strand an in-progress refresh.
 
 Every page requests 100 groups and 24-hour group statistics. Sentry's `Link`
 header is authoritative: the Worker continues only when the one trusted
 `rel="next"` entry declares `results="true"`. Missing or malformed links,
-untrusted origins/paths, duplicate next links, and cursor cycles fail closed.
+untrusted origins/paths, duplicate next links, and repeated recent cursors fail
+closed. Cursor fingerprints use a fixed-size history so long traversals do not
+grow continuation state or introduce an artificial page limit.
 
 ### Service-level reliability
 
@@ -216,23 +233,27 @@ Projects with no matching issues still appear. An issue aggregate whose
 project was deleted or became inaccessible is retained using the issue's
 project metadata so risk does not disappear silently.
 
-Continuation state has a 240 KiB safety budget below Workers' 256 KiB runtime
-limit, plus a secondary cap of 500 active projects. Metadata length varies, so
-the serialized-state budget can be reached first. Larger organizations should
-set `SENTRY_PROJECTS`; crossing either boundary fails with an actionable error
-rather than truncating the snapshot or returning invalid continuation state.
+Continuation state remains below Workers' 256 KiB runtime limit, with reserved
+headroom for compact cursor history and a secondary cap of 500 active projects.
+Metadata length varies, so the serialized-state budget can be reached first.
+If either aggregation boundary is reached, the Worker checkpoints before any
+project rows are written and asks for a narrower project or environment scope.
+After the configured scope changes, it automatically restarts from a fresh
+window instead of retrying an unrecoverable oversized state. During project
+inventory pagination, emitted aggregates are removed so continuation state
+shrinks while rows are written.
+
+Apply the narrower scope with `ntn workers env set`, then rerun
+`ntn workers sync trigger projectsSync`. No sync-state reset is required.
 
 ### Recent rollout health
 
-The release refresh deliberately requests only the first 100 releases from the
-endpoint's most-recent-first default order, so this is an explicit useful set
-rather than accidental pagination truncation. The Worker sends configured
-project and environment filters plus an explicit empty `status=` to the release
-request. Sentry's public list-releases reference documents the project filter,
-but not environment or status for this endpoint. Their effect on release
-membership is therefore compatibility behavior, not a portable guarantee
-across Sentry SaaS and self-hosted versions. The separate Release Health query
-always applies the explicit project and environment scope shown in Notion.
+The release refresh deliberately requests the maximum 100 releases from
+Sentry's documented most-recent-first organization endpoint, so this is an
+explicit useful set rather than accidental pagination truncation. The Worker
+uses only the endpoint's documented project and environment filters. The
+separate Release Health query applies the same explicit project and environment
+scope shown in Notion.
 
 One additional sessions request groups the prior seven days by release across
 the configured project and environment scope, requests totals without
@@ -244,13 +265,11 @@ that conservative request also remains below Sentry's documented
 10,000-data-point constraint even if the service computes series before
 omitting them from the response.
 
-An empty health result is valid and clears unavailable metrics. The Worker also
-treats any 404 from the sessions endpoint as unavailable health and preserves
-release metadata. That fallback does not prove that the Sentry installation is
-too old: if health was expected, check the organization, route, permissions,
-proxy, and Sentry version. Explicit 401/403 authentication and authorization
-responses, malformed data, timeouts, 429s, and other non-404 API errors remain
-visible failures.
+A successful empty health result is valid and clears unavailable metrics. API
+errors, including 404s, remain visible failures rather than being interpreted
+as absent telemetry. Because the release sync uses replacement semantics, a
+failed health request does not publish a partial snapshot or clear previously
+valid rows.
 
 ### Rate limits and request safety
 
@@ -261,14 +280,17 @@ limit. On HTTP 429, the Worker passes usable `Retry-After` and
 
 Requests have a 30-second timeout, reject redirects, and send the bearer token
 only to a validated HTTPS base URL. Loopback HTTP is allowed for local testing.
-The token fingerprint prevents a multi-page refresh from continuing under a
-rotated credential with different access.
+Authentication and authorization errors remain visible rather than being
+reinterpreted as empty provider data.
 
 ## Sentry access and configuration
 
 ### Create a Sentry token
 
 Prefer an organization **internal integration** for a deployed Worker:
+
+“Internal integration” is Sentry's name for an organization-owned credential;
+it does not mean this example calls an internal or alpha API.
 
 1. Open **Organization Settings > Developer Settings > Internal
    Integrations**.
@@ -283,13 +305,13 @@ convenient for testing but follows that user's access and lifecycle.
 
 ### Environment variables
 
-| Variable              | Required | Description                                                                          |
-| --------------------- | -------- | ------------------------------------------------------------------------------------ |
-| `SENTRY_AUTH_TOKEN`   | Yes      | Bearer token with `event:read`, `org:read`, and `project:releases`                   |
-| `SENTRY_ORG_SLUG`     | Yes      | Organization slug from the Sentry URL                                                |
-| `SENTRY_PROJECTS`     | No       | Comma-separated project IDs or slugs; scopes issues, projects, releases, and health  |
-| `SENTRY_ENVIRONMENTS` | No       | Comma-separated environments; scopes issues, project aggregates, and release health  |
-| `SENTRY_BASE_URL`     | No       | HTTPS root for self-hosted Sentry; defaults to `https://sentry.io`, without API path |
+| Variable              | Required | Description                                                                           |
+| --------------------- | -------- | ------------------------------------------------------------------------------------- |
+| `SENTRY_AUTH_TOKEN`   | Yes      | Bearer token with `event:read`, `org:read`, and `project:releases`                    |
+| `SENTRY_ORG_SLUG`     | Yes      | Organization slug from the Sentry URL                                                 |
+| `SENTRY_PROJECTS`     | No       | Comma-separated project IDs or slugs; scopes issues, projects, releases, and health   |
+| `SENTRY_ENVIRONMENTS` | No       | Comma-separated environments; scopes issues, project aggregates, releases, and health |
+| `SENTRY_BASE_URL`     | No       | HTTPS root for self-hosted Sentry; defaults to `https://sentry.io`, without API path  |
 
 For self-hosted Sentry:
 
@@ -348,9 +370,9 @@ For live verification without writing to Notion, copy `.env.example` to `.env`,
 add credentials for a small test project, and run:
 
 ```sh
-ntn workers exec issuesSync --local --stream
-ntn workers exec projectsSync --local --stream
-ntn workers exec releasesSync --local --stream
+ntn workers sync trigger issuesSync --local --preview
+ntn workers sync trigger projectsSync --local --preview
+ntn workers sync trigger releasesSync --local --preview
 ```
 
 Keep generated and machine-local files out of commits. `.env`, `workers.json`,
@@ -360,9 +382,9 @@ deployment does not require committing its generated Worker configuration.
 
 Confirm that recently active resolved and unresolved issues appear; project
 totals match the scoped issue set; current/prior seven-day buckets line up with
-Sentry; newest releases remain one row each with project context; and missing
-Release Health clears prior fields rather than retaining stale values or
-creating false zeroes.
+Sentry; newest releases remain one row each with project context; and a
+successful health response without a matching release group clears prior
+metrics rather than retaining stale values or creating false zeroes.
 
 ## Customizing the default set
 
@@ -390,8 +412,10 @@ the visible schema:
    an immutable provider ID as the primary key.
 3. **Lifecycle contract:** register a new database, sync, and schedule in
    `src/index.ts`. Pin the time window and `SentryScope` for the full refresh,
-   validate cursor traversal with `nextCursorTraversal`, and pass every
-   continuation through `boundedSyncState` in `src/sync-state.ts`.
+   validate cursor traversal with `nextCursorTraversal`, and enforce the
+   continuation limits in `src/sync-state.ts`. If state can grow before any
+   rows are emitted, prefer a small recoverable checkpoint like the projects
+   sync rather than stranding an oversized continuation.
 4. **Completeness contract:** exhaustive syncs must follow trusted pagination
    until a terminal `hasMore: false`; never silently stop and call a partial
    result complete. If a deliberately bounded snapshot is more useful, as with
@@ -415,4 +439,6 @@ issue freshness while the full refresh remains reconciliation.
 - [Sentry rate limits](https://docs.sentry.io/api/ratelimits/)
 - [Sentry authentication and permissions](https://docs.sentry.io/api/auth/)
 - [Sentry data scrubbing](https://docs.sentry.io/security-legal-pii/scrubbing/)
-- [Notion Workers](https://developers.notion.com/docs/workers)
+- [Notion Workers overview](https://developers.notion.com/workers/get-started/overview)
+- [Workers SDK reference](https://developers.notion.com/workers/reference/sdk)
+- [Workers sync guide](https://developers.notion.com/workers/guides/syncs)
