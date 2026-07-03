@@ -21,9 +21,10 @@ directory.
   [Linear](workers/linear-sync/), [PagerDuty](workers/pagerduty-sync/),
   [Salesforce](workers/salesforce-sync/), [Sentry](workers/sentry-sync/),
   [Snowflake](workers/snowflake-sync/), or [Zendesk](workers/zendesk-sync/).
-- **Give a Notion Agent a new tool:** connect it to
-  [Airflow](workers/airflow/), [CloudWatch Logs](workers/cloudwatch-logs/),
-  [Postgres](workers/postgres-query/), or one of the other Worker tools below.
+- **Give a Notion Agent a reliable new capability:** execute a repeatable API
+  workflow in one tool call, or connect to [Airflow](workers/airflow/),
+  [CloudWatch Logs](workers/cloudwatch-logs/),
+  [Postgres](workers/postgres-query/), and more.
 - **React to external events:** receive and verify
   [Zendesk webhooks](workers/zendesk-webhook/).
 
