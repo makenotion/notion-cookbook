@@ -1,7 +1,9 @@
 # Notion Worker examples
+
 [Notion Workers](https://developers.notion.com/docs/workers) are server-side extensions deployed to Notion. Each direct child of this directory is an independently executable and deployable Worker.
 
 There are 3 different type of Worker capabilties:
+
 - A **sync** imports external records into a managed Notion database on a
   schedule or on demand.
 - An **agent tool** lets a Notion Agent query context or execute a repeatable API workflow
@@ -28,16 +30,17 @@ For self-hosted integrations built directly with the Notion API, see the [API ex
 
 ## Agent tools
 
-| Worker                                    | What an agent can do                                                               |
-| ----------------------------------------- | ---------------------------------------------------------------------------------- |
-| [Airflow](airflow/)                       | Inspect DAGs, runs, tasks, logs, and service health through the Airflow REST API.  |
-| [Chart generator](chart-generator/)       | Render a Vega-Lite chart, upload the PNG, and insert it into a Notion page.        |
-| [CloudWatch Logs](cloudwatch-logs/)       | Find log groups and streams and read AWS CloudWatch log events.                    |
-| [DuckDB query](duckdb-query/)             | Query a seeded, in-memory DuckDB database with read-only SQL; no secrets required. |
-| [Postgres query](postgres-query/)         | Discover tables and query PostgreSQL with guarded, read-only SQL.                  |
-| [PowerPoint creator](powerpoint-creator/) | Turn a Notion page into PowerPoint slides and attach the generated `.pptx` file.   |
-| [Snowflake query](snowflake-query/)       | Discover tables and query Snowflake with guarded, read-only SQL.                   |
-| [SQLite query](sqlite-query/)             | Query a seeded, in-memory SQLite database; no secrets required.                    |
+| Worker                                                           | What an agent can do                                                                                           |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| [Airflow](airflow/)                                              | Inspect DAGs, runs, tasks, logs, and service health through the Airflow REST API.                              |
+| [Chart generator](chart-generator/)                              | Render a Vega-Lite chart, upload the PNG, and insert it into a Notion page.                                    |
+| [CloudWatch Logs](cloudwatch-logs/)                              | Find log groups and streams and read AWS CloudWatch log events.                                                |
+| [DuckDB query](duckdb-query/)                                    | Query a seeded, in-memory DuckDB database with read-only SQL; no secrets required.                             |
+| [Postgres query](postgres-query/)                                | Discover tables and query PostgreSQL with guarded, read-only SQL.                                              |
+| [PowerPoint creator](powerpoint-creator/)                        | Turn a Notion page into PowerPoint slides and attach the generated `.pptx` file.                               |
+| [Salesforce meeting outcome](salesforce-record-meeting-outcome/) | Record one approved meeting activity, bounded Opportunity changes, follow-up Tasks, and a replay-safe receipt. |
+| [Snowflake query](snowflake-query/)                              | Discover tables and query Snowflake with guarded, read-only SQL.                                               |
+| [SQLite query](sqlite-query/)                                    | Query a seeded, in-memory SQLite database; no secrets required.                                                |
 
 ## Webhooks
 
