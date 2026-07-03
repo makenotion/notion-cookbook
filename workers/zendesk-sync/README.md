@@ -339,6 +339,12 @@ a cross-capability lock to this Worker, so automatically overlapping a full
 sweep with a five-minute cursor would make deletion safety depend on
 undocumented scheduling behavior.
 
+Run the repair procedure below once immediately after upgrading an existing
+deployment. Notion preserves incremental sync state across deploys, so unchanged
+historical tickets and metrics will not otherwise revisit the new relation
+properties or nullable-field clearing behavior. New deployments populate those
+values during their initial backfill.
+
 Before a repair, pause both scheduled incremental capabilities and wait for any
 in-flight runs to finish. Then reset and trigger the replacement sweeps. Resume
 incremental updates only after both repairs report completion in `sync status`:

@@ -734,6 +734,20 @@ async function testZendeskClient() {
         })
       }
 
+      if (cursor === "empty-continuation") {
+        return Response.json({
+          results: [],
+          users: metrics ? undefined : [],
+          groups: metrics ? undefined : [],
+          organizations: metrics ? undefined : [],
+          metric_sets: metrics ? [] : undefined,
+          meta: {
+            has_more: true,
+            after_cursor: "empty-continuation-next",
+          },
+        })
+      }
+
       if (cursor === "cycle-a") {
         return Response.json({
           results: [{ ...standardTicket, result_type: "ticket" }],
@@ -817,6 +831,16 @@ async function testZendeskClient() {
     )
     const firstMetricReconciliation =
       await fetchTicketMetricsReconciliationPage(reconciliationCutoff)
+    const emptyTicketReconciliationContinuation =
+      await fetchTicketsReconciliationPage(
+        reconciliationCutoff,
+        "empty-continuation"
+      )
+    const emptyMetricReconciliationContinuation =
+      await fetchTicketMetricsReconciliationPage(
+        reconciliationCutoff,
+        "empty-continuation"
+      )
     const reconciliationTailStart = Math.floor(
       new Date(reconciliationCutoff).getTime() / 1_000
     )
@@ -1147,6 +1171,17 @@ async function testZendeskClient() {
         capabilityTicketTailUrl != null &&
         continuedTicketSearchUrl?.searchParams.get("query") ===
           `created<=${ticketReconciliationRun.nextUserContext?.createdBefore}`
+    )
+    ok(
+      "empty Search Export pages advance with their continuation cursor",
+      emptyTicketReconciliationContinuation.tickets.length === 0 &&
+        emptyTicketReconciliationContinuation.hasMore &&
+        emptyTicketReconciliationContinuation.nextCursor ===
+          "empty-continuation-next" &&
+        emptyMetricReconciliationContinuation.metrics.length === 0 &&
+        emptyMetricReconciliationContinuation.hasMore &&
+        emptyMetricReconciliationContinuation.nextCursor ===
+          "empty-continuation-next"
     )
     ok(
       "Search Export cursor loops fail closed",

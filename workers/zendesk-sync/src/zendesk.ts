@@ -297,11 +297,9 @@ async function fetchSearchExportTicketsPage(
   if (page.meta.has_more && nextCursor === cursor) {
     throw new Error("Zendesk ticket search export repeated its cursor")
   }
-  if (page.meta.has_more && page.results.length === 0) {
-    throw new Error(
-      "Zendesk ticket search export returned a cursor without results"
-    )
-  }
+  // Search Export can return an empty page with has_more and a new cursor.
+  // Continue through it; the cursor-loop and page-count guards still fail
+  // closed if pagination stops making progress.
   if (includes.includes("metric_sets") && !Array.isArray(page.metric_sets)) {
     // A missing sideload must not be mistaken for an empty metrics keyspace;
     // completing replace mode in that case would delete valid metric pages.
