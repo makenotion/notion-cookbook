@@ -481,6 +481,25 @@
       }
     },
     {
+      "id": "vercel-promote-approved-deployment",
+      "title": "Vercel approved deployment promotion",
+      "summary": "Promote one exact Notion-approved staged Vercel deployment after revalidating release evidence, then reconcile production domains and record a resumable receipt.",
+      "path": "workers/vercel-promote-approved-deployment",
+      "kind": "worker-tool",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "vercel", "redis"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name vercel-promote-approved-deployment"
+      }
+    },
+    {
       "id": "workday-sync",
       "title": "Workday employee directory sync",
       "summary": "Sync a daily employee-facing directory of Workday people, supervisory organizations, work email, Notion People references, and manager relations.",
