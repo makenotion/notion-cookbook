@@ -76,8 +76,11 @@ worker.sync("collectionsSync", {
   execute: async () => {
     const session = await client.authenticate()
     const items = await session.fetchCollections()
+    const observedAt = new Date().toISOString()
     return {
-      changes: items.map((item) => collectionToChange(session.accountId, item)),
+      changes: items.map((item) =>
+        collectionToChange(session.accountId, item, observedAt)
+      ),
       hasMore: false,
     }
   },
@@ -91,13 +94,14 @@ worker.sync("bookmarksSync", {
     const session = await client.authenticate()
     const { phase, page } = currentBookmarkPosition(state, session.accountId)
     const result = await session.fetchBookmarksPage(phase, page)
+    const observedAt = new Date().toISOString()
     return bookmarkPageResult(
       state,
       session.accountId,
       phase,
       result.items,
       result.items.map((item) =>
-        bookmarkToChange(session.accountId, item, phase === "trash")
+        bookmarkToChange(session.accountId, item, phase === "trash", observedAt)
       )
     )
   },
@@ -111,11 +115,14 @@ worker.sync("highlightsSync", {
     const session = await client.authenticate()
     const page = currentPage(state, session.accountId, "highlights")
     const result = await session.fetchHighlightsPage(page)
+    const observedAt = new Date().toISOString()
     return pageResult(
       state,
       session.accountId,
       result.items,
-      result.items.map((item) => highlightToChange(session.accountId, item)),
+      result.items.map((item) =>
+        highlightToChange(session.accountId, item, observedAt)
+      ),
       "highlights"
     )
   },

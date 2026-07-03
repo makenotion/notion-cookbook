@@ -26,6 +26,8 @@ export const collectionSchema = {
 
     Updated: Schema.date(),
 
+    "Last Seen": Schema.date(),
+
     "Collection ID": Schema.richText(),
 
     "Raindrop Account ID": Schema.richText(),
@@ -36,7 +38,8 @@ export const collectionSchema = {
 
 export function collectionToChange(
   accountId: number,
-  collection: RaindropCollection
+  collection: RaindropCollection,
+  observedAt: string
 ): SyncChangeUpsert<typeof PRIMARY_KEY, typeof collectionSchema.properties> {
   const key = collectionKey(accountId, collection._id)
   return {
@@ -57,6 +60,7 @@ export function collectionToChange(
       Updated: collection.lastUpdate
         ? Builder.dateTime(collection.lastUpdate, "UTC")
         : [],
+      "Last Seen": Builder.dateTime(observedAt, "UTC"),
       "Collection ID": Builder.richText(String(collection._id)),
       "Raindrop Account ID": Builder.richText(String(accountId)),
       "Collection Key": Builder.richText(key),

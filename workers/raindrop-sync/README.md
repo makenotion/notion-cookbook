@@ -88,19 +88,20 @@ cannot overwrite the earlier account's archive.
 
 ### Collections
 
-| Notion property     | Raindrop.io field or meaning             | Type                   |
-| ------------------- | ---------------------------------------- | ---------------------- |
-| Name                | `title`                                  | title                  |
-| Parent              | Account-scoped `parent.$id`              | self-relation          |
-| Subcollections      | Reciprocal of Parent                     | reciprocal relation    |
-| Bookmarks           | `count`                                  | number                 |
-| Public              | `public`                                 | checkbox               |
-| Created             | `created`                                | date                   |
-| Updated             | `lastUpdate`                             | date                   |
-| Collection ID       | Raw `_id`                                | rich text              |
-| Raindrop Account ID | Authenticated user `_id`                 | rich text              |
-| Collection Key      | Account-scoped source identity           | rich text, primary key |
-| Synced Bookmarks    | Reciprocal of each bookmark's Collection | reciprocal relation    |
+| Notion property     | Raindrop.io field or meaning              | Type                   |
+| ------------------- | ----------------------------------------- | ---------------------- |
+| Name                | `title`                                   | title                  |
+| Parent              | Account-scoped `parent.$id`               | self-relation          |
+| Subcollections      | Reciprocal of Parent                      | reciprocal relation    |
+| Bookmarks           | `count`                                   | number                 |
+| Public              | `public`                                  | checkbox               |
+| Created             | `created`                                 | date                   |
+| Updated             | `lastUpdate`                              | date                   |
+| Last Seen           | When the Worker most recently observed it | date                   |
+| Collection ID       | Raw `_id`                                 | rich text              |
+| Raindrop Account ID | Authenticated user `_id`                  | rich text              |
+| Collection Key      | Account-scoped source identity            | rich text, primary key |
+| Synced Bookmarks    | Reciprocal of each bookmark's Collection  | reciprocal relation    |
 
 Raindrop.io omits system collections from its collection endpoints. The Worker
 adds account-scoped **Unsorted** (`-1`) and **Trash** (`-99`) relation targets.
@@ -113,6 +114,7 @@ provide them.
 | ------------------- | -------------------------------------------- | ----------------------- |
 | Title               | `title`, with domain or URL as a fallback    | title                   |
 | URL                 | `link`                                       | URL                     |
+| URL Omitted         | `link` exceeded Notion's URL limit           | checkbox                |
 | Collection          | Account-scoped `collection.$id` relation     | relation to Collections |
 | Tags                | `tags`                                       | multi-select            |
 | Type                | `type`                                       | select                  |
@@ -122,10 +124,11 @@ provide them.
 | In Trash            | Whether this scan observed the item in `-99` | checkbox                |
 | Note                | `note`                                       | rich text               |
 | Excerpt             | `excerpt`                                    | rich text               |
-| Truncated           | Note or Excerpt exceeded the property limit  | checkbox                |
+| Truncated           | Title, Note, or Excerpt exceeded its limit   | checkbox                |
 | Highlights          | Number of embedded highlights                | number                  |
 | Created             | `created`                                    | date                    |
 | Updated             | `lastUpdate`                                 | date                    |
+| Last Seen           | When the Worker most recently observed it    | date                    |
 | Raindrop ID         | Raw `_id`                                    | rich text               |
 | Raindrop Account ID | Authenticated user `_id`                     | rich text               |
 | Bookmark Key        | Account-scoped source identity               | rich text, primary key  |
@@ -138,21 +141,23 @@ the synthetic Trash collection. Restoring it updates that page to
 
 ### Highlights
 
-| Notion property     | Raindrop.io field or meaning             | Type                   |
-| ------------------- | ---------------------------------------- | ---------------------- |
-| Highlight           | Compact first line of `text`             | title                  |
-| Text                | `text`                                   | rich text              |
-| Note                | `note`                                   | rich text              |
-| Bookmark            | Account-scoped `raindropRef` relation    | relation to Bookmarks  |
-| Bookmark title      | `title`                                  | rich text              |
-| URL                 | `link`                                   | URL                    |
-| Color               | Documented `color` enum                  | select                 |
-| Tags                | `tags`                                   | multi-select           |
-| Truncated           | Text or Note exceeded the property limit | checkbox               |
-| Created             | `created`                                | date                   |
-| Highlight ID        | Raw `_id`                                | rich text              |
-| Raindrop Account ID | Authenticated user `_id`                 | rich text              |
-| Highlight Key       | Account-scoped source identity           | rich text, primary key |
+| Notion property     | Raindrop.io field or meaning              | Type                   |
+| ------------------- | ----------------------------------------- | ---------------------- |
+| Highlight           | Compact single-line excerpt of `text`     | title                  |
+| Text                | `text`                                    | rich text              |
+| Note                | `note`                                    | rich text              |
+| Bookmark            | Account-scoped `raindropRef` relation     | relation to Bookmarks  |
+| Bookmark title      | `title`                                   | rich text              |
+| URL                 | `link`                                    | URL                    |
+| URL Omitted         | `link` exceeded Notion's URL limit        | checkbox               |
+| Color               | Documented `color` enum                   | select                 |
+| Tags                | `tags`                                    | multi-select           |
+| Truncated           | Text or Note exceeded the property limit  | checkbox               |
+| Created             | `created`                                 | date                   |
+| Last Seen           | When the Worker most recently observed it | date                   |
+| Highlight ID        | Raw `_id`                                 | rich text              |
+| Raindrop Account ID | Authenticated user `_id`                  | rich text              |
+| Highlight Key       | Account-scoped source identity            | rich text, primary key |
 
 Notion rich-text properties are bounded to 2,000 Unicode characters in this
 reference recipe. When a source Note, Excerpt, highlight Text, or highlight Note
@@ -162,14 +167,21 @@ source record exists. Page bodies are deliberately not managed, so you can
 write longer summaries and project-specific notes there without a later scan
 overwriting them.
 
+[Notion URL properties accept at most 2,000 characters][notion-request-limits].
+When a bookmark or highlight link is longer, the Worker leaves **URL** empty and
+checks **URL Omitted** instead of failing that page and blocking the rest of the
+scan. The complete link remains in Raindrop.io.
+
 Source timestamps are normalized to UTC before they are written to Notion date
 properties.
 
-Tag names are normalized into deterministic Notion options. Because the Worker
-multi-select wire format uses commas as separators, a comma inside one
-Raindrop.io tag becomes a visually similar full-width comma (`，`). More than
-100 distinct tags on one record fails the page instead of silently dropping
-source values.
+Tag names are trimmed, whitespace-normalized, and deduplicated
+case-insensitively. Because the Worker multi-select wire format uses commas as
+separators, a comma inside one Raindrop.io tag becomes a visually similar
+full-width comma (`，`). If otherwise-distinct tags map to the same Notion
+option, the Worker adds a stable suffix to preserve both. More than 100
+resulting options on one record fails the page instead of silently dropping
+values.
 
 ## Archive and refresh semantics
 
@@ -183,14 +195,18 @@ non-destructive scan:
 3. Bookmarks read all active items in ascending creation order, then all Trash
    items, 50 at a time.
 4. Highlights read the global highlights endpoint, 50 at a time.
-5. Every observed record is upserted. Unobserved records are left untouched.
+5. Every observed record is upserted and advances **Last Seen**. Unobserved
+   records are left untouched with their earlier timestamp.
 
 This means:
 
 - A moved or restored Trash item is updated explicitly through **In Trash**.
-- A hard-deleted bookmark remains as its last-known Notion record.
-- A deleted collection remains as its last-known Notion record.
-- A removed or hard-deleted highlight remains as its last-known Notion record.
+- A hard-deleted bookmark remains as its last-known Notion record and retains
+  its earlier **Last Seen** value.
+- A deleted collection remains as its last-known Notion record and retains its
+  earlier **Last Seen** value.
+- A removed or hard-deleted highlight remains as its last-known Notion record
+  and retains its earlier **Last Seen** value.
 - The API does not provide enough information to label those last three cases
   as deleted reliably. Treat them as archive records, not confirmed live data.
 
@@ -233,9 +249,9 @@ In Notion, you can safely add properties such as:
 
 The Worker schema owns only the properties listed above and does not write page
 bodies. Because it never emits deletes, source disappearance does not remove a
-managed page or its user-added values. If your workflow needs a confirmed-live
-view, add a separate reviewed retention process instead of inferring deletion
-from absence in one Raindrop.io scan.
+managed page or its user-added values. Use **Last Seen** to find records that
+have not been observed recently, then verify them in Raindrop.io before taking
+destructive action. Absence from one scan is not proof of deletion.
 
 ## Privacy and access
 
@@ -363,6 +379,7 @@ increase runtime, rate-limit pressure, and the window for page movement.
 
 ## API references
 
+- [Notion request limits][notion-request-limits]
 - [Raindrop.io API overview and rate limits][raindrop-overview]
 - [Authentication and personal test tokens][raindrop-token]
 - [Authenticated user identity][raindrop-user]
@@ -372,6 +389,7 @@ increase runtime, rate-limit pressure, and the window for page movement.
 - [Highlights][raindrop-highlights]
 
 [raindrop-apps]: https://app.raindrop.io/settings/integrations
+[notion-request-limits]: https://developers.notion.com/reference/request-limits
 [raindrop-bookmarks]: https://developer.raindrop.io/v1/raindrops/multiple
 [raindrop-collections]: https://developer.raindrop.io/v1/collections/methods
 [raindrop-fields]: https://developer.raindrop.io/v1/raindrops

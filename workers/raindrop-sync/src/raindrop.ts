@@ -4,6 +4,7 @@ const API_BASE_URL = "https://api.raindrop.io"
 export const PAGE_SIZE = 50
 export const MAX_RESPONSE_BYTES = 10 * 1_024 * 1_024
 export const REQUEST_TIMEOUT_MS = 30_000
+export const NOTION_URL_LIMIT = 2_000
 const MAX_COLLECTIONS = 10_000
 
 export type BeforeRequest = () => Promise<void>
@@ -26,7 +27,8 @@ export type RaindropType =
 export type RaindropBookmark = {
   _id: number
   title: string
-  link: string
+  link: string | undefined
+  linkOmitted: boolean
   domain: string
   excerpt: string
   note: string
@@ -47,7 +49,8 @@ export type RaindropHighlight = {
   note: string
   color: RaindropHighlightColor
   title: string
-  link: string
+  link: string | undefined
+  linkOmitted: boolean
   tags: string[]
   created: string
 }
@@ -435,7 +438,12 @@ function dateTimeValue(value: unknown, label: string): string {
   return new Date(dateTime).toISOString()
 }
 
-function urlValue(value: unknown, label: string): string {
+type NotionUrlValue = {
+  value: string | undefined
+  omitted: boolean
+}
+
+function notionUrlValue(value: unknown, label: string): NotionUrlValue {
   const url = stringValue(value, label)
   let parsed: URL
   try {
@@ -446,7 +454,11 @@ function urlValue(value: unknown, label: string): string {
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new Error(`Raindrop.io ${label} must use HTTP or HTTPS.`)
   }
-  return url
+  const omitted = url.length > NOTION_URL_LIMIT
+  return {
+    value: omitted ? undefined : url,
+    omitted,
+  }
 }
 
 function stringArray(value: unknown, label: string): string[] {
@@ -502,6 +514,7 @@ function highlightColor(value: unknown, label: string): RaindropHighlightColor {
 function parseBookmark(value: unknown, label: string): RaindropBookmark {
   const item = objectValue(value, label)
   const collection = objectValue(item.collection, `${label}.collection`)
+  const link = notionUrlValue(item.link, `${label}.link`)
   const highlights = item.highlights ?? []
   if (!Array.isArray(highlights)) {
     throw new Error(`Raindrop.io ${label}.highlights must be an array.`)
@@ -510,7 +523,8 @@ function parseBookmark(value: unknown, label: string): RaindropBookmark {
   return {
     _id: positiveInteger(item._id, `${label}._id`),
     title: stringValue(item.title, `${label}.title`),
-    link: urlValue(item.link, `${label}.link`),
+    link: link.value,
+    linkOmitted: link.omitted,
     domain: optionalString(item.domain, `${label}.domain`),
     excerpt: optionalString(item.excerpt, `${label}.excerpt`),
     note: optionalString(item.note, `${label}.note`),
@@ -533,6 +547,7 @@ function parseHighlight(value: unknown, label: string): RaindropHighlight {
   if (!id) {
     throw new Error(`Raindrop.io ${label}._id must not be empty.`)
   }
+  const link = notionUrlValue(item.link, `${label}.link`)
   return {
     _id: id,
     raindropRef: positiveInteger(item.raindropRef, `${label}.raindropRef`),
@@ -540,7 +555,8 @@ function parseHighlight(value: unknown, label: string): RaindropHighlight {
     note: optionalString(item.note, `${label}.note`),
     color: highlightColor(item.color, `${label}.color`),
     title: optionalString(item.title, `${label}.title`),
-    link: urlValue(item.link, `${label}.link`),
+    link: link.value,
+    linkOmitted: link.omitted,
     tags: stringArray(item.tags ?? [], `${label}.tags`),
     created: dateTimeValue(item.created, `${label}.created`),
   }

@@ -19,6 +19,7 @@ import { bookmarkKey, collectionKey, highlightKey } from "./src/keys.js"
 import {
   createRaindropClient,
   MAX_RESPONSE_BYTES,
+  NOTION_URL_LIMIT,
   PAGE_SIZE,
   type RaindropBookmark,
   type RaindropCollection,
@@ -36,11 +37,13 @@ import {
 } from "./src/sync-state.js"
 
 const accountId = 321
+const observedAt = "2026-07-03T12:34:56.000Z"
 
 const bookmark: RaindropBookmark = {
   _id: 42,
   title: "Workers worth reading",
   link: "https://example.com/workers",
+  linkOmitted: false,
   domain: "example.com",
   excerpt: "A useful description.",
   note: "Use this in the next project.",
@@ -62,6 +65,7 @@ const highlight: RaindropHighlight = {
   color: "purple",
   title: "Workers worth reading",
   link: "https://example.com/workers",
+  linkOmitted: false,
   tags: ["notion"],
   created: "2026-06-01T10:05:00.000Z",
 }
@@ -235,7 +239,7 @@ test("resource keys are stable within an account and isolated across accounts an
 })
 
 test("bookmark transform scopes keys and relations while preserving raw IDs", () => {
-  const change = bookmarkToChange(accountId, bookmark, false)
+  const change = bookmarkToChange(accountId, bookmark, false, observedAt)
 
   assert.equal(change.key, "raindrop:321:bookmark:42")
   assert.equal("upstreamUpdatedAt" in change, false)
@@ -248,6 +252,8 @@ test("bookmark transform scopes keys and relations while preserving raw IDs", ()
   assert.ok(propertyIncludes(change.properties.Highlights, "1"))
   assert.ok(propertyIncludes(change.properties.Created, "UTC"))
   assert.ok(propertyIncludes(change.properties.Updated, "UTC"))
+  assert.ok(propertyIncludes(change.properties["Last Seen"], "2026-07-03"))
+  assert.ok(propertyIncludes(change.properties["Last Seen"], "12:34"))
   assert.ok(propertyIncludes(change.properties["Raindrop ID"], "42"))
   assert.ok(propertyIncludes(change.properties["Raindrop Account ID"], "321"))
   assert.ok(
@@ -264,8 +270,8 @@ test("trash and restored bookmark upserts use one key and explicitly flip In Tra
     ...bookmark,
     collection: { $id: -99 },
   }
-  const trashed = bookmarkToChange(accountId, trashedBookmark, true)
-  const restored = bookmarkToChange(accountId, bookmark, false)
+  const trashed = bookmarkToChange(accountId, trashedBookmark, true, observedAt)
+  const restored = bookmarkToChange(accountId, bookmark, false, observedAt)
 
   assert.equal(trashed.key, restored.key)
   assert.ok(propertyIncludes(trashed.properties["In Trash"], "Yes"))
@@ -288,7 +294,8 @@ test("bookmark transform clears optional values without owning page content", ()
       note: "",
       tags: [],
     },
-    false
+    false,
+    observedAt
   )
 
   assert.deepEqual(change.properties.Domain, [])
@@ -299,7 +306,7 @@ test("bookmark transform clears optional values without owning page content", ()
 })
 
 test("highlight transform scopes its key and bookmark relation", () => {
-  const change = highlightToChange(accountId, highlight)
+  const change = highlightToChange(accountId, highlight, observedAt)
 
   assert.equal(change.key, "raindrop:321:highlight:highlight-1")
   assert.ok(
@@ -308,17 +315,23 @@ test("highlight transform scopes its key and bookmark relation", () => {
   assert.ok(propertyIncludes(change.properties.Text, "agent decides when"))
   assert.ok(propertyIncludes(change.properties.Color, "Purple"))
   assert.ok(propertyIncludes(change.properties.Created, "UTC"))
+  assert.ok(propertyIncludes(change.properties["Last Seen"], "2026-07-03"))
+  assert.ok(propertyIncludes(change.properties["Last Seen"], "12:34"))
   assert.ok(propertyIncludes(change.properties["Highlight ID"], "highlight-1"))
   assert.equal("pageContentMarkdown" in change, false)
 })
 
 test("collection transform scopes parent relations and exposes raw identity", () => {
-  const child = collectionToChange(accountId, collection)
-  const root = collectionToChange(accountId, {
-    ...collection,
-    _id: 3,
-    parentId: undefined,
-  })
+  const child = collectionToChange(accountId, collection, observedAt)
+  const root = collectionToChange(
+    accountId,
+    {
+      ...collection,
+      _id: 3,
+      parentId: undefined,
+    },
+    observedAt
+  )
 
   assert.equal(child.key, "raindrop:321:collection:7")
   assert.ok(
@@ -328,7 +341,41 @@ test("collection transform scopes parent relations and exposes raw identity", ()
   assert.ok(propertyIncludes(child.properties["Collection ID"], "7"))
   assert.ok(propertyIncludes(child.properties.Created, "UTC"))
   assert.ok(propertyIncludes(child.properties.Updated, "UTC"))
+  assert.ok(propertyIncludes(child.properties["Last Seen"], "2026-07-03"))
+  assert.ok(propertyIncludes(child.properties["Last Seen"], "12:34"))
   assert.equal("upstreamUpdatedAt" in child, false)
+})
+
+test("omitted source URLs are disclosed without breaking transforms", () => {
+  const bookmarkChange = bookmarkToChange(
+    accountId,
+    {
+      ...bookmark,
+      title: "",
+      domain: "",
+      link: undefined,
+      linkOmitted: true,
+    },
+    false,
+    observedAt
+  )
+  const highlightChange = highlightToChange(
+    accountId,
+    {
+      ...highlight,
+      link: undefined,
+      linkOmitted: true,
+    },
+    observedAt
+  )
+
+  assert.deepEqual(bookmarkChange.properties.URL, [])
+  assert.ok(
+    propertyIncludes(bookmarkChange.properties.Title, "Untitled bookmark")
+  )
+  assert.ok(propertyIncludes(bookmarkChange.properties["URL Omitted"], "Yes"))
+  assert.deepEqual(highlightChange.properties.URL, [])
+  assert.ok(propertyIncludes(highlightChange.properties["URL Omitted"], "Yes"))
 })
 
 test("text helpers truncate by Unicode character and disclose truncation", () => {
@@ -343,11 +390,51 @@ test("text helpers truncate by Unicode character and disclose truncation", () =>
   assert.equal(highlightTitle("a\n  b", "fallback"), "a b")
 })
 
-test("tag options are deterministic, comma-safe, and never silently dropped", () => {
-  assert.deepEqual(optionNames("bookmark tags", [" API ", "api", "a,b"]), [
+test("tag options deduplicate case variants and preserve normalization collisions", () => {
+  const sourceTags = [" API ", "api", "a,b", "a，b"]
+  const normalized = optionNames("bookmark tags", sourceTags)
+
+  assert.equal(normalized.length, 3)
+  assert.equal(normalized.includes("a，b"), true)
+  assert.equal(
+    normalized.some((name) => /^a，b.*[0-9a-f]{12}$/.test(name)),
+    true
+  )
+  assert.deepEqual(
+    optionNames("bookmark tags", [...sourceTags].reverse()),
+    normalized
+  )
+  assert.equal(
+    normalized.filter((name) => name.toLocaleLowerCase("en-US") === "api")
+      .length,
+    1
+  )
+  assert.equal(
+    normalized.every((name) => Array.from(name).length <= 100),
+    true
+  )
+
+  const generatedName = optionNames("bookmark tags", ["a,b", "a，b"]).find(
+    (name) => name !== "a，b"
+  )
+  assert.ok(generatedName)
+  const naturalNameCollision = optionNames("bookmark tags", [
+    "a,b",
     "a，b",
-    "API",
+    generatedName,
   ])
+  assert.equal(naturalNameCollision.length, 3)
+  assert.equal(naturalNameCollision.includes(generatedName), true)
+  assert.equal(
+    new Set(naturalNameCollision.map((name) => name.toLocaleLowerCase("en-US")))
+      .size,
+    3
+  )
+  assert.equal(
+    naturalNameCollision.every((name) => Array.from(name).length <= 100),
+    true
+  )
+
   assert.equal(optionNames("bookmark tags", ["x".repeat(101)])[0].length, 100)
   assert.throws(
     () =>
@@ -570,6 +657,64 @@ test("client normalizes provider timestamp offsets to UTC", async () => {
   const session = await client.authenticate()
   const page = await session.fetchBookmarksPage("active", 0)
   assert.equal(page.items[0].created, "2026-06-01T10:00:00.000Z")
+})
+
+test("client preserves 2,000-character URLs and omits longer links", async () => {
+  const prefix = "https://example.com/"
+  const exact = `${prefix}${"a".repeat(NOTION_URL_LIMIT - prefix.length)}`
+  const overlong = `${exact}a`
+  const astralOverlong = `${exact.slice(0, -1)}😀`
+  assert.equal(Array.from(astralOverlong).length, NOTION_URL_LIMIT)
+  assert.equal(astralOverlong.length, NOTION_URL_LIMIT + 1)
+  const client = createRaindropClient({
+    beforeRequest: async () => undefined,
+    fetchImpl: withAuthenticatedUser(async (input) => {
+      const path = new URL(input instanceof Request ? input.url : String(input))
+        .pathname
+      return path.startsWith("/rest/v1/raindrops/")
+        ? jsonResponse({
+            result: true,
+            items: [
+              bookmarkPayload({ _id: 42, link: exact }),
+              bookmarkPayload({ _id: 43, link: overlong }),
+              bookmarkPayload({ _id: 44, link: astralOverlong }),
+            ],
+          })
+        : jsonResponse({
+            result: true,
+            items: [
+              highlightPayload({ _id: "exact", link: exact }),
+              highlightPayload({ _id: "overlong", link: overlong }),
+              highlightPayload({
+                _id: "astral-overlong",
+                link: astralOverlong,
+              }),
+            ],
+          })
+    }),
+    getAccessToken: () => "test-token",
+  })
+
+  const session = await client.authenticate()
+  const bookmarks = await session.fetchBookmarksPage("active", 0)
+  const highlights = await session.fetchHighlightsPage(0)
+
+  assert.deepEqual(
+    bookmarks.items.map(({ link, linkOmitted }) => ({ link, linkOmitted })),
+    [
+      { link: exact, linkOmitted: false },
+      { link: undefined, linkOmitted: true },
+      { link: undefined, linkOmitted: true },
+    ]
+  )
+  assert.deepEqual(
+    highlights.items.map(({ link, linkOmitted }) => ({ link, linkOmitted })),
+    [
+      { link: exact, linkOmitted: false },
+      { link: undefined, linkOmitted: true },
+      { link: undefined, linkOmitted: true },
+    ]
+  )
 })
 
 test("client scans Trash and accepts the Trash collection relation", async () => {

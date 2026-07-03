@@ -33,6 +33,8 @@ export const highlightSchema = {
 
     URL: Schema.url(),
 
+    "URL Omitted": Schema.checkbox(),
+
     Color: Schema.select([
       { name: "Blue" },
       { name: "Brown" },
@@ -54,6 +56,8 @@ export const highlightSchema = {
 
     Created: Schema.date(),
 
+    "Last Seen": Schema.date(),
+
     "Highlight ID": Schema.richText(),
 
     "Raindrop Account ID": Schema.richText(),
@@ -64,7 +68,8 @@ export const highlightSchema = {
 
 export function highlightToChange(
   accountId: number,
-  highlight: RaindropHighlight
+  highlight: RaindropHighlight,
+  observedAt: string
 ): SyncChangeUpsert<typeof PRIMARY_KEY, typeof highlightSchema.properties> {
   const tags = optionNames("highlight tags", highlight.tags)
   const key = highlightKey(accountId, highlight._id)
@@ -81,13 +86,15 @@ export function highlightToChange(
       "Bookmark title": highlight.title
         ? Builder.richText(boundedText(highlight.title))
         : [],
-      URL: Builder.url(highlight.link),
+      URL: highlight.link ? Builder.url(highlight.link) : [],
+      "URL Omitted": Builder.checkbox(highlight.linkOmitted),
       Color: Builder.select(displayLabel(highlight.color)),
       Tags: tags.length > 0 ? Builder.multiSelect(...tags) : [],
       Truncated: Builder.checkbox(
         textWasTruncated(highlight.text) || textWasTruncated(highlight.note)
       ),
       Created: Builder.dateTime(highlight.created, "UTC"),
+      "Last Seen": Builder.dateTime(observedAt, "UTC"),
       "Highlight ID": Builder.richText(highlight._id),
       "Raindrop Account ID": Builder.richText(String(accountId)),
       "Highlight Key": Builder.richText(key),

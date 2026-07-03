@@ -21,6 +21,8 @@ export const bookmarkSchema = {
 
     URL: Schema.url(),
 
+    "URL Omitted": Schema.checkbox(),
+
     Collection: Schema.relation("collections", {
       twoWay: true,
       relatedPropertyName: "Synced Bookmarks",
@@ -57,6 +59,8 @@ export const bookmarkSchema = {
 
     Updated: Schema.date(),
 
+    "Last Seen": Schema.date(),
+
     "Raindrop ID": Schema.richText(),
 
     "Raindrop Account ID": Schema.richText(),
@@ -68,17 +72,23 @@ export const bookmarkSchema = {
 export function bookmarkToChange(
   accountId: number,
   bookmark: RaindropBookmark,
-  inTrash: boolean
+  inTrash: boolean,
+  observedAt: string
 ): SyncChangeUpsert<typeof PRIMARY_KEY, typeof bookmarkSchema.properties> {
-  const title = bookmark.title.trim() || bookmark.domain.trim() || bookmark.link
+  const sourceTitle =
+    bookmark.title.trim() ||
+    bookmark.domain.trim() ||
+    bookmark.link ||
+    "Untitled bookmark"
   const tags = optionNames("bookmark tags", bookmark.tags)
   const key = bookmarkKey(accountId, bookmark._id)
   return {
     type: "upsert",
     key,
     properties: {
-      Title: Builder.title(title),
-      URL: Builder.url(bookmark.link),
+      Title: Builder.title(boundedText(sourceTitle)),
+      URL: bookmark.link ? Builder.url(bookmark.link) : [],
+      "URL Omitted": Builder.checkbox(bookmark.linkOmitted),
       Collection: [
         Builder.relation(collectionKey(accountId, bookmark.collection.$id)),
       ],
@@ -93,11 +103,14 @@ export function bookmarkToChange(
         ? Builder.richText(boundedText(bookmark.excerpt))
         : [],
       Truncated: Builder.checkbox(
-        textWasTruncated(bookmark.note) || textWasTruncated(bookmark.excerpt)
+        textWasTruncated(sourceTitle) ||
+          textWasTruncated(bookmark.note) ||
+          textWasTruncated(bookmark.excerpt)
       ),
       Highlights: Builder.number(bookmark.highlights.length),
       Created: Builder.dateTime(bookmark.created, "UTC"),
       Updated: Builder.dateTime(bookmark.lastUpdate, "UTC"),
+      "Last Seen": Builder.dateTime(observedAt, "UTC"),
       "Raindrop ID": Builder.richText(String(bookmark._id)),
       "Raindrop Account ID": Builder.richText(String(accountId)),
       "Bookmark Key": Builder.richText(key),
