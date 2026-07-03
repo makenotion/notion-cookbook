@@ -1,0 +1,586 @@
+import { RateLimitError } from "@notionhq/workers"
+
+const API_BASE_URL = "https://api.raindrop.io"
+export const PAGE_SIZE = 50
+export const MAX_RESPONSE_BYTES = 10 * 1_024 * 1_024
+export const REQUEST_TIMEOUT_MS = 30_000
+const MAX_COLLECTIONS = 10_000
+
+export type BeforeRequest = () => Promise<void>
+
+export type RaindropClientOptions = {
+  beforeRequest: BeforeRequest
+  fetchImpl?: typeof fetch
+  getAccessToken?: () => string
+  requestTimeoutMs?: number
+}
+
+export type RaindropType =
+  | "link"
+  | "article"
+  | "image"
+  | "video"
+  | "document"
+  | "audio"
+
+export type RaindropBookmark = {
+  _id: number
+  title: string
+  link: string
+  domain: string
+  excerpt: string
+  note: string
+  type: RaindropType
+  tags: string[]
+  collection: { $id: number }
+  important: boolean
+  broken: boolean
+  created: string
+  lastUpdate: string
+  highlights: unknown[]
+}
+
+export type RaindropHighlight = {
+  _id: string
+  raindropRef: number
+  text: string
+  note: string
+  color: RaindropHighlightColor
+  title: string
+  link: string
+  tags: string[]
+  created: string
+}
+
+export type RaindropHighlightColor =
+  | "blue"
+  | "brown"
+  | "cyan"
+  | "gray"
+  | "green"
+  | "indigo"
+  | "orange"
+  | "pink"
+  | "purple"
+  | "red"
+  | "teal"
+  | "yellow"
+
+export type BookmarkScope = "active" | "trash"
+
+export type RaindropCollection = {
+  _id: number
+  title: string
+  count?: number
+  public: boolean
+  parentId?: number
+  created?: string
+  lastUpdate?: string
+}
+
+export type RaindropPage<T> = {
+  items: T[]
+}
+
+export type RaindropSession = {
+  accountId: number
+  fetchCollections(): Promise<RaindropCollection[]>
+  fetchBookmarksPage(
+    scope: BookmarkScope,
+    page: number
+  ): Promise<RaindropPage<RaindropBookmark>>
+  fetchHighlightsPage(page: number): Promise<RaindropPage<RaindropHighlight>>
+}
+
+export type RaindropClient = {
+  authenticate(): Promise<RaindropSession>
+}
+
+export function createRaindropClient(
+  options: RaindropClientOptions
+): RaindropClient {
+  const fetchImpl = options.fetchImpl ?? fetch
+  const getAccessToken = options.getAccessToken ?? requireAccessToken
+  const requestTimeoutMs = options.requestTimeoutMs ?? REQUEST_TIMEOUT_MS
+  if (!Number.isSafeInteger(requestTimeoutMs) || requestTimeoutMs <= 0) {
+    throw new Error("Raindrop.io request timeout must be a positive integer.")
+  }
+
+  async function request(path: string, accessToken: string): Promise<unknown> {
+    await options.beforeRequest()
+    const signal = AbortSignal.timeout(requestTimeoutMs)
+    let response: Response
+    try {
+      response = await fetchImpl(new URL(path, API_BASE_URL), {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${accessToken}`,
+          "User-Agent": "notion-cookbook-raindrop-sync",
+        },
+        redirect: "error",
+        signal,
+      })
+    } catch {
+      if (signal.aborted) {
+        throw new Error(
+          `Raindrop.io API request timed out after ${requestTimeoutMs}ms.`
+        )
+      }
+      throw new Error(
+        "Raindrop.io API request failed before a response was received."
+      )
+    }
+
+    if (response.status === 429) {
+      const retryAfter = retryAfterSeconds(response.headers)
+      await cancelResponseBody(response)
+      throw new RateLimitError({
+        retryAfter,
+      })
+    }
+    if (response.status === 401 || response.status === 403) {
+      await cancelResponseBody(response)
+      throw new Error(
+        "Raindrop.io rejected RAINDROP_ACCESS_TOKEN. Create or replace the test token, then retry."
+      )
+    }
+    if (!response.ok) {
+      await cancelResponseBody(response)
+      throw new Error(`Raindrop.io API request failed (${response.status}).`)
+    }
+
+    let responseText: string
+    try {
+      responseText = await readBoundedResponseText(response)
+    } catch (error) {
+      if (signal.aborted) {
+        throw new Error(
+          `Raindrop.io API request timed out after ${requestTimeoutMs}ms.`
+        )
+      }
+      throw error
+    }
+    try {
+      return JSON.parse(responseText) as unknown
+    } catch {
+      throw new Error("Raindrop.io returned an invalid JSON response.")
+    }
+  }
+
+  async function fetchCollectionList(
+    path: string,
+    label: string,
+    accessToken: string
+  ): Promise<RaindropCollection[]> {
+    const payload = responseObject(await request(path, accessToken), label)
+    return responseItems(payload, label).map((item, index) =>
+      parseCollection(item, `${label}.items[${index}]`)
+    )
+  }
+
+  return {
+    async authenticate() {
+      const accessToken = getAccessToken().trim()
+      if (!accessToken) {
+        throw new Error("RAINDROP_ACCESS_TOKEN is not set.")
+      }
+
+      const payload = responseObject(
+        await request("/rest/v1/user", accessToken),
+        "user"
+      )
+      const user = objectValue(payload.user, "user.user")
+      const accountId = positiveInteger(user._id, "user.user._id")
+
+      return {
+        accountId,
+
+        async fetchCollections() {
+          const root = await fetchCollectionList(
+            "/rest/v1/collections",
+            "root collections",
+            accessToken
+          )
+          const children = await fetchCollectionList(
+            "/rest/v1/collections/childrens",
+            "child collections",
+            accessToken
+          )
+          const collections: RaindropCollection[] = [
+            {
+              _id: -1,
+              title: "Unsorted",
+              public: false,
+            },
+            {
+              _id: -99,
+              title: "Trash",
+              public: false,
+            },
+            ...root,
+            ...children,
+          ]
+          if (collections.length > MAX_COLLECTIONS) {
+            throw new Error(
+              `Raindrop.io returned more than ${MAX_COLLECTIONS} collections.`
+            )
+          }
+          assertUnique(
+            collections.map((collection) => String(collection._id)),
+            "collection ID"
+          )
+          return collections
+        },
+
+        async fetchBookmarksPage(scope, page) {
+          const collectionId = scope === "active" ? 0 : -99
+          const url = new URL(
+            `/rest/v1/raindrops/${collectionId}`,
+            API_BASE_URL
+          )
+          url.searchParams.set("sort", "created")
+          url.searchParams.set("perpage", String(PAGE_SIZE))
+          url.searchParams.set("page", String(page))
+          const bookmarkPayload = responseObject(
+            await request(`${url.pathname}${url.search}`, accessToken),
+            "bookmarks"
+          )
+          const items = responseItems(bookmarkPayload, "bookmarks").map(
+            (item, index) => parseBookmark(item, `bookmarks.items[${index}]`)
+          )
+          assertPage(items, (item) => String(item._id), "bookmark")
+          return { items }
+        },
+
+        async fetchHighlightsPage(page) {
+          const url = new URL("/rest/v1/highlights", API_BASE_URL)
+          url.searchParams.set("perpage", String(PAGE_SIZE))
+          url.searchParams.set("page", String(page))
+          const highlightPayload = responseObject(
+            await request(`${url.pathname}${url.search}`, accessToken),
+            "highlights"
+          )
+          const items = responseItems(highlightPayload, "highlights").map(
+            (item, index) => parseHighlight(item, `highlights.items[${index}]`)
+          )
+          assertPage(items, (item) => item._id, "highlight")
+          return { items }
+        },
+      }
+    },
+  }
+}
+
+async function cancelResponseBody(response: Response): Promise<void> {
+  if (!response.body) return
+  await response.body.cancel().catch(() => undefined)
+}
+
+async function readBoundedResponseText(response: Response): Promise<string> {
+  const contentLength = response.headers.get("Content-Length")?.trim()
+  if (
+    contentLength &&
+    /^\d+$/.test(contentLength) &&
+    Number(contentLength) > MAX_RESPONSE_BYTES
+  ) {
+    await cancelResponseBody(response)
+    throw new Error("Raindrop.io response exceeded the allowed size.")
+  }
+
+  if (!response.body) return ""
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  const chunks: string[] = []
+  let bytesRead = 0
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      bytesRead += value.byteLength
+      if (bytesRead > MAX_RESPONSE_BYTES) {
+        await reader.cancel().catch(() => undefined)
+        throw new Error("Raindrop.io response exceeded the allowed size.")
+      }
+      chunks.push(decoder.decode(value, { stream: true }))
+    }
+  } finally {
+    reader.releaseLock()
+  }
+
+  chunks.push(decoder.decode())
+  return chunks.join("")
+}
+
+function requireAccessToken(): string {
+  const token = process.env.RAINDROP_ACCESS_TOKEN?.trim()
+  if (!token) {
+    throw new Error("RAINDROP_ACCESS_TOKEN is not set.")
+  }
+  return token
+}
+
+function retryAfterSeconds(headers: Headers): number {
+  const retryAfter = headers.get("Retry-After")
+  if (retryAfter) {
+    const seconds = Number(retryAfter)
+    if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds)
+
+    const retryAt = Date.parse(retryAfter)
+    if (Number.isFinite(retryAt)) {
+      return Math.max(1, Math.ceil((retryAt - Date.now()) / 1_000))
+    }
+  }
+
+  const resetAt = Number(headers.get("X-RateLimit-Reset"))
+  if (Number.isFinite(resetAt) && resetAt > 0) {
+    return Math.max(1, Math.ceil(resetAt - Date.now() / 1_000))
+  }
+  return 60
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function responseObject(
+  value: unknown,
+  label: string
+): Record<string, unknown> {
+  const object = objectValue(value, label)
+  if (object.result !== true) {
+    throw new Error(`Raindrop.io ${label} response reported a failure.`)
+  }
+  return object
+}
+
+function responseItems(
+  value: Record<string, unknown>,
+  label: string
+): unknown[] {
+  if (!Array.isArray(value.items)) {
+    throw new Error(`Raindrop.io ${label} response is missing items.`)
+  }
+  return value.items
+}
+
+function objectValue(value: unknown, label: string): Record<string, unknown> {
+  if (!isRecord(value)) {
+    throw new Error(`Raindrop.io ${label} must be an object.`)
+  }
+  return value
+}
+
+function stringValue(value: unknown, label: string): string {
+  if (typeof value !== "string") {
+    throw new Error(`Raindrop.io ${label} must be a string.`)
+  }
+  return value
+}
+
+function optionalString(value: unknown, label: string): string {
+  if (value === undefined || value === null) return ""
+  return stringValue(value, label)
+}
+
+function integerValue(value: unknown, label: string): number {
+  if (!Number.isSafeInteger(value)) {
+    throw new Error(`Raindrop.io ${label} must be an integer.`)
+  }
+  return Number(value)
+}
+
+function nonNegativeInteger(value: unknown, label: string): number {
+  const integer = integerValue(value, label)
+  if (integer < 0) {
+    throw new Error(`Raindrop.io ${label} must not be negative.`)
+  }
+  return integer
+}
+
+function positiveInteger(value: unknown, label: string): number {
+  const integer = integerValue(value, label)
+  if (integer <= 0) {
+    throw new Error(`Raindrop.io ${label} must be positive.`)
+  }
+  return integer
+}
+
+function collectionIdValue(value: unknown, label: string): number {
+  const integer = integerValue(value, label)
+  if (integer !== -99 && integer !== -1 && integer <= 0) {
+    throw new Error(`Raindrop.io ${label} must be -99, -1, or positive.`)
+  }
+  return integer
+}
+
+function booleanValue(value: unknown, label: string): boolean {
+  if (typeof value !== "boolean") {
+    throw new Error(`Raindrop.io ${label} must be a boolean.`)
+  }
+  return value
+}
+
+function optionalBoolean(value: unknown, label: string): boolean {
+  if (value === undefined || value === null) return false
+  return booleanValue(value, label)
+}
+
+function dateTimeValue(value: unknown, label: string): string {
+  const dateTime = stringValue(value, label)
+  if (!dateTime || !Number.isFinite(Date.parse(dateTime))) {
+    throw new Error(`Raindrop.io ${label} must be an ISO 8601 timestamp.`)
+  }
+  return new Date(dateTime).toISOString()
+}
+
+function urlValue(value: unknown, label: string): string {
+  const url = stringValue(value, label)
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    throw new Error(`Raindrop.io ${label} must be an absolute URL.`)
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(`Raindrop.io ${label} must use HTTP or HTTPS.`)
+  }
+  return url
+}
+
+function stringArray(value: unknown, label: string): string[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`Raindrop.io ${label} must be an array.`)
+  }
+  const strings = value.map((item, index) =>
+    stringValue(item, `${label}[${index}]`).trim()
+  )
+  return [...new Set(strings.filter(Boolean))]
+}
+
+function bookmarkType(value: unknown, label: string): RaindropType {
+  switch (value) {
+    case "link":
+    case "article":
+    case "image":
+    case "video":
+    case "document":
+    case "audio":
+      return value
+    default:
+      throw new Error(`Raindrop.io ${label} has an unsupported bookmark type.`)
+  }
+}
+
+function highlightColor(value: unknown, label: string): RaindropHighlightColor {
+  if (value === undefined || value === null || value === "") return "yellow"
+  if (typeof value !== "string") {
+    throw new Error(`Raindrop.io ${label} has an unsupported highlight color.`)
+  }
+  switch (value) {
+    case "blue":
+    case "brown":
+    case "cyan":
+    case "gray":
+    case "green":
+    case "indigo":
+    case "orange":
+    case "pink":
+    case "purple":
+    case "red":
+    case "teal":
+    case "yellow":
+      return value
+    default:
+      throw new Error(
+        `Raindrop.io ${label} has an unsupported highlight color.`
+      )
+  }
+}
+
+function parseBookmark(value: unknown, label: string): RaindropBookmark {
+  const item = objectValue(value, label)
+  const collection = objectValue(item.collection, `${label}.collection`)
+  const highlights = item.highlights ?? []
+  if (!Array.isArray(highlights)) {
+    throw new Error(`Raindrop.io ${label}.highlights must be an array.`)
+  }
+
+  return {
+    _id: positiveInteger(item._id, `${label}._id`),
+    title: stringValue(item.title, `${label}.title`),
+    link: urlValue(item.link, `${label}.link`),
+    domain: optionalString(item.domain, `${label}.domain`),
+    excerpt: optionalString(item.excerpt, `${label}.excerpt`),
+    note: optionalString(item.note, `${label}.note`),
+    type: bookmarkType(item.type, `${label}.type`),
+    tags: stringArray(item.tags ?? [], `${label}.tags`),
+    collection: {
+      $id: collectionIdValue(collection.$id, `${label}.collection.$id`),
+    },
+    important: optionalBoolean(item.important, `${label}.important`),
+    broken: optionalBoolean(item.broken, `${label}.broken`),
+    created: dateTimeValue(item.created, `${label}.created`),
+    lastUpdate: dateTimeValue(item.lastUpdate, `${label}.lastUpdate`),
+    highlights,
+  }
+}
+
+function parseHighlight(value: unknown, label: string): RaindropHighlight {
+  const item = objectValue(value, label)
+  const id = stringValue(item._id, `${label}._id`).trim()
+  if (!id) {
+    throw new Error(`Raindrop.io ${label}._id must not be empty.`)
+  }
+  return {
+    _id: id,
+    raindropRef: positiveInteger(item.raindropRef, `${label}.raindropRef`),
+    text: stringValue(item.text, `${label}.text`),
+    note: optionalString(item.note, `${label}.note`),
+    color: highlightColor(item.color, `${label}.color`),
+    title: optionalString(item.title, `${label}.title`),
+    link: urlValue(item.link, `${label}.link`),
+    tags: stringArray(item.tags ?? [], `${label}.tags`),
+    created: dateTimeValue(item.created, `${label}.created`),
+  }
+}
+
+function parseCollection(value: unknown, label: string): RaindropCollection {
+  const item = objectValue(value, label)
+  const parent = item.parent
+  let parentId: number | undefined
+  if (parent !== undefined && parent !== null) {
+    parentId = positiveInteger(
+      objectValue(parent, `${label}.parent`).$id,
+      `${label}.parent.$id`
+    )
+  }
+
+  return {
+    _id: positiveInteger(item._id, `${label}._id`),
+    title: stringValue(item.title, `${label}.title`),
+    count: nonNegativeInteger(item.count, `${label}.count`),
+    public: booleanValue(item.public, `${label}.public`),
+    parentId,
+    created: dateTimeValue(item.created, `${label}.created`),
+    lastUpdate: dateTimeValue(item.lastUpdate, `${label}.lastUpdate`),
+  }
+}
+
+function assertPage<T>(
+  items: T[],
+  key: (item: T) => string,
+  label: string
+): void {
+  if (items.length > PAGE_SIZE) {
+    throw new Error(`Raindrop.io returned too many ${label}s in one page.`)
+  }
+  assertUnique(items.map(key), `${label} ID`)
+}
+
+function assertUnique(values: string[], label: string): void {
+  if (new Set(values).size !== values.length) {
+    throw new Error(`Raindrop.io returned a duplicate ${label}.`)
+  }
+}
