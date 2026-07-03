@@ -40,6 +40,7 @@ For self-hosted integrations built directly with the Notion API, see the [API ex
 | [Chart generator](chart-generator/)                                       | Render a Vega-Lite chart, upload the PNG, and insert it into a Notion page.        |
 | [CloudWatch Logs](cloudwatch-logs/)                                       | Find log groups and streams and read AWS CloudWatch log events.                    |
 | [DuckDB query](duckdb-query/)                                             | Query a seeded, in-memory DuckDB database with read-only SQL; no secrets required. |
+| [GitHub release publisher](github-publish-prepared-release/)              | Publish one exact approved draft release.                                          |
 | [Postgres query](postgres-query/)                                         | Discover tables and query PostgreSQL with guarded, read-only SQL.                  |
 | [PowerPoint creator](powerpoint-creator/)                                 | Turn a Notion page into PowerPoint slides and attach the generated `.pptx` file.   |
 | [Snowflake query](snowflake-query/)                                       | Discover tables and query Snowflake with guarded, read-only SQL.                   |

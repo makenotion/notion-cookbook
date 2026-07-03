@@ -235,6 +235,25 @@
       }
     },
     {
+      "id": "github-publish-prepared-release",
+      "title": "GitHub prepared-release publisher agent tool",
+      "summary": "Publish one exact approved GitHub draft release, reconcile its terminal state, and write the authoritative receipt to its Notion release packet.",
+      "path": "workers/github-publish-prepared-release",
+      "kind": "worker-tool",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "github", "redis"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name github-publish-prepared-release"
+      }
+    },
+    {
       "id": "github-stars-sync",
       "title": "GitHub starred repositories sync",
       "summary": "Turn the authenticated GitHub user's starred repositories into a current Notion research and evaluation library.",

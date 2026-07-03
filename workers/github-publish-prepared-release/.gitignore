@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+dist/
+node_modules/
+workers.json
+
+# The repository's broad Worker ignore rule excludes locks by default. This
+# production-oriented recipe deliberately commits its reproducible npm lock.
+!package-lock.json

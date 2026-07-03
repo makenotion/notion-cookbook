@@ -136,6 +136,7 @@ and a **webhook** handles events from another service. See the complete
 | Render and insert Vega-Lite charts                  | [Chart generator](workers/chart-generator/)                                       | Vega-Lite           |
 | Browse log groups, streams, and events              | [CloudWatch Logs](workers/cloudwatch-logs/)                                       | AWS CloudWatch Logs |
 | Learn the database-query pattern with seeded data   | [DuckDB query](workers/duckdb-query/)                                             | DuckDB              |
+| Publish an approved release and record its receipt  | [GitHub release publisher](workers/github-publish-prepared-release/)              | Notion, GitHub      |
 | Query a database with read-only SQL                 | [Postgres query](workers/postgres-query/)                                         | PostgreSQL          |
 | Turn a Notion page into PowerPoint slides (`.pptx`) | [PowerPoint creator](workers/powerpoint-creator/)                                 | Notion, PowerPoint  |
 | Query a warehouse with read-only SQL                | [Snowflake query](workers/snowflake-query/)                                       | Snowflake           |
