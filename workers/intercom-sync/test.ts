@@ -1731,11 +1731,11 @@ test("worker manifest exposes one connected four-database support bundle", () =>
       "incremental",
       { type: "interval", intervalMs: 5 * 60_000 },
       "replace",
-      { type: "manual" },
+      { type: "interval", intervalMs: 24 * 60 * 60_000 },
       "incremental",
       { type: "interval", intervalMs: 5 * 60_000 },
       "replace",
-      { type: "manual" },
+      { type: "interval", intervalMs: 24 * 60 * 60_000 },
     ]
   )
   assert.deepEqual(worker.manifest.pacers, [

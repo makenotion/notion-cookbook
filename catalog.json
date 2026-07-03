@@ -275,7 +275,7 @@
     {
       "id": "intercom-sync",
       "title": "Intercom sync",
-      "summary": "Sync Intercom companies, contacts, conversations, and tickets into a connected support workspace in Notion.",
+      "summary": "Keep Intercom companies, contacts, conversations, and tickets current in connected Notion databases, including daily full refreshes.",
       "path": "workers/intercom-sync",
       "kind": "worker-sync",
       "status": "ready",

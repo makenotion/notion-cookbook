@@ -172,7 +172,7 @@ worker.sync("conversationsSync", {
 worker.sync("conversationsReconciliation", {
   database: conversations,
   mode: "replace",
-  schedule: "manual",
+  schedule: "1d",
   execute: async (state: ConversationReconciliationState | undefined) => {
     if (!state) reconciliationConversationDirectories.clear()
     const client = createClient()
@@ -191,7 +191,7 @@ worker.sync("conversationsReconciliation", {
 
 // ---------------------------------------------------------------------------
 // Tickets — optional in Intercom plans, but included in the same deploy. Keep
-// the scheduled sync paused and do not trigger reconciliation without access.
+// both Ticket schedules paused when the workspace does not have API access.
 // ---------------------------------------------------------------------------
 
 const tickets = worker.database("tickets", {
@@ -220,7 +220,7 @@ worker.sync("ticketsSync", {
 worker.sync("ticketsReconciliation", {
   database: tickets,
   mode: "replace",
-  schedule: "manual",
+  schedule: "1d",
   execute: async (state: TicketReconciliationState | undefined) => {
     if (!state) reconciliationTicketDirectories.clear()
     const client = createClient()
