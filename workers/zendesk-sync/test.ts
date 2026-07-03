@@ -7,6 +7,7 @@ import worker from "./src/index.js"
 import { ticketToChange, ticketUrl } from "./src/tickets.js"
 import { formatLabel, dateOnly } from "./src/formatters.js"
 import { userToChange } from "./src/users.js"
+import { organizationToChange } from "./src/organizations.js"
 import { ticketMetricToChange } from "./src/ticket-metrics.js"
 import { slaPolicyToChange } from "./src/sla-policies.js"
 import { surveyResponseToChange } from "./src/survey-responses.js"
@@ -15,12 +16,17 @@ import {
   fetchSlaPoliciesPage,
   fetchSurveyResponsesPage,
   fetchTicketMetricsPage,
+  fetchTicketMetricsReconciliationPage,
+  fetchTicketMetricsReconciliationTailPage,
   fetchTicketsPage,
+  fetchTicketsReconciliationPage,
+  fetchTicketsReconciliationTailPage,
   getAuthorizationHeader,
   isDeletedTicket,
 } from "./src/zendesk.js"
 import type {
   ZendeskFullUser,
+  ZendeskOrganization,
   ZendeskTicket,
   ZendeskTicketMetric,
   ZendeskSlaPolicy,
@@ -41,6 +47,10 @@ function ok(name: string, cond: boolean) {
     failed++
     console.log(`  FAIL ${name}`)
   }
+}
+
+function isEmptyProperty(value: unknown): boolean {
+  return Array.isArray(value) && value.length === 0
 }
 
 // ---------------------------------------------------------------------------
@@ -78,6 +88,13 @@ const standardTicket: ZendeskTicket = {
   via: { channel: "email" },
   created_at: "2024-06-15T10:30:00Z",
   updated_at: "2024-06-16T14:00:00Z",
+}
+
+const tailOnlyTicket: ZendeskTicket = {
+  ...standardTicket,
+  id: 777,
+  subject: "Created after the reconciliation search cutoff",
+  updated_at: "2024-06-30T00:02:00Z",
 }
 
 const change = ticketToChange(standardTicket, SUBDOMAIN, users, groups, orgs)
@@ -125,6 +142,10 @@ ok(
   JSON.stringify(change.properties.Assignee).includes("Jane Smith")
 )
 ok(
+  "Assignee relation uses the stable user id",
+  JSON.stringify(change.properties["Assignee Record"]).includes("1001")
+)
+ok(
   "Group resolved to name",
   JSON.stringify(change.properties.Group).includes("Billing Support")
 )
@@ -133,8 +154,16 @@ ok(
   JSON.stringify(change.properties.Requester).includes("Bob Customer")
 )
 ok(
+  "Requester relation uses the stable user id",
+  JSON.stringify(change.properties["Requester Record"]).includes("2001")
+)
+ok(
   "Organization resolved to name",
   JSON.stringify(change.properties.Organization).includes("Acme Corp")
+)
+ok(
+  "Organization relation uses the stable organization id",
+  JSON.stringify(change.properties["Organization Record"]).includes("500")
 )
 ok(
   "Created at contains date",
@@ -185,20 +214,25 @@ const minimalChange = ticketToChange(
 )
 
 ok("key is ticket id", minimalChange.key === "99")
-ok("null type omits Type", minimalChange.properties.Type === undefined)
+ok("null type clears Type", isEmptyProperty(minimalChange.properties.Type))
 ok(
-  "null priority omits Priority",
-  minimalChange.properties.Priority === undefined
+  "null priority clears Priority",
+  isEmptyProperty(minimalChange.properties.Priority)
 )
-ok("empty tags omits Tags", minimalChange.properties.Tags === undefined)
+ok("empty tags clears Tags", isEmptyProperty(minimalChange.properties.Tags))
 ok(
-  "null assignee_id omits Assignee",
-  minimalChange.properties.Assignee === undefined
+  "null assignee_id clears Assignee and its relation",
+  isEmptyProperty(minimalChange.properties.Assignee) &&
+    isEmptyProperty(minimalChange.properties["Assignee Record"])
 )
-ok("null group_id omits Group", minimalChange.properties.Group === undefined)
 ok(
-  "null organization_id omits Organization",
-  minimalChange.properties.Organization === undefined
+  "null group_id clears Group",
+  isEmptyProperty(minimalChange.properties.Group)
+)
+ok(
+  "null organization_id clears Organization and its relation",
+  isEmptyProperty(minimalChange.properties.Organization) &&
+    isEmptyProperty(minimalChange.properties["Organization Record"])
 )
 ok(
   "requester resolved to name",
@@ -235,8 +269,11 @@ ok(
   JSON.stringify(fallbackChange.properties.Group).includes("100")
 )
 ok(
-  "unknown org omits Organization",
-  fallbackChange.properties.Organization === undefined
+  "unknown org falls back to its id and preserves the stable relation",
+  JSON.stringify(fallbackChange.properties.Organization).includes("500") &&
+    JSON.stringify(fallbackChange.properties["Organization Record"]).includes(
+      "500"
+    )
 )
 
 // ---------------------------------------------------------------------------
@@ -299,17 +336,64 @@ ok(
   JSON.stringify(endUserChange.properties.Role).includes("End-user") &&
     !JSON.stringify(endUserChange.properties.Role).includes("End-User")
 )
+ok(
+  "missing user fields explicitly clear stale values",
+  isEmptyProperty(endUserChange.properties.Email) === false &&
+    isEmptyProperty(endUserChange.properties["Organization ID"]) &&
+    isEmptyProperty(endUserChange.properties["Organization Record"]) &&
+    isEmptyProperty(endUserChange.properties.Phone) &&
+    isEmptyProperty(endUserChange.properties.Tags) &&
+    isEmptyProperty(endUserChange.properties["Last login"])
+)
+const organizationUserChange = userToChange({
+  ...endUser,
+  organization_id: 500,
+})
+ok(
+  "user organization relation uses the stable organization id",
+  JSON.stringify(
+    organizationUserChange.properties["Organization Record"]
+  ).includes("500")
+)
+
+const organization: ZendeskOrganization = {
+  id: 500,
+  name: "Acme Corp",
+  domain_names: [],
+  details: null,
+  notes: null,
+  tags: [],
+  group_id: null,
+  created_at: "2024-01-01T00:00:00Z",
+  updated_at: "2024-01-02T00:00:00Z",
+}
+const organizationChange = organizationToChange(organization)
+ok(
+  "missing organization fields and page content explicitly clear",
+  isEmptyProperty(organizationChange.properties.Domains) &&
+    isEmptyProperty(organizationChange.properties.Tags) &&
+    isEmptyProperty(organizationChange.properties.Details) &&
+    organizationChange.pageContentMarkdown === ""
+)
 
 const partialMetric: ZendeskTicketMetric = {
   id: 8001,
   ticket_id: 42,
 }
+const tailOnlyMetric: ZendeskTicketMetric = {
+  id: 8002,
+  ticket_id: 777,
+  updated_at: "2024-06-30T00:02:00Z",
+}
 const partialMetricChange = ticketMetricToChange(partialMetric)
 ok(
-  "optional ticket metrics do not crash or emit invalid numbers",
-  partialMetricChange.properties["First Reply (min)"] === undefined &&
-    partialMetricChange.properties["Full Resolution (min)"] === undefined &&
-    partialMetricChange.properties.Reopens === undefined
+  "optional ticket metrics clear stale values and retain their ticket relation",
+  isEmptyProperty(partialMetricChange.properties["First Reply (min)"]) &&
+    isEmptyProperty(partialMetricChange.properties["Full Resolution (min)"]) &&
+    isEmptyProperty(partialMetricChange.properties.Reopens) &&
+    JSON.stringify(partialMetricChange.properties["Ticket Record"]).includes(
+      "42"
+    )
 )
 
 const surveyResponse: ZendeskSurveyResponse = {
@@ -359,7 +443,15 @@ ok(
     JSON.stringify(surveyResponseChange.properties.Feedback).includes(
       "Fast and helpful."
     ) &&
-    JSON.stringify(surveyResponseChange.properties["Ticket ID"]).includes("99")
+    JSON.stringify(surveyResponseChange.properties["Ticket ID"]).includes(
+      "99"
+    ) &&
+    JSON.stringify(surveyResponseChange.properties["Ticket Record"]).includes(
+      "99"
+    ) &&
+    JSON.stringify(
+      surveyResponseChange.properties["Responder Record"]
+    ).includes("4398080151295")
 )
 ok(
   "survey response uses the latest answer update as its checkpoint",
@@ -371,9 +463,11 @@ const minimalSurveyResponse = surveyResponseToChange({
   responder_id: 123,
 })
 ok(
-  "optional survey response fields do not emit invalid values",
-  minimalSurveyResponse.properties.Rating === undefined &&
-    minimalSurveyResponse.properties.Feedback === undefined &&
+  "optional survey response fields and page content explicitly clear",
+  isEmptyProperty(minimalSurveyResponse.properties.Rating) &&
+    isEmptyProperty(minimalSurveyResponse.properties.Feedback) &&
+    isEmptyProperty(minimalSurveyResponse.properties["Ticket Record"]) &&
+    minimalSurveyResponse.pageContentMarkdown === "" &&
     minimalSurveyResponse.upstreamUpdatedAt === undefined
 )
 
@@ -385,10 +479,10 @@ const minimalSlaPolicy: ZendeskSlaPolicy = {
 }
 const minimalSlaChange = slaPolicyToChange(minimalSlaPolicy)
 ok(
-  "optional SLA fields do not crash or emit invalid values",
-  minimalSlaChange.properties.Position === undefined &&
-    minimalSlaChange.properties["Created at"] === undefined &&
-    minimalSlaChange.properties["Updated at"] === undefined &&
+  "optional SLA fields explicitly clear stale values",
+  isEmptyProperty(minimalSlaChange.properties.Position) &&
+    isEmptyProperty(minimalSlaChange.properties["Created at"]) &&
+    isEmptyProperty(minimalSlaChange.properties["Updated at"]) &&
     minimalSlaChange.upstreamUpdatedAt === undefined
 )
 
@@ -409,8 +503,30 @@ function syncConfig(key: string): SyncManifestConfig {
   return capability.config as SyncManifestConfig
 }
 
+function hasRelation(
+  databaseKey: string,
+  propertyName: string,
+  relatedDatabaseKey: string,
+  relatedPropertyName: string
+): boolean {
+  const database = worker.manifest.databases.find(
+    (candidate) => candidate.key === databaseKey
+  )
+  const property = database?.config.schema.properties[propertyName]
+  return (
+    property?.type === "relation" &&
+    property.relatedDatabaseKey === relatedDatabaseKey &&
+    property.config.twoWay &&
+    property.config.relatedPropertyName === relatedPropertyName
+  )
+}
+
 const ticketsConfig = syncConfig("ticketsSync")
+const ticketsReconciliationConfig = syncConfig("ticketsReconciliationSync")
 const metricsConfig = syncConfig("ticketMetricsSync")
+const metricsReconciliationConfig = syncConfig(
+  "ticketMetricsReconciliationSync"
+)
 const surveyResponsesConfig = syncConfig("surveyResponsesSync")
 const slaConfig = syncConfig("slaPoliciesSync")
 ok(
@@ -420,6 +536,13 @@ ok(
     ticketsConfig.schedule.intervalMs === 5 * 60_000
 )
 ok("ticket metrics use incremental mode", metricsConfig.mode === "incremental")
+ok(
+  "tickets and ticket metrics expose manual replacement repair sweeps",
+  ticketsReconciliationConfig.mode === "replace" &&
+    ticketsReconciliationConfig.schedule?.type === "manual" &&
+    metricsReconciliationConfig.mode === "replace" &&
+    metricsReconciliationConfig.schedule?.type === "manual"
+)
 ok(
   "current CSAT survey responses replace daily",
   surveyResponsesConfig.mode === "replace" &&
@@ -439,6 +562,44 @@ ok(
       pacer.config.allowedRequests === 9 &&
       pacer.config.intervalMs === 60_000
   )
+)
+ok(
+  "independent pacers leave aggregate Zendesk account headroom",
+  worker.manifest.pacers.some(
+    (pacer) =>
+      pacer.key === "zendesk" &&
+      pacer.config.allowedRequests === 70 &&
+      pacer.config.intervalMs === 60_000
+  )
+)
+ok(
+  "manual repair sweeps share a bounded Search Export pacer",
+  worker.manifest.pacers.some(
+    (pacer) =>
+      pacer.key === "zendeskSearchExports" &&
+      pacer.config.allowedRequests === 90 &&
+      pacer.config.intervalMs === 60_000
+  )
+)
+ok(
+  "managed databases expose stable cross-resource relations",
+  hasRelation("tickets", "Assignee Record", "users", "Assigned Tickets") &&
+    hasRelation("tickets", "Requester Record", "users", "Requested Tickets") &&
+    hasRelation("tickets", "Organization Record", "organizations", "Tickets") &&
+    hasRelation("users", "Organization Record", "organizations", "Users") &&
+    hasRelation(
+      "surveyResponses",
+      "Ticket Record",
+      "tickets",
+      "CSAT Responses"
+    ) &&
+    hasRelation(
+      "surveyResponses",
+      "Responder Record",
+      "users",
+      "CSAT Responses"
+    ) &&
+    hasRelation("ticketMetrics", "Ticket Record", "tickets", "Ticket Metrics")
 )
 
 // ---------------------------------------------------------------------------
@@ -514,10 +675,25 @@ async function testZendeskClient() {
 
     if (url.pathname === "/api/v2/incremental/tickets/cursor") {
       const include = url.searchParams.get("include")
+      const startTime = url.searchParams.get("start_time")
+      const isReconciliationTail = startTime != null && startTime !== "1"
       if (include === "metric_sets") {
+        if (url.searchParams.get("cursor") === "missing-metric-sideload") {
+          return Response.json({
+            tickets: [],
+            after_cursor: "missing-metric-sideload-end",
+            end_of_stream: true,
+          })
+        }
         return Response.json({
-          tickets: [{ id: 404, status: "deleted" }],
-          metric_sets: [{ id: 8001, ticket_id: 42 }],
+          tickets: [
+            { id: 404, status: "deleted" },
+            ...(isReconciliationTail ? [tailOnlyTicket] : []),
+          ],
+          metric_sets: [
+            partialMetric,
+            ...(isReconciliationTail ? [tailOnlyMetric] : []),
+          ],
           after_cursor: "metric-cursor-2",
           end_of_stream: true,
         })
@@ -532,12 +708,65 @@ async function testZendeskClient() {
       }
 
       return Response.json({
-        tickets: [standardTicket, { id: 404, status: "deleted" }],
+        tickets: [
+          standardTicket,
+          ...(isReconciliationTail ? [tailOnlyTicket] : []),
+          { id: 404, status: "deleted" },
+        ],
         users: [...users.values()],
         groups: [...groups.values()],
         organizations: [...orgs.values()],
         after_cursor: "ticket-cursor-1",
         end_of_stream: false,
+      })
+    }
+
+    if (url.pathname === "/api/v2/search/export") {
+      const include = url.searchParams.get("include") ?? ""
+      const cursor = url.searchParams.get("page[after]")
+      const metrics = include === "tickets(metric_sets)"
+
+      if (cursor === "repeat") {
+        return Response.json({
+          results: [],
+          metric_sets: metrics ? [] : undefined,
+          meta: { has_more: true, after_cursor: "repeat" },
+        })
+      }
+
+      if (cursor === "cycle-a") {
+        return Response.json({
+          results: [{ ...standardTicket, result_type: "ticket" }],
+          users: [...users.values()],
+          groups: [...groups.values()],
+          organizations: [...orgs.values()],
+          meta: { has_more: true, after_cursor: "cycle-b" },
+        })
+      }
+
+      if (cursor) {
+        return Response.json({
+          results: [],
+          users: metrics ? undefined : [],
+          groups: metrics ? undefined : [],
+          organizations: metrics ? undefined : [],
+          metric_sets: metrics ? [] : undefined,
+          meta: { has_more: false, after_cursor: null },
+        })
+      }
+
+      return Response.json({
+        results: [{ ...standardTicket, result_type: "ticket" }],
+        users: metrics ? undefined : [...users.values()],
+        groups: metrics ? undefined : [...groups.values()],
+        organizations: metrics ? undefined : [...orgs.values()],
+        metric_sets: metrics ? [partialMetric] : undefined,
+        meta: {
+          has_more: true,
+          after_cursor: metrics
+            ? "metric-search-cursor"
+            : "ticket-search-cursor",
+        },
       })
     }
 
@@ -579,6 +808,27 @@ async function testZendeskClient() {
     const firstTicketsPage = await fetchTicketsPage()
     const finalTicketsPage = await fetchTicketsPage("ticket-cursor-1")
     const metricsPage = await fetchTicketMetricsPage("metric-cursor-1")
+    const reconciliationCutoff = "2024-06-30T00:00:00.000Z"
+    const firstTicketReconciliation =
+      await fetchTicketsReconciliationPage(reconciliationCutoff)
+    const finalTicketReconciliation = await fetchTicketsReconciliationPage(
+      reconciliationCutoff,
+      firstTicketReconciliation.nextCursor
+    )
+    const firstMetricReconciliation =
+      await fetchTicketMetricsReconciliationPage(reconciliationCutoff)
+    const reconciliationTailStart = Math.floor(
+      new Date(reconciliationCutoff).getTime() / 1_000
+    )
+    const firstTicketReconciliationTail =
+      await fetchTicketsReconciliationTailPage(reconciliationTailStart)
+    const finalTicketReconciliationTail =
+      await fetchTicketsReconciliationTailPage(
+        reconciliationTailStart,
+        firstTicketReconciliationTail.nextCursor
+      )
+    const metricReconciliationTail =
+      await fetchTicketMetricsReconciliationTailPage(reconciliationTailStart)
     const firstSurveyPage = await fetchSurveyResponsesPage()
     const finalSurveyPage = await fetchSurveyResponsesPage(
       firstSurveyPage.nextCursor
@@ -588,7 +838,14 @@ async function testZendeskClient() {
     type SyncRunResult = {
       changes: { type: string; key: string }[]
       hasMore: boolean
-      nextUserContext?: { cursor: string }
+      nextUserContext?: {
+        phase?: "search" | "tail"
+        cursor?: string
+        createdBefore?: string
+        tailStartTime?: number
+        recentCursors?: string[]
+        pageCount?: number
+      }
     }
     const initialTicketRun = (await worker.run(
       "ticketsSync",
@@ -603,6 +860,41 @@ async function testZendeskClient() {
     const metricRun = (await worker.run(
       "ticketMetricsSync",
       { state: { cursor: "metric-cursor-1" } },
+      { concreteOutput: true }
+    )) as SyncRunResult
+    const ticketReconciliationRun = (await worker.run(
+      "ticketsReconciliationSync",
+      {},
+      { concreteOutput: true }
+    )) as SyncRunResult
+    const ticketReconciliationTailTransitionRun = (await worker.run(
+      "ticketsReconciliationSync",
+      { state: ticketReconciliationRun.nextUserContext },
+      { concreteOutput: true }
+    )) as SyncRunResult
+    const ticketReconciliationTailRun = (await worker.run(
+      "ticketsReconciliationSync",
+      { state: ticketReconciliationTailTransitionRun.nextUserContext },
+      { concreteOutput: true }
+    )) as SyncRunResult
+    const ticketReconciliationFinalRun = (await worker.run(
+      "ticketsReconciliationSync",
+      { state: ticketReconciliationTailRun.nextUserContext },
+      { concreteOutput: true }
+    )) as SyncRunResult
+    const metricReconciliationRun = (await worker.run(
+      "ticketMetricsReconciliationSync",
+      {},
+      { concreteOutput: true }
+    )) as SyncRunResult
+    const metricReconciliationTailTransitionRun = (await worker.run(
+      "ticketMetricsReconciliationSync",
+      { state: metricReconciliationRun.nextUserContext },
+      { concreteOutput: true }
+    )) as SyncRunResult
+    const metricReconciliationFinalRun = (await worker.run(
+      "ticketMetricsReconciliationSync",
+      { state: metricReconciliationTailTransitionRun.nextUserContext },
       { concreteOutput: true }
     )) as SyncRunResult
     const surveyRun = (await worker.run(
@@ -622,6 +914,59 @@ async function testZendeskClient() {
       await fetchPage("acme", "/api/v2/users.json")
     } catch (error) {
       rateLimitWithoutHeader = error
+    }
+    let repeatedSearchCursorError: unknown
+    try {
+      await fetchTicketsReconciliationPage(reconciliationCutoff, "repeat")
+    } catch (error) {
+      repeatedSearchCursorError = error
+    }
+    let missingMetricSideloadError: unknown
+    try {
+      await fetchTicketMetricsReconciliationTailPage(
+        reconciliationTailStart,
+        "missing-metric-sideload"
+      )
+    } catch (error) {
+      missingMetricSideloadError = error
+    }
+    let reconciliationPageBoundError: unknown
+    try {
+      await worker.run(
+        "ticketsReconciliationSync",
+        {
+          state: {
+            phase: "tail",
+            cursor: "bound-cursor",
+            createdBefore: reconciliationCutoff,
+            tailStartTime: reconciliationTailStart,
+            recentCursors: ["bound-cursor"],
+            pageCount: 2_000,
+          },
+        },
+        { concreteOutput: true }
+      )
+    } catch (error) {
+      reconciliationPageBoundError = error
+    }
+    let nonImmediateCursorCycleError: unknown
+    try {
+      await worker.run(
+        "ticketsReconciliationSync",
+        {
+          state: {
+            phase: "search",
+            cursor: "cycle-a",
+            createdBefore: reconciliationCutoff,
+            tailStartTime: reconciliationTailStart,
+            recentCursors: ["cycle-b", "cycle-a"],
+            pageCount: 2,
+          },
+        },
+        { concreteOutput: true }
+      )
+    } catch (error) {
+      nonImmediateCursorCycleError = error
     }
 
     const initialTicketUrl = requestedUrls.find(
@@ -686,6 +1031,139 @@ async function testZendeskClient() {
       ) &&
         metricRun.changes.some(
           (change) => change.type === "delete" && change.key === "404"
+        )
+    )
+    const ticketSearchUrl = requestedUrls.find(
+      (url) =>
+        url.pathname === "/api/v2/search/export" &&
+        url.searchParams.get("include") ===
+          "tickets(users,groups,organizations)" &&
+        !url.searchParams.has("page[after]")
+    )
+    const metricSearchUrl = requestedUrls.find(
+      (url) =>
+        url.pathname === "/api/v2/search/export" &&
+        url.searchParams.get("include") === "tickets(metric_sets)" &&
+        !url.searchParams.has("page[after]")
+    )
+    const continuedTicketSearchUrl = requestedUrls.find(
+      (url) =>
+        url.pathname === "/api/v2/search/export" &&
+        url.searchParams.get("page[after]") === "ticket-search-cursor" &&
+        url.searchParams.get("query") ===
+          `created<=${ticketReconciliationRun.nextUserContext?.createdBefore}`
+    )
+    const directTicketTailUrl = requestedUrls.find(
+      (url) =>
+        url.pathname === "/api/v2/incremental/tickets/cursor" &&
+        url.searchParams.get("include") === "users,groups,organizations" &&
+        url.searchParams.get("start_time") === String(reconciliationTailStart)
+    )
+    const directMetricTailUrl = requestedUrls.find(
+      (url) =>
+        url.pathname === "/api/v2/incremental/tickets/cursor" &&
+        url.searchParams.get("include") === "metric_sets" &&
+        url.searchParams.get("start_time") === String(reconciliationTailStart)
+    )
+    const capabilityTicketTailUrl = requestedUrls.find(
+      (url) =>
+        url.pathname === "/api/v2/incremental/tickets/cursor" &&
+        url.searchParams.get("include") === "users,groups,organizations" &&
+        url.searchParams.get("start_time") ===
+          String(
+            ticketReconciliationTailTransitionRun.nextUserContext?.tailStartTime
+          )
+    )
+    ok(
+      "ticket reconciliation uses a pinned archived-ticket Search Export",
+      firstTicketReconciliation.tickets[0]?.id === standardTicket.id &&
+        firstTicketReconciliation.hasMore &&
+        !finalTicketReconciliation.hasMore &&
+        ticketSearchUrl?.searchParams.get("filter[type]") === "ticket" &&
+        ticketSearchUrl.searchParams.get("query") ===
+          `created<=${reconciliationCutoff}` &&
+        ticketSearchUrl.searchParams.get("page[size]") === "100"
+    )
+    ok(
+      "metric reconciliation uses archived ticket metric sideloads",
+      firstMetricReconciliation.metrics[0]?.ticket_id === 42 &&
+        firstMetricReconciliation.hasMore &&
+        metricSearchUrl?.searchParams.get("query") ===
+          `created<=${reconciliationCutoff}`
+    )
+    ok(
+      "reconciliation tails cover new records through incremental end_of_stream",
+      firstTicketReconciliationTail.hasMore &&
+        firstTicketReconciliationTail.tickets.some(
+          (ticket) => ticket.id === tailOnlyTicket.id
+        ) &&
+        !finalTicketReconciliationTail.hasMore &&
+        metricReconciliationTail.metrics.some(
+          (metric) => metric.ticket_id === tailOnlyMetric.ticket_id
+        ) &&
+        metricReconciliationTail.deletedTicketIds.join(",") === "404" &&
+        directTicketTailUrl != null &&
+        directMetricTailUrl != null
+    )
+    ok(
+      "manual reconciliation capabilities preserve cutoff state and finish only after the tail",
+      ticketReconciliationRun.changes.some(
+        (change) => change.type === "upsert" && change.key === "42"
+      ) &&
+        !ticketReconciliationRun.changes.some(
+          (change) => change.key === "777"
+        ) &&
+        metricReconciliationRun.changes.some(
+          (change) => change.type === "upsert" && change.key === "42"
+        ) &&
+        !metricReconciliationRun.changes.some(
+          (change) => change.key === "777"
+        ) &&
+        ticketReconciliationRun.nextUserContext?.phase === "search" &&
+        ticketReconciliationRun.nextUserContext?.createdBefore != null &&
+        ticketReconciliationRun.nextUserContext?.pageCount === 1 &&
+        ticketReconciliationTailTransitionRun.hasMore &&
+        ticketReconciliationTailTransitionRun.nextUserContext?.phase ===
+          "tail" &&
+        ticketReconciliationTailTransitionRun.nextUserContext?.cursor ===
+          undefined &&
+        ticketReconciliationTailTransitionRun.nextUserContext?.pageCount ===
+          0 &&
+        ticketReconciliationTailRun.hasMore &&
+        ticketReconciliationTailRun.nextUserContext?.phase === "tail" &&
+        ticketReconciliationTailRun.nextUserContext?.cursor ===
+          "ticket-cursor-1" &&
+        ticketReconciliationTailRun.changes.some(
+          (change) => change.type === "upsert" && change.key === "777"
+        ) &&
+        metricReconciliationRun.nextUserContext?.createdBefore != null &&
+        metricReconciliationTailTransitionRun.nextUserContext?.phase ===
+          "tail" &&
+        !metricReconciliationFinalRun.hasMore &&
+        metricReconciliationFinalRun.changes.some(
+          (change) => change.type === "upsert" && change.key === "777"
+        ) &&
+        !ticketReconciliationFinalRun.hasMore &&
+        capabilityTicketTailUrl != null &&
+        continuedTicketSearchUrl?.searchParams.get("query") ===
+          `created<=${ticketReconciliationRun.nextUserContext?.createdBefore}`
+    )
+    ok(
+      "Search Export cursor loops fail closed",
+      repeatedSearchCursorError instanceof Error &&
+        repeatedSearchCursorError.message.includes("repeated its cursor")
+    )
+    ok(
+      "reconciliation rejects missing metric sideloads and unsafe state",
+      missingMetricSideloadError instanceof Error &&
+        missingMetricSideloadError.message.includes(
+          "missing its metric_sets sideload"
+        ) &&
+        reconciliationPageBoundError instanceof Error &&
+        reconciliationPageBoundError.message.includes("page bound") &&
+        nonImmediateCursorCycleError instanceof Error &&
+        nonImmediateCursorCycleError.message.includes(
+          "repeated a recent cursor"
         )
     )
     const finalSurveyUrl = requestedUrls.find(

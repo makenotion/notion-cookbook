@@ -3,14 +3,14 @@
 
 import * as Schema from "@notionhq/workers/schema"
 import * as Builder from "@notionhq/workers/builder"
-import { notionIcon } from "@notionhq/workers"
+import { notionIcon, type SyncChangeUpsert } from "@notionhq/workers"
 import type { ZendeskOrganization } from "./zendesk.js"
 import { dateOnly } from "./formatters.js"
 
 export const INITIAL_TITLE = "Zendesk Organizations"
 export const PRIMARY_KEY = "Org ID"
 
-export const organizationSchema: Schema.Schema<typeof PRIMARY_KEY> = {
+export const organizationSchema = {
   databaseIcon: notionIcon("briefcase"),
   properties: {
     Name: Schema.title(),
@@ -27,9 +27,11 @@ export const organizationSchema: Schema.Schema<typeof PRIMARY_KEY> = {
 
     "Created at": Schema.date(),
   },
-}
+} satisfies Schema.Schema<typeof PRIMARY_KEY>
 
-export function organizationToChange(org: ZendeskOrganization) {
+export function organizationToChange(
+  org: ZendeskOrganization
+): SyncChangeUpsert<typeof PRIMARY_KEY, typeof organizationSchema.properties> {
   return {
     type: "upsert" as const,
     key: String(org.id),
@@ -38,13 +40,12 @@ export function organizationToChange(org: ZendeskOrganization) {
     properties: {
       Name: Builder.title(org.name ?? ""),
       "Org ID": Builder.richText(String(org.id)),
-      ...(org.domain_names.length > 0
-        ? { Domains: Builder.richText(org.domain_names.join(", ")) }
-        : {}),
-      ...(org.tags.length > 0
-        ? { Tags: Builder.multiSelect(...org.tags) }
-        : {}),
-      ...(org.details ? { Details: Builder.richText(org.details) } : {}),
+      Domains:
+        org.domain_names.length > 0
+          ? Builder.richText(org.domain_names.join(", "))
+          : [],
+      Tags: org.tags.length > 0 ? Builder.multiSelect(...org.tags) : [],
+      Details: org.details ? Builder.richText(org.details) : [],
       "Created at": Builder.date(dateOnly(org.created_at)),
       "Updated at": Builder.date(dateOnly(org.updated_at)),
     },

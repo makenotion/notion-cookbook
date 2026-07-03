@@ -22,7 +22,7 @@
 
 import * as Schema from "@notionhq/workers/schema"
 import * as Builder from "@notionhq/workers/builder"
-import { notionIcon } from "@notionhq/workers"
+import { notionIcon, type SyncChangeUpsert } from "@notionhq/workers"
 import type {
   ZendeskTicket,
   UserLookup,
@@ -38,7 +38,7 @@ export const INITIAL_TITLE =
 // this property to decide whether to create or update a page.
 export const PRIMARY_KEY = "Ticket ID"
 
-export const ticketSchema: Schema.Schema<typeof PRIMARY_KEY> = {
+export const ticketSchema = {
   databaseIcon: notionIcon("ticket"),
   properties: {
     Subject: Schema.title(),
@@ -61,6 +61,11 @@ export const ticketSchema: Schema.Schema<typeof PRIMARY_KEY> = {
 
     Assignee: Schema.richText(),
 
+    "Assignee Record": Schema.relation("users", {
+      twoWay: true,
+      relatedPropertyName: "Assigned Tickets",
+    }),
+
     Group: Schema.richText(),
 
     "Ticket link": Schema.url(),
@@ -69,7 +74,17 @@ export const ticketSchema: Schema.Schema<typeof PRIMARY_KEY> = {
 
     Requester: Schema.richText(),
 
+    "Requester Record": Schema.relation("users", {
+      twoWay: true,
+      relatedPropertyName: "Requested Tickets",
+    }),
+
     Organization: Schema.richText(),
+
+    "Organization Record": Schema.relation("organizations", {
+      twoWay: true,
+      relatedPropertyName: "Tickets",
+    }),
 
     Type: Schema.select([
       { name: "Problem" },
@@ -96,7 +111,7 @@ export const ticketSchema: Schema.Schema<typeof PRIMARY_KEY> = {
 
     "Ticket ID": Schema.richText(),
   },
-}
+} satisfies Schema.Schema<typeof PRIMARY_KEY>
 
 // Use explicit labels when Zendesk's raw values need product-specific casing.
 const CHANNEL_LABELS: Record<string, string> = {
@@ -107,14 +122,16 @@ const CHANNEL_LABELS: Record<string, string> = {
   mobile: "Mobile",
 }
 
-// Nullable fields are omitted instead of writing empty values into Notion.
+// Empty arrays explicitly clear nullable fields when an upstream value disappears.
 export function ticketToChange(
   ticket: ZendeskTicket,
   subdomain: string,
   users: UserLookup,
   groups: GroupLookup,
   orgs: OrgLookup
-) {
+): SyncChangeUpsert<typeof PRIMARY_KEY, typeof ticketSchema.properties> & {
+  pageContentMarkdown: string
+} {
   const assigneeName = ticket.assignee_id
     ? (users.get(ticket.assignee_id)?.name ?? String(ticket.assignee_id))
     : null
@@ -124,7 +141,7 @@ export function ticketToChange(
     ? (groups.get(ticket.group_id)?.name ?? String(ticket.group_id))
     : null
   const orgName = ticket.organization_id
-    ? (orgs.get(ticket.organization_id)?.name ?? null)
+    ? (orgs.get(ticket.organization_id)?.name ?? String(ticket.organization_id))
     : null
 
   return {
@@ -135,25 +152,30 @@ export function ticketToChange(
     properties: {
       Subject: Builder.title(ticket.subject ?? ""),
       Status: Builder.select(formatLabel(ticket.status ?? "new")),
-      ...(ticket.priority
-        ? { Priority: Builder.select(formatLabel(ticket.priority)) }
-        : {}),
-      ...(assigneeName ? { Assignee: Builder.richText(assigneeName) } : {}),
-      ...(groupName ? { Group: Builder.richText(groupName) } : {}),
+      Priority: ticket.priority
+        ? Builder.select(formatLabel(ticket.priority))
+        : [],
+      Assignee: assigneeName ? Builder.richText(assigneeName) : [],
+      "Assignee Record":
+        ticket.assignee_id != null
+          ? [Builder.relation(String(ticket.assignee_id))]
+          : [],
+      Group: groupName ? Builder.richText(groupName) : [],
       "Ticket link": Builder.url(ticketUrl(subdomain, ticket.id)),
       "Updated at": Builder.date(dateOnly(ticket.updated_at)),
       Requester: Builder.richText(requesterName),
-      ...(orgName ? { Organization: Builder.richText(orgName) } : {}),
-      ...(ticket.type
-        ? { Type: Builder.select(formatLabel(ticket.type)) }
-        : {}),
+      "Requester Record": [Builder.relation(String(ticket.requester_id))],
+      Organization: orgName ? Builder.richText(orgName) : [],
+      "Organization Record":
+        ticket.organization_id != null
+          ? [Builder.relation(String(ticket.organization_id))]
+          : [],
+      Type: ticket.type ? Builder.select(formatLabel(ticket.type)) : [],
       Channel: Builder.select(
         CHANNEL_LABELS[ticket.via?.channel ?? "web"] ??
           formatLabel(ticket.via?.channel ?? "web")
       ),
-      ...(ticket.tags.length > 0
-        ? { Tags: Builder.multiSelect(...ticket.tags) }
-        : {}),
+      Tags: ticket.tags.length > 0 ? Builder.multiSelect(...ticket.tags) : [],
       "Created at": Builder.date(dateOnly(ticket.created_at)),
       "Ticket ID": Builder.richText(String(ticket.id)),
     },

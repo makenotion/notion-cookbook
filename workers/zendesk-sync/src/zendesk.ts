@@ -175,10 +175,42 @@ type IncrementalTicketsResponse = {
   end_of_stream: boolean
 }
 
+type SearchExportTicket = ZendeskExportTicket & {
+  result_type?: string
+}
+
+type SearchExportTicketsResponse = {
+  results: SearchExportTicket[]
+  users?: ZendeskUser[]
+  groups?: ZendeskGroup[]
+  organizations?: ZendeskOrganizationRef[]
+  metric_sets?: ZendeskTicketMetric[]
+  meta: {
+    has_more: boolean
+    after_cursor?: string | null
+  }
+}
+
+type SearchExportTicketsPage = {
+  tickets: ZendeskExportTicket[]
+  users: UserLookup
+  groups: GroupLookup
+  orgs: OrgLookup
+  metrics: ZendeskTicketMetric[]
+  hasMore: boolean
+  nextCursor: string | undefined
+}
+
 async function fetchIncrementalTicketsPage(
   includes: string[],
-  cursor?: string
+  cursor?: string,
+  startTime: number = INITIAL_EXPORT_START_TIME
 ): Promise<IncrementalTicketsResponse> {
+  if (!Number.isSafeInteger(startTime) || startTime < 1) {
+    throw new Error(
+      "Zendesk incremental export start_time must be a positive Unix timestamp"
+    )
+  }
   const subdomain = requireSubdomain()
   const url = new URL(
     `https://${subdomain}.zendesk.com/api/v2/incremental/tickets/cursor`
@@ -191,7 +223,7 @@ async function fetchIncrementalTicketsPage(
   if (cursor) {
     url.searchParams.set("cursor", cursor)
   } else {
-    url.searchParams.set("start_time", String(INITIAL_EXPORT_START_TIME))
+    url.searchParams.set("start_time", String(startTime))
   }
 
   const page = await fetchJson<IncrementalTicketsResponse>(url.toString())
@@ -201,7 +233,92 @@ async function fetchIncrementalTicketsPage(
   if (!page.end_of_stream && page.after_cursor === cursor) {
     throw new Error("Zendesk incremental export repeated its cursor")
   }
+  if (includes.includes("metric_sets") && !Array.isArray(page.metric_sets)) {
+    throw new Error(
+      "Zendesk incremental export is missing its metric_sets sideload"
+    )
+  }
   return page
+}
+
+function userLookup(users: ZendeskUser[] | undefined): UserLookup {
+  return new Map((users ?? []).map((user) => [user.id, user]))
+}
+
+function groupLookup(groups: ZendeskGroup[] | undefined): GroupLookup {
+  return new Map((groups ?? []).map((group) => [group.id, group]))
+}
+
+function organizationLookup(
+  organizations: ZendeskOrganizationRef[] | undefined
+): OrgLookup {
+  return new Map((organizations ?? []).map((org) => [org.id, org]))
+}
+
+async function fetchSearchExportTicketsPage(
+  createdBefore: string,
+  includes: string[],
+  cursor?: string
+): Promise<SearchExportTicketsPage> {
+  const subdomain = requireSubdomain()
+  const url = new URL(`https://${subdomain}.zendesk.com/api/v2/search/export`)
+  url.searchParams.set("filter[type]", "ticket")
+  url.searchParams.set("query", `created<=${createdBefore}`)
+  // Zendesk allows up to 1,000 Search Export results but recommends 100 when
+  // archived tickets are present because larger responses may time out.
+  url.searchParams.set("page[size]", String(PAGE_SIZE))
+  url.searchParams.set("include", `tickets(${includes.join(",")})`)
+  if (cursor) {
+    url.searchParams.set("page[after]", cursor)
+  }
+
+  const page = await fetchJson<SearchExportTicketsResponse>(url.toString())
+  if (
+    !Array.isArray(page.results) ||
+    typeof page.meta?.has_more !== "boolean"
+  ) {
+    throw new Error("Zendesk ticket search export returned an invalid page")
+  }
+  if (
+    page.results.some(
+      (result) =>
+        result.result_type !== undefined && result.result_type !== "ticket"
+    )
+  ) {
+    throw new Error("Zendesk ticket search export returned a non-ticket result")
+  }
+
+  const nextCursor = page.meta.has_more
+    ? (page.meta.after_cursor ?? undefined)
+    : undefined
+  if (page.meta.has_more && !nextCursor) {
+    throw new Error("Zendesk ticket search export is missing its after_cursor")
+  }
+  if (page.meta.has_more && nextCursor === cursor) {
+    throw new Error("Zendesk ticket search export repeated its cursor")
+  }
+  if (page.meta.has_more && page.results.length === 0) {
+    throw new Error(
+      "Zendesk ticket search export returned a cursor without results"
+    )
+  }
+  if (includes.includes("metric_sets") && !Array.isArray(page.metric_sets)) {
+    // A missing sideload must not be mistaken for an empty metrics keyspace;
+    // completing replace mode in that case would delete valid metric pages.
+    throw new Error(
+      "Zendesk ticket search export is missing its metric_sets sideload"
+    )
+  }
+
+  return {
+    tickets: page.results,
+    users: userLookup(page.users),
+    groups: groupLookup(page.groups),
+    orgs: organizationLookup(page.organizations),
+    metrics: page.metric_sets ?? [],
+    hasMore: page.meta.has_more,
+    nextCursor,
+  }
 }
 
 // Sideloading embeds related objects in the ticket response so we can
@@ -219,26 +336,63 @@ export async function fetchTicketsPage(cursor?: string): Promise<{
     cursor
   )
 
-  const users: UserLookup = new Map()
-  for (const user of page.users ?? []) {
-    users.set(user.id, user)
-  }
-
-  const groups: GroupLookup = new Map()
-  for (const group of page.groups ?? []) {
-    groups.set(group.id, group)
-  }
-
-  const orgs: OrgLookup = new Map()
-  for (const org of page.organizations ?? []) {
-    orgs.set(org.id, org)
-  }
-
   return {
     tickets: page.tickets,
-    users,
-    groups,
-    orgs,
+    users: userLookup(page.users),
+    groups: groupLookup(page.groups),
+    orgs: organizationLookup(page.organizations),
+    hasMore: !page.end_of_stream,
+    nextCursor: page.after_cursor,
+  }
+}
+
+export async function fetchTicketsReconciliationPage(
+  createdBefore: string,
+  cursor?: string
+): Promise<{
+  tickets: ZendeskExportTicket[]
+  users: UserLookup
+  groups: GroupLookup
+  orgs: OrgLookup
+  hasMore: boolean
+  nextCursor: string | undefined
+}> {
+  const page = await fetchSearchExportTicketsPage(
+    createdBefore,
+    ["users", "groups", "organizations"],
+    cursor
+  )
+  return {
+    tickets: page.tickets,
+    users: page.users,
+    groups: page.groups,
+    orgs: page.orgs,
+    hasMore: page.hasMore,
+    nextCursor: page.nextCursor,
+  }
+}
+
+export async function fetchTicketsReconciliationTailPage(
+  startTime: number,
+  cursor?: string
+): Promise<{
+  tickets: ZendeskExportTicket[]
+  users: UserLookup
+  groups: GroupLookup
+  orgs: OrgLookup
+  hasMore: boolean
+  nextCursor: string
+}> {
+  const page = await fetchIncrementalTicketsPage(
+    ["users", "groups", "organizations"],
+    cursor,
+    startTime
+  )
+  return {
+    tickets: page.tickets,
+    users: userLookup(page.users),
+    groups: groupLookup(page.groups),
+    orgs: organizationLookup(page.organizations),
     hasMore: !page.end_of_stream,
     nextCursor: page.after_cursor,
   }
@@ -423,6 +577,57 @@ export async function fetchTicketMetricsPage(cursor?: string): Promise<{
   return {
     metrics: page.metric_sets ?? [],
     deletedTicketIds,
+    hasMore: !page.end_of_stream,
+    nextCursor: page.after_cursor,
+  }
+}
+
+export async function fetchTicketMetricsReconciliationPage(
+  createdBefore: string,
+  cursor?: string
+): Promise<{
+  metrics: ZendeskTicketMetric[]
+  hasMore: boolean
+  nextCursor: string | undefined
+}> {
+  const page = await fetchSearchExportTicketsPage(
+    createdBefore,
+    ["metric_sets"],
+    cursor
+  )
+  const liveTicketIds = new Set(
+    page.tickets
+      .filter((ticket) => !isDeletedTicket(ticket))
+      .map((ticket) => ticket.id)
+  )
+  return {
+    metrics: page.metrics.filter((metric) =>
+      liveTicketIds.has(metric.ticket_id)
+    ),
+    hasMore: page.hasMore,
+    nextCursor: page.nextCursor,
+  }
+}
+
+export async function fetchTicketMetricsReconciliationTailPage(
+  startTime: number,
+  cursor?: string
+): Promise<{
+  metrics: ZendeskTicketMetric[]
+  deletedTicketIds: number[]
+  hasMore: boolean
+  nextCursor: string
+}> {
+  const page = await fetchIncrementalTicketsPage(
+    ["metric_sets"],
+    cursor,
+    startTime
+  )
+  return {
+    metrics: page.metric_sets ?? [],
+    deletedTicketIds: page.tickets
+      .filter(isDeletedTicket)
+      .map((ticket) => ticket.id),
     hasMore: !page.end_of_stream,
     nextCursor: page.after_cursor,
   }

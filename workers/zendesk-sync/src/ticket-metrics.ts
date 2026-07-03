@@ -7,17 +7,22 @@
 
 import * as Schema from "@notionhq/workers/schema"
 import * as Builder from "@notionhq/workers/builder"
-import { notionIcon } from "@notionhq/workers"
+import { notionIcon, type SyncChangeUpsert } from "@notionhq/workers"
 import type { ZendeskTicketMetric } from "./zendesk.js"
 import { dateOnly } from "./formatters.js"
 
 export const INITIAL_TITLE = "Zendesk Ticket Metrics"
 export const PRIMARY_KEY = "Ticket ID"
 
-export const ticketMetricSchema: Schema.Schema<typeof PRIMARY_KEY> = {
+export const ticketMetricSchema = {
   databaseIcon: notionIcon("stopwatch"),
   properties: {
     "Ticket ID": Schema.title(),
+
+    "Ticket Record": Schema.relation("tickets", {
+      twoWay: true,
+      relatedPropertyName: "Ticket Metrics",
+    }),
 
     "First Reply (min)": Schema.number(),
 
@@ -45,7 +50,7 @@ export const ticketMetricSchema: Schema.Schema<typeof PRIMARY_KEY> = {
 
     "Created at": Schema.date(),
   },
-}
+} satisfies Schema.Schema<typeof PRIMARY_KEY>
 
 function calendarMinutes(
   metric: ZendeskTicketMetric["reply_time_in_minutes"]
@@ -53,7 +58,9 @@ function calendarMinutes(
   return metric?.calendar ?? null
 }
 
-export function ticketMetricToChange(metric: ZendeskTicketMetric) {
+export function ticketMetricToChange(
+  metric: ZendeskTicketMetric
+): SyncChangeUpsert<typeof PRIMARY_KEY, typeof ticketMetricSchema.properties> {
   const firstReply = calendarMinutes(metric.reply_time_in_minutes)
   const firstResolution = calendarMinutes(
     metric.first_resolution_time_in_minutes
@@ -69,43 +76,35 @@ export function ticketMetricToChange(metric: ZendeskTicketMetric) {
     ...(metric.updated_at ? { upstreamUpdatedAt: metric.updated_at } : {}),
     properties: {
       "Ticket ID": Builder.title(String(metric.ticket_id)),
-      ...(firstReply != null
-        ? { "First Reply (min)": Builder.number(firstReply) }
-        : {}),
-      ...(firstResolution != null
-        ? { "First Resolution (min)": Builder.number(firstResolution) }
-        : {}),
-      ...(fullResolution != null
-        ? { "Full Resolution (min)": Builder.number(fullResolution) }
-        : {}),
-      ...(agentWait != null
-        ? { "Agent Wait (min)": Builder.number(agentWait) }
-        : {}),
-      ...(requesterWait != null
-        ? { "Requester Wait (min)": Builder.number(requesterWait) }
-        : {}),
-      ...(metric.reopens != null
-        ? { Reopens: Builder.number(metric.reopens) }
-        : {}),
-      ...(metric.assignee_stations != null
-        ? { "Agents Touched": Builder.number(metric.assignee_stations) }
-        : {}),
-      ...(metric.group_stations != null
-        ? { "Groups Touched": Builder.number(metric.group_stations) }
-        : {}),
-      ...(metric.solved_at
-        ? { "Solved at": Builder.date(dateOnly(metric.solved_at)) }
-        : {}),
-      ...(metric.replies != null
-        ? { Replies: Builder.number(metric.replies) }
-        : {}),
-      ...(onHold != null ? { "On Hold (min)": Builder.number(onHold) } : {}),
-      ...(metric.updated_at
-        ? { "Updated at": Builder.date(dateOnly(metric.updated_at)) }
-        : {}),
-      ...(metric.created_at
-        ? { "Created at": Builder.date(dateOnly(metric.created_at)) }
-        : {}),
+      "Ticket Record": [Builder.relation(String(metric.ticket_id))],
+      "First Reply (min)": firstReply != null ? Builder.number(firstReply) : [],
+      "First Resolution (min)":
+        firstResolution != null ? Builder.number(firstResolution) : [],
+      "Full Resolution (min)":
+        fullResolution != null ? Builder.number(fullResolution) : [],
+      "Agent Wait (min)": agentWait != null ? Builder.number(agentWait) : [],
+      "Requester Wait (min)":
+        requesterWait != null ? Builder.number(requesterWait) : [],
+      Reopens: metric.reopens != null ? Builder.number(metric.reopens) : [],
+      "Agents Touched":
+        metric.assignee_stations != null
+          ? Builder.number(metric.assignee_stations)
+          : [],
+      "Groups Touched":
+        metric.group_stations != null
+          ? Builder.number(metric.group_stations)
+          : [],
+      "Solved at": metric.solved_at
+        ? Builder.date(dateOnly(metric.solved_at))
+        : [],
+      Replies: metric.replies != null ? Builder.number(metric.replies) : [],
+      "On Hold (min)": onHold != null ? Builder.number(onHold) : [],
+      "Updated at": metric.updated_at
+        ? Builder.date(dateOnly(metric.updated_at))
+        : [],
+      "Created at": metric.created_at
+        ? Builder.date(dateOnly(metric.created_at))
+        : [],
     },
   }
 }

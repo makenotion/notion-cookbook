@@ -10,10 +10,14 @@ import { Worker } from "@notionhq/workers"
 
 import {
   fetchTicketsPage,
+  fetchTicketsReconciliationPage,
+  fetchTicketsReconciliationTailPage,
   fetchOrganizationsPage,
   fetchUsersPage,
   fetchSurveyResponsesPage,
   fetchTicketMetricsPage,
+  fetchTicketMetricsReconciliationPage,
+  fetchTicketMetricsReconciliationTailPage,
   fetchSlaPoliciesPage,
   isDeletedTicket,
   requireSubdomain,
@@ -59,12 +63,184 @@ type SyncState = {
   cursor: string
 }
 
+type ReconciliationState = {
+  phase: "search" | "tail"
+  cursor?: string
+  createdBefore: string
+  tailStartTime: number
+  recentCursors: string[]
+  pageCount: number
+}
+
+const MAX_RECONCILIATION_CURSOR_HISTORY = 128
+const SEARCH_INDEX_BUFFER_MS = 5 * 60_000
+// Search Export cursors expire after one hour. At 100 rows per page, this
+// bound supports up to 200,000 records per replacement while ensuring two
+// concurrently scheduled sweeps can stay within the shared search pacer.
+const MAX_RECONCILIATION_SEARCH_PAGES = 2_000
+const MAX_RECONCILIATION_TAIL_PAGES = 2_000
+
+function reconciliationState(
+  state: ReconciliationState | undefined,
+  resourceName: string,
+  now: () => Date = () => new Date()
+): ReconciliationState {
+  if (!state) {
+    const value = now()
+    if (Number.isNaN(value.getTime())) {
+      throw new Error(`Zendesk ${resourceName} reconciliation clock is invalid`)
+    }
+    // Zendesk documents that newly created records can take a few minutes to
+    // enter Search. Keep the immutable creation boundary behind that lag; the
+    // five-minute incremental capability owns the newer tail.
+    const createdBefore = new Date(
+      Math.max(0, value.getTime() - SEARCH_INDEX_BUFFER_MS)
+    ).toISOString()
+    return {
+      phase: "search",
+      createdBefore,
+      tailStartTime: Math.max(
+        1,
+        Math.floor(new Date(createdBefore).getTime() / 1_000)
+      ),
+      recentCursors: [],
+      pageCount: 0,
+    }
+  }
+
+  if (state.phase !== "search" && state.phase !== "tail") {
+    throw new Error(
+      `Zendesk ${resourceName} reconciliation has an invalid phase`
+    )
+  }
+  if (typeof state.createdBefore !== "string" || !state.createdBefore.trim()) {
+    throw new Error(
+      `Zendesk ${resourceName} reconciliation has an invalid createdBefore cutoff`
+    )
+  }
+  const cutoff = new Date(state.createdBefore)
+  if (
+    Number.isNaN(cutoff.getTime()) ||
+    cutoff.toISOString() !== state.createdBefore
+  ) {
+    throw new Error(
+      `Zendesk ${resourceName} reconciliation has an invalid createdBefore cutoff`
+    )
+  }
+  const expectedTailStartTime = Math.max(
+    1,
+    Math.floor(cutoff.getTime() / 1_000)
+  )
+  if (
+    !Number.isSafeInteger(state.tailStartTime) ||
+    state.tailStartTime !== expectedTailStartTime
+  ) {
+    throw new Error(
+      `Zendesk ${resourceName} reconciliation has an invalid tail start_time`
+    )
+  }
+  if (
+    !Array.isArray(state.recentCursors) ||
+    state.recentCursors.length > MAX_RECONCILIATION_CURSOR_HISTORY ||
+    state.recentCursors.some(
+      (cursor) => typeof cursor !== "string" || !cursor.trim()
+    )
+  ) {
+    throw new Error(
+      `Zendesk ${resourceName} reconciliation has invalid cursor history`
+    )
+  }
+  if (state.cursor !== undefined) {
+    if (
+      typeof state.cursor !== "string" ||
+      !state.cursor.trim() ||
+      state.recentCursors.length === 0 ||
+      !state.recentCursors.includes(state.cursor)
+    ) {
+      throw new Error(
+        `Zendesk ${resourceName} reconciliation has an invalid cursor`
+      )
+    }
+  } else if (
+    state.phase !== "tail" ||
+    state.recentCursors.length !== 0 ||
+    state.pageCount !== 0
+  ) {
+    throw new Error(
+      `Zendesk ${resourceName} reconciliation is missing its phase cursor`
+    )
+  }
+  const pageLimit =
+    state.phase === "search"
+      ? MAX_RECONCILIATION_SEARCH_PAGES
+      : MAX_RECONCILIATION_TAIL_PAGES
+  if (
+    !Number.isSafeInteger(state.pageCount) ||
+    state.pageCount < (state.cursor ? 1 : 0) ||
+    state.pageCount >= pageLimit
+  ) {
+    throw new Error(
+      `Zendesk ${resourceName} reconciliation is outside its page bound`
+    )
+  }
+  return state
+}
+
+function nextReconciliationState(
+  state: ReconciliationState,
+  nextCursor: string | undefined,
+  resourceName: string
+): ReconciliationState {
+  if (!nextCursor?.trim()) {
+    throw new Error(
+      `Zendesk ${resourceName} reconciliation is missing its next cursor`
+    )
+  }
+  const recentCursors = new Set(state.recentCursors)
+  if (state.cursor) recentCursors.add(state.cursor)
+  if (recentCursors.has(nextCursor)) {
+    throw new Error(
+      `Zendesk ${resourceName} reconciliation repeated a recent cursor`
+    )
+  }
+
+  const pageCount = state.pageCount + 1
+  const pageLimit =
+    state.phase === "search"
+      ? MAX_RECONCILIATION_SEARCH_PAGES
+      : MAX_RECONCILIATION_TAIL_PAGES
+  if (pageCount >= pageLimit) {
+    throw new Error(
+      `Zendesk ${resourceName} reconciliation ${state.phase} phase exceeded ${pageLimit} pages`
+    )
+  }
+  recentCursors.add(nextCursor)
+  return {
+    ...state,
+    cursor: nextCursor,
+    recentCursors: [...recentCursors].slice(-MAX_RECONCILIATION_CURSOR_HISTORY),
+    pageCount,
+  }
+}
+
+function tailReconciliationState(
+  state: ReconciliationState
+): ReconciliationState {
+  return {
+    phase: "tail",
+    createdBefore: state.createdBefore,
+    tailStartTime: state.tailStartTime,
+    recentCursors: [],
+    pageCount: 0,
+  }
+}
+
 const worker = new Worker()
 
-// Team accounts allow 200 Support API requests/minute. Keep aggregate general
-// traffic below that limit, with headroom for the incremental export pacer.
+// Team accounts allow 200 Support API requests/minute. These three independent
+// pacers sum to 169 requests/minute, leaving headroom for account activity.
 const generalPacer = worker.pacer("zendesk", {
-  allowedRequests: 170,
+  allowedRequests: 70,
   intervalMs: 60_000,
 })
 
@@ -72,6 +248,13 @@ const generalPacer = worker.pacer("zendesk", {
 // Tickets and metrics share this pacer so the limit applies collectively.
 const incrementalExportPacer = worker.pacer("zendeskIncrementalExports", {
   allowedRequests: 9,
+  intervalMs: 60_000,
+})
+
+// Search Export has a separate 100-request/minute account limit. Both manual
+// reconciliation capabilities share this pacer and leave provider headroom.
+const searchExportPacer = worker.pacer("zendeskSearchExports", {
+  allowedRequests: 90,
   intervalMs: 60_000,
 })
 
@@ -105,6 +288,73 @@ worker.sync("ticketsSync", {
       // Incremental mode persists this checkpoint across scheduled runs,
       // including when this page reaches end_of_stream.
       nextState: { cursor: page.nextCursor },
+    }
+  },
+})
+
+// Search Export includes archived tickets, unlike the ordinary List Tickets
+// endpoint. A pinned creation cutoff keeps membership fixed while its
+// short-lived cursor is paged; a fresh incremental tail then adds newer
+// tickets before replacement is allowed to complete.
+worker.sync("ticketsReconciliationSync", {
+  database: tickets,
+  mode: "replace",
+  schedule: "manual",
+  execute: async (state: ReconciliationState | undefined) => {
+    const reconciliation = reconciliationState(state, "ticket")
+    const subdomain = requireSubdomain()
+    if (reconciliation.phase === "search") {
+      await searchExportPacer.wait()
+      const page = await fetchTicketsReconciliationPage(
+        reconciliation.createdBefore,
+        reconciliation.cursor
+      )
+      const changes = page.tickets.flatMap((ticket) =>
+        isDeletedTicket(ticket)
+          ? []
+          : [
+              ticketToChange(
+                ticket,
+                subdomain,
+                page.users,
+                page.groups,
+                page.orgs
+              ),
+            ]
+      )
+      return {
+        changes,
+        hasMore: true as const,
+        nextState: page.hasMore
+          ? nextReconciliationState(reconciliation, page.nextCursor, "ticket")
+          : tailReconciliationState(reconciliation),
+      }
+    }
+
+    await incrementalExportPacer.wait()
+    const page = await fetchTicketsReconciliationTailPage(
+      reconciliation.tailStartTime,
+      reconciliation.cursor
+    )
+    const changes = page.tickets.flatMap((ticket) =>
+      isDeletedTicket(ticket)
+        ? []
+        : [
+            ticketToChange(
+              ticket,
+              subdomain,
+              page.users,
+              page.groups,
+              page.orgs
+            ),
+          ]
+    )
+    return {
+      changes,
+      hasMore: page.hasMore,
+      nextState: page.hasMore
+        ? nextReconciliationState(reconciliation, page.nextCursor, "ticket")
+        : undefined,
     }
   },
 })
@@ -224,6 +474,56 @@ worker.sync("ticketMetricsSync", {
       changes,
       hasMore: page.hasMore,
       nextState: { cursor: page.nextCursor },
+    }
+  },
+})
+
+// List Ticket Metrics excludes archived tickets, so this replacement also
+// uses Search Export with the documented tickets(metric_sets) sideload. This
+// preserves the historical keyspace populated by the incremental export.
+worker.sync("ticketMetricsReconciliationSync", {
+  database: ticketMetrics,
+  mode: "replace",
+  schedule: "manual",
+  execute: async (state: ReconciliationState | undefined) => {
+    const reconciliation = reconciliationState(state, "ticket metric")
+    if (reconciliation.phase === "search") {
+      await searchExportPacer.wait()
+      const page = await fetchTicketMetricsReconciliationPage(
+        reconciliation.createdBefore,
+        reconciliation.cursor
+      )
+      return {
+        changes: page.metrics.map(ticketMetricToChange),
+        hasMore: true as const,
+        nextState: page.hasMore
+          ? nextReconciliationState(
+              reconciliation,
+              page.nextCursor,
+              "ticket metric"
+            )
+          : tailReconciliationState(reconciliation),
+      }
+    }
+
+    await incrementalExportPacer.wait()
+    const page = await fetchTicketMetricsReconciliationTailPage(
+      reconciliation.tailStartTime,
+      reconciliation.cursor
+    )
+    const deletedTicketIds = new Set(page.deletedTicketIds)
+    return {
+      changes: page.metrics
+        .filter((metric) => !deletedTicketIds.has(metric.ticket_id))
+        .map(ticketMetricToChange),
+      hasMore: page.hasMore,
+      nextState: page.hasMore
+        ? nextReconciliationState(
+            reconciliation,
+            page.nextCursor,
+            "ticket metric"
+          )
+        : undefined,
     }
   },
 })

@@ -119,7 +119,7 @@ and a **webhook** handles events from another service. See the complete
 | Sync accounts and opportunities                             | [Salesforce sync](workers/salesforce-sync/) | Salesforce |
 | Coordinate issue triage, service risk, and rollout health   | [Sentry sync](workers/sentry-sync/)         | Sentry     |
 | Sync the result of a warehouse query                        | [Snowflake sync](workers/snowflake-sync/)   | Snowflake  |
-| Sync tickets, users, organizations, and support metrics     | [Zendesk sync](workers/zendesk-sync/)       | Zendesk    |
+| Sync related tickets, users, organizations, and metrics     | [Zendesk sync](workers/zendesk-sync/)       | Zendesk    |
 
 ### Add tools to a Notion Agent
 

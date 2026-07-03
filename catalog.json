@@ -483,7 +483,7 @@
     {
       "id": "zendesk-sync",
       "title": "Zendesk sync",
-      "summary": "Sync Zendesk tickets, organizations, users, CSAT responses, ticket metrics, and SLA policies into managed Notion databases.",
+      "summary": "Sync Zendesk tickets, organizations, users, CSAT responses, ticket metrics, and SLA policies into related managed Notion databases with incremental updates and manual repair sweeps.",
       "path": "workers/zendesk-sync",
       "kind": "worker-sync",
       "status": "ready",

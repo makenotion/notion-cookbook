@@ -4,14 +4,14 @@
 
 import * as Schema from "@notionhq/workers/schema"
 import * as Builder from "@notionhq/workers/builder"
-import { notionIcon } from "@notionhq/workers"
+import { notionIcon, type SyncChangeUpsert } from "@notionhq/workers"
 import type { ZendeskFullUser } from "./zendesk.js"
 import { formatLabel, dateOnly } from "./formatters.js"
 
 export const INITIAL_TITLE = "Zendesk Users"
 export const PRIMARY_KEY = "User ID"
 
-export const userSchema: Schema.Schema<typeof PRIMARY_KEY> = {
+export const userSchema = {
   databaseIcon: notionIcon("people"),
   properties: {
     Name: Schema.title(),
@@ -32,6 +32,11 @@ export const userSchema: Schema.Schema<typeof PRIMARY_KEY> = {
 
     "Organization ID": Schema.richText(),
 
+    "Organization Record": Schema.relation("organizations", {
+      twoWay: true,
+      relatedPropertyName: "Users",
+    }),
+
     Phone: Schema.richText(),
 
     Suspended: Schema.checkbox(),
@@ -40,7 +45,7 @@ export const userSchema: Schema.Schema<typeof PRIMARY_KEY> = {
 
     "Created at": Schema.date(),
   },
-}
+} satisfies Schema.Schema<typeof PRIMARY_KEY>
 
 const ROLE_LABELS: Record<string, string> = {
   "end-user": "End-user",
@@ -48,7 +53,9 @@ const ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
 }
 
-export function userToChange(user: ZendeskFullUser) {
+export function userToChange(
+  user: ZendeskFullUser
+): SyncChangeUpsert<typeof PRIMARY_KEY, typeof userSchema.properties> {
   return {
     type: "upsert" as const,
     key: String(user.id),
@@ -56,21 +63,24 @@ export function userToChange(user: ZendeskFullUser) {
     properties: {
       Name: Builder.title(user.name ?? ""),
       "User ID": Builder.richText(String(user.id)),
-      ...(user.email ? { Email: Builder.email(user.email) } : {}),
+      Email: user.email ? Builder.email(user.email) : [],
       Role: Builder.select(
         ROLE_LABELS[user.role] ?? formatLabel(user.role ?? "end-user")
       ),
-      ...(user.organization_id
-        ? { "Organization ID": Builder.richText(String(user.organization_id)) }
-        : {}),
-      ...(user.phone ? { Phone: Builder.richText(user.phone) } : {}),
-      ...(user.tags.length > 0
-        ? { Tags: Builder.multiSelect(...user.tags) }
-        : {}),
+      "Organization ID":
+        user.organization_id != null
+          ? Builder.richText(String(user.organization_id))
+          : [],
+      "Organization Record":
+        user.organization_id != null
+          ? [Builder.relation(String(user.organization_id))]
+          : [],
+      Phone: user.phone ? Builder.richText(user.phone) : [],
+      Tags: user.tags.length > 0 ? Builder.multiSelect(...user.tags) : [],
       Suspended: Builder.checkbox(user.suspended),
-      ...(user.last_login_at
-        ? { "Last login": Builder.date(dateOnly(user.last_login_at)) }
-        : {}),
+      "Last login": user.last_login_at
+        ? Builder.date(dateOnly(user.last_login_at))
+        : [],
       "Created at": Builder.date(dateOnly(user.created_at)),
       "Updated at": Builder.date(dateOnly(user.updated_at)),
     },

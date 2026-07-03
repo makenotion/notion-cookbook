@@ -7,14 +7,14 @@
 
 import * as Schema from "@notionhq/workers/schema"
 import * as Builder from "@notionhq/workers/builder"
-import { notionIcon } from "@notionhq/workers"
+import { notionIcon, type SyncChangeUpsert } from "@notionhq/workers"
 import type { ZendeskSlaPolicy, ZendeskSlaPolicyMetric } from "./zendesk.js"
 import { dateOnly } from "./formatters.js"
 
 export const INITIAL_TITLE = "Zendesk SLA Policies"
 export const PRIMARY_KEY = "Policy ID"
 
-export const slaPolicySchema: Schema.Schema<typeof PRIMARY_KEY> = {
+export const slaPolicySchema = {
   databaseIcon: notionIcon("shield"),
   properties: {
     Title: Schema.title(),
@@ -43,7 +43,7 @@ export const slaPolicySchema: Schema.Schema<typeof PRIMARY_KEY> = {
 
     "Created at": Schema.date(),
   },
-}
+} satisfies Schema.Schema<typeof PRIMARY_KEY>
 
 function findTarget(
   metrics: ZendeskSlaPolicyMetric[],
@@ -56,7 +56,9 @@ function findTarget(
   return match?.target
 }
 
-export function slaPolicyToChange(policy: ZendeskSlaPolicy) {
+export function slaPolicyToChange(
+  policy: ZendeskSlaPolicy
+): SyncChangeUpsert<typeof PRIMARY_KEY, typeof slaPolicySchema.properties> {
   const metrics = policy.policy_metrics ?? []
   const description = policy.description ?? ""
 
@@ -78,39 +80,26 @@ export function slaPolicyToChange(policy: ZendeskSlaPolicy) {
     properties: {
       Title: Builder.title(policy.title ?? ""),
       "Policy ID": Builder.richText(String(policy.id)),
-      ...(policy.position != null
-        ? { Position: Builder.number(policy.position) }
-        : {}),
-      ...(urgentReply != null
-        ? { "Urgent First Reply (min)": Builder.number(urgentReply) }
-        : {}),
-      ...(highReply != null
-        ? { "High First Reply (min)": Builder.number(highReply) }
-        : {}),
-      ...(normalReply != null
-        ? { "Normal First Reply (min)": Builder.number(normalReply) }
-        : {}),
-      ...(lowReply != null
-        ? { "Low First Reply (min)": Builder.number(lowReply) }
-        : {}),
-      ...(urgentRes != null
-        ? { "Urgent Resolution (min)": Builder.number(urgentRes) }
-        : {}),
-      ...(highRes != null
-        ? { "High Resolution (min)": Builder.number(highRes) }
-        : {}),
-      ...(normalRes != null
-        ? { "Normal Resolution (min)": Builder.number(normalRes) }
-        : {}),
-      ...(lowRes != null
-        ? { "Low Resolution (min)": Builder.number(lowRes) }
-        : {}),
-      ...(policy.created_at
-        ? { "Created at": Builder.date(dateOnly(policy.created_at)) }
-        : {}),
-      ...(policy.updated_at
-        ? { "Updated at": Builder.date(dateOnly(policy.updated_at)) }
-        : {}),
+      Position: policy.position != null ? Builder.number(policy.position) : [],
+      "Urgent First Reply (min)":
+        urgentReply != null ? Builder.number(urgentReply) : [],
+      "High First Reply (min)":
+        highReply != null ? Builder.number(highReply) : [],
+      "Normal First Reply (min)":
+        normalReply != null ? Builder.number(normalReply) : [],
+      "Low First Reply (min)": lowReply != null ? Builder.number(lowReply) : [],
+      "Urgent Resolution (min)":
+        urgentRes != null ? Builder.number(urgentRes) : [],
+      "High Resolution (min)": highRes != null ? Builder.number(highRes) : [],
+      "Normal Resolution (min)":
+        normalRes != null ? Builder.number(normalRes) : [],
+      "Low Resolution (min)": lowRes != null ? Builder.number(lowRes) : [],
+      "Created at": policy.created_at
+        ? Builder.date(dateOnly(policy.created_at))
+        : [],
+      "Updated at": policy.updated_at
+        ? Builder.date(dateOnly(policy.updated_at))
+        : [],
     },
   }
 }

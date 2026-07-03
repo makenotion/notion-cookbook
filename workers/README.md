@@ -1,7 +1,9 @@
 # Notion Worker examples
+
 [Notion Workers](https://developers.notion.com/docs/workers) are server-side extensions deployed to Notion. Each direct child of this directory is an independently executable and deployable Worker.
 
 There are 3 different type of Worker capabilties:
+
 - A **sync** imports external records into a managed Notion database on a
   schedule or on demand.
 - An **agent tool** lets a Notion Agent query context or execute a repeatable API workflow
@@ -24,7 +26,7 @@ For self-hosted integrations built directly with the Notion API, see the [API ex
 | [Salesforce sync](salesforce-sync/) | Salesforce accounts and opportunities, with related account context.                                                   |
 | [Sentry sync](sentry-sync/)         | Issue triage, project reliability trends, and recent release health for cross-functional follow-up.                    |
 | [Snowflake sync](snowflake-sync/)   | Rows returned by a configurable Snowflake query.                                                                       |
-| [Zendesk sync](zendesk-sync/)       | Tickets, organizations, users, CSAT responses, ticket metrics, and SLA policies.                                       |
+| [Zendesk sync](zendesk-sync/)       | Related tickets, organizations, users, CSAT responses, metrics, and SLA policies with manual repair sweeps.            |
 
 ## Agent tools
 
