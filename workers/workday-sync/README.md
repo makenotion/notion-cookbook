@@ -1,118 +1,100 @@
 # Worker sync: Workday employee directory
 
-Create a navigable employee directory in Notion from Workday display names,
-available public primary work email addresses, and current supervisory
-organizations. The Worker links employees to managers, organization members,
-and—when an exact email match resolves—their native Notion profile. It refreshes
-both managed databases every day.
+Bring active Workday employees and their current supervisory organizations into
+two connected Notion databases. Employees can find colleagues, follow manager
+and direct-report relationships, browse organization membership, and open a
+native Notion People profile when the employee's work email resolves.
 
-This is an employee directory with reporting links, not a replica of Workday
-Org Chart. Workday remains authoritative, and Notion does not re-evaluate
-Workday security for each viewer.
+The worker refreshes both databases daily. Workday remains authoritative; this
+is an employee directory, not a replica of Workday Org Chart or a source for HR
+operations, headcount, provisioning, compliance, or access control.
 
-> **Deployment contract:** Share these databases only with a named audience for
-> which the Workday data owner has confirmed that every published value and
-> derived relationship below is visible to every audience member. Permission to
-> call a Workday API does not certify its result as employee-visible. If this
-> cannot be established, narrow the Workday population or Notion audience before
-> syncing.
+Only share the databases with an audience for which every published field and
+derived relationship is employee-visible. Workday API access and its `Public`
+email flag do not establish that audience automatically.
 
 ## Quickstart
 
 You need Node.js 22+, npm 10.9.2+, Notion Workers deployment access, and a
-non-production Workday tenant. Complete the
-[source and audience approval](#source-and-audience-approval) before enabling a
-sync.
+dedicated Workday integration user and API client. Start with a non-production
+tenant and complete the [Workday access and data visibility](#workday-access-and-data-visibility)
+review before sharing the result.
 
-From the repository root, run the offline checks, deploy, and pause both syncs:
+From the repository root:
 
 ```sh
-npm install --global ntn
+npm install --global ntn@latest
 cd workers/workday-sync
 npm install
-npm run check
-npm test
-npm run build
 ntn login
 ntn workers deploy --name workday-sync
 ntn workers sync pause organizationsSync
 ntn workers sync pause peopleSync
 ```
 
-The first deployment creates **Workday Supervisory Organizations** and
-**Workday People**. Pause the syncs before adding credentials, then restrict
-both databases to the approved employee audience. For later updates, pause both
-syncs before deploying. Treat `workers.json` as local state and do not commit
-it.
+The deployment creates **Workday Supervisory Organizations** and **Workday
+People**. Keep both syncs paused while you configure credentials and restrict
+the databases to the approved Notion audience.
 
-Set the exact values approved by the Workday integration owner:
+Set the exact tenant values approved by the Workday integration owner:
 
 ```sh
-ntn workers env set WORKDAY_API_URL=https://tenant1.myworkday.com/ccx/service/example_tenant/Human_Resources/v46.1
-ntn workers env set WORKDAY_API_VERSION=v46.1
-ntn workers env set WORKDAY_TOKEN_URL=https://tenant1.myworkday.com/ccx/oauth2/example_tenant/token
-ntn workers env set WORKDAY_CLIENT_ID=your-client-id
-ntn workers env set WORKDAY_CLIENT_SECRET=your-client-secret
-ntn workers env set WORKDAY_REFRESH_TOKEN=your-refresh-token
-ntn workers env set WORKDAY_EFFECTIVE_TIME_ZONE=America/New_York
+ntn workers env set \
+  WORKDAY_API_URL=https://tenant1.myworkday.com/ccx/service/example_tenant/Human_Resources/v46.1 \
+  WORKDAY_API_VERSION=v46.1 \
+  WORKDAY_TOKEN_URL=https://tenant1.myworkday.com/ccx/oauth2/example_tenant/token \
+  WORKDAY_CLIENT_ID=your-client-id \
+  WORKDAY_CLIENT_SECRET=your-client-secret \
+  WORKDAY_REFRESH_TOKEN=your-refresh-token \
+  WORKDAY_EFFECTIVE_TIME_ZONE=America/New_York
 ```
 
-Preview Organizations and then People. Previews call Workday and print
-employee data without writing the databases, so protect terminal output.
+Preview Organizations and then People. Previews call Workday and print employee
+data without writing the databases, so protect terminal output.
 
 ```sh
 ntn workers sync trigger organizationsSync --preview
 ntn workers sync trigger peopleSync --preview
 ```
 
-Before a real sync, the Workday data and security owners must attest the exact
-audience, worker population, source fields, and derived relations. Test personas
-from every materially different country, company, organization, and security
-cohort validate that attestation; sampling does not replace it. The Notion owner
-must separately approve database, teamspace, guest, search, export,
-integration, and AI/agent access.
+Before sharing, confirm that:
 
-After approval, populate both databases in order:
+- the preview contains only the approved employee population and fields;
+- manager, direct-report, organization, and member relations resolve;
+- Name remains, and Work Email remains when Workday supplies an eligible
+  address, even when Notion Profile is empty; and
+- active workspace-member, unmatched, guest, deactivated, alias, and
+  case-variant email examples behave as the Notion owner expects.
+
+Populate both databases in relation-target order, then start the daily
+schedules:
 
 ```sh
 ntn workers sync trigger organizationsSync
 ntn workers sync trigger peopleSync
-```
-
-Inspect both results while the syncs remain paused. Confirm every
-manager and organization relation resolves across page boundaries. Exercise an
-active member, a person without an eligible work email, an email with no Notion
-account, and any guest, deactivated, alias, or case-variant behavior covered by
-your approved identity contract. In every case, confirm Name remains and Work
-Email remains when Workday supplied it. Then resume daily operation:
-
-```sh
 ntn workers sync resume organizationsSync
 ntn workers sync resume peopleSync
 ```
 
-Never commit `.env`, tokens, client secrets, SOAP payloads, previews, or
-`workers.json`. The Worker does not need a Notion API token; the Workers
-platform owns the managed-database write path.
+No recurring CLI action is required. Never commit `.env`, tokens, SOAP
+payloads, preview output, or generated `workers.json` state. The worker does not
+need a Notion API token.
 
 ## What you can answer
 
-| Managed database                      | Questions it helps answer                                                                                                                |
-| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| **Workday People**                    | Which supervisory organization is this employee in? Who manages them? Who reports to them? Does their email resolve to a Notion profile? |
-| **Workday Supervisory Organizations** | Who belongs to this supervisory organization? How can I navigate from an organization to its employees and reporting relationships?      |
-
-Do not use this directory for HR operations, headcount, access control,
-compliance, analytics, or provisioning. It has daily, eventual consistency.
+| Managed database                      | Questions it helps answer                                                                                                                      |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Workday People**                    | Who manages this employee? Who reports to them? Which organization are they in? Can I open their Notion profile or contact them by work email? |
+| **Workday Supervisory Organizations** | Who belongs to this organization? How can I navigate from the organization to its employees and reporting relationships?                       |
 
 ## Reference
 
 ### Synced databases and schedules
 
-| Database                              | Workday resource                                | Schedule  |
-| ------------------------------------- | ----------------------------------------------- | --------- |
-| **Workday Supervisory Organizations** | Current employee supervisory organizations      | Every day |
-| **Workday People**                    | Active employees, work email, and org relations | Every day |
+| Database                              | Workday resource                           | Schedule  |
+| ------------------------------------- | ------------------------------------------ | --------- |
+| **Workday Supervisory Organizations** | Current employee supervisory organizations | Every day |
+| **Workday People**                    | Active employees and reporting relations   | Every day |
 
 #### Workday People
 
@@ -120,273 +102,40 @@ compliance, analytics, or provisioning. It has daily, eventual consistency.
 | ------------------------ | -------------------------------------------------- | ------------------------- |
 | Name                     | Explicit `Worker_Descriptor`                       | title                     |
 | Work Email               | Public, primary `WORK` email, when present         | email                     |
-| Notion Profile           | Attempted exact Work Email resolution              | people                    |
+| Notion Profile           | People resolution requested by Work Email          | people                    |
 | Supervisory Organization | Current supervisory organization WID               | relation to Organizations |
 | Supervisory Managers     | Manager(s) of the current supervisory organization | self-relation             |
 | Direct Reports           | Reciprocal of Supervisory Managers                 | reciprocal relation       |
-| Directory Key            | Digest of the employee WID                         | rich text, primary key    |
+| Directory Key            | Opaque value derived from the employee WID         | rich text, primary key    |
 
 `Notion Profile` uses the Workers-native `Schema.people()` and
-`Builder.people(workEmail)` primitives. Resolution is email-based only: there
-is no WID or name matching, and no Notion users-list call. Name and Work Email
-are emitted independently, so they remain the fallback identity even when the
-People value is empty or does not identify the intended account. Before launch,
-verify the hosted resolver for active members, emails with no account, guests,
-deactivated accounts, aliases, and case variants. A populated People property
-does not by itself prove current workspace-member status.
+`Builder.people(workEmail)` primitives. The worker requests resolution using
+only the normalized Work Email; there is no name, WID, fuzzy, or Notion
+users-list lookup. Name and Work Email are separate properties, so they remain
+the fallback identity when the People value is empty. If Workday has no eligible
+email, Name remains while Work Email and Notion Profile are blank.
+
+A populated People value does not prove that an account is an active workspace
+member. Validate hosted resolution for unmatched, guest, deactivated, alias,
+and case-variant addresses before sharing the directory.
 
 #### Workday Supervisory Organizations
 
-| Notion property      | Workday source or derivation               | Type                   |
-| -------------------- | ------------------------------------------ | ---------------------- |
-| Name                 | Supervisory organization name              | title                  |
-| Organization Members | Reciprocal of each employee's organization | reciprocal relation    |
-| Directory Key        | Digest of the organization WID             | rich text, primary key |
+| Notion property      | Workday source or derivation                   | Type                   |
+| -------------------- | ---------------------------------------------- | ---------------------- |
+| Name                 | Supervisory organization name                  | title                  |
+| Organization Members | Reciprocal of each employee's organization     | reciprocal relation    |
+| Directory Key        | Opaque value derived from the organization WID | rich text, primary key |
 
 This database contains supervisory organizations, not Workday Teams,
-Workteams, Flex Teams, cost centers, companies, or custom organizations. Empty
-organizations and parent-child organization hierarchy are absent because the
-source is employee membership. Matrix management is intentionally excluded.
+Workteams, Flex Teams, cost centers, companies, or custom organizations. It
+does not include empty organizations, parent hierarchy, or matrix management.
 
-Names are display values, never identifiers. Duplicate employee and
-organization names remain technically distinct because opaque keys differ, but
-duplicate organization names are visually ambiguous after Directory Key is
-hidden. Before launch, require unique approved names, add an approved
-employee-visible disambiguator in a reviewed extension, or explicitly accept
-that limitation. Employee-facing views should show Work Email and Supervisory
-Organization beside Name and hide Directory Key. Managed schemas cannot hide a
-property in code; view hiding is presentation, not access control. Never add
-employee IDs merely to disambiguate names.
-
-Each key is a domain-separated SHA-256 digest of a stable Workday WID, truncated
-to 128 bits and prefixed with `wd-person-` or `wd-organization-`. Raw WIDs are
-processed in memory for joins, upserts, and relations but never become a Notion
-property, state value, page body, or log field.
-
-### Product and privacy contract
-
-| Boundary             | Contract                                                                                                                                                                     |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Audience             | A named employee-only Notion audience. Guests, external collaborators, integrations, and agents require separate approval.                                                   |
-| Population           | Active employees in the approved Workday directory population. The ISU-visible population is acceptable only after the owner confirms universal visibility for the audience. |
-| Published source     | Employee display name, optional public primary work email, and current supervisory organization name. Personal or home email is never a fallback.                            |
-| Published derivation | Notion Profile, Supervisory Managers, Direct Reports, Organization Members, and the employee-to-organization link. Approve these global/inverse views explicitly.            |
-| Not published        | Raw WIDs and employee IDs, other work contact fields, job/position/location data, employment details, compensation, demographics, and page body content.                     |
-| Authority            | Workday is authoritative. Notion is an eventually consistent directory and must not drive HR decisions, authorization, compliance, or headcount.                             |
-
-The two APIs have different source boundaries:
-
-- `Get_Workers` requests references, supervisory organization membership, and
-  management-chain data. Its coarse response sections can transiently include
-  reference IDs, organization-summary metadata, and the full supervisory and
-  matrix management chains. The parser keeps only the worker descriptor,
-  current supervisory organization name and WID, and its direct employee
-  manager WIDs; personal, employment, compensation, role, and other broad
-  sections remain disabled.
-- `Get_Change_Work_Contact_Information` is called once for the WIDs on each
-  People page. It is narrower than Workday `Personal_Data`, but its transient
-  response can contain other **work** addresses, phones, instant-messenger
-  handles, and web addresses. The parser retains only one email whose same
-  usage record is `Public=true`, `Primary=true`, and
-  `Communication_Usage_Type_ID=WORK`.
-
-If the policy requires that no non-published field—including organization
-summary metadata, non-current management-chain data, or other work-contact
-fields—may leave Workday even transiently, these standard operations are too
-broad. Use a tenant-owned, security-reviewed source that projects only approved
-fields; do not weaken this recipe's parser or grant private contact access.
-
-The Workday `Public` flag is necessary but not proof of universal visibility.
-Workday separately evaluates operation access, contextual worker population,
-and field access for the calling ISU. Once copied, Workday no longer evaluates
-each Notion viewer; the sharing boundary of both databases becomes the security
-boundary.
-
-### Source and audience approval
-
-Before enabling either sync, the Workday HR data owner, Workday security owner,
-Notion workspace data owner, Privacy, Security, and—where applicable—Legal or a
-works council must approve:
-
-- the named Notion audience and exact Workday worker population, including
-  restricted workers, countries, companies, and supervisory organizations;
-- display name, optional public primary work email, organization name, and every
-  derived relation or cross-system identity link;
-- how multi-job, international-assignment, top-level, confidential, and
-  co-manager records appear to the approved audience;
-- database, search, export, guest, integration, and AI/agent access;
-- closure of the population under manager references, plus the approved
-  handling of duplicate supervisory-organization display names; and
-- the freshness objectives and incident owner below.
-
-Repeat approval after a Workday security or schema change, Notion audience or
-sharing change, new field or relation, and at the organization's normal access
-review cadence. Availability in Workday is not by itself approval to copy data
-into Notion.
-
-### Least-privilege Workday setup
-
-1. Create a dedicated Integration System User and constrained security group.
-   Do not reuse a human account or tenant administrator. Assign owners for
-   access review and credential rotation.
-2. Authorize read access only for `Get_Workers` and
-   `Get_Change_Work_Contact_Information`. `Worker Data: Public Worker Reports`
-   permits `Get_Workers` invocation but does not prove its result is public.
-3. Constrain `Worker Data: Workers` contextual **Integration GET** access to the
-   approved population. Grant only the fields required for worker descriptors,
-   current supervisory organizations, supervisory manager references, and work
-   contact information. Do not grant Put, compensation, employment, personal,
-   home-contact, or broad private-worker access.
-4. Activate pending security changes, inspect the effective policy with
-   **View Security for Securable Item**, and test as the ISU. Tenant task and
-   domain names can vary; have the Workday security owner verify the effective
-   operation, population, and field grants rather than copying role names.
-
-Register a dedicated **API Client for Integrations** with only the functional
-scope for this read path, then generate its refresh token for the ISU. The
-supported source is the pinned tenant
-`/ccx/service/.../Human_Resources/vN.N` SOAP endpoint—not REST, RaaS, or an
-unversioned custom endpoint.
-
-### How it works
-
-1. Each sync fixes one `As_Of_Entry_DateTime` across all pages and derives one
-   effective date in `WORKDAY_EFFECTIVE_TIME_ZONE`.
-2. `Get_Workers` reads active employees in pages of 100, excluding contingent
-   workers and non-directory response sections.
-3. For People only, the Worker batches that page's WIDs into one pinned
-   `Get_Change_Work_Contact_Information` request and joins the response by WID
-   in memory.
-4. The parser accepts zero or one public primary `WORK` email per employee: zero
-   leaves Work Email and Notion Profile blank, while ambiguity or malformed data
-   fails the run. It validates a one-to-one WID join and rejects a nonempty email
-   reused by another employee anywhere in the snapshot.
-5. The current supervisory management-chain entry supplies the organization's
-   direct manager or co-managers. It is not the full ancestor or matrix chain.
-6. Both syncs use `mode: "replace"`; stale rows are removed only after the final
-   page completes successfully.
-
-The Worker fails rather than guessing on empty snapshots, changed totals,
-missing or ambiguous organization membership, malformed manager references,
-ambiguous or duplicate work emails, mismatched contact responses, duplicate
-page records, relations above 100 managers, and snapshots above 100 pages or
-10,000 employees. A top-level organization may have a present chain entry with
-no manager; missing chain data is not treated as “no manager.”
-
-One Workday client, OAuth token provider, and four-request-per-second pacer are
-shared per runtime. OAuth and work-contact requests have a 60-second deadline;
-`Get_Workers` page 1 has no client timeout because Workday builds its paging
-cache there. Responses are bounded at 64 KiB for OAuth and 5 MiB for SOAP.
-Optional Workday external correlation headers identify attempts without
-including employee data.
-
-Pagination state contains pinned times, counts, page number, a version, and a
-source-contract fingerprint. People state also packs a truncated HMAC of each
-nonempty normalized work email already seen in that snapshot so cross-page
-identity collisions fail closed; raw emails are never stored. The HMAC is keyed
-by the Workday client secret, and the contract fingerprint stores only a derived
-key version. At the 10,000-person ceiling, packed email state is at most 160,000
-characters. A changed endpoint, WWS version, time zone, API client ID, client
-secret, page size, parser/output contract, or key strategy invalidates in-flight
-state and requires a paired reset.
-
-### Freshness and consistency
-
-The databases are separate full-snapshot syncs and are not atomic. These are
-operator objectives, not platform guarantees:
-
-| Measure            | Objective                                                          | If missed                                                   |
-| ------------------ | ------------------------------------------------------------------ | ----------------------------------------------------------- |
-| Freshness          | Each sync succeeds at least once every 30 hours.                   | Treat the directory as stale and investigate.               |
-| Pair consistency   | Latest successful runs are no more than four hours apart.          | Treat relations and membership as potentially inconsistent. |
-| Removal lag        | A Workday removal disappears after the next successful daily pair. | Restrict access if continued visibility creates risk.       |
-| Relation integrity | Every manager and organization target resolves in Notion.          | Do not present the result as a complete employee directory. |
-
-Assign an operator and alert on failed or missed runs, either database exceeding
-the 30-hour freshness objective, pair skew above four hours, unresolved
-relations, or an unapproved count delta. This recipe surfaces failures but does
-not provision an alert destination.
-
-At the 10,000-employee ceiling, one daily pair can make up to 300 SOAP calls:
-100 organization `Get_Workers` pages, 100 People `Get_Workers` pages, and 100
-batched work-contact calls. Confirm this full-scan capacity with the Workday
-integration owner. A successful People run does not make a failed or older
-Organizations run current.
-
-Daily is the conservative default for this non-authoritative full snapshot. Use
-`ntn workers sync trigger` for an approved immediate refresh. A tenant that
-requires sub-day directory freshness may change both schedules to `1h` only
-after approving Workday capacity of up to 7,200 SOAP calls per day at the
-ceiling and updating the freshness objectives. Do not use manual-only schedules:
-missed removals and moves would remain stale indefinitely.
-
-### Configuration reference
-
-| Variable                          | Required | Secret | Description                                                                 |
-| --------------------------------- | -------- | ------ | --------------------------------------------------------------------------- |
-| `WORKDAY_API_URL`                 | Yes      | No     | Exact tenant Human Resources SOAP URL; version must match the setting below |
-| `WORKDAY_API_VERSION`             | No       | No     | Pinned `vN.N` WWS version; defaults to tested `v46.1`                       |
-| `WORKDAY_TOKEN_URL`               | Yes      | No     | Matching tenant OAuth token endpoint ending in `/token`                     |
-| `WORKDAY_CLIENT_ID`               | Yes      | No     | Dedicated API Client for Integrations ID                                    |
-| `WORKDAY_CLIENT_SECRET`           | Yes      | Yes    | Dedicated API client secret                                                 |
-| `WORKDAY_REFRESH_TOKEN`           | Yes      | Yes    | Refresh token generated for the dedicated ISU                               |
-| `WORKDAY_EFFECTIVE_TIME_ZONE`     | Yes      | No     | Owner-approved IANA zone for effective-dated records                        |
-| `WORKDAY_EXTERNAL_APPLICATION_ID` | No       | No     | Non-sensitive Workday correlation label, at most 50 characters              |
-
-Both URLs reject non-Workday hosts, nonstandard ports, embedded credentials,
-query strings, and fragments. They must share an origin and tenant segment.
-When the optional application ID is set, each SOAP attempt adds a unique
-`wd-external-request-id`. Never put employee data or credentials in either
-header.
-
-### Operations and troubleshooting
-
-Inspect capability state and recent runs with:
-
-```sh
-ntn workers sync status
-ntn workers runs list
-ntn workers runs logs <run-id>
-```
-
-On suspected overexposure, restrict both databases first, pause both syncs,
-and investigate before restoring access. Do not rely on a later replace cycle
-as the incident response.
-
-For an intentional incompatible source, parser, key, schema, or paging change,
-pause both syncs, deploy, then reset both states:
-
-```sh
-ntn workers sync state reset organizationsSync
-ntn workers sync state reset peopleSync
-```
-
-Repeat previews, approvals, and real triggers, then resume both syncs. A
-transient failure under the same contract normally needs a retry; a Workday
-paging-cache expiry requires the paired reset. Rotating the client secret also
-invalidates in-flight state because it keys collision fingerprints; reset both
-syncs before resuming. A refresh-token-only rotation does not change the source
-contract.
-
-Common failures:
-
-- **HTTP 401, 403, or Workday security fault:** verify the client, refresh token,
-  ISU, operation access, contextual population, field security, and policy
-  activation. Do not assign an administrator role to make the error disappear.
-- **Missing or ambiguous work email:** no eligible address leaves Work Email and
-  Notion Profile blank. Multiple, malformed, or over-200-character eligible
-  addresses fail. Never substitute a home, `BUSINESS`, secondary, or guessed
-  address.
-- **Missing management chain or unclassifiable manager:** verify response-field
-  security and source data. A contingent or WID-only manager is not silently
-  presented as “no manager.”
-- **No employees or incomplete contact response:** the run fails closed and
-  preserves existing rows. Confirm the approved source population; do not
-  bypass the guard to clear data.
-- **Rows update but stale rows remain:** inspect the final page. Replace mode
-  removes stale rows only after `hasMore: false`.
-- **Repeated throttling or slow backfill:** keep the 100-record batch size,
-  review tenant capacity, and let pacing and runtime retries protect Workday.
+Opaque deterministic keys preserve upserts and relations without publishing raw
+WIDs. Hide Directory Key in employee-facing views for presentation, not as an
+access-control measure. Duplicate organization names remain visually ambiguous;
+use an approved employee-visible disambiguator or explicitly accept that
+limitation before launch.
 
 ### Project structure
 
@@ -397,27 +146,147 @@ src/
 ├── sync.ts            — fixed-snapshot state and replace-sync execution
 ├── people.ts          — People schema and allowlisted transform
 ├── organizations.ts   — supervisory-organization schema and collapse
-├── keys.ts            — domain-separated opaque directory keys
+├── keys.ts            — deterministic opaque directory keys
 └── validation.ts      — shared page, date, and work-email validation
 test.ts                — offline privacy, parser, paging, and failure tests
 ```
 
+### How it works
+
+1. Each run fixes one Workday entry timestamp and tenant-local effective date
+   across every page.
+2. `Get_Workers` reads active employees in pages of 100, excluding contingent
+   workers and broad HR response sections.
+3. People pages batch their WIDs into one
+   `Get_Change_Work_Contact_Information` request and join the response by WID.
+4. The parser accepts only an email whose same usage record is `Public=true`,
+   `Primary=true`, and `Communication_Usage_Type_ID=WORK`. It never substitutes
+   home, private, secondary, `BUSINESS`, or guessed addresses.
+5. The current supervisory management-chain entry supplies direct employee
+   managers or co-managers. Full ancestor and matrix chains are not published.
+6. Deterministic keys connect People to Organizations and other People without
+   exposing raw Workday identifiers.
+7. Both syncs use `mode: "replace"`. Stale rows are removed only after the final
+   page succeeds, so a partial failure preserves the previous complete result.
+
+The worker fails closed on empty snapshots, drifting totals, incomplete joins,
+ambiguous organization membership or email, reused work email, malformed
+manager references, more than 100 manager relations, and snapshots above 100
+pages or 10,000 employees. Continuation state contains no raw WIDs or emails.
+
+The databases are separate snapshots rather than one atomic transaction. Run
+Organizations before People for initial loads and immediate refreshes. At the
+10,000-person ceiling, one daily pair can make up to 300 SOAP calls; confirm
+that capacity with the Workday integration owner. Manual triggers are useful
+for approved immediate refreshes, but manual-only schedules would leave missed
+removals and moves stale indefinitely.
+
+Monitor both daily runs. A failed run leaves the last complete snapshot in
+Notion, where it can become stale until the next successful run.
+
+### Workday access and data visibility
+
+Use this recipe only when the Workday and Notion owners approve the same
+employee-visible directory boundary:
+
+| Boundary   | What this recipe expects                                                                                           |
+| ---------- | ------------------------------------------------------------------------------------------------------------------ |
+| Audience   | A named employee Notion audience; guests, integrations, exports, search, and AI access need explicit review        |
+| Population | Active employees in the approved Workday population; inactive and contingent workers are excluded                  |
+| Published  | Display name, optional public primary work email, current supervisory organization name, and reporting relations   |
+| Derived    | Notion Profile, Supervisory Managers, Direct Reports, Organization Members, and employee-to-organization links     |
+| Excluded   | Employee IDs, raw WIDs, job/location data, compensation, demographics, other contact fields, and page body content |
+| Authority  | Workday remains authoritative; Notion is an eventually consistent directory                                        |
+
+Workday operation access and the email `Public` flag do not prove that every
+Notion viewer may see the result. Once data is copied, the Notion database
+sharing boundary replaces Workday's per-viewer security checks. Approve both
+source fields and derived inverse relationships for the complete audience.
+
+The standard Workday response sections are broader than the published output:
+
+- `Get_Workers` can transiently include reference IDs, organization-summary
+  metadata, and full supervisory and matrix management chains.
+- `Get_Change_Work_Contact_Information` can transiently include other work
+  addresses, phone numbers, instant-messenger handles, and web addresses.
+
+The parser retains only the fields listed above. If policy forbids these other
+fields from leaving Workday even transiently, use a tenant-owned,
+security-reviewed source that projects only the approved fields.
+
+For least-privilege access:
+
+1. Create a dedicated non-human Integration System User and constrained
+   security group. Do not reuse an administrator or human account.
+2. Grant read access only for `Get_Workers` and
+   `Get_Change_Work_Contact_Information`; do not grant Put, compensation,
+   personal, home-contact, or broad private-worker access.
+3. Constrain contextual Integration GET access to the approved worker
+   population and required descriptor, supervisory-organization,
+   management-chain, and work-contact fields.
+4. Register a dedicated API Client for Integrations, activate pending security
+   changes, inspect effective access, and test as the integration user.
+
+Validate representative multi-job, international-assignment, top-level,
+co-manager, confidential, missing-email, and duplicate-name records before
+sharing. Workday tenant security and naming vary; do not copy role names or
+assume a field is universally visible because the integration user can read it.
+
+### Configuration reference
+
+| Variable                          | Required | Secret | Description                                                        |
+| --------------------------------- | -------- | ------ | ------------------------------------------------------------------ |
+| `WORKDAY_API_URL`                 | Yes      | No     | Pinned tenant Human Resources SOAP URL                             |
+| `WORKDAY_API_VERSION`             | No       | No     | WWS version; defaults to tested `v46.1` and must match the API URL |
+| `WORKDAY_TOKEN_URL`               | Yes      | No     | Matching tenant OAuth token endpoint ending in `/token`            |
+| `WORKDAY_CLIENT_ID`               | Yes      | No     | Dedicated API Client for Integrations ID                           |
+| `WORKDAY_CLIENT_SECRET`           | Yes      | Yes    | Dedicated API client secret                                        |
+| `WORKDAY_REFRESH_TOKEN`           | Yes      | Yes    | Refresh token generated for the dedicated integration user         |
+| `WORKDAY_EFFECTIVE_TIME_ZONE`     | Yes      | No     | Owner-approved IANA zone for effective-dated records               |
+| `WORKDAY_EXTERNAL_APPLICATION_ID` | No       | No     | Non-sensitive Workday correlation label, at most 50 characters     |
+
+The API and token URLs must be matching Workday-hosted HTTPS tenant endpoints.
+Do not put employee data or credentials in the optional correlation label.
+
+### Resetting sync state
+
+Deployments preserve paging state. For an intentional source, schema, parser,
+key, or paging-contract change, pause both syncs, deploy, and reset both states:
+
+```sh
+ntn workers sync pause organizationsSync
+ntn workers sync pause peopleSync
+ntn workers sync state reset organizationsSync
+ntn workers sync state reset peopleSync
+```
+
+Preview and trigger Organizations before People, then resume both schedules.
+Client-secret rotation also requires a paired reset because that secret keys
+the cross-page email-collision state. A Workday paging-cache expiry also needs a
+paired reset; refresh-token-only rotation does not.
+
+If data may be overexposed, restrict both databases and pause both syncs before
+investigating. If relations appear incomplete, inspect both runs: a successful
+People run does not make an older or failed Organizations run current.
+
 ### Adapting the schema
 
-Treat a new field or population as a privacy, product, security, and API change.
-Verify universal employee visibility, use the narrowest versioned source,
-allowlist one parser path and destination property, test nearby sensitive-field
-exclusion, update this inventory, and repeat approval. Do not serialize an
-upstream object or broaden `Personal_Data` for one field.
+Treat a new field or population as both a product and data-boundary change:
 
-An incompatible change requires bumping
-`DIRECTORY_SYNC_CONTRACT_VERSION` and following the paired state-reset
-procedure. Adding inactive employees, contingent workers, matrix managers, or
-parent organization hierarchy should be a separately reviewed dataset.
+1. Confirm the value is visible to every member of the Notion audience.
+2. Add the narrowest Workday response field and an explicit parser path.
+3. Add the Notion property and tests for present, missing, and nearby excluded
+   values.
+4. Update this inventory and repeat preview and sharing review.
+
+For an incompatible source, key, parser, or schema change, bump
+`DIRECTORY_SYNC_CONTRACT_VERSION` and follow the paired reset procedure.
+Inactive employees, contingent workers, matrix managers, or parent hierarchy
+should be separately reviewed datasets rather than flags on this recipe.
 
 ### Local testing
 
-All repository checks are deterministic and require no Workday credentials:
+Run the deterministic offline checks; they need no Workday credentials:
 
 ```sh
 cd workers/workday-sync
@@ -431,11 +300,10 @@ npm install
 npm run verify:all
 ```
 
-Offline tests verify optional fallback fields, native People references, and
-cross-page duplicate-email rejection. They cannot prove tenant security,
-Workday `Public` semantics, that production data satisfies the contract,
-cross-page hosted relation resolution, Notion sharing, or hosted
-Notion-profile resolution. Those remain deployment-gate checks.
+Tests cover schemas, transforms, Workday request construction, privacy
+allowlists, pagination, state, authentication, pacing, and failure behavior.
+They cannot prove tenant security, Notion sharing, or hosted People resolution;
+verify those before sharing the databases.
 
 ## Learn more
 
@@ -444,7 +312,5 @@ Notion-profile resolution. Those remain deployment-gate checks.
 - [Notion schema and builders](https://developers.notion.com/workers/reference/schema)
 - [Workday `Get_Workers` guide](https://developer.workday.com/documentation/GUID-1f289b82-801e-434e-9e5a-aef66bc35179/GetWorkers)
 - [Workday `Get_Change_Work_Contact_Information` v46.1](https://community.workday.com/sites/default/files/file-hosting/productionapi/Human_Resources/v46.1/Get_Change_Work_Contact_Information.html)
-- [Workday response-filter guidance](https://developer.workday.com/documentation/jas1383238226367/ConceptWorkdayWebServicesResponseFilterElement)
 - [Workday integration and web service limits](https://developer.workday.com/documentation/dan1370797408285/ReferenceIntegrationsandWebServiceLimits)
-- [Workday SOAP authentication](https://developer.workday.com/documentation/GUID-4c354bdb-06cd-461d-a632-ea8303beaedb-enHYPHENus/SOAPAPIAuthenticationandSecurity)
 - [Contributing guide](../../CONTRIBUTING.md)
