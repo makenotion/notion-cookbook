@@ -49,9 +49,9 @@ stable account ID that this recipe can verify before a replacement sweep. To
 sync another account, create a separate deployment and managed databases rather
 than changing the token on an existing deployment.
 
-Highlights, notes, document titles, and URLs can contain private reading
-context. Review both managed databases' Notion sharing settings before giving a
-broader audience access.
+Highlights, notes, tags, document titles, URLs, and reading activity can reveal
+private interests or routines. Review both managed databases' Notion sharing
+settings before giving a broader audience access.
 
 ## What you can answer
 
@@ -102,6 +102,9 @@ highlights related to that row.
 Sources use deterministic `reader:<id>` or `readwise:<user_book_id>` keys.
 Highlights use `highlight:<id>`. Replaying a provider page therefore updates
 the same Notion rows, and relations remain stable when display names change.
+On a unified Reader Source, Reader owns shared metadata and Reader-specific
+fields; Readwise Export owns **Readwise Review** and **Readwise Source ID**.
+Reconciliation clears fields owned by a representation that has disappeared.
 
 Quote, note, and summary properties are bounded to 1,900 Unicode characters.
 The adjacent **Truncated** checkbox discloses shortened values, and links back
@@ -120,11 +123,12 @@ or a tag longer than 100 characters fails visibly instead of dropping data.
    checkpoint by five minutes to replay equal timestamps, indexing lag, and
    records fetched after the checkpoint; neither API supports an
    `updatedBefore` bound.
-3. Source scans process Readwise Export before Reader. When both APIs identify
-   the same `reader:<id>` row, the richer Reader metadata wins the final upsert.
-4. Daily replace-mode scans repair records missed by polling and remove rows
-   only after every page and Source phase completes. A partial scan does not
-   sweep unseen rows.
+3. Reader and Readwise Export can update the same `reader:<id>` Source
+   independently. Each update writes only the fields its API owns.
+4. Daily replacement scans require two consecutive complete inventories to
+   match before a verified emission pass can delete unseen rows. Each pass pins
+   the provider-reported count and rejects duplicate identities; partial or
+   changing scans do not delete data.
 5. All capabilities share a conservative pacer of 15 requests per minute,
    below Reader's documented 20 requests per minute. Provider `429` responses
    preserve `Retry-After` for the Worker runtime.
