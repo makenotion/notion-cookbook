@@ -11,13 +11,11 @@ import { Worker } from "@notionhq/workers"
 import {
   fetchTicketsPage,
   fetchTicketsReconciliationPage,
-  fetchTicketsReconciliationTailPage,
   fetchOrganizationsPage,
   fetchUsersPage,
   fetchSurveyResponsesPage,
   fetchTicketMetricsPage,
   fetchTicketMetricsReconciliationPage,
-  fetchTicketMetricsReconciliationTailPage,
   fetchSlaPoliciesPage,
   isDeletedTicket,
   requireSubdomain,
@@ -65,46 +63,23 @@ type SyncState = {
 
 type ReconciliationState = {
   phase: "search" | "tail"
+  cutoff: string
   cursor?: string
-  createdBefore: string
-  tailStartTime: number
-  recentCursors: string[]
-  pageCount: number
 }
 
-const MAX_RECONCILIATION_CURSOR_HISTORY = 128
 const SEARCH_INDEX_BUFFER_MS = 5 * 60_000
-// Search Export cursors expire after one hour. At 100 rows per page, this
-// bound supports up to 200,000 records per replacement while ensuring two
-// concurrently scheduled sweeps can stay within the shared search pacer.
-const MAX_RECONCILIATION_SEARCH_PAGES = 2_000
-const MAX_RECONCILIATION_TAIL_PAGES = 2_000
 
 function reconciliationState(
   state: ReconciliationState | undefined,
-  resourceName: string,
-  now: () => Date = () => new Date()
+  resourceName: string
 ): ReconciliationState {
   if (!state) {
-    const value = now()
-    if (Number.isNaN(value.getTime())) {
-      throw new Error(`Zendesk ${resourceName} reconciliation clock is invalid`)
-    }
     // Zendesk documents that newly created records can take a few minutes to
     // enter Search. Keep the immutable creation boundary behind that lag; the
     // five-minute incremental capability owns the newer tail.
-    const createdBefore = new Date(
-      Math.max(0, value.getTime() - SEARCH_INDEX_BUFFER_MS)
-    ).toISOString()
     return {
       phase: "search",
-      createdBefore,
-      tailStartTime: Math.max(
-        1,
-        Math.floor(new Date(createdBefore).getTime() / 1_000)
-      ),
-      recentCursors: [],
-      pageCount: 0,
+      cutoff: new Date(Date.now() - SEARCH_INDEX_BUFFER_MS).toISOString(),
     }
   }
 
@@ -113,74 +88,20 @@ function reconciliationState(
       `Zendesk ${resourceName} reconciliation has an invalid phase`
     )
   }
-  if (typeof state.createdBefore !== "string" || !state.createdBefore.trim()) {
-    throw new Error(
-      `Zendesk ${resourceName} reconciliation has an invalid createdBefore cutoff`
-    )
-  }
-  const cutoff = new Date(state.createdBefore)
   if (
-    Number.isNaN(cutoff.getTime()) ||
-    cutoff.toISOString() !== state.createdBefore
+    typeof state.cutoff !== "string" ||
+    Number.isNaN(Date.parse(state.cutoff))
   ) {
     throw new Error(
-      `Zendesk ${resourceName} reconciliation has an invalid createdBefore cutoff`
-    )
-  }
-  const expectedTailStartTime = Math.max(
-    1,
-    Math.floor(cutoff.getTime() / 1_000)
-  )
-  if (
-    !Number.isSafeInteger(state.tailStartTime) ||
-    state.tailStartTime !== expectedTailStartTime
-  ) {
-    throw new Error(
-      `Zendesk ${resourceName} reconciliation has an invalid tail start_time`
+      `Zendesk ${resourceName} reconciliation has an invalid cutoff`
     )
   }
   if (
-    !Array.isArray(state.recentCursors) ||
-    state.recentCursors.length > MAX_RECONCILIATION_CURSOR_HISTORY ||
-    state.recentCursors.some(
-      (cursor) => typeof cursor !== "string" || !cursor.trim()
-    )
+    state.cursor !== undefined &&
+    (typeof state.cursor !== "string" || !state.cursor.trim())
   ) {
     throw new Error(
-      `Zendesk ${resourceName} reconciliation has invalid cursor history`
-    )
-  }
-  if (state.cursor !== undefined) {
-    if (
-      typeof state.cursor !== "string" ||
-      !state.cursor.trim() ||
-      state.recentCursors.length === 0 ||
-      !state.recentCursors.includes(state.cursor)
-    ) {
-      throw new Error(
-        `Zendesk ${resourceName} reconciliation has an invalid cursor`
-      )
-    }
-  } else if (
-    state.phase !== "tail" ||
-    state.recentCursors.length !== 0 ||
-    state.pageCount !== 0
-  ) {
-    throw new Error(
-      `Zendesk ${resourceName} reconciliation is missing its phase cursor`
-    )
-  }
-  const pageLimit =
-    state.phase === "search"
-      ? MAX_RECONCILIATION_SEARCH_PAGES
-      : MAX_RECONCILIATION_TAIL_PAGES
-  if (
-    !Number.isSafeInteger(state.pageCount) ||
-    state.pageCount < (state.cursor ? 1 : 0) ||
-    state.pageCount >= pageLimit
-  ) {
-    throw new Error(
-      `Zendesk ${resourceName} reconciliation is outside its page bound`
+      `Zendesk ${resourceName} reconciliation has an invalid cursor`
     )
   }
   return state
@@ -196,30 +117,9 @@ function nextReconciliationState(
       `Zendesk ${resourceName} reconciliation is missing its next cursor`
     )
   }
-  const recentCursors = new Set(state.recentCursors)
-  if (state.cursor) recentCursors.add(state.cursor)
-  if (recentCursors.has(nextCursor)) {
-    throw new Error(
-      `Zendesk ${resourceName} reconciliation repeated a recent cursor`
-    )
-  }
-
-  const pageCount = state.pageCount + 1
-  const pageLimit =
-    state.phase === "search"
-      ? MAX_RECONCILIATION_SEARCH_PAGES
-      : MAX_RECONCILIATION_TAIL_PAGES
-  if (pageCount >= pageLimit) {
-    throw new Error(
-      `Zendesk ${resourceName} reconciliation ${state.phase} phase exceeded ${pageLimit} pages`
-    )
-  }
-  recentCursors.add(nextCursor)
   return {
     ...state,
     cursor: nextCursor,
-    recentCursors: [...recentCursors].slice(-MAX_RECONCILIATION_CURSOR_HISTORY),
-    pageCount,
   }
 }
 
@@ -228,11 +128,12 @@ function tailReconciliationState(
 ): ReconciliationState {
   return {
     phase: "tail",
-    createdBefore: state.createdBefore,
-    tailStartTime: state.tailStartTime,
-    recentCursors: [],
-    pageCount: 0,
+    cutoff: state.cutoff,
   }
+}
+
+function reconciliationTailStart(state: ReconciliationState): number {
+  return Math.max(1, Math.floor(Date.parse(state.cutoff) / 1_000))
 }
 
 const worker = new Worker()
@@ -306,7 +207,7 @@ worker.sync("ticketsReconciliationSync", {
     if (reconciliation.phase === "search") {
       await searchExportPacer.wait()
       const page = await fetchTicketsReconciliationPage(
-        reconciliation.createdBefore,
+        reconciliation.cutoff,
         reconciliation.cursor
       )
       const changes = page.tickets.flatMap((ticket) =>
@@ -332,9 +233,9 @@ worker.sync("ticketsReconciliationSync", {
     }
 
     await incrementalExportPacer.wait()
-    const page = await fetchTicketsReconciliationTailPage(
-      reconciliation.tailStartTime,
-      reconciliation.cursor
+    const page = await fetchTicketsPage(
+      reconciliation.cursor,
+      reconciliationTailStart(reconciliation)
     )
     const changes = page.tickets.flatMap((ticket) =>
       isDeletedTicket(ticket)
@@ -490,7 +391,7 @@ worker.sync("ticketMetricsReconciliationSync", {
     if (reconciliation.phase === "search") {
       await searchExportPacer.wait()
       const page = await fetchTicketMetricsReconciliationPage(
-        reconciliation.createdBefore,
+        reconciliation.cutoff,
         reconciliation.cursor
       )
       return {
@@ -507,9 +408,9 @@ worker.sync("ticketMetricsReconciliationSync", {
     }
 
     await incrementalExportPacer.wait()
-    const page = await fetchTicketMetricsReconciliationTailPage(
-      reconciliation.tailStartTime,
-      reconciliation.cursor
+    const page = await fetchTicketMetricsPage(
+      reconciliation.cursor,
+      reconciliationTailStart(reconciliation)
     )
     const deletedTicketIds = new Set(page.deletedTicketIds)
     return {

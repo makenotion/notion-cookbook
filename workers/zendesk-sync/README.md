@@ -256,36 +256,25 @@ src/
 1. Tickets and ticket metrics use Zendesk's cursor-based Incremental Ticket
    Export every five minutes. The first run starts at Unix time `1` to backfill
    retained history; later runs continue from the persisted `after_cursor`.
-2. The incremental export includes archived records. Deleted ticket records
-   become explicit Notion delete changes before their scrubbed fields are
-   transformed.
-3. On-demand replacement reconciliations use Zendesk Search Export, which
-   includes archived tickets and supports cursor pagination. One sweep refreshes
-   ticket rows and a second uses the `metric_sets` sideload to refresh ticket
-   metrics. These sweeps repair missed updates, expired deletion markers,
-   permission changes, stale nullable values, and missing relations.
-4. Each reconciliation pins a creation-time cutoff behind Zendesk's search
-   indexing delay. After Search Export reaches its last page, the same
-   replacement cycle starts a fresh Incremental Ticket Export at that cutoff
-   and follows it through `end_of_stream`. Only this tail phase can complete the
-   replacement, preventing records newer than the search snapshot from being
-   swept away.
-5. Organizations and users use cursor-paginated list endpoints with 100 records
+2. The export includes archived records and turns deleted tickets into explicit
+   Notion deletes before their scrubbed fields are transformed.
+3. Manual repair sweeps use Search Export for archived tickets and their metric
+   sets, then run a fresh incremental tail from a pinned cutoff. Replacement
+   completes only after the tail reaches `end_of_stream`, so newer records are
+   not swept away.
+4. Organizations and users use cursor-paginated list endpoints with 100 records
    per page and `mode: "replace"`.
-6. CSAT survey responses use a cursor-paginated daily replace sweep. Zendesk
+5. CSAT survey responses use a cursor-paginated daily replace sweep. Zendesk
    exposes creation-time filters but no update-time cursor, so a full sweep
    safely catches submitted or edited answers.
-7. SLA policies use Zendesk's offset pagination and refresh daily.
-8. Every record uses its stable Zendesk ID as the Notion sync key, preventing
+6. SLA policies use Zendesk's offset pagination and refresh daily.
+7. Every record uses its stable Zendesk ID as the Notion sync key, preventing
    duplicates across pages and scheduled runs.
 
-General API calls use a 70-request/minute pacer. Ticket and metric exports share
-a separate 9-request/minute pacer because Zendesk caps incremental exports at
-10/minute. The two Search Export sweeps share a 90-request/minute budget below
-that endpoint's 100-request/minute limit. Together the independent pacers allow
-at most 169 requests per minute, leaving headroom under the 200-request Team-plan
-limit. If Zendesk still returns 429, the worker passes `Retry-After` to the
-Workers runtime for backoff.
+Separate shared pacers keep general, incremental, and Search Export traffic
+within Zendesk's limits. Incremental exports are capped at 10 requests per
+minute and Search Export at 100; if Zendesk returns 429, the worker passes
+`Retry-After` to the Workers runtime for backoff.
 
 ### Zendesk API token
 
@@ -332,22 +321,14 @@ Run Organizations and Users before Tickets when populating a new deployment so
 the relation targets already exist. SLA Policies refreshes daily, but it can
 also be triggered manually after a policy change.
 
-The replacement reconciliations are deliberately manual. This follows Notion's
-recommended scheduled-delta plus manual-backfill pattern.
-Replace mode deletes keys unseen at completion, and the runtime does not expose
-a cross-capability lock to this Worker, so automatically overlapping a full
-sweep with a five-minute cursor would make deletion safety depend on
-undocumented scheduling behavior.
+Replacement repairs are deliberately manual because replace mode deletes unseen
+keys at completion and must not overlap the five-minute incremental syncs.
+After upgrading an existing deployment, run this procedure once: Notion preserves
+incremental state, so unchanged rows otherwise retain their old property values.
 
-Run the repair procedure below once immediately after upgrading an existing
-deployment. Notion preserves incremental sync state across deploys, so unchanged
-historical tickets and metrics will not otherwise revisit the new relation
-properties or nullable-field clearing behavior. New deployments populate those
-values during their initial backfill.
-
-Before a repair, pause both scheduled incremental capabilities and wait for any
-in-flight runs to finish. Then reset and trigger the replacement sweeps. Resume
-incremental updates only after both repairs report completion in `sync status`:
+Pause both incremental syncs and wait for in-flight runs to finish. Then reset
+and trigger both repairs, and resume the incremental syncs only after
+`sync status` reports that both repairs completed:
 
 ```sh
 ntn workers sync pause ticketsSync
@@ -389,7 +370,7 @@ existing pages—don't remove it. Keep every schema property present in its
 transform and use `[]` for missing nullable values. Preserve the stable-ID
 relations when changing the user-facing name or ID columns.
 
-### Incremental history and large instances
+### Incremental history and repairs
 
 Tickets and ticket metrics already use Zendesk's cursor-based incremental
 export. The initial request sends `start_time=1` as Unix epoch seconds. Every
@@ -407,32 +388,10 @@ ntn workers sync state reset ticketsSync
 ntn workers sync state reset ticketMetricsSync
 ```
 
-The manual `ticketsReconciliationSync` and
-`ticketMetricsReconciliationSync` replacement sweeps use the same database
-handles and stable keys as their incremental partners. Search Export is used
-instead of restarting the incremental cursor: Zendesk recommends incremental
-cursors for ongoing changes rather than repeated full exports, while Search
-Export can include archived tickets and sideload their metric sets. Its cursors
-expire after one hour, so the worker bounds and validates continuation state and
-fails visibly rather than committing a known partial replacement.
-
-The search phase alone is not a complete replacement snapshot because search
-indexing is delayed. Each sweep therefore transitions into a fresh incremental
-tail from the pinned cutoff. Search and tail pages share one replacement cycle;
-only reaching the tail's `end_of_stream` allows mark-and-sweep deletion to
-commit.
-
-A ticket deleted after its Search page was emitted may already count as seen
-for that in-flight replacement. The five-minute incremental export normally
-removes it from its deletion marker; if that marker races the sweep, run the
-manual reconciliation again. Failed or incomplete replacement runs never
-commit mark-and-sweep deletions.
-
-At the recommended 100 rows per Search Export page, each reconciliation is
-bounded to 2,000 pages, or 200,000 searched tickets. Larger accounts should
-partition reconciliation by a stable creation-time range before enabling these
-repair capabilities; increasing the page size trades fewer requests for a
-greater risk of archived-ticket timeouts.
+Search Export cursors expire after one hour. Failed or incomplete repairs do not
+commit mark-and-sweep deletions; reset and trigger the repair again. If a ticket
+deletion races a completed repair and remains visible, let the incremental sync
+resume and rerun the repair.
 
 Organizations, users, CSAT survey responses, and SLA policies continue to use
 full replace sweeps directly.

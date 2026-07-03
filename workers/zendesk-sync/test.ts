@@ -17,10 +17,8 @@ import {
   fetchSurveyResponsesPage,
   fetchTicketMetricsPage,
   fetchTicketMetricsReconciliationPage,
-  fetchTicketMetricsReconciliationTailPage,
   fetchTicketsPage,
   fetchTicketsReconciliationPage,
-  fetchTicketsReconciliationTailPage,
   getAuthorizationHeader,
   isDeletedTicket,
 } from "./src/zendesk.js"
@@ -47,6 +45,15 @@ function ok(name: string, cond: boolean) {
     failed++
     console.log(`  FAIL ${name}`)
   }
+}
+
+async function captureError(action: () => Promise<unknown>): Promise<unknown> {
+  try {
+    await action()
+  } catch (error) {
+    return error
+  }
+  return undefined
 }
 
 function isEmptyProperty(value: unknown): boolean {
@@ -734,6 +741,17 @@ async function testZendeskClient() {
         })
       }
 
+      if (cursor === "missing-cursor") {
+        return Response.json({
+          results: [],
+          meta: { has_more: true, after_cursor: null },
+        })
+      }
+
+      if (cursor === "malformed-page") {
+        return Response.json({ results: null, meta: { has_more: "yes" } })
+      }
+
       if (cursor === "empty-continuation") {
         return Response.json({
           results: [],
@@ -745,16 +763,6 @@ async function testZendeskClient() {
             has_more: true,
             after_cursor: "empty-continuation-next",
           },
-        })
-      }
-
-      if (cursor === "cycle-a") {
-        return Response.json({
-          results: [{ ...standardTicket, result_type: "ticket" }],
-          users: [...users.values()],
-          groups: [...groups.values()],
-          organizations: [...orgs.values()],
-          meta: { has_more: true, after_cursor: "cycle-b" },
         })
       }
 
@@ -823,14 +831,6 @@ async function testZendeskClient() {
     const finalTicketsPage = await fetchTicketsPage("ticket-cursor-1")
     const metricsPage = await fetchTicketMetricsPage("metric-cursor-1")
     const reconciliationCutoff = "2024-06-30T00:00:00.000Z"
-    const firstTicketReconciliation =
-      await fetchTicketsReconciliationPage(reconciliationCutoff)
-    const finalTicketReconciliation = await fetchTicketsReconciliationPage(
-      reconciliationCutoff,
-      firstTicketReconciliation.nextCursor
-    )
-    const firstMetricReconciliation =
-      await fetchTicketMetricsReconciliationPage(reconciliationCutoff)
     const emptyTicketReconciliationContinuation =
       await fetchTicketsReconciliationPage(
         reconciliationCutoff,
@@ -844,15 +844,6 @@ async function testZendeskClient() {
     const reconciliationTailStart = Math.floor(
       new Date(reconciliationCutoff).getTime() / 1_000
     )
-    const firstTicketReconciliationTail =
-      await fetchTicketsReconciliationTailPage(reconciliationTailStart)
-    const finalTicketReconciliationTail =
-      await fetchTicketsReconciliationTailPage(
-        reconciliationTailStart,
-        firstTicketReconciliationTail.nextCursor
-      )
-    const metricReconciliationTail =
-      await fetchTicketMetricsReconciliationTailPage(reconciliationTailStart)
     const firstSurveyPage = await fetchSurveyResponsesPage()
     const finalSurveyPage = await fetchSurveyResponsesPage(
       firstSurveyPage.nextCursor
@@ -865,133 +856,71 @@ async function testZendeskClient() {
       nextUserContext?: {
         phase?: "search" | "tail"
         cursor?: string
-        createdBefore?: string
-        tailStartTime?: number
-        recentCursors?: string[]
-        pageCount?: number
+        cutoff?: string
       }
     }
-    const initialTicketRun = (await worker.run(
-      "ticketsSync",
-      {},
-      { concreteOutput: true }
-    )) as SyncRunResult
-    const finalTicketRun = (await worker.run(
-      "ticketsSync",
-      { state: { cursor: "ticket-cursor-1" } },
-      { concreteOutput: true }
-    )) as SyncRunResult
-    const metricRun = (await worker.run(
-      "ticketMetricsSync",
-      { state: { cursor: "metric-cursor-1" } },
-      { concreteOutput: true }
-    )) as SyncRunResult
-    const ticketReconciliationRun = (await worker.run(
-      "ticketsReconciliationSync",
-      {},
-      { concreteOutput: true }
-    )) as SyncRunResult
-    const ticketReconciliationTailTransitionRun = (await worker.run(
-      "ticketsReconciliationSync",
-      { state: ticketReconciliationRun.nextUserContext },
-      { concreteOutput: true }
-    )) as SyncRunResult
-    const ticketReconciliationTailRun = (await worker.run(
-      "ticketsReconciliationSync",
-      { state: ticketReconciliationTailTransitionRun.nextUserContext },
-      { concreteOutput: true }
-    )) as SyncRunResult
-    const ticketReconciliationFinalRun = (await worker.run(
-      "ticketsReconciliationSync",
-      { state: ticketReconciliationTailRun.nextUserContext },
-      { concreteOutput: true }
-    )) as SyncRunResult
-    const metricReconciliationRun = (await worker.run(
-      "ticketMetricsReconciliationSync",
-      {},
-      { concreteOutput: true }
-    )) as SyncRunResult
-    const metricReconciliationTailTransitionRun = (await worker.run(
-      "ticketMetricsReconciliationSync",
-      { state: metricReconciliationRun.nextUserContext },
-      { concreteOutput: true }
-    )) as SyncRunResult
-    const metricReconciliationFinalRun = (await worker.run(
-      "ticketMetricsReconciliationSync",
-      { state: metricReconciliationTailTransitionRun.nextUserContext },
-      { concreteOutput: true }
-    )) as SyncRunResult
-    const surveyRun = (await worker.run(
-      "surveyResponsesSync",
-      {},
-      { concreteOutput: true }
-    )) as SyncRunResult
+    type TestSyncKey =
+      | "ticketsSync"
+      | "ticketMetricsSync"
+      | "ticketsReconciliationSync"
+      | "ticketMetricsReconciliationSync"
+      | "surveyResponsesSync"
+    const runSync = async (key: TestSyncKey, state?: unknown) =>
+      (await worker.run(key, state === undefined ? {} : { state }, {
+        concreteOutput: true,
+      })) as SyncRunResult
 
-    let rateLimitError: unknown
-    try {
-      await fetchPage("acme", "/api/v2/organizations.json")
-    } catch (error) {
-      rateLimitError = error
-    }
-    let rateLimitWithoutHeader: unknown
-    try {
-      await fetchPage("acme", "/api/v2/users.json")
-    } catch (error) {
-      rateLimitWithoutHeader = error
-    }
-    let repeatedSearchCursorError: unknown
-    try {
-      await fetchTicketsReconciliationPage(reconciliationCutoff, "repeat")
-    } catch (error) {
-      repeatedSearchCursorError = error
-    }
-    let missingMetricSideloadError: unknown
-    try {
-      await fetchTicketMetricsReconciliationTailPage(
-        reconciliationTailStart,
-        "missing-metric-sideload"
-      )
-    } catch (error) {
-      missingMetricSideloadError = error
-    }
-    let reconciliationPageBoundError: unknown
-    try {
-      await worker.run(
-        "ticketsReconciliationSync",
-        {
-          state: {
-            phase: "tail",
-            cursor: "bound-cursor",
-            createdBefore: reconciliationCutoff,
-            tailStartTime: reconciliationTailStart,
-            recentCursors: ["bound-cursor"],
-            pageCount: 2_000,
-          },
-        },
-        { concreteOutput: true }
-      )
-    } catch (error) {
-      reconciliationPageBoundError = error
-    }
-    let nonImmediateCursorCycleError: unknown
-    try {
-      await worker.run(
-        "ticketsReconciliationSync",
-        {
-          state: {
-            phase: "search",
-            cursor: "cycle-a",
-            createdBefore: reconciliationCutoff,
-            tailStartTime: reconciliationTailStart,
-            recentCursors: ["cycle-b", "cycle-a"],
-            pageCount: 2,
-          },
-        },
-        { concreteOutput: true }
-      )
-    } catch (error) {
-      nonImmediateCursorCycleError = error
-    }
+    const initialTicketRun = await runSync("ticketsSync")
+    const finalTicketRun = await runSync("ticketsSync", {
+      cursor: "ticket-cursor-1",
+    })
+    const metricRun = await runSync("ticketMetricsSync", {
+      cursor: "metric-cursor-1",
+    })
+    const ticketReconciliationRun = await runSync("ticketsReconciliationSync")
+    const ticketReconciliationTailTransitionRun = await runSync(
+      "ticketsReconciliationSync",
+      ticketReconciliationRun.nextUserContext
+    )
+    const ticketReconciliationTailRun = await runSync(
+      "ticketsReconciliationSync",
+      ticketReconciliationTailTransitionRun.nextUserContext
+    )
+    const ticketReconciliationFinalRun = await runSync(
+      "ticketsReconciliationSync",
+      ticketReconciliationTailRun.nextUserContext
+    )
+    const metricReconciliationRun = await runSync(
+      "ticketMetricsReconciliationSync"
+    )
+    const metricReconciliationTailTransitionRun = await runSync(
+      "ticketMetricsReconciliationSync",
+      metricReconciliationRun.nextUserContext
+    )
+    const metricReconciliationFinalRun = await runSync(
+      "ticketMetricsReconciliationSync",
+      metricReconciliationTailTransitionRun.nextUserContext
+    )
+    const surveyRun = await runSync("surveyResponsesSync")
+
+    const rateLimitError = await captureError(() =>
+      fetchPage("acme", "/api/v2/organizations.json")
+    )
+    const rateLimitWithoutHeader = await captureError(() =>
+      fetchPage("acme", "/api/v2/users.json")
+    )
+    const repeatedSearchCursorError = await captureError(() =>
+      fetchTicketsReconciliationPage(reconciliationCutoff, "repeat")
+    )
+    const missingSearchCursorError = await captureError(() =>
+      fetchTicketsReconciliationPage(reconciliationCutoff, "missing-cursor")
+    )
+    const malformedSearchPageError = await captureError(() =>
+      fetchTicketsReconciliationPage(reconciliationCutoff, "malformed-page")
+    )
+    const missingMetricSideloadError = await captureError(() =>
+      fetchTicketMetricsPage("missing-metric-sideload", reconciliationTailStart)
+    )
 
     const initialTicketUrl = requestedUrls.find(
       (url) =>
@@ -1070,64 +999,38 @@ async function testZendeskClient() {
         url.searchParams.get("include") === "tickets(metric_sets)" &&
         !url.searchParams.has("page[after]")
     )
+    const ticketCutoff = ticketReconciliationRun.nextUserContext?.cutoff
+    const metricCutoff = metricReconciliationRun.nextUserContext?.cutoff
+    const tailStart = ticketCutoff
+      ? Math.floor(Date.parse(ticketCutoff) / 1_000)
+      : undefined
     const continuedTicketSearchUrl = requestedUrls.find(
       (url) =>
         url.pathname === "/api/v2/search/export" &&
-        url.searchParams.get("page[after]") === "ticket-search-cursor" &&
-        url.searchParams.get("query") ===
-          `created<=${ticketReconciliationRun.nextUserContext?.createdBefore}`
-    )
-    const directTicketTailUrl = requestedUrls.find(
-      (url) =>
-        url.pathname === "/api/v2/incremental/tickets/cursor" &&
-        url.searchParams.get("include") === "users,groups,organizations" &&
-        url.searchParams.get("start_time") === String(reconciliationTailStart)
-    )
-    const directMetricTailUrl = requestedUrls.find(
-      (url) =>
-        url.pathname === "/api/v2/incremental/tickets/cursor" &&
-        url.searchParams.get("include") === "metric_sets" &&
-        url.searchParams.get("start_time") === String(reconciliationTailStart)
+        url.searchParams.get("page[after]") === "ticket-search-cursor"
     )
     const capabilityTicketTailUrl = requestedUrls.find(
       (url) =>
         url.pathname === "/api/v2/incremental/tickets/cursor" &&
         url.searchParams.get("include") === "users,groups,organizations" &&
-        url.searchParams.get("start_time") ===
-          String(
-            ticketReconciliationTailTransitionRun.nextUserContext?.tailStartTime
-          )
+        url.searchParams.get("start_time") === String(tailStart)
     )
     ok(
       "ticket reconciliation uses a pinned archived-ticket Search Export",
-      firstTicketReconciliation.tickets[0]?.id === standardTicket.id &&
-        firstTicketReconciliation.hasMore &&
-        !finalTicketReconciliation.hasMore &&
-        ticketSearchUrl?.searchParams.get("filter[type]") === "ticket" &&
+      ticketSearchUrl?.searchParams.get("filter[type]") === "ticket" &&
         ticketSearchUrl.searchParams.get("query") ===
-          `created<=${reconciliationCutoff}` &&
-        ticketSearchUrl.searchParams.get("page[size]") === "100"
+          `created<=${ticketCutoff}` &&
+        ticketSearchUrl.searchParams.get("page[size]") === "100" &&
+        continuedTicketSearchUrl?.searchParams.get("query") ===
+          `created<=${ticketCutoff}`
     )
     ok(
       "metric reconciliation uses archived ticket metric sideloads",
-      firstMetricReconciliation.metrics[0]?.ticket_id === 42 &&
-        firstMetricReconciliation.hasMore &&
-        metricSearchUrl?.searchParams.get("query") ===
-          `created<=${reconciliationCutoff}`
-    )
-    ok(
-      "reconciliation tails cover new records through incremental end_of_stream",
-      firstTicketReconciliationTail.hasMore &&
-        firstTicketReconciliationTail.tickets.some(
-          (ticket) => ticket.id === tailOnlyTicket.id
-        ) &&
-        !finalTicketReconciliationTail.hasMore &&
-        metricReconciliationTail.metrics.some(
-          (metric) => metric.ticket_id === tailOnlyMetric.ticket_id
-        ) &&
-        metricReconciliationTail.deletedTicketIds.join(",") === "404" &&
-        directTicketTailUrl != null &&
-        directMetricTailUrl != null
+      metricSearchUrl?.searchParams.get("query") ===
+        `created<=${metricCutoff}` &&
+        metricReconciliationRun.changes.some(
+          (change) => change.type === "upsert" && change.key === "42"
+        )
     )
     ok(
       "manual reconciliation capabilities preserve cutoff state and finish only after the tail",
@@ -1137,22 +1040,21 @@ async function testZendeskClient() {
         !ticketReconciliationRun.changes.some(
           (change) => change.key === "777"
         ) &&
-        metricReconciliationRun.changes.some(
-          (change) => change.type === "upsert" && change.key === "42"
-        ) &&
         !metricReconciliationRun.changes.some(
           (change) => change.key === "777"
         ) &&
         ticketReconciliationRun.nextUserContext?.phase === "search" &&
-        ticketReconciliationRun.nextUserContext?.createdBefore != null &&
-        ticketReconciliationRun.nextUserContext?.pageCount === 1 &&
+        ticketCutoff != null &&
+        Object.keys(ticketReconciliationRun.nextUserContext)
+          .sort()
+          .join(",") === "cursor,cutoff,phase" &&
         ticketReconciliationTailTransitionRun.hasMore &&
         ticketReconciliationTailTransitionRun.nextUserContext?.phase ===
           "tail" &&
         ticketReconciliationTailTransitionRun.nextUserContext?.cursor ===
           undefined &&
-        ticketReconciliationTailTransitionRun.nextUserContext?.pageCount ===
-          0 &&
+        ticketReconciliationTailTransitionRun.nextUserContext?.cutoff ===
+          ticketCutoff &&
         ticketReconciliationTailRun.hasMore &&
         ticketReconciliationTailRun.nextUserContext?.phase === "tail" &&
         ticketReconciliationTailRun.nextUserContext?.cursor ===
@@ -1160,7 +1062,6 @@ async function testZendeskClient() {
         ticketReconciliationTailRun.changes.some(
           (change) => change.type === "upsert" && change.key === "777"
         ) &&
-        metricReconciliationRun.nextUserContext?.createdBefore != null &&
         metricReconciliationTailTransitionRun.nextUserContext?.phase ===
           "tail" &&
         !metricReconciliationFinalRun.hasMore &&
@@ -1168,9 +1069,7 @@ async function testZendeskClient() {
           (change) => change.type === "upsert" && change.key === "777"
         ) &&
         !ticketReconciliationFinalRun.hasMore &&
-        capabilityTicketTailUrl != null &&
-        continuedTicketSearchUrl?.searchParams.get("query") ===
-          `created<=${ticketReconciliationRun.nextUserContext?.createdBefore}`
+        capabilityTicketTailUrl != null
     )
     ok(
       "empty Search Export pages advance with their continuation cursor",
@@ -1184,21 +1083,19 @@ async function testZendeskClient() {
           "empty-continuation-next"
     )
     ok(
-      "Search Export cursor loops fail closed",
+      "malformed Search Export pages and cursors fail closed",
       repeatedSearchCursorError instanceof Error &&
-        repeatedSearchCursorError.message.includes("repeated its cursor")
+        repeatedSearchCursorError.message.includes("repeated its cursor") &&
+        missingSearchCursorError instanceof Error &&
+        missingSearchCursorError.message.includes("missing its after_cursor") &&
+        malformedSearchPageError instanceof Error &&
+        malformedSearchPageError.message.includes("returned an invalid page")
     )
     ok(
-      "reconciliation rejects missing metric sideloads and unsafe state",
+      "reconciliation rejects missing metric sideloads",
       missingMetricSideloadError instanceof Error &&
         missingMetricSideloadError.message.includes(
           "missing its metric_sets sideload"
-        ) &&
-        reconciliationPageBoundError instanceof Error &&
-        reconciliationPageBoundError.message.includes("page bound") &&
-        nonImmediateCursorCycleError instanceof Error &&
-        nonImmediateCursorCycleError.message.includes(
-          "repeated a recent cursor"
         )
     )
     const finalSurveyUrl = requestedUrls.find(
