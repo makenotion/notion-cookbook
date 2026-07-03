@@ -237,18 +237,10 @@ worker.sync("ticketsReconciliationSync", {
       reconciliation.cursor,
       reconciliationTailStart(reconciliation)
     )
-    const changes = page.tickets.flatMap((ticket) =>
+    const changes = page.tickets.map((ticket) =>
       isDeletedTicket(ticket)
-        ? []
-        : [
-            ticketToChange(
-              ticket,
-              subdomain,
-              page.users,
-              page.groups,
-              page.orgs
-            ),
-          ]
+        ? { type: "delete" as const, key: String(ticket.id) }
+        : ticketToChange(ticket, subdomain, page.users, page.groups, page.orgs)
     )
     return {
       changes,
@@ -414,9 +406,15 @@ worker.sync("ticketMetricsReconciliationSync", {
     )
     const deletedTicketIds = new Set(page.deletedTicketIds)
     return {
-      changes: page.metrics
-        .filter((metric) => !deletedTicketIds.has(metric.ticket_id))
-        .map(ticketMetricToChange),
+      changes: [
+        ...page.metrics
+          .filter((metric) => !deletedTicketIds.has(metric.ticket_id))
+          .map(ticketMetricToChange),
+        ...[...deletedTicketIds].map((ticketId) => ({
+          type: "delete" as const,
+          key: String(ticketId),
+        })),
+      ],
       hasMore: page.hasMore,
       nextState: page.hasMore
         ? nextReconciliationState(

@@ -695,7 +695,9 @@ async function testZendeskClient() {
         return Response.json({
           tickets: [
             { id: 404, status: "deleted" },
-            ...(isReconciliationTail ? [tailOnlyTicket] : []),
+            ...(isReconciliationTail
+              ? [tailOnlyTicket, { id: 42, status: "deleted" as const }]
+              : []),
           ],
           metric_sets: [
             partialMetric,
@@ -716,8 +718,9 @@ async function testZendeskClient() {
 
       return Response.json({
         tickets: [
-          standardTicket,
-          ...(isReconciliationTail ? [tailOnlyTicket] : []),
+          ...(isReconciliationTail
+            ? [tailOnlyTicket, { id: 42, status: "deleted" as const }]
+            : [standardTicket]),
           { id: 404, status: "deleted" },
         ],
         users: [...users.values()],
@@ -1070,6 +1073,27 @@ async function testZendeskClient() {
         ) &&
         !ticketReconciliationFinalRun.hasMore &&
         capabilityTicketTailUrl != null
+    )
+    ok(
+      "reconciliation tails delete keys previously seen during Search",
+      ticketReconciliationRun.changes.some(
+        (change) => change.type === "upsert" && change.key === "42"
+      ) &&
+        ticketReconciliationTailRun.changes.some(
+          (change) => change.type === "delete" && change.key === "42"
+        ) &&
+        !ticketReconciliationTailRun.changes.some(
+          (change) => change.type === "upsert" && change.key === "42"
+        ) &&
+        metricReconciliationRun.changes.some(
+          (change) => change.type === "upsert" && change.key === "42"
+        ) &&
+        metricReconciliationFinalRun.changes.some(
+          (change) => change.type === "delete" && change.key === "42"
+        ) &&
+        !metricReconciliationFinalRun.changes.some(
+          (change) => change.type === "upsert" && change.key === "42"
+        )
     )
     ok(
       "empty Search Export pages advance with their continuation cursor",
