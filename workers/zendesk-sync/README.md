@@ -2,8 +2,8 @@
 
 Bring your support operation into Notion so teams and agents can investigate
 queue health, customer feedback, response performance, and SLA targets without
-leaving the workspace. One deploy creates six connected managed databases and
-keeps them updated from Zendesk automatically.
+leaving the workspace. One deploy creates six managed databases and keeps them
+updated from Zendesk automatically.
 
 You do not need to build the Notion databases or supply a Notion API token. The
 worker declares their schemas, and Notion creates and manages them for you.
@@ -108,10 +108,9 @@ ticket-metric syncs after removing the CSAT and SLA sync registrations.
 Each page body contains the ticket description. Assignee, requester, group,
 and organization show real names (resolved via Zendesk's
 [sideloading](https://developer.zendesk.com/api-reference/introduction/side-loading/),
-with no extra API calls). The matching relation columns link to stable User and
-Organization records without replacing the readable names. The incremental
-export includes archived tickets and uses `support_type_scope=all`, so both
-human-agent and AI-agent tickets are included.
+with no extra API calls). The incremental export includes archived tickets and
+uses `support_type_scope=all`, so both human-agent and AI-agent tickets are
+included.
 
 #### Zendesk Organizations
 
@@ -213,28 +212,15 @@ SLA targets are flattened from the `policy_metrics` array into individual
 columns by priority level, so managers can compare targets at a glance.
 Page body contains the policy description.
 
-### Connected records and clearing behavior
+### Relations and clearing behavior
 
-Relations use immutable Zendesk IDs, while the existing name and ID columns
-remain available for search, export, and troubleshooting:
+Relations use immutable Zendesk IDs while keeping readable name and ID columns.
+Tickets link to users and organizations; users link to organizations; CSAT
+responses link to tickets and responders; and metrics link to tickets.
+Relations are two-way; SLA policies remain standalone.
 
-- Tickets relate to their assignee and requester in **Zendesk Users**, and to
-  their organization in **Zendesk Organizations**.
-- Users relate to their organization.
-- CSAT responses relate to their ticket and responder.
-- Ticket metrics relate to their ticket.
-
-These are two-way relations. **Zendesk Users** receives **Assigned Tickets**,
-**Requested Tickets**, and **CSAT Responses** backlinks. **Zendesk
-Organizations** receives **Tickets** and **Users**, while **Support Tickets**
-receives **CSAT Responses** and **Ticket Metrics**. SLA policies remain
-standalone because the synced ticket payload does not provide a reliable policy
-foreign key.
-
-Every transform emits every declared property. When Zendesk changes a nullable
-field from populated to empty, the worker sends an explicit empty value so the
-old Notion value is cleared. The same rule applies to CSAT feedback in the page
-body.
+Every transform emits every declared property. Missing nullable values are sent
+as explicit empty values so stale Notion properties and CSAT page content clear.
 
 ### Project structure
 
@@ -253,28 +239,20 @@ src/
 
 ### How it works
 
-1. Tickets and ticket metrics use Zendesk's cursor-based Incremental Ticket
-   Export every five minutes. The first run starts at Unix time `1` to backfill
-   retained history; later runs continue from the persisted `after_cursor`.
-2. The export includes archived records and turns deleted tickets into explicit
-   Notion deletes before their scrubbed fields are transformed.
-3. Manual repair sweeps use Search Export for archived tickets and their metric
-   sets, then run a fresh incremental tail from a pinned cutoff. Replacement
-   completes only after the tail reaches `end_of_stream`, so newer records are
-   not swept away.
-4. Organizations and users use cursor-paginated list endpoints with 100 records
+1. Tickets and ticket metrics sync incrementally every five minutes, including
+   archived records and explicit ticket deletions.
+2. Manual repairs combine Search Export with an incremental tail and complete
+   replacement only after the tail reaches `end_of_stream`.
+3. Organizations and users use cursor-paginated list endpoints with 100 records
    per page and `mode: "replace"`.
-5. CSAT survey responses use a cursor-paginated daily replace sweep. Zendesk
+4. CSAT survey responses use a cursor-paginated daily replace sweep. Zendesk
    exposes creation-time filters but no update-time cursor, so a full sweep
    safely catches submitted or edited answers.
-6. SLA policies use Zendesk's offset pagination and refresh daily.
-7. Every record uses its stable Zendesk ID as the Notion sync key, preventing
+5. SLA policies use Zendesk's offset pagination and refresh daily.
+6. Every record uses its stable Zendesk ID as the Notion sync key, preventing
    duplicates across pages and scheduled runs.
 
-Separate shared pacers keep general, incremental, and Search Export traffic
-within Zendesk's limits. Incremental exports are capped at 10 requests per
-minute and Search Export at 100; if Zendesk returns 429, the worker passes
-`Retry-After` to the Workers runtime for backoff.
+API families are paced separately, and 429 responses honor `Retry-After`.
 
 ### Zendesk API token
 
@@ -317,18 +295,14 @@ ntn workers sync trigger ticketMetricsSync
 ntn workers sync trigger slaPoliciesSync
 ```
 
-Run Organizations and Users before Tickets when populating a new deployment so
-the relation targets already exist. SLA Policies refreshes daily, but it can
-also be triggered manually after a policy change.
+SLA Policies refreshes daily, but it can also be triggered manually after a
+policy change.
 
-Replacement repairs are deliberately manual because replace mode deletes unseen
-keys at completion and must not overlap the five-minute incremental syncs.
-After upgrading an existing deployment, run this procedure once: Notion preserves
-incremental state, so unchanged rows otherwise retain their old property values.
-
-Pause both incremental syncs and wait for in-flight runs to finish. Then reset
-and trigger both repairs, and resume the incremental syncs only after
-`sync status` reports that both repairs completed:
+Repairs are manual because replace mode deletes unseen keys and must not overlap
+the incremental syncs. After upgrading, run this once to backfill relations and
+clear stale nullable values: pause both incrementals and wait for in-flight runs
+to finish, then reset and trigger both repairs. Resume only after `sync status`
+reports completion:
 
 ```sh
 ntn workers sync pause ticketsSync
@@ -365,10 +339,8 @@ To add a new Zendesk field to any resource:
 2. Add a property to the schema with the appropriate `Schema.*` type
 3. Add a `Builder.*` call in the transform function
 
-The `PRIMARY_KEY` property is used by the platform to match incoming data to
-existing pages—don't remove it. Keep every schema property present in its
-transform and use `[]` for missing nullable values. Preserve the stable-ID
-relations when changing the user-facing name or ID columns.
+Keep every schema property in its transform, using `[]` for missing nullable
+values. Do not remove `PRIMARY_KEY` or the stable-ID relations.
 
 ### Incremental history and repairs
 
@@ -388,13 +360,8 @@ ntn workers sync state reset ticketsSync
 ntn workers sync state reset ticketMetricsSync
 ```
 
-Search Export cursors expire after one hour. Failed or incomplete repairs do not
-commit mark-and-sweep deletions; reset and trigger the repair again. If a ticket
-deletion races a completed repair and remains visible, let the incremental sync
-resume and rerun the repair.
-
-Organizations, users, CSAT survey responses, and SLA policies continue to use
-full replace sweeps directly.
+Search Export cursors expire after one hour. Incomplete repairs do not commit
+replacement deletions; reset and trigger the repair again.
 
 ### Local testing
 
@@ -418,7 +385,6 @@ ntn workers exec organizationsSync --local
 - [Notion Workers documentation](https://developers.notion.com/docs/workers)
 - [Zendesk API — Tickets](https://developer.zendesk.com/api-reference/ticketing/tickets/tickets/)
 - [Zendesk API — Search Export](https://developer.zendesk.com/api-reference/ticketing/ticket-management/search/#export-search-results)
-- [Zendesk API — Side-loading](https://developer.zendesk.com/documentation/api-basics/working-with-data/side_loading/)
 - [Zendesk API — Organizations](https://developer.zendesk.com/api-reference/ticketing/organizations/organizations/)
 - [Zendesk API — Users](https://developer.zendesk.com/api-reference/ticketing/users/users/)
 - [Zendesk API — CSAT Survey Responses](https://developer.zendesk.com/api-reference/ticketing/ticket-management/csat_survey_responses/)
