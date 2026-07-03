@@ -43,12 +43,12 @@ broader audience.
 
 ## What you can answer
 
-| Managed database  | Questions it helps answer                                                                                               |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| **Companies**     | Which accounts are active, high-usage, high-spend, or in a key segment? Which contacts and support work belong to them? |
-| **Contacts**      | Who are our users and leads, who owns them, and who is inactive or cannot receive email?                                |
-| **Conversations** | Which open, unread, or priority conversations are waiting? Where are response time, SLA, CSAT, or AI signals weak?      |
-| **Tickets**       | Which structured requests are open, waiting, snoozed, or unassigned? Which customer and teammate own the next step?     |
+| Managed database  | Questions it helps answer                                                                                                                                                                         |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Companies**     | Which high-spend or high-usage accounts have gone quiet? Which segments are generating the most conversations, and which contacts belong to each account?                                         |
+| **Contacts**      | Which users or leads need follow-up based on when they were last seen, contacted, or replied? Who owns them, and who is unsubscribed, marked as spam, or hard bounced?                            |
+| **Conversations** | Which open, unread, or priority conversations have waited longest, missed SLA, or lack an assignee? Which teams and channels have slow replies, low ratings, repeated reopens, or AI escalations? |
+| **Tickets**       | Which open tickets are unassigned, waiting on a customer, or ready for follow-up after snoozing? How is the queue distributed by team, ticket type, and category?                                 |
 
 ## Reference
 

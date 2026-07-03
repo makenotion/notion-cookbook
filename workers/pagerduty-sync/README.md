@@ -47,10 +47,10 @@ broader audience access to incident and on-call details.
 
 ## What you can answer
 
-| Managed database        | Questions it helps answer                                                                                                                                         |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **PagerDuty Incidents** | What needs attention now? Who owns the response? Which services are affected? What resolved recently, and which incidents may need follow-up?                     |
-| **PagerDuty Services**  | Which services are degraded or in maintenance? Where is primary on-call coverage missing? Who owns each service, and what routing and support arrangements apply? |
+| Managed database        | Questions it helps answer                                                                                                                                                                                                                                                    |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **PagerDuty Incidents** | Which high-urgency incidents still need acknowledgment, who is handling them, and which services are affected? Will an incident escalate, change urgency, or resolve automatically next—and when? Which services have the most recent incidents or longest resolution times? |
+| **PagerDuty Services**  | Which services are awaiting response, already responding, or in maintenance? Where is primary on-call coverage missing, and who is currently on call elsewhere? How do support hours, paging urgency, auto-resolution, and re-trigger timing differ by service?              |
 
 ## Reference
 

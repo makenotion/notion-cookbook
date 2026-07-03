@@ -42,11 +42,11 @@ record; changes in Notion never update it.
 
 ## What you can answer
 
-| Managed database    | Questions it helps answer                                                                |
-| ------------------- | ---------------------------------------------------------------------------------------- |
-| **Sentry Issues**   | What is new, regressed, escalating, high-impact, unhandled, or missing an owner?         |
-| **Sentry Projects** | Which services carry unresolved risk, ownership gaps, or rising week-over-week activity? |
-| **Sentry Releases** | Are recent rollouts crash-free, broadly exercised, and reporting session health?         |
+| Managed database    | Questions it helps answer                                                                                                                                                                                                     |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Sentry Issues**   | What should we triage first among new, regressed, escalating, high-priority, and unhandled issues? Which unassigned issues have the most 24-hour events or 30-day affected users?                                             |
+| **Sentry Projects** | Which services have the largest unresolved or high-priority backlog, and what is each service's most active issue? Where is seven-day event volume rising, and which projects lack team ownership or session instrumentation? |
+| **Sentry Releases** | Which recent releases need investigation because crash-free session or user rates are low, new issues appeared, or health data is missing? Which rollouts have enough seven-day sessions and users to assess confidently?     |
 
 ## Reference
 
