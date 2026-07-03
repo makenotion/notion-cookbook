@@ -1,333 +1,222 @@
-# Readwise and Reader sync
+# Worker sync: Readwise and Reader
 
-Turn your reading activity into a durable Notion knowledge base. This Worker
-keeps two related managed databases current:
+Turn your reading activity into a connected Notion knowledge base. This Worker
+creates managed databases for sources and highlights, relates every highlight
+to its source, and keeps both current with Readwise and Reader.
 
-- **Reading Sources** is your Reader library plus source containers for
-  highlights imported into Readwise from Kindle, Apple Books, Instapaper, and
-  other services.
-- **Reading Highlights** contains the quotes, notes, tags, locations, and
-  source relationships that make those ideas useful in projects and writing.
+Readwise and Reader remain the places to save, organize, highlight, and review.
+This recipe is read-only and leaves the Notion page bodies available for your
+own notes and writing.
 
-The result is more useful than a flat highlight export. You can build views for
-the Reader inbox, unfinished long reads, favorite highlights, recently updated
-notes, books by topic, or every highlight related to one source.
+## Quickstart
 
-This is a read-only V1. It reads Readwise and Reader APIs but never creates,
-updates, archives, or deletes data in either service.
+You need Node.js 22+, npm 10.9.2+, a Readwise account with API access, and a
+personal [Readwise access token](https://readwise.io/access_token). The same
+token authenticates the Readwise and Reader APIs.
 
-## Why there are two upstream APIs
+From the repository root:
 
-Readwise exposes two related but different data models:
-
-1. The [Reader Document LIST API](https://readwise.io/reader_api) returns the
-   Reader library, including inbox location, archive state, progress, reading
-   time, and document metadata. Reader also represents its highlights and
-   notes as documents. This recipe keeps only top-level records whose
-   `parent_id` is null, so nested annotations are not duplicated as Sources.
-2. The [Readwise Highlight EXPORT API](https://readwise.io/api_deets#export)
-   returns source containers and highlights from every service connected to
-   Readwise. For a Reader-backed source, its documented `external_id` is the
-   Reader document ID. The Worker uses that ID to relate the highlight to the
-   richer Reader Source row.
-
-A Kindle book may therefore appear as a Source even when it was never saved to
-Reader. A Reader article with Readwise highlights appears once, with those
-highlights related to it.
-
-## What the Worker maintains
-
-### Reading Sources
-
-| Property                  | Upstream value                                               |
-| ------------------------- | ------------------------------------------------------------ |
-| Name                      | Reader or Readwise source title                              |
-| Origin                    | Reader or the Readwise import source, such as Kindle         |
-| Category                  | Article, PDF, book, email, tweet, and similar categories     |
-| Location                  | Reader inbox, later, shortlist, archive, or feed             |
-| Archived                  | Whether the Reader document is in `archive`                  |
-| Author / Site             | Document author and site                                     |
-| Tags                      | Reader document tags or Readwise source tags                 |
-| Original URL              | Original document URL                                        |
-| Open in Reader            | Reader document URL                                          |
-| Readwise Review           | Readwise source review URL                                   |
-| Summary / Note            | Bounded upstream summary and document note                   |
-| Reading Progress          | Reader progress from `0` to `1`                              |
-| Word Count / Reading Time | Reader length estimates                                      |
-| Published / Saved         | Reader publication and save times                            |
-| Last Opened / Updated     | Reader activity timestamps                                   |
-| Reader Document ID        | Stable Reader ID when the source exists in Reader            |
-| Readwise Source ID        | Stable Readwise `user_book_id` when highlights were exported |
-| Source Key                | Namespaced primary key used by syncs and relations           |
-| Highlights                | Two-way relation created by the Highlights database          |
-
-### Reading Highlights
-
-| Property            | Upstream value                                    |
-| ------------------- | ------------------------------------------------- |
-| Name / Quote        | Searchable excerpt and highlight text             |
-| Note                | The note attached to the highlight                |
-| Source              | Relation to the Reading Sources row               |
-| Source Title/Author | Denormalized context for filtering                |
-| Origin              | Reader, Kindle, or another Readwise import source |
-| Tags / Color        | Highlight organization metadata                   |
-| Favorite/Discarded  | Readwise review state                             |
-| Location/Type       | Location in the source and its coordinate type    |
-| Highlighted         | When the highlight was taken                      |
-| Created / Updated   | Readwise timestamps                               |
-| Readwise URL        | Direct link to the highlight                      |
-| Source URL          | Deep link or original source URL when available   |
-| External ID         | Source-system highlight ID when available         |
-| Readwise Source ID  | Parent `user_book_id`                             |
-| Highlight Key       | Namespaced primary key, such as `highlight:9001`  |
-
-Notion rich-text properties have practical size limits. Quote, note, and
-summary values are bounded to 1,900 Unicode characters. The adjacent
-`Truncated` checkbox makes that loss explicit, and the Readwise link remains
-available for the full upstream value.
-
-## Sync behavior and guarantees
-
-| Capability                     | Mode        | Schedule | Purpose                                                 |
-| ------------------------------ | ----------- | -------- | ------------------------------------------------------- |
-| `sourcesSync`                  | Incremental | 15 min   | Reader document changes and changed Readwise sources    |
-| `highlightsSync`               | Incremental | 15 min   | New, edited, and explicitly deleted Readwise highlights |
-| `sourcesReconciliationSync`    | Replace     | Daily    | Full Reader and Readwise source repair sweep            |
-| `highlightsReconciliationSync` | Replace     | Daily    | Full highlight repair and deletion sweep                |
-
-The implementation makes these guarantees:
-
-- Reader IDs, Readwise `user_book_id` values, and Readwise highlight IDs are
-  namespaced deterministic keys. Replaying a page updates the same rows.
-- Every API request fetches one provider page. `pageCursor` is persisted only
-  after that page has been transformed successfully.
-- An incremental cycle pins one `updatedAfter` value while traversing every
-  `pageCursor`. It records a checkpoint before the first request and advances
-  the watermark only after the final page succeeds.
-- The next cycle starts five minutes before the checkpoint. This intentional
-  overlap safely replays equal timestamps, provider indexing lag, and records
-  fetched after the checkpoint because neither API supports an `updatedBefore`
-  bound.
-- Cursor cycles, malformed cursors, incompatible state, and runs above 10,000
-  pages per phase fail closed instead of silently completing an unsafe sweep.
-- Replacement rows are swept only after every page and both Source phases
-  complete. A partial reconciliation does not delete unseen rows.
-- Source scans read Readwise Export first and Reader second. When both APIs
-  address the same `reader:<id>` row, the richer Reader title, tags, summary,
-  note, and document metadata therefore win the final upsert.
-- The Worker never writes page body content and only emits properties declared
-  in its managed schemas. Views, page bodies, and user-added properties on
-  retained rows remain outside this recipe's write set.
-
-This recipe does not promise immediate delivery. Provider indexing, the
-15-minute schedule, rate limiting, and a failed run can delay an update. The
-overlap and daily reconciliation are designed for eventual convergence rather
-than webhook-like latency.
-
-## Deletions, archives, and known limits
-
-These distinctions matter:
-
-- **Reader archive is not deletion.** Moving a document to archive changes its
-  `location`; the Source remains and `Archived` becomes checked.
-- **Readwise highlight deletion is explicit.** Incremental export requests use
-  `includeDeleted=true`, and `is_deleted` highlights become Notion delete
-  changes.
-- **A deleted Reader-backed Readwise container does not delete a Reader row.**
-  Reader LIST is authoritative for the unified `reader:<id>` Source. The export
-  phase ignores that source-level tombstone while still deleting its highlight
-  rows; the next successful two-source replacement decides whether the Source
-  itself still exists. Non-Reader source tombstones are deleted immediately.
-- **Reader hard deletion has no tombstone in Document LIST.** A deleted Reader
-  document can remain until the next successful daily replacement. If its
-  Readwise source and highlights still exist, the Source remains as a useful
-  Readwise source container.
-- **Whole-source deletion may not enumerate every former highlight.** The daily
-  Highlight replacement is the final repair mechanism for highlights missing
-  from incremental tombstones.
-- **Upstream deletion removes the managed Notion row.** An explicit tombstone
-  or completed replacement sweep deletes that page, including its page-body
-  notes and user-added property values. Archive the source instead, or keep
-  durable commentary in a separate related database, when that context must
-  outlive deletion from Readwise or Reader.
-- **Tags are dynamic.** Reader and Readwise can introduce arbitrary tag names;
-  the managed databases create select options as they appear. A record with
-  more than 100 unique tags or a tag name above 100 characters fails visibly
-  instead of silently dropping or shortening tags. Commas inside one source
-  tag become visually similar full-width commas (`，`) because the Worker
-  multi-select wire format uses commas as separators.
-- **Reader-backed identity depends on `external_id`.** Readwise documents this
-  field only for sources whose `source` is `reader`. If it is absent, the
-  Worker safely creates a separate `readwise:<user_book_id>` Source rather than
-  guessing from title or URL.
-
-Readwise now documents custom webhooks, but the current event list does not
-provide a complete create/update/delete feed for both datasets: it lists
-`readwise.highlight.created` plus selected Reader document events. The webhook
-secret is included in the POST payload. This V1 deliberately uses authenticated
-polling and reconciliation instead of claiming complete webhook coverage. See
-the [official webhook documentation](https://docs.readwise.io/readwise/docs/webhooks).
-
-## Prerequisites
-
-- Node.js 22 or newer
-- npm 10.9.2 or newer
-- The [Notion CLI](https://developers.notion.com/docs/get-started-with-notion-cli)
-- A Readwise account with access to the APIs you intend to sync
-- A personal [Readwise access token](https://readwise.io/access_token)
-
-The same token authenticates both APIs with `Authorization: Token …`. This
-Worker does not need a separate Notion API token because managed database
-writes are handled by the Worker sync runtime.
-
-Keep one deployment bound to one Readwise account. These APIs do not expose a
-stable account ID that this recipe can verify before a replacement sweep.
-Changing `READWISE_ACCESS_TOKEN` to a different account would make the prior
-account's rows look deleted. Create a separate Worker deployment and managed
-databases instead of repointing an existing deployment.
-
-## Set up and deploy
-
-From this directory:
-
-```bash
+```sh
+npm install --global ntn
+cd workers/readwise-sync
 npm install
-npm run check
-npm test
-npm run build
 ntn login
 ntn workers deploy --name readwise-sync
-ntn workers env set READWISE_ACCESS_TOKEN=your_token
+ntn workers env set READWISE_ACCESS_TOKEN=your-token
 ```
 
-Never commit the real token. `.env.example` contains only the variable name and
-a safe placeholder.
+Preview the initial backfills without writing to Notion:
 
-## Run the first sync
-
-Preview both incremental backfills before writing anything:
-
-```bash
+```sh
 ntn workers sync trigger sourcesSync --preview
 ntn workers sync trigger highlightsSync --preview
 ```
 
-Then establish Source rows before their Highlight relations:
+Then populate Sources before Highlights so relations can resolve immediately:
 
-```bash
+```sh
 ntn workers sync trigger sourcesSync
 ntn workers sync trigger highlightsSync
 ```
 
-The first incremental run starts at the Unix epoch, so it is a complete
-backfill. Later runs use the stored overlapping checkpoint. The daily
-reconciliations begin automatically after deployment and repair omissions or
-deletions.
+The first incremental runs backfill all available history. Subsequent changes
+sync every 15 minutes, and daily reconciliation repairs omissions and removals.
+No `NOTION_API_TOKEN` is needed; the Workers platform handles Notion
+authentication.
 
-Inspect progress and logs with:
+Keep each deployment bound to one Readwise account. The APIs do not expose a
+stable account ID that this recipe can verify before a replacement sweep. To
+sync another account, create a separate deployment and managed databases rather
+than changing the token on an existing deployment.
 
-```bash
-ntn workers sync status
-ntn workers runs list
-ntn workers runs logs <run-id>
-```
+Highlights, notes, document titles, and URLs can contain private reading
+context. Review both managed databases' Notion sharing settings before giving a
+broader audience access.
 
-## Reset or repair state
+## What you can answer
 
-Deploying new code preserves sync state. If a state contract changes or you
-intentionally want to replay all history, reset and trigger the affected
-incremental capability:
+| Managed database       | Questions it helps answer                                                                                                               |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| **Reading Sources**    | What is in my Reader inbox or archive? Which books and articles have I not finished? What have I saved by author, site, topic, or type? |
+| **Reading Highlights** | Which ideas have I saved or annotated recently? What are my favorite highlights, and which source, project, or topic do they support?   |
 
-```bash
-ntn workers sync state get sourcesSync
-ntn workers sync state reset sourcesSync
-ntn workers sync trigger sourcesSync
+The result is richer than a flat highlight export: Reader documents and sources
+imported from Kindle, Apple Books, Instapaper, and other services share one
+source database, with every highlight connected by a Notion relation.
 
-ntn workers sync state get highlightsSync
-ntn workers sync state reset highlightsSync
-ntn workers sync trigger highlightsSync
-```
+## Reference
 
-You can also trigger either replacement sweep immediately:
+### Why the Worker uses two APIs
 
-```bash
-ntn workers sync trigger sourcesReconciliationSync
-ntn workers sync trigger highlightsReconciliationSync
-```
+Readwise exposes two related data models:
 
-Run Sources first when repairing both databases so every relation target is
-available before Highlights are refreshed.
+- The [Reader Document LIST API](https://readwise.io/reader_api) provides the
+  Reader library, including inbox location, archive state, reading progress,
+  reading time, and document metadata. The Worker keeps only top-level records
+  whose `parent_id` is null, so nested notes and highlights are not duplicated
+  as Sources.
+- The [Readwise Highlight EXPORT API](https://readwise.io/api_deets#export)
+  provides source containers and highlights from every service connected to
+  Readwise. For a Reader source, its documented `external_id` is the Reader
+  document ID, which lets the Worker relate exported highlights to the richer
+  Reader Source row.
 
-## Rate limiting
+A Kindle book therefore appears as a Source even if it was never saved to
+Reader. A Reader article with Readwise highlights appears once, with its
+highlights related to that row.
 
-Reader documents are documented at 20 requests per minute per access token;
-Readwise documents a default base rate of 240 requests per minute for most v2
-endpoints. All four capabilities share one conservative Worker pacer capped at
-15 requests per minute. A provider `429` becomes a Workers `RateLimitError` and
-preserves `Retry-After` so the runtime can retry appropriately.
+### Synced databases and schedules
 
-Large libraries can therefore take multiple minutes to backfill. Do not raise
-the pacer above Reader's published limit without confirming updated provider
-terms.
+| Database               | Key contents                                                                                               |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------- |
+| **Reading Sources**    | Title, origin, category, location, archive state, author, site, tags, URLs, summary, progress, and dates   |
+| **Reading Highlights** | Quote, note, source relation, tags, color, review state, location, dates, Readwise URL, and source context |
 
-## Code map
+| Capability                     | Mode        | Schedule     | Purpose                                               |
+| ------------------------------ | ----------- | ------------ | ----------------------------------------------------- |
+| `sourcesSync`                  | Incremental | Every 15 min | Changed Reader documents and Readwise sources         |
+| `highlightsSync`               | Incremental | Every 15 min | New, edited, and explicitly deleted highlights        |
+| `sourcesReconciliationSync`    | Replace     | Daily        | Complete Reader and Readwise source repair            |
+| `highlightsReconciliationSync` | Replace     | Daily        | Complete highlight repair and deletion reconciliation |
+
+Sources use deterministic `reader:<id>` or `readwise:<user_book_id>` keys.
+Highlights use `highlight:<id>`. Replaying a provider page therefore updates
+the same Notion rows, and relations remain stable when display names change.
+
+Quote, note, and summary properties are bounded to 1,900 Unicode characters.
+The adjacent **Truncated** checkbox discloses shortened values, and links back
+to Readwise preserve access to the full source. Tag values are normalized into
+deterministic options; commas become full-width commas (`，`) because the
+current multi-select wire format uses commas as separators. More than 100 tags
+or a tag longer than 100 characters fails visibly instead of dropping data.
+
+### How it works
+
+1. Each API request fetches and transforms one provider page before its
+   `pageCursor` is saved. Cursor loops, malformed cursors, incompatible state,
+   and more than 10,000 pages per phase fail closed.
+2. An incremental cycle pins one `updatedAfter` value and advances its
+   checkpoint only after every page succeeds. The next cycle overlaps the
+   checkpoint by five minutes to replay equal timestamps, indexing lag, and
+   records fetched after the checkpoint; neither API supports an
+   `updatedBefore` bound.
+3. Source scans process Readwise Export before Reader. When both APIs identify
+   the same `reader:<id>` row, the richer Reader metadata wins the final upsert.
+4. Daily replace-mode scans repair records missed by polling and remove rows
+   only after every page and Source phase completes. A partial scan does not
+   sweep unseen rows.
+5. All capabilities share a conservative pacer of 15 requests per minute,
+   below Reader's documented 20 requests per minute. Provider `429` responses
+   preserve `Retry-After` for the Worker runtime.
+
+This design favors eventual convergence over webhook-like latency. Provider
+indexing, a failed run, rate limiting, and the 15-minute schedule can delay an
+update.
+
+### Deletion and data safety
+
+- Moving a Reader document to archive is not deletion. The Source remains, its
+  location changes, and **Archived** is checked.
+- Incremental Export requests include deleted highlights; explicit highlight
+  tombstones become Notion delete changes.
+- A deleted non-Reader source, such as a Kindle or Apple Books container,
+  becomes a Notion delete on the next incremental Source sync.
+- Reader LIST has no hard-deletion tombstone. Daily reconciliation removes a
+  missing Reader document unless its Readwise source or highlights still make
+  it a useful source container.
+- A deleted Reader-backed Readwise container does not immediately delete the
+  unified Reader row. Reader is authoritative for that identity; daily
+  two-source reconciliation decides whether the Source remains.
+- Whole-source deletion may not enumerate every former highlight. Daily
+  Highlight reconciliation is the final repair for missing tombstones.
+- Deleting a managed row also removes its page body and user-added property
+  values. Archive upstream records when that Notion context must survive, or
+  keep durable commentary in a separate related database.
+
+For retained rows, the Worker writes only its declared managed properties and
+never writes page body content. User-added properties, views, and page bodies
+remain outside its write set.
+
+Reader-backed identity depends on Readwise's documented `external_id`. If a
+Reader source omits it, the Worker creates a separate
+`readwise:<user_book_id>` Source rather than guessing from a title or URL.
+
+### Project structure
 
 ```text
 src/
-├── index.ts       Registers databases, schedules, and the shared pacer
-├── readwise.ts    Typed Reader and Readwise clients and response validation
-├── state.ts       Cursor guards, checkpoint pinning, and overlap transitions
-├── syncs.ts       Incremental and replacement page executors
-├── sources.ts     Source schema, stable keys, and transforms
-├── highlights.ts  Highlight schema, relations, deletes, and transforms
-└── values.ts      Bounded text, tags, dates, URLs, and display normalization
-fixtures/
-├── reader-page.json
-└── export-page.json
-test.ts            Deterministic offline API, state, and transform tests
+├── index.ts       — databases, schedules, and shared pacing
+├── readwise.ts    — typed clients and response validation
+├── state.ts       — cursor guards, checkpoints, and overlap transitions
+├── syncs.ts       — incremental and replacement page executors
+├── sources.ts     — Source schema, keys, and transforms
+├── highlights.ts  — Highlight schema, relations, deletes, and transforms
+└── values.ts      — bounded text, tags, dates, URLs, and labels
+fixtures/          — fixed Reader and Readwise API responses
+test.ts            — offline client, transform, state, and sync tests
 ```
 
-## Adapt the recipe
+### Adapt the recipe
 
-Useful extensions include:
+- Change schedules in `src/index.ts` for a slower personal archive. Keep the
+  shared pacer within Reader's published limit.
+- Add a Source or Highlight field by validating it in `src/readwise.ts`, adding
+  the schema and transform value in the resource file, and covering populated
+  and missing values in tests.
+- Add formulas, rollups, or a related Authors database when those relationships
+  are useful to your workflow.
+- Add Worker-owned page content for longer source text only if you want later
+  syncs to own and update that content. This recipe leaves page bodies alone.
+- Add webhook-triggered freshness only after designing for signature/secret
+  handling, retries, replay, and reconciliation. Readwise's current event list
+  does not replace polling for both complete datasets.
 
-- Change the schedules in `src/index.ts` for a slower personal archive.
-- Add rollups or formulas in Notion for highlight counts and unread queues.
-- Add a third managed database for authors only if the relation is valuable to
-  your workflow; author strings are intentionally simpler in V1.
-- Store longer text in Worker-owned page content if you are willing to make
-  that content provider-owned. V1 leaves page bodies untouched so users can
-  write around synced records safely.
-- Add a webhook capability only after choosing a complete event strategy and
-  testing secret validation, retries, replay behavior, and reconciliation.
+If a code change alters source selection, key construction, response parsing,
+or state shape, bump `SYNC_STATE_VERSION` and reset the affected capability
+state after deployment.
 
-When changing source selection, key construction, response parsing, or state
-shape, bump `SYNC_STATE_VERSION` and reset affected capability state after
-deployment.
+### Local testing
 
-## Verify locally
+Tests use fixed fixtures and do not contact Readwise, Reader, or Notion. From
+the repository root:
 
-The tests use fixed API fixtures and never require a Readwise token or Notion
-workspace:
-
-```bash
+```sh
+cd workers/readwise-sync
 npm install
 npm run check
 npm test
 npm run build
 ```
 
-They cover authentication headers, endpoint parameters, response validation,
-bounded response reads, non-disclosing errors, strict deletion flags, rate-limit
-propagation, Reader child filtering, Reader/Readwise identity merging,
-relations, deletion tombstones, tag and text bounds, cursor cycles, phase
-transitions, checkpoint overlap, failure replay, and reconciliation behavior.
+They cover endpoint parameters, response validation, bounded reads,
+non-disclosing errors, identities and relations, deletion tombstones, text and
+tag bounds, cursor cycles, checkpoint overlap, failure replay, and daily
+reconciliation.
 
-Live API calls and deployment are intentionally not part of the offline test
-suite.
+## Learn more
 
-## Official API references
-
+- [Notion sync guide](https://developers.notion.com/workers/guides/syncs)
 - [Reader API](https://readwise.io/reader_api)
 - [Readwise API and Highlight EXPORT](https://readwise.io/api_deets#export)
 - [Readwise and Reader webhooks](https://docs.readwise.io/readwise/docs/webhooks)
+- [Contributing guide](../../CONTRIBUTING.md)
