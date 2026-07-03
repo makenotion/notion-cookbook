@@ -17,30 +17,23 @@ export type ReaderDocument = {
   source_url: string | null
   title: string | null
   author: string | null
-  source: string | null
   category: string | null
   location: string | null
   tags: unknown
   site_name: string | null
   word_count: number | null
   reading_time: string | null
-  listening_time: string | null
-  created_at: string | null
   updated_at: string | null
   published_date: string | null
   notes: string | null
   summary: string | null
-  image_url: string | null
   parent_id: string | null
   reading_progress: number | null
-  first_opened_at: string | null
   last_opened_at: string | null
   saved_at: string | null
-  last_moved_at: string | null
 }
 
 export type ReadwiseTag = {
-  id: string | null
   name: string | null
 }
 
@@ -56,9 +49,7 @@ export type ReadwiseHighlight = {
   created_at: string | null
   updated_at: string | null
   external_id: string | null
-  end_location: number | null
   url: string | null
-  book_id: string | null
   tags: ReadwiseTag[]
   is_favorite: boolean
   is_discard: boolean
@@ -72,7 +63,6 @@ export type ReadwiseSource = {
   readable_title: string | null
   author: string | null
   source: string | null
-  cover_image_url: string | null
   unique_url: string | null
   book_tags: ReadwiseTag[]
   category: string | null
@@ -81,17 +71,18 @@ export type ReadwiseSource = {
   readwise_url: string | null
   source_url: string | null
   external_id: string | null
-  asin: string | null
   highlights: ReadwiseHighlight[]
 }
 
 export type ReaderDocumentPage = {
   documents: ReaderDocument[]
+  count: number
   nextPageCursor: string | undefined
 }
 
 export type ReadwiseExportPage = {
   sources: ReadwiseSource[]
+  count: number
   nextPageCursor: string | undefined
 }
 
@@ -171,17 +162,33 @@ function identifier(value: unknown, label: string): string {
   return id
 }
 
+function nullableStringIdentifier(
+  value: unknown,
+  label: string
+): string | null {
+  if (value === null) return null
+  if (typeof value !== "string") {
+    throw new Error(`Readwise ${label} must be null or a valid stable id.`)
+  }
+  const id = value.trim()
+  if (!id || id.length > 512) {
+    throw new Error(`Readwise ${label} must be null or a valid stable id.`)
+  }
+  return id
+}
+
+function nonNegativeInteger(value: unknown, label: string): number {
+  if (!Number.isSafeInteger(value) || Number(value) < 0) {
+    throw new Error(`Readwise ${label} must be a non-negative integer.`)
+  }
+  return Number(value)
+}
+
 function tags(value: unknown, label: string): ReadwiseTag[] {
   if (value == null) return []
   return array(value, label).map((candidate) => {
     const item = record(candidate, `${label} item`)
-    const rawId = item.id
     return {
-      id:
-        typeof rawId === "string" ||
-        (typeof rawId === "number" && Number.isSafeInteger(rawId))
-          ? String(rawId)
-          : null,
       name: nullableString(item.name),
     }
   })
@@ -195,26 +202,20 @@ function parseReaderDocument(value: unknown): ReaderDocument {
     source_url: nullableString(item.source_url),
     title: nullableString(item.title),
     author: nullableString(item.author),
-    source: nullableString(item.source),
     category: nullableString(item.category),
     location: nullableString(item.location),
     tags: item.tags,
     site_name: nullableString(item.site_name),
     word_count: nullableNumber(item.word_count),
     reading_time: nullableString(item.reading_time),
-    listening_time: nullableString(item.listening_time),
-    created_at: nullableString(item.created_at),
     updated_at: nullableString(item.updated_at),
     published_date: nullableString(item.published_date),
     notes: nullableString(item.notes),
     summary: nullableString(item.summary),
-    image_url: nullableString(item.image_url),
-    parent_id: nullableString(item.parent_id),
+    parent_id: nullableStringIdentifier(item.parent_id, "Reader parent_id"),
     reading_progress: nullableNumber(item.reading_progress),
-    first_opened_at: nullableString(item.first_opened_at),
     last_opened_at: nullableString(item.last_opened_at),
     saved_at: nullableString(item.saved_at),
-    last_moved_at: nullableString(item.last_moved_at),
   }
 }
 
@@ -232,10 +233,7 @@ function parseHighlight(value: unknown): ReadwiseHighlight {
     created_at: nullableString(item.created_at),
     updated_at: nullableString(item.updated_at ?? item.updated),
     external_id: nullableString(item.external_id),
-    end_location: nullableNumber(item.end_location),
     url: nullableString(item.url),
-    book_id:
-      item.book_id == null ? null : identifier(item.book_id, "highlight book"),
     tags: tags(item.tags, "highlight tags"),
     is_favorite: boolean(item.is_favorite),
     is_discard: boolean(item.is_discard),
@@ -252,7 +250,6 @@ function parseSource(value: unknown): ReadwiseSource {
     readable_title: nullableString(item.readable_title),
     author: nullableString(item.author),
     source: nullableString(item.source),
-    cover_image_url: nullableString(item.cover_image_url),
     unique_url: nullableString(item.unique_url),
     book_tags: tags(item.book_tags, "source tags"),
     category: nullableString(item.category),
@@ -261,10 +258,7 @@ function parseSource(value: unknown): ReadwiseSource {
     readwise_url: nullableString(item.readwise_url),
     source_url: nullableString(item.source_url),
     external_id: nullableString(item.external_id),
-    asin: nullableString(item.asin),
-    highlights: array(item.highlights ?? [], "source highlights").map(
-      parseHighlight
-    ),
+    highlights: array(item.highlights, "source highlights").map(parseHighlight),
   }
 }
 
@@ -396,6 +390,7 @@ export function createReadwiseClient(
         documents: array(body.results, "Reader document results").map(
           parseReaderDocument
         ),
+        count: nonNegativeInteger(body.count, "Reader document count"),
         nextPageCursor: parseCursor(
           body.nextPageCursor,
           "Reader document page"
@@ -414,6 +409,7 @@ export function createReadwiseClient(
         sources: array(body.results, "highlight export results").map(
           parseSource
         ),
+        count: nonNegativeInteger(body.count, "highlight export count"),
         nextPageCursor: parseCursor(
           body.nextPageCursor,
           "highlight export page"

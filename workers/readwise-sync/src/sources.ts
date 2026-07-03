@@ -72,9 +72,13 @@ function isReaderSource(source: ReadwiseSource): boolean {
   return source.source?.trim().toLowerCase() === "reader"
 }
 
+export function readerExternalId(source: ReadwiseSource): string | undefined {
+  return isReaderSource(source) ? trimmed(source.external_id) : undefined
+}
+
 export function exportSourceKey(source: ReadwiseSource): string {
-  const externalId = trimmed(source.external_id)
-  return isReaderSource(source) && externalId
+  const externalId = readerExternalId(source)
+  return externalId
     ? readerSourceKey(externalId)
     : `readwise:${source.user_book_id}`
 }
@@ -83,7 +87,10 @@ function readwiseTagNames(source: ReadwiseSource): string[] {
   return uniqueSelectNames(source.book_tags.map((tag) => tag.name))
 }
 
-export function readerDocumentToChange(document: ReaderDocument) {
+export function readerDocumentToChange(
+  document: ReaderDocument,
+  options: { exportPresent?: boolean } = {}
+) {
   // Reader also models its highlights and notes as documents. parent_id is the
   // documented discriminator; those records come from Readwise Export instead.
   if (document.parent_id !== null) return undefined
@@ -142,52 +149,125 @@ export function readerDocumentToChange(document: ReaderDocument) {
       "Last Opened": dateValue(document.last_opened_at),
       Updated: dateValue(document.updated_at),
       "Reader Document ID": Builder.richText(document.id),
+      ...(options.exportPresent === false
+        ? {
+            "Readwise Review": [],
+            "Readwise Source ID": [],
+          }
+        : {}),
       "Source Key": Builder.richText(key),
     },
   }
 }
 
-export function exportSourceToChange(source: ReadwiseSource) {
-  const key = exportSourceKey(source)
-  // Reader LIST is authoritative for the unified reader:<id> row. Deleting a
-  // Readwise highlight container must not temporarily erase a Reader document
-  // that still exists; the two-source replacement sweep decides final absence.
-  if (source.is_deleted) {
-    return isReaderSource(source) ? undefined : { type: "delete" as const, key }
+function exportOwnedProperties(source: ReadwiseSource) {
+  const reviewUrl = validUrl(source.readwise_url)
+  return {
+    "Readwise Review": reviewUrl ? Builder.url(reviewUrl) : [],
+    "Readwise Source ID": Builder.richText(source.user_book_id),
   }
+}
 
+function fullExportProperties(source: ReadwiseSource) {
+  const key = exportSourceKey(source)
   const summary = boundedText(source.summary)
   const note = boundedText(source.document_note)
   const category = normalizedCategory(source.category)
-  const readerId = isReaderSource(source)
-    ? trimmed(source.external_id)
-    : undefined
-  const title = source.readable_title ?? source.title
-  const originalUrl = validUrl(source.source_url ?? source.unique_url)
-  const reviewUrl = validUrl(source.readwise_url)
+  const readerId = readerExternalId(source)
+  const title = trimmed(source.readable_title) ?? trimmed(source.title)
+  const originalUrl = validUrl(source.source_url) ?? validUrl(source.unique_url)
+
+  return {
+    Name: Builder.title(
+      displayTitle(title, `Untitled Readwise source ${source.user_book_id}`)
+    ),
+    Origin: Builder.select(sourceName(source.source)),
+    Category: category ? Builder.select(category) : [],
+    Location: [],
+    Archived: Builder.checkbox(false),
+    Author: trimmed(source.author)
+      ? Builder.richText(source.author!.trim())
+      : [],
+    Site: [],
+    Tags: Builder.multiSelect(...readwiseTagNames(source)),
+    "Original URL": originalUrl ? Builder.url(originalUrl) : [],
+    "Open in Reader": [],
+    ...exportOwnedProperties(source),
+    Summary: summary.text ? Builder.richText(summary.text) : [],
+    "Summary Truncated": Builder.checkbox(summary.truncated),
+    Note: note.text ? Builder.richText(note.text) : [],
+    "Note Truncated": Builder.checkbox(note.truncated),
+    "Reading Progress": [],
+    "Word Count": [],
+    "Reading Time": [],
+    Published: [],
+    Saved: [],
+    "Last Opened": [],
+    Updated: [],
+    "Reader Document ID": readerId ? Builder.richText(readerId) : [],
+    "Source Key": Builder.richText(key),
+  }
+}
+
+export function exportSourceToChange(
+  source: ReadwiseSource,
+  options: { initialBackfill?: boolean } = {}
+) {
+  const key = exportSourceKey(source)
+  const readerId = readerExternalId(source)
+  // Reader LIST owns unified reader:<id> rows. An Export tombstone cannot prove
+  // that the Reader document disappeared, so the replacement sync resolves it.
+  if (source.is_deleted) {
+    return readerId ? undefined : { type: "delete" as const, key }
+  }
+
+  // On the initial full-history cycle, Reader's own full-history phase follows
+  // Export and deterministically restores its owned fields. Later Export-only
+  // deltas use a narrow patch so an unchanged Reader parent cannot be clobbered.
+  if (readerId && !options.initialBackfill) {
+    return {
+      type: "upsert" as const,
+      key,
+      properties: {
+        ...exportOwnedProperties(source),
+        "Reader Document ID": Builder.richText(readerId),
+        "Source Key": Builder.richText(key),
+      },
+    }
+  }
 
   return {
     type: "upsert" as const,
     key,
-    properties: {
-      Name: Builder.title(
-        displayTitle(title, `Untitled Readwise source ${source.user_book_id}`)
-      ),
-      Origin: Builder.select(sourceName(source.source)),
-      Category: category ? Builder.select(category) : [],
-      Author: trimmed(source.author)
-        ? Builder.richText(source.author!.trim())
-        : [],
-      Tags: Builder.multiSelect(...readwiseTagNames(source)),
-      "Original URL": originalUrl ? Builder.url(originalUrl) : [],
-      "Readwise Review": reviewUrl ? Builder.url(reviewUrl) : [],
-      Summary: summary.text ? Builder.richText(summary.text) : [],
-      "Summary Truncated": Builder.checkbox(summary.truncated),
-      Note: note.text ? Builder.richText(note.text) : [],
-      "Note Truncated": Builder.checkbox(note.truncated),
-      ...(readerId ? { "Reader Document ID": Builder.richText(readerId) } : {}),
-      "Readwise Source ID": Builder.richText(source.user_book_id),
-      "Source Key": Builder.richText(key),
-    },
+    properties: fullExportProperties(source),
+  }
+}
+
+export function exportSourceToReconciliationChange(
+  source: ReadwiseSource,
+  readerPresent: boolean
+) {
+  if (source.is_deleted) {
+    throw new Error(
+      "Readwise reconciliation unexpectedly returned a deleted source."
+    )
+  }
+  const key = exportSourceKey(source)
+  const readerId = readerExternalId(source)
+  if (readerId && readerPresent) {
+    return {
+      type: "upsert" as const,
+      key,
+      properties: {
+        ...exportOwnedProperties(source),
+        "Reader Document ID": Builder.richText(readerId),
+        "Source Key": Builder.richText(key),
+      },
+    }
+  }
+  return {
+    type: "upsert" as const,
+    key,
+    properties: fullExportProperties(source),
   }
 }

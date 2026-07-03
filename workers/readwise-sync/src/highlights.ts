@@ -74,12 +74,15 @@ export function highlightToChange(
   )
   const updatedAt = validDate(highlight.updated_at)
   const location = finiteNumber(highlight.location)
-  const sourceTitle = trimmed(source.readable_title ?? source.title)
+  const sourceTitle = trimmed(source.readable_title) ?? trimmed(source.title)
   const sourceAuthor = trimmed(source.author)
   const color = trimmed(highlight.color)?.toLowerCase()
   const locationType = trimmed(highlight.location_type)?.toLowerCase()
   const readwiseUrl = validUrl(highlight.readwise_url)
-  const sourceUrl = validUrl(highlight.url ?? source.source_url)
+  const sourceUrl =
+    validUrl(highlight.url) ??
+    validUrl(source.source_url) ??
+    validUrl(source.unique_url)
 
   return {
     type: "upsert" as const,
