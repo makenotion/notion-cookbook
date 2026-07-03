@@ -27,6 +27,60 @@ directory.
 - **React to external events:** receive and verify
   [Zendesk webhooks](workers/zendesk-webhook/).
 
+## Quickstarts
+
+### Using this cookbook with a coding agent
+
+Tell the agent the outcome or integration you need, then point it to:
+
+- [`catalog.json`](catalog.json), the machine-readable index of every runnable
+  project and its supported commands.
+- [`AGENTS.md`](AGENTS.md), the canonical instructions for finding, running,
+  adapting, adding, and validating recipes.
+- The selected project's README and entrypoint, which are authoritative for its
+  setup and implementation.
+
+For example: "Use `catalog.json` to find the Linear sync recipe. Explain its
+data flow, adapt it to include issue labels, and run its offline checks."
+
+### Run an API example
+
+The introductory example is the best first project. Create a
+[Notion integration](https://www.notion.com/my-integrations), share a test page
+with it, then:
+
+```sh
+git clone https://github.com/makenotion/notion-cookbook.git
+cd notion-cookbook/examples/intro-to-notion-api
+npm install
+cp .env.example .env
+# Add NOTION_API_KEY and NOTION_PAGE_ID to .env
+npm run basic:1
+```
+
+Other API examples use different scripts and may require additional services.
+Use the command in the selected example's README rather than assuming
+`npm start`.
+
+### Deploy a Worker
+
+The DuckDB query Worker is self-contained and needs no secrets:
+
+```sh
+npm install --global ntn
+git clone https://github.com/makenotion/notion-cookbook.git
+cd notion-cookbook/workers/duckdb-query
+npm install
+npm run check
+npm test
+ntn login
+ntn workers deploy --name duckdb-query
+```
+
+After deployment, add the Worker to a custom agent under **Tools and access >
+Add connection**. Other Workers may need service credentials or database
+configuration; follow their READMEs.
+
 ## API examples
 
 These examples use the official JavaScript SDK and run locally with Node.js.
@@ -84,60 +138,6 @@ and a **webhook** handles events from another service. See the complete
 | Task                                                 | Worker                                      | Integration |
 | ---------------------------------------------------- | ------------------------------------------- | ----------- |
 | Verify ticket events and upsert tickets and comments | [Zendesk webhook](workers/zendesk-webhook/) | Zendesk     |
-
-## Quickstarts
-
-### Run an API example
-
-The introductory example is the best first project. Create a
-[Notion integration](https://www.notion.com/my-integrations), share a test page
-with it, then:
-
-```sh
-git clone https://github.com/makenotion/notion-cookbook.git
-cd notion-cookbook/examples/intro-to-notion-api
-npm install
-cp .env.example .env
-# Add NOTION_API_KEY and NOTION_PAGE_ID to .env
-npm run basic:1
-```
-
-Other API examples use different scripts and may require additional services.
-Use the command in the selected example's README rather than assuming
-`npm start`.
-
-### Deploy a Worker
-
-The DuckDB query Worker is self-contained and needs no secrets:
-
-```sh
-npm install --global ntn
-git clone https://github.com/makenotion/notion-cookbook.git
-cd notion-cookbook/workers/duckdb-query
-npm install
-npm run check
-npm test
-ntn login
-ntn workers deploy --name duckdb-query
-```
-
-After deployment, add the Worker to a custom agent under **Tools and access >
-Add connection**. Other Workers may need service credentials or database
-configuration; follow their READMEs.
-
-## Using this cookbook with a coding agent
-
-Tell the agent the outcome or integration you need, then point it to:
-
-- [`catalog.json`](catalog.json), the machine-readable index of every runnable
-  project and its supported commands.
-- [`AGENTS.md`](AGENTS.md), the canonical instructions for finding, running,
-  adapting, adding, and validating recipes.
-- The selected project's README and entrypoint, which are authoritative for its
-  setup and implementation.
-
-For example: "Use `catalog.json` to find the Linear sync recipe. Explain its
-data flow, adapt it to include issue labels, and run its offline checks."
 
 ## More resources
 
