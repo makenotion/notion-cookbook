@@ -4,7 +4,7 @@ Create a navigable employee directory in Notion from Workday display names,
 available public primary work email addresses, and current supervisory
 organizations. The Worker links employees to managers, organization members,
 and—when an exact email match resolves—their native Notion profile. It refreshes
-both managed databases every hour.
+both managed databases every day.
 
 This is an employee directory with reporting links, not a replica of Workday
 Org Chart. Workday remains authoritative, and Notion does not re-evaluate
@@ -24,8 +24,7 @@ non-production Workday tenant. Complete the
 [source and audience approval](#source-and-audience-approval) before enabling a
 sync.
 
-From the repository root, run the offline checks, deploy, and disable both sync
-capabilities:
+From the repository root, run the offline checks, deploy, and pause both syncs:
 
 ```sh
 npm install --global ntn
@@ -36,15 +35,15 @@ npm test
 npm run build
 ntn login
 ntn workers deploy --name workday-sync
-ntn workers capabilities disable organizationsSync
-ntn workers capabilities disable peopleSync
+ntn workers sync pause organizationsSync
+ntn workers sync pause peopleSync
 ```
 
 The first deployment creates **Workday Supervisory Organizations** and
-**Workday People**. Disable the capabilities before adding credentials, then
-restrict both databases to the approved employee audience. For later updates,
-disable both capabilities before deploying. Treat `workers.json` as local state
-and do not commit it.
+**Workday People**. Pause the syncs before adding credentials, then restrict
+both databases to the approved employee audience. For later updates, pause both
+syncs before deploying. Treat `workers.json` as local state and do not commit
+it.
 
 Set the exact values approved by the Workday integration owner:
 
@@ -80,16 +79,16 @@ ntn workers sync trigger organizationsSync
 ntn workers sync trigger peopleSync
 ```
 
-Inspect both results while the capabilities remain disabled. Confirm every
+Inspect both results while the syncs remain paused. Confirm every
 manager and organization relation resolves across page boundaries. Exercise an
 active member, a person without an eligible work email, an email with no Notion
 account, and any guest, deactivated, alias, or case-variant behavior covered by
 your approved identity contract. In every case, confirm Name remains and Work
-Email remains when Workday supplied it. Then enable hourly operation:
+Email remains when Workday supplied it. Then resume daily operation:
 
 ```sh
-ntn workers capabilities enable organizationsSync
-ntn workers capabilities enable peopleSync
+ntn workers sync resume organizationsSync
+ntn workers sync resume peopleSync
 ```
 
 Never commit `.env`, tokens, client secrets, SOAP payloads, previews, or
@@ -104,16 +103,16 @@ platform owns the managed-database write path.
 | **Workday Supervisory Organizations** | Who belongs to this supervisory organization? How can I navigate from an organization to its employees and reporting relationships?      |
 
 Do not use this directory for HR operations, headcount, access control,
-compliance, analytics, or provisioning. It has hourly, eventual consistency.
+compliance, analytics, or provisioning. It has daily, eventual consistency.
 
 ## Reference
 
 ### Synced databases and schedules
 
-| Database                              | Workday resource                                | Schedule   |
-| ------------------------------------- | ----------------------------------------------- | ---------- |
-| **Workday Supervisory Organizations** | Current employee supervisory organizations      | Every hour |
-| **Workday People**                    | Active employees, work email, and org relations | Every hour |
+| Database                              | Workday resource                                | Schedule  |
+| ------------------------------------- | ----------------------------------------------- | --------- |
+| **Workday Supervisory Organizations** | Current employee supervisory organizations      | Every day |
+| **Workday People**                    | Active employees, work email, and org relations | Every day |
 
 #### Workday People
 
@@ -296,23 +295,30 @@ state and requires a paired reset.
 The databases are separate full-snapshot syncs and are not atomic. These are
 operator objectives, not platform guarantees:
 
-| Measure            | Objective                                                    | If missed                                                   |
-| ------------------ | ------------------------------------------------------------ | ----------------------------------------------------------- |
-| Freshness          | Both syncs complete successfully within two hours.           | Treat the directory as stale and investigate.               |
-| Pair consistency   | Latest successful runs are no more than one hour apart.      | Treat relations and membership as potentially inconsistent. |
-| Removal lag        | A Workday removal disappears after the next successful pair. | Restrict access if continued visibility creates risk.       |
-| Relation integrity | Every manager and organization target resolves in Notion.    | Do not present the result as a complete employee directory. |
+| Measure            | Objective                                                          | If missed                                                   |
+| ------------------ | ------------------------------------------------------------------ | ----------------------------------------------------------- |
+| Freshness          | Each sync succeeds at least once every 30 hours.                   | Treat the directory as stale and investigate.               |
+| Pair consistency   | Latest successful runs are no more than four hours apart.          | Treat relations and membership as potentially inconsistent. |
+| Removal lag        | A Workday removal disappears after the next successful daily pair. | Restrict access if continued visibility creates risk.       |
+| Relation integrity | Every manager and organization target resolves in Notion.          | Do not present the result as a complete employee directory. |
 
 Assign an operator and alert on failed or missed runs, either database exceeding
-the two-hour freshness objective, pair skew above one hour, unresolved
+the 30-hour freshness objective, pair skew above four hours, unresolved
 relations, or an unapproved count delta. This recipe surfaces failures but does
 not provision an alert destination.
 
-At the 10,000-employee ceiling, one hourly pair can make up to 300 SOAP calls:
+At the 10,000-employee ceiling, one daily pair can make up to 300 SOAP calls:
 100 organization `Get_Workers` pages, 100 People `Get_Workers` pages, and 100
 batched work-contact calls. Confirm this full-scan capacity with the Workday
 integration owner. A successful People run does not make a failed or older
 Organizations run current.
+
+Daily is the conservative default for this non-authoritative full snapshot. Use
+`ntn workers sync trigger` for an approved immediate refresh. A tenant that
+requires sub-day directory freshness may change both schedules to `1h` only
+after approving Workday capacity of up to 7,200 SOAP calls per day at the
+ceiling and updating the freshness objectives. Do not use manual-only schedules:
+missed removals and moves would remain stale indefinitely.
 
 ### Configuration reference
 
@@ -343,23 +349,24 @@ ntn workers runs list
 ntn workers runs logs <run-id>
 ```
 
-On suspected overexposure, restrict both databases first, disable both syncs,
+On suspected overexposure, restrict both databases first, pause both syncs,
 and investigate before restoring access. Do not rely on a later replace cycle
 as the incident response.
 
 For an intentional incompatible source, parser, key, schema, or paging change,
-disable both capabilities, deploy, then reset both states:
+pause both syncs, deploy, then reset both states:
 
 ```sh
 ntn workers sync state reset organizationsSync
 ntn workers sync state reset peopleSync
 ```
 
-Repeat previews, approvals, real triggers, and enablement. A transient failure
-under the same contract normally needs a retry; a Workday paging-cache expiry
-requires the paired reset. Rotating the client secret also invalidates in-flight
-state because it keys collision fingerprints; reset both syncs before resuming.
-A refresh-token-only rotation does not change the source contract.
+Repeat previews, approvals, and real triggers, then resume both syncs. A
+transient failure under the same contract normally needs a retry; a Workday
+paging-cache expiry requires the paired reset. Rotating the client secret also
+invalidates in-flight state because it keys collision fingerprints; reset both
+syncs before resuming. A refresh-token-only rotation does not change the source
+contract.
 
 Common failures:
 

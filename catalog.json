@@ -483,7 +483,7 @@
     {
       "id": "workday-sync",
       "title": "Workday employee directory sync",
-      "summary": "Sync an employee-facing directory of Workday people, supervisory organizations, work email, Notion profiles, and manager relations.",
+      "summary": "Sync a daily employee-facing directory of Workday people, supervisory organizations, work email, Notion People references, and manager relations.",
       "path": "workers/workday-sync",
       "kind": "worker-sync",
       "status": "ready",

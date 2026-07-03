@@ -72,7 +72,7 @@ const people = worker.database("people", {
 worker.sync("organizationsSync", {
   database: organizations,
   mode: "replace",
-  schedule: "1h",
+  schedule: "1d",
   execute: (state: DirectorySyncState | undefined) =>
     runOrganizationsSyncPage(workdayClient(), state),
 })
@@ -80,7 +80,7 @@ worker.sync("organizationsSync", {
 worker.sync("peopleSync", {
   database: people,
   mode: "replace",
-  schedule: "1h",
+  schedule: "1d",
   execute: (state: DirectorySyncState | undefined) =>
     runPeopleSyncPage(workdayClient(), state),
 })

@@ -507,7 +507,7 @@ test("worker manifest declares organizations before people with exact schemas", 
   })
 })
 
-test("worker manifest pins replace-mode hourly syncs behind one shared pacer", () => {
+test("worker manifest pins replace-mode daily syncs behind one shared pacer", () => {
   type SyncConfig = {
     databaseKey: string
     primaryKeyProperty: string
@@ -529,14 +529,14 @@ test("worker manifest pins replace-mode hourly syncs behind one shared pacer", (
         databaseKey: "organizations",
         primaryKeyProperty: "Directory Key",
         mode: "replace",
-        schedule: { type: "interval", intervalMs: 60 * 60_000 },
+        schedule: { type: "interval", intervalMs: 24 * 60 * 60_000 },
       },
       {
         key: "peopleSync",
         databaseKey: "people",
         primaryKeyProperty: "Directory Key",
         mode: "replace",
-        schedule: { type: "interval", intervalMs: 60 * 60_000 },
+        schedule: { type: "interval", intervalMs: 24 * 60 * 60_000 },
       },
     ]
   )
