@@ -12,10 +12,12 @@ import {
   type LedgerIdentity,
   type OperationLedger,
 } from "./ledger.js"
-import { NotionPacketError } from "./notion.js"
+import { NotionPacketError, type NotionPacketSnapshot } from "./notion.js"
 import {
   assertReceipt,
+  boundedRetryAfterSeconds,
   buildIdentity,
+  normalizeRepository,
   PolicyError,
   sha256,
   validateInput,
@@ -60,7 +62,7 @@ export type GitHubOperations = {
 }
 
 export type NotionPacketOperations = {
-  verify(input: PublishPreparedReleaseInput): Promise<unknown>
+  verify(input: PublishPreparedReleaseInput): Promise<NotionPacketSnapshot>
   writeReceipt(
     input: PublishPreparedReleaseInput,
     receiptJson: string,
@@ -116,6 +118,129 @@ function receiptJson(identity: LedgerIdentity, release: ReleaseRecord): string {
   })
 }
 
+function hasExactKeys(value: object, expected: string[]): boolean {
+  return (
+    Object.keys(value).sort().join("\u0000") ===
+    [...expected].sort().join("\u0000")
+  )
+}
+
+function sameReleaseRecord(left: ReleaseRecord, right: ReleaseRecord): boolean {
+  return (
+    left.releaseId === right.releaseId &&
+    left.repositoryId === right.repositoryId &&
+    left.repository === right.repository &&
+    left.tag === right.tag &&
+    left.targetCommit === right.targetCommit &&
+    left.url === right.url &&
+    left.nameSha256 === right.nameSha256 &&
+    left.bodySha256 === right.bodySha256 &&
+    left.prerelease === right.prerelease &&
+    left.publishedAt === right.publishedAt
+  )
+}
+
+function spentReceiptRelease(
+  value: string,
+  input: PublishPreparedReleaseInput,
+  identity: LedgerIdentity,
+  repositoryId: number
+): ReleaseRecord | null {
+  if (value === "") return null
+  if (Buffer.byteLength(value, "utf8") > 2_000) {
+    throw new NotionPacketError(
+      "Release receipt property is not the canonical receipt for this operation",
+      { kind: "conflict" }
+    )
+  }
+  let decoded: unknown
+  try {
+    decoded = JSON.parse(value)
+  } catch {
+    throw new NotionPacketError(
+      "Release receipt property is not the canonical receipt for this operation",
+      { kind: "conflict" }
+    )
+  }
+  if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) {
+    throw new NotionPacketError(
+      "Release receipt property is not the canonical receipt for this operation",
+      { kind: "conflict" }
+    )
+  }
+  const raw = decoded as Record<string, unknown>
+  if (
+    !hasExactKeys(raw, [
+      "version",
+      "operationId",
+      "idempotencyKey",
+      "repository",
+      "repositoryId",
+      "releaseId",
+      "releaseUrl",
+      "tag",
+      "targetCommit",
+      "nameSha256",
+      "bodySha256",
+      "publishedAt",
+    ]) ||
+    raw.version !== 1 ||
+    raw.operationId !== identity.operationId ||
+    raw.idempotencyKey !== identity.idempotencyKey ||
+    raw.repository !== normalizeRepository(input.repository) ||
+    raw.repositoryId !== repositoryId ||
+    raw.releaseId !== input.releaseId ||
+    raw.tag !== input.tag ||
+    raw.targetCommit !== input.targetCommit ||
+    raw.nameSha256 !== input.nameSha256 ||
+    raw.bodySha256 !== input.bodySha256 ||
+    typeof raw.releaseUrl !== "string" ||
+    typeof raw.publishedAt !== "string" ||
+    raw.publishedAt.length < 1 ||
+    raw.publishedAt.length > 40 ||
+    Number.isNaN(Date.parse(raw.publishedAt))
+  ) {
+    throw new NotionPacketError(
+      "Release receipt property is not the canonical receipt for this operation",
+      { kind: "conflict" }
+    )
+  }
+  const release: ReleaseRecord = {
+    releaseId: input.releaseId,
+    repositoryId,
+    repository: normalizeRepository(input.repository),
+    tag: input.tag,
+    targetCommit: input.targetCommit,
+    url: raw.releaseUrl,
+    nameSha256: input.nameSha256,
+    bodySha256: input.bodySha256,
+    prerelease: input.prerelease,
+    publishedAt: raw.publishedAt,
+  }
+  try {
+    const url = new URL(release.url)
+    const prefix = `/${release.repository}/releases/tag/`
+    if (
+      url.origin !== "https://github.com" ||
+      url.username !== "" ||
+      url.password !== "" ||
+      url.search !== "" ||
+      url.hash !== "" ||
+      !url.pathname.toLowerCase().startsWith(prefix.toLowerCase()) ||
+      decodeURIComponent(url.pathname.slice(prefix.length)) !== release.tag ||
+      receiptJson(identity, release) !== value
+    ) {
+      throw new Error("not canonical")
+    }
+  } catch {
+    throw new NotionPacketError(
+      "Release receipt property is not the canonical receipt for this operation",
+      { kind: "conflict" }
+    )
+  }
+  return release
+}
+
 function rejectedIdentity(input: PublishPreparedReleaseInput): LedgerIdentity {
   const digest = sha256(
     [
@@ -150,6 +275,7 @@ function baseReceipt(
     steps: [],
     warnings: [],
     retryable: false,
+    retryAfterSeconds: null,
     resumeToken: null,
     repair: null,
     ...overrides,
@@ -178,6 +304,7 @@ function replayReceipt(state: OperationState): PublishReceipt {
       changed: false,
       replay: true,
       retryable: false,
+      retryAfterSeconds: null,
       resumeToken: null,
       repair: null,
       steps: [
@@ -251,6 +378,9 @@ export class PublishPreparedReleaseOrchestrator {
       const claim = await this.options.ledger.acquireLease(identity, token)
       ownsLease = claim.acquired
       if (!claim.acquired) {
+        const retryAfterSeconds = boundedRetryAfterSeconds(
+          claim.retryAfterSeconds
+        )
         const afterClaim = await this.options.ledger.readState(identity)
         if (afterClaim) matchingState(afterClaim, identity)
         if (afterClaim?.stage === "completed") return replayReceipt(afterClaim)
@@ -264,11 +394,12 @@ export class PublishPreparedReleaseOrchestrator {
             ),
           ],
           retryable: true,
+          retryAfterSeconds,
           resumeToken: `ghrel_resume_${sha256(`resume:${identity.idempotencyKey.replace("github-release:", "")}`).slice(0, 24)}`,
           repair:
-            claim.retryAfterSeconds === null
+            retryAfterSeconds === null
               ? "Retry the identical input after the active invocation finishes."
-              : `Retry the identical input after at least ${claim.retryAfterSeconds} seconds.`,
+              : `Retry the identical input after at least ${retryAfterSeconds} seconds.`,
         })
       }
 
@@ -282,6 +413,15 @@ export class PublishPreparedReleaseOrchestrator {
           identity,
           repositoryId,
           durable,
+          token
+        )
+      }
+      if (durable?.stage === "mutation_unknown") {
+        publicationAttempted = true
+        return await this.resumeMutationUnknown(
+          input,
+          identity,
+          repositoryId,
           token
         )
       }
@@ -300,10 +440,26 @@ export class PublishPreparedReleaseOrchestrator {
       await this.options.ledger.putState(identity, claimed)
 
       const steps: ReceiptStep[] = []
-      await this.options.notion.verify(input)
+      const approval = await this.options.notion.verify(input)
       steps.push(
         step("approval_preflight", "completed", "Notion approval matched")
       )
+      const spentAtPreflight = spentReceiptRelease(
+        approval.receiptJson,
+        input,
+        identity,
+        repositoryId
+      )
+      if (spentAtPreflight) {
+        return await this.reconcileSpentReceipt(
+          input,
+          identity,
+          repositoryId,
+          approval,
+          spentAtPreflight,
+          steps
+        )
+      }
       const first = await this.options.github.verifyPreparedRelease(
         input,
         repositoryId
@@ -343,13 +499,29 @@ export class PublishPreparedReleaseOrchestrator {
         })
       }
 
-      // Re-read every authoritative approval and provider precondition directly
-      // before the single consequential PATCH.
-      await this.options.notion.verify(input)
+      // Read GitHub first, then make the final authorization read the last
+      // external precondition immediately before the durable mutation boundary.
       const finalPrecondition = await this.options.github.verifyPreparedRelease(
         input,
         repositoryId
       )
+      const finalApproval = await this.options.notion.verify(input)
+      const spentAtBoundary = spentReceiptRelease(
+        finalApproval.receiptJson,
+        input,
+        identity,
+        repositoryId
+      )
+      if (spentAtBoundary) {
+        return await this.reconcileSpentReceipt(
+          input,
+          identity,
+          repositoryId,
+          finalApproval,
+          spentAtBoundary,
+          steps
+        )
+      }
       if (finalPrecondition.state !== "draft") {
         return await this.completePublished(
           input,
@@ -360,7 +532,7 @@ export class PublishPreparedReleaseOrchestrator {
             step(
               "final_preconditions",
               "completed",
-              "Publication already observed"
+              "Publication already observed and final approval matched"
             ),
           ],
           true,
@@ -391,7 +563,34 @@ export class PublishPreparedReleaseOrchestrator {
         })
       }
 
+      const mutationUnknown: OperationState = {
+        ...claimed,
+        stage: "mutation_unknown",
+        updatedAt: this.now(),
+      }
+      await this.options.ledger.putState(identity, mutationUnknown)
       publicationAttempted = true
+
+      // Fence the checkpoint itself: a process that lost the resource lease
+      // after closing the operation may reconcile, but may never send PATCH.
+      if (!(await this.options.ledger.renewLease(identity, token))) {
+        return baseReceipt(identity, {
+          status: "ambiguous",
+          steps: [
+            ...steps,
+            step(
+              "mutation_boundary",
+              "unknown",
+              "Durable mutation boundary closed, but lease ownership expired before PATCH"
+            ),
+          ],
+          retryable: true,
+          resumeToken: `ghrel_resume_${sha256(`resume:${identity.idempotencyKey.replace("github-release:", "")}`).slice(0, 24)}`,
+          repair:
+            "Retry the identical input for read-only reconciliation. This approval will never issue another PATCH.",
+        })
+      }
+
       const published = await this.options.github.publishAndReconcile(
         input,
         repositoryId
@@ -422,6 +621,198 @@ export class PublishPreparedReleaseOrchestrator {
         await this.options.ledger.releaseLease(identity, token).catch(() => {})
       }
     }
+  }
+
+  private async resumeMutationUnknown(
+    input: PublishPreparedReleaseInput,
+    identity: LedgerIdentity,
+    repositoryId: number,
+    token: string
+  ): Promise<PublishReceipt> {
+    if (!(await this.options.ledger.renewLease(identity, token))) {
+      return baseReceipt(identity, {
+        status: "ambiguous",
+        steps: [
+          step(
+            "operation_lease",
+            "unknown",
+            "Lease ownership expired before read-only reconciliation"
+          ),
+        ],
+        retryable: true,
+        resumeToken: `ghrel_resume_${sha256(`resume:${identity.idempotencyKey.replace("github-release:", "")}`).slice(0, 24)}`,
+        repair:
+          "Retry the identical input for read-only reconciliation. This approval will never issue another PATCH.",
+      })
+    }
+    const verified = await this.options.github.verifyPreparedRelease(
+      input,
+      repositoryId,
+      { verifyGates: false, verifyLatest: true }
+    )
+    if (verified.state === "published") {
+      return this.completePublished(
+        input,
+        identity,
+        verified,
+        [
+          step(
+            "mutation_reconciliation",
+            "completed",
+            "Observed publication without repeating PATCH"
+          ),
+        ],
+        true,
+        false
+      )
+    }
+    return baseReceipt(identity, {
+      status: "ambiguous",
+      steps: [
+        step(
+          "mutation_reconciliation",
+          "unknown",
+          "Exact release still reads as draft after the durable mutation boundary"
+        ),
+      ],
+      retryable: true,
+      resumeToken: `ghrel_resume_${sha256(`resume:${identity.idempotencyKey.replace("github-release:", "")}`).slice(0, 24)}`,
+      repair:
+        "Retry only for read-only reconciliation. If GitHub remains draft, investigate the prior request and create a new approved revision; this approval will never issue another PATCH.",
+    })
+  }
+
+  private async reconcileSpentReceipt(
+    input: PublishPreparedReleaseInput,
+    identity: LedgerIdentity,
+    repositoryId: number,
+    snapshot: NotionPacketSnapshot,
+    spentRelease: ReleaseRecord,
+    priorSteps: ReceiptStep[]
+  ): Promise<PublishReceipt> {
+    const verified = await this.options.github.verifyPreparedRelease(
+      input,
+      repositoryId,
+      { verifyGates: false, verifyLatest: false }
+    )
+    if (verified.state === "draft") {
+      return baseReceipt(identity, {
+        status: "conflict",
+        records: [notionRecord(snapshot.pageId, snapshot.url)],
+        steps: [
+          ...priorSteps,
+          step(
+            "spent_receipt_reconciliation",
+            "failed",
+            "Canonical spent receipt exists, but GitHub currently shows a draft"
+          ),
+        ],
+        repair:
+          "Do not reuse this spent approval. Investigate the recorded publication and create a new approved revision if another publication is intended.",
+      })
+    }
+    if (!sameReleaseRecord(verified.record, spentRelease)) {
+      throw new GitHubPublishedPostconditionError(
+        "The exact release is published, but it no longer matches the canonical spent receipt",
+        verified.record,
+        false
+      )
+    }
+    const confirmedSnapshot = await this.options.notion.verify(input)
+    const confirmedSpentRelease = spentReceiptRelease(
+      confirmedSnapshot.receiptJson,
+      input,
+      identity,
+      repositoryId
+    )
+    if (
+      !confirmedSpentRelease ||
+      !sameReleaseRecord(confirmedSpentRelease, spentRelease)
+    ) {
+      throw new NotionPacketError(
+        "Canonical spent receipt changed during read-only reconciliation",
+        { kind: "conflict" }
+      )
+    }
+    return this.completeSpentReceipt(
+      input,
+      identity,
+      verified,
+      [
+        ...priorSteps,
+        step(
+          "spent_receipt_reconciliation",
+          "completed",
+          "Canonical spent receipt matched authoritative GitHub state"
+        ),
+      ],
+      confirmedSnapshot
+    )
+  }
+
+  private async completeSpentReceipt(
+    input: PublishPreparedReleaseInput,
+    identity: LedgerIdentity,
+    verified: VerifiedRelease,
+    priorSteps: ReceiptStep[],
+    snapshot: NotionPacketSnapshot
+  ): Promise<PublishReceipt> {
+    const stableJson = receiptJson(identity, verified.record)
+    const completed = baseReceipt(identity, {
+      status: "no_op",
+      replay: true,
+      published: true,
+      records: [
+        releaseRecord(verified.record, "observed"),
+        notionRecord(snapshot.pageId, snapshot.url),
+      ],
+      steps: [
+        ...priorSteps,
+        step(
+          "notion_receipt",
+          "completed",
+          "Canonical spent receipt confirmed by read-only reconciliation"
+        ),
+      ],
+      warnings: [
+        "GitHub provides no conditional release PATCH; tag rules and immutable releases reduce but do not eliminate the final tag-move race.",
+        ...(input.makeLatest === "true"
+          ? []
+          : [
+              "GitHub release reads do not expose the original make_latest=false/legacy intent; publication is verified, but that intent is not claimed as independently observable.",
+            ]),
+      ],
+    })
+    try {
+      await this.options.ledger.putState(identity, {
+        version: 1,
+        operationId: identity.operationId,
+        idempotencyKey: identity.idempotencyKey,
+        inputFingerprint: identity.inputFingerprint,
+        stage: "completed",
+        release: verified.record,
+        receipt: completed,
+        receiptJson: stableJson,
+        updatedAt: this.now(),
+      })
+    } catch (error) {
+      return baseReceipt(identity, {
+        status: "partial_failure",
+        replay: true,
+        published: true,
+        records: completed.records,
+        steps: [
+          ...completed.steps,
+          step("operation_finalize", "failed", safeMessage(error)),
+        ],
+        warnings: completed.warnings,
+        retryable: true,
+        resumeToken: `ghrel_resume_${sha256(`resume:${identity.idempotencyKey.replace("github-release:", "")}`).slice(0, 24)}`,
+        repair:
+          "Restore Redis and retry the identical input for read-only spent-receipt reconciliation; no provider write is needed.",
+      })
+    }
+    return completed
   }
 
   private async resumeReceiptOnly(
@@ -524,16 +915,17 @@ export class PublishPreparedReleaseOrchestrator {
         retryable: true,
         resumeToken: `ghrel_resume_${sha256(`resume:${identity.idempotencyKey.replace("github-release:", "")}`).slice(0, 24)}`,
         repair:
-          "Restore Redis and retry the identical input. GitHub will be read first; PATCH is issued only if the exact release is still a draft.",
+          "Restore Redis and retry the identical input. GitHub is reconciled first, and any existing mutation boundary remains non-rearmable.",
       })
     }
 
     let written: { changed: boolean; pageId: string; url: string }
     try {
       written = await this.options.notion.writeReceipt(input, stableJson, {
-        // Publication is already durable. A workflow may transition Approved to
-        // Published/Done; receipt writeback still binds the immutable revision
-        // and fingerprint but does not re-authorize an action that already ran.
+        // Publication is already durable. A workflow may transition Approved
+        // to Published/Done; receipt writeback still binds the immutable
+        // revision and fingerprint but does not re-authorize an action that
+        // already ran.
         requireApproved: false,
       })
     } catch (error) {
@@ -635,6 +1027,9 @@ export class PublishPreparedReleaseOrchestrator {
     publicationAttempted: boolean
   ): PublishReceipt {
     if (error instanceof GitHubPublishedPostconditionError) {
+      const retryAfterSeconds = boundedRetryAfterSeconds(
+        error.retryAfterSeconds
+      )
       return baseReceipt(identity, {
         status: "partial_failure",
         changed: publicationAttempted,
@@ -659,19 +1054,28 @@ export class PublishPreparedReleaseOrchestrator {
           ),
         ],
         retryable: error.retryable,
+        retryAfterSeconds,
         resumeToken: `ghrel_resume_${sha256(`resume:${identity.idempotencyKey.replace("github-release:", "")}`).slice(0, 24)}`,
         repair:
-          "Inspect the exact published release and its post-publication policy, then retry the identical input. The published release is read before any possible PATCH.",
+          retryAfterSeconds === null
+            ? "Inspect the exact published release and its post-publication policy, then retry the identical input. Reconciliation never repeats PATCH."
+            : `Wait at least ${retryAfterSeconds} seconds, then retry the identical input for read-only reconciliation. PATCH will not be repeated.`,
       })
     }
     if (error instanceof GitHubApiError && error.ambiguousMutation) {
+      const retryAfterSeconds = boundedRetryAfterSeconds(
+        error.retryAfterSeconds
+      )
       return baseReceipt(identity, {
         status: "ambiguous",
         steps: [step("publish_or_reconcile", "unknown", safeMessage(error))],
         retryable: true,
+        retryAfterSeconds,
         resumeToken: `ghrel_resume_${sha256(`resume:${identity.idempotencyKey.replace("github-release:", "")}`).slice(0, 24)}`,
         repair:
-          "Retry the identical input. The Worker will read the exact release ID before deciding whether PATCH is still needed.",
+          retryAfterSeconds === null
+            ? "Retry the identical input for read-only reconciliation. The durable mutation boundary prevents another PATCH."
+            : `Wait at least ${retryAfterSeconds} seconds, then retry the identical input for read-only reconciliation. The durable mutation boundary prevents another PATCH.`,
       })
     }
     if (publicationAttempted && error instanceof GitHubPreconditionError) {
@@ -687,7 +1091,7 @@ export class PublishPreparedReleaseOrchestrator {
         retryable: true,
         resumeToken: `ghrel_resume_${sha256(`resume:${identity.idempotencyKey.replace("github-release:", "")}`).slice(0, 24)}`,
         repair:
-          "Retry the identical input. The Worker will observe the exact release ID before any possible PATCH.",
+          "Retry the identical input for read-only reconciliation. The durable mutation boundary prevents another PATCH.",
       })
     }
     if (
@@ -706,12 +1110,23 @@ export class PublishPreparedReleaseOrchestrator {
       error instanceof LedgerError ||
       (error instanceof GitHubApiError && error.retryable) ||
       (error instanceof NotionPacketError && error.retryable)
+    const retryAfterSeconds =
+      error instanceof GitHubApiError
+        ? boundedRetryAfterSeconds(error.retryAfterSeconds)
+        : null
     return baseReceipt(identity, {
       status: "blocked",
       steps: [step("execution", "failed", safeMessage(error))],
       retryable,
+      retryAfterSeconds,
       repair: retryable
-        ? "Resolve the unavailable dependency, then retry the identical input."
+        ? publicationAttempted
+          ? retryAfterSeconds === null
+            ? "Resolve the unavailable dependency, then retry the identical input for read-only reconciliation. The durable mutation boundary prevents another PATCH."
+            : `Wait at least ${retryAfterSeconds} seconds, then retry the identical input for read-only reconciliation. The durable mutation boundary prevents another PATCH.`
+          : retryAfterSeconds === null
+            ? "Resolve the unavailable dependency, then retry the identical input."
+            : `Wait at least ${retryAfterSeconds} seconds, then retry the identical input.`
         : "Check credential permissions and the exact configured target before retrying.",
     })
   }

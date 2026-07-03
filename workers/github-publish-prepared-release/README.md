@@ -70,22 +70,29 @@ and [Notion's GitHub connection](https://www.notion.com/help/github).
    release ID** with `SET NX PX`. State remains separately keyed to the exact
    approval.
 3. Read the Notion packet through the invocation-scoped `context.notion`
-   client. Require its configured status, approval revision, and fingerprint.
+   client. Require its configured status, approval revision, fingerprint, and
+   an empty receipt property. An exact canonical spent receipt enters
+   read-only reconciliation; any other content conflicts.
 4. Make the first GitHub read `GET /repos/{owner}/{repo}` and require both the
    configured numeric ID and name. Then read the exact release ID, its complete
    asset manifest, existing tag ref (peeling at most three annotated tags),
    release target, full commit, and required App-bound check-runs.
-5. Renew the token-owned lease, then repeat the authoritative Notion and GitHub
-   reads immediately before mutation. The release must still be a draft.
-6. Send exactly one `PATCH /repos/{owner}/{repo}/releases/{release_id}` with
-   `{ "draft": false, "make_latest": ... }`. The Worker never blindly retries
-   this PATCH.
+5. Renew the token-owned lease, repeat the authoritative GitHub reads, then
+   make the final Notion approval/receipt read the last external precondition.
+   The release must still be a draft and the approval must still be current.
+6. Renew the lease, durably close the operation in `mutation_unknown`, and
+   renew once more to fence that checkpoint. Only then send exactly one
+   `PATCH /repos/{owner}/{repo}/releases/{release_id}` with
+   `{ "draft": false, "make_latest": ... }`.
 7. Re-read the exact release and tag after success, timeout, retryable server
-   failure, or `409`. When `makeLatest` is `"true"`, also require
+   failure, or `409`. A retry from `mutation_unknown` is reconciliation-only
+   and can never send PATCH again. When `makeLatest` is `"true"`, also require
    `GET /releases/latest` to return the same numeric release ID.
 8. Persist the published checkpoint, assign a compact JSON receipt to the
    packet's rich-text receipt property, read that property back, then persist
-   the completed receipt. A token-checked Redis `EVAL` releases the lease.
+   the completed receipt. A spent-receipt replay instead confirms both systems
+   by reads and persists completion directly, without a provider write. A
+   token-checked Redis `EVAL` releases the lease.
 
 GitHub is the source of truth for release publication; the approved Notion
 packet is the source of truth for authorization and expected content. The two
@@ -187,8 +194,9 @@ Example input (identifiers and hashes are intentionally fake):
 Terminal `status` is one of `completed`, `no_op`, `blocked`, `conflict`,
 `partial_failure`, or `ambiguous`. Every result has the same strict shape:
 operation and idempotency IDs, `changed`, `replay`, observed publication,
-canonical records, per-step state, warnings, retryability, and nullable resume
-and repair fields. Raw provider payloads are never returned.
+canonical records, per-step state, warnings, retryability, a nullable bounded
+`retryAfterSeconds`, and nullable resume and repair fields. Raw provider
+payloads are never returned.
 
 Example success receipt:
 
@@ -233,6 +241,7 @@ Example success receipt:
     "GitHub provides no conditional release PATCH; tag rules and immutable releases reduce but do not eliminate the final tag-move race."
   ],
   "retryable": false,
+  "retryAfterSeconds": null,
   "resumeToken": null,
   "repair": null
 }
@@ -246,16 +255,19 @@ Example success receipt:
 | Concurrent identical call                           | Resource lease returns retryable `conflict`; wait for the named TTL/active call and retry identical input.                                                                                                                               |
 | Different approval for same release                 | It contends on the same numeric-repository/release lease, preventing two approvals from both acting on `draft: true`.                                                                                                                    |
 | Stale status/revision/fingerprint                   | `conflict`; zero GitHub writes. Create a new explicit approval and fingerprint.                                                                                                                                                          |
+| Receipt is occupied by other content                | `conflict` before PATCH. Only empty content authorizes a fresh mutation; the exact canonical receipt for this operation is the sole accepted spent value.                                                                                |
+| Canonical spent receipt exists                      | Provider-read-only reconciliation: no GitHub PATCH or Notion update. A matching published release is adopted; a draft or mismatch requires investigation and a new approved revision.                                                    |
 | Changed release/tag/target/content/assets/gates     | `conflict`; zero GitHub writes. Never “fix” the provider from this tool.                                                                                                                                                                 |
 | GitHub `401`/`403`                                  | `blocked`, normally not retryable; repair App/PAT identity or permissions. Provider text is redacted.                                                                                                                                    |
 | GitHub `404`                                        | `blocked`, not blindly retried; check the allowlist, App installation, and exact release.                                                                                                                                                |
 | GitHub `409` during PATCH                           | No second PATCH. Re-read exact release ID; success only if it is observably published and exact, otherwise `ambiguous`.                                                                                                                  |
-| GitHub `429`                                        | Safe GET may retry once when `Retry-After` is at most two seconds; otherwise return retryable `blocked` with the delay. A missing header fails closed with a 60-second repair delay. PATCH is not retried.                               |
+| GitHub primary/secondary rate limit                 | Parse `Retry-After` or primary `X-RateLimit-Reset`; recognize GitHub's secondary-limit response and otherwise use 60 seconds. Return a typed delay capped at 86,400 seconds. PATCH is not retried.                                       |
 | Retryable GitHub `5xx`                              | Safe GET retries once. A PATCH response is reconciled by reads, never blindly repeated.                                                                                                                                                  |
 | Timeout before mutation                             | Safe read retries once, then retryable `blocked`; zero PATCH calls.                                                                                                                                                                      |
 | Timeout after PATCH                                 | Re-read exact release ID. If published and exact, continue; if read-back cannot decide, return retryable `ambiguous`.                                                                                                                    |
+| Crash/lease loss after mutation boundary            | Durable stage remains `mutation_unknown`. Every identical retry is read-only reconciliation, even when GitHub still shows a draft; use a new approved revision after investigating rather than rearming this approval.                   |
 | Published but post-PATCH checkpoint drifted         | Minimal exact-release read reports `partial_failure`, `published: true`, and the observed release. It is never downgraded to an unpublished precondition conflict.                                                                       |
-| Published, Redis checkpoint unavailable             | `partial_failure`, `published: true`, canonical release record. Restore Redis and retry identical input; GitHub is read before any possible PATCH.                                                                                       |
+| Published, Redis checkpoint unavailable             | `partial_failure`, `published: true`, canonical release record. Restore Redis and retry identical input; the durable mutation boundary prevents another PATCH.                                                                           |
 | Published, Notion writeback fails                   | Durable stage remains `published`; return `partial_failure` and resume token. Identical retry skips PATCH and transient branch/latest/gate/Approved-state checks, verifies the immutable checkpoint, and resumes only receipt writeback. |
 | Notion update times out after applying              | Read back the exact receipt property; do not send a second update when it matches.                                                                                                                                                       |
 | GitHub and Notion complete, final Redis write fails | `partial_failure` with both records. Restore Redis and retry; only durable finalization remains.                                                                                                                                         |
@@ -266,9 +278,12 @@ state without an expiry. The lease is a separate resource-scoped key using
 `SET NX PX`; renew and release use token-comparing Lua `EVAL` scripts. If Redis
 is unavailable before publication, the Worker fails closed.
 
-The durable `published` checkpoint contains the exact numeric identities,
-release URL, tag, target commit, content hashes, prerelease flag, and GitHub
-publication timestamp. Receipt-only recovery re-verifies that checkpoint but
+The durable `mutation_unknown` stage is written before PATCH and is
+non-rearmable. It deliberately sacrifices automatic reuse of the same approval
+after a crash between checkpoint and request in exchange for an at-most-once
+publication attempt. The durable `published` checkpoint contains the exact
+numeric identities, release URL, tag, target commit, content hashes, prerelease
+flag, and GitHub publication timestamp. Receipt-only recovery re-verifies that
 does not re-authorize publication: it intentionally ignores a branch that has
 advanced, a later release becoming latest, completed checks changing retention
 state, and an approval status transitioning to Published/Done. It still binds
@@ -321,12 +336,12 @@ private keys, PATs, Redis tokens, generated Worker state, or `workers.json`.
 
 Defaults are configurable through `.env.example`:
 
-| Property               | Supported type     | Required value before call                                                                                                                   |
-| ---------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Approval status`      | Status or select   | Exactly `Approved` (configurable).                                                                                                           |
-| `Approval revision`    | Rich text or title | Explicit stable revision such as `release-approval-7`; do not use `last_edited_time`, because receipt writeback edits the page.              |
-| `Approval fingerprint` | Rich text or title | Exact canonical SHA-256.                                                                                                                     |
-| `Release receipt`      | Rich text          | Empty, or the exact receipt from this operation. The Worker refuses a different pre-existing value and verifies its assignment by read-back. |
+| Property               | Supported type     | Required value before call                                                                                                                |
+| ---------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `Approval status`      | Status or select   | Exactly `Approved` (configurable).                                                                                                        |
+| `Approval revision`    | Rich text or title | Explicit stable revision such as `release-approval-7`; do not use `last_edited_time`, because receipt writeback edits the page.           |
+| `Approval fingerprint` | Rich text or title | Exact canonical SHA-256.                                                                                                                  |
+| `Release receipt`      | Rich text          | Empty for a fresh mutation. The exact canonical spent receipt permits read-only reconciliation; every other pre-existing value conflicts. |
 
 The Worker uses the invocation-scoped Notion client; deployed agent calls need
 no extra Notion token. Local `ntn workers exec --local` needs a Notion PAT or
@@ -382,13 +397,16 @@ npm test
 npm run build
 ```
 
-The tests assert exact cross-system request ordering, headers and PATCH count; immutable
-repository identity; stale approval/provider preconditions; check App identity;
-asset/check pagination; `403`, `404`, `409`, `429`, `5xx`, header and body
-timeouts; redaction; Redis contention/expiry/token ownership and corrupt nested
-state; completed replay; output schema for every terminal status; ambiguous
-GitHub/Notion writes and competing receipt assignment; stable receipt-only
-resume; and Redis failures at both post-publication checkpoints.
+The tests assert exact cross-system request ordering, final approval placement,
+headers and PATCH count; immutable repository identity; stale approval/provider
+preconditions; check App identity on draft and uncheckpointed published
+adoption; asset/check pagination; primary and secondary rate-limit delays;
+`403`, `404`, `409`, `429`, `5xx`, header and body timeouts; redaction; Redis
+contention/expiry/token ownership, the non-rearmable mutation boundary, and
+corrupt nested state; completed and spent-receipt replay; output schema for
+every terminal status; ambiguous GitHub/Notion writes and competing receipt
+assignment; stable receipt-only resume; and Redis failures at all durable
+checkpoints.
 
 Opt-in destructive sandbox smoke test (not run as part of cookbook validation):
 
@@ -472,7 +490,8 @@ Opt-in destructive sandbox smoke test (not run as part of cookbook validation):
   after ten seconds. Safe GitHub reads get at most two total attempts. Redis
   requests time out after three seconds. PATCH is one attempt.
 - Approval values, tag/check/asset names, output records/steps, and receipt size
-  are bounded in code. The Notion receipt is at most 2,000 UTF-8 bytes.
+  are bounded in code. The Notion receipt is at most 2,000 UTF-8 bytes, and a
+  reported retry delay is capped at 86,400 seconds.
 - The public Workers documentation does not publish a total wall-clock or CPU
   guarantee; this recipe bounds provider calls instead of claiming one.
 

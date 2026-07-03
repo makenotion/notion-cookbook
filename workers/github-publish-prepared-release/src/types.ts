@@ -65,6 +65,7 @@ export type PublishReceipt = {
   steps: ReceiptStep[]
   warnings: string[]
   retryable: boolean
+  retryAfterSeconds: number | null
   resumeToken: string | null
   repair: string | null
 }
@@ -82,7 +83,11 @@ export type ReleaseRecord = {
   publishedAt: string
 }
 
-export type OperationStage = "claimed" | "published" | "completed"
+export type OperationStage =
+  | "claimed"
+  | "mutation_unknown"
+  | "published"
+  | "completed"
 
 export type OperationState = {
   version: 1

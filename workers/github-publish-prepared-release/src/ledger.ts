@@ -262,7 +262,9 @@ function validateState(
       `ghrel_${state.idempotencyKey.slice("github-release:".length, "github-release:".length + 24)}` ||
     typeof state.inputFingerprint !== "string" ||
     !SHA256.test(state.inputFingerprint) ||
-    !["claimed", "published", "completed"].includes(String(state.stage)) ||
+    !["claimed", "mutation_unknown", "published", "completed"].includes(
+      String(state.stage)
+    ) ||
     !validIso(state.updatedAt) ||
     state.operationId.length > 100 ||
     state.idempotencyKey.length > 200
@@ -278,14 +280,14 @@ function validateState(
   ) {
     throw new LedgerError("Redis operation state belongs to a different input")
   }
-  if (state.stage === "claimed") {
+  if (state.stage === "claimed" || state.stage === "mutation_unknown") {
     if (
       state.release !== null ||
       state.receipt !== null ||
       state.receiptJson !== null
     ) {
       throw new LedgerError(
-        "Claimed Redis state contains post-publication data"
+        "Pre-publication Redis state contains post-publication data"
       )
     }
   } else {

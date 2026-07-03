@@ -106,6 +106,12 @@ export const publishReceiptSchema = j.object({
   steps: j.array(stepSchema),
   warnings: j.array(j.string()),
   retryable: j.boolean(),
+  retryAfterSeconds: j
+    .integer()
+    .nullable()
+    .describe(
+      "Bounded provider or lease delay in seconds before the next safe retry."
+    ),
   resumeToken: j.string().nullable(),
   repair: j.string().nullable(),
 })

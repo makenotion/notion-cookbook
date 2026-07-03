@@ -118,6 +118,8 @@ class FakeGitHub implements GitHubOperations {
   verifyCalls = 0
   publishCalls = 0
   failVerifyAt = 0
+  rateLimitVerifyAt = 0
+  rateLimitSeconds = 75
   ambiguousPublish = false
   publishedPostconditionFailure = false
   postPatchPreconditionFailure = false
@@ -147,6 +149,13 @@ class FakeGitHub implements GitHubOperations {
     assert.equal(expectedRepositoryId, REPOSITORY_ID)
     if (this.verifyCalls === this.failVerifyAt) {
       throw new GitHubPreconditionError("provider precondition changed")
+    }
+    if (this.verifyCalls === this.rateLimitVerifyAt) {
+      throw new GitHubApiError("GitHub read is rate limited (HTTP 403)", {
+        status: 403,
+        retryable: true,
+        retryAfterSeconds: this.rateLimitSeconds,
+      })
     }
     return {
       state: this.published ? "published" : "draft",
@@ -193,16 +202,28 @@ class FakeNotion implements NotionPacketOperations {
   writeCalls = 0
   receipt = ""
   verifyError: Error | null = null
+  failVerifyAt = 0
+  clearReceiptAtVerify = 0
   writeError: Error | null = null
   writeOptions: Array<{ requireApproved?: boolean } | undefined> = []
 
   constructor(private readonly events?: string[]) {}
 
-  async verify(): Promise<unknown> {
+  async verify() {
     this.verifyCalls++
     this.events?.push(`notion.verify:${this.verifyCalls}`)
-    if (this.verifyError) throw this.verifyError
-    return {}
+    if (
+      this.verifyError &&
+      (!this.failVerifyAt || this.verifyCalls === this.failVerifyAt)
+    ) {
+      throw this.verifyError
+    }
+    if (this.verifyCalls === this.clearReceiptAtVerify) this.receipt = ""
+    return {
+      pageId: PAGE_ID.replaceAll("-", ""),
+      url: `https://www.notion.so/${PAGE_ID.replaceAll("-", "")}`,
+      receiptJson: this.receipt,
+    }
   }
 
   async writeReceipt(
@@ -275,8 +296,10 @@ test("success preserves the cross-system ordering contract", async () => {
     "notion.verify:1",
     "github.verify:1",
     "ledger.renew",
-    "notion.verify:2",
     "github.verify:2",
+    "notion.verify:2",
+    "ledger.renew",
+    "ledger.put:mutation_unknown",
     "ledger.renew",
     "github.publish",
     "ledger.put:published",
@@ -341,6 +364,84 @@ test("stale approval and changed final provider state produce zero publication w
   assert.equal(changedGitHub.publishCalls, 0)
 })
 
+test("revoked approval is reread after the final GitHub preflight and before the mutation boundary", async () => {
+  const notion = new FakeNotion()
+  notion.failVerifyAt = 2
+  notion.verifyError = new NotionPacketError(
+    "Release packet is not currently approved",
+    { kind: "conflict" }
+  )
+  const { orchestrator, github, ledger } = setup({ notion })
+  const result = await orchestrator.execute(makeInput())
+  assert.equal(result.status, "conflict")
+  assert.equal(github.verifyCalls, 2)
+  assert.equal(github.publishCalls, 0)
+  assert.equal(ledger.state?.stage, "claimed")
+})
+
+test("a noncanonical occupied receipt fails closed before any GitHub read or PATCH", async () => {
+  const notion = new FakeNotion()
+  notion.receipt = '{"unexpected":true}'
+  const { orchestrator, github } = setup({ notion })
+  const result = await orchestrator.execute(makeInput())
+  assert.equal(result.status, "conflict")
+  assert.equal(github.verifyCalls, 0)
+  assert.equal(github.publishCalls, 0)
+  assert.match(result.steps[0]?.detail ?? "", /canonical receipt/)
+})
+
+test("a canonical spent receipt reconciles read-only and never republishes a draft", async () => {
+  const notion = new FakeNotion()
+  const completed = setup({ notion })
+  assert.equal(
+    (await completed.orchestrator.execute(makeInput())).status,
+    "completed"
+  )
+  const spentReceipt = notion.receipt
+
+  const github = new FakeGitHub()
+  const replay = setup({ notion, github })
+  const result = await replay.orchestrator.execute(makeInput())
+  assert.equal(result.status, "conflict")
+  assert.equal(github.verifyCalls, 1)
+  assert.equal(github.publishCalls, 0)
+  assert.equal(notion.receipt, spentReceipt)
+  assert.equal(notion.writeCalls, 1)
+  assert.match(result.repair ?? "", /spent approval/)
+})
+
+test("a canonical spent receipt adopts the matching published release without PATCH", async () => {
+  const notion = new FakeNotion()
+  const completed = setup({ notion })
+  await completed.orchestrator.execute(makeInput())
+
+  const github = new FakeGitHub()
+  github.published = true
+  const result = await setup({ notion, github }).orchestrator.execute(
+    makeInput()
+  )
+  assert.equal(result.status, "no_op")
+  assert.equal(result.replay, true)
+  assert.equal(github.publishCalls, 0)
+  assert.equal(notion.writeCalls, 1)
+})
+
+test("spent-receipt reconciliation never rewrites a receipt cleared during reads", async () => {
+  const notion = new FakeNotion()
+  await setup({ notion }).orchestrator.execute(makeInput())
+  notion.clearReceiptAtVerify = 4
+
+  const github = new FakeGitHub()
+  github.published = true
+  const result = await setup({ notion, github }).orchestrator.execute(
+    makeInput()
+  )
+  assert.equal(result.status, "conflict")
+  assert.equal(github.publishCalls, 0)
+  assert.equal(notion.writeCalls, 1)
+  assert.equal(notion.receipt, "")
+})
+
 test("lost resource lease after final reads prevents publication", async () => {
   const ledger = new FakeLedger()
   ledger.failRenewAt = 2
@@ -350,6 +451,27 @@ test("lost resource lease after final reads prevents publication", async () => {
   assert.equal(github.verifyCalls, 2)
   assert.equal(github.publishCalls, 0)
   assert.match(result.repair ?? "", /no publication was attempted/)
+})
+
+test("lease loss after the durable mutation boundary closes the operation without PATCH", async () => {
+  const ledger = new FakeLedger()
+  ledger.failRenewAt = 3
+  const { orchestrator, github } = setup({ ledger })
+  const result = await orchestrator.execute(makeInput())
+  assert.equal(result.status, "ambiguous")
+  assert.equal(github.publishCalls, 0)
+  assert.equal(ledger.state?.stage, "mutation_unknown")
+  assert.match(result.repair ?? "", /never issue another PATCH/)
+})
+
+test("an unavailable mutation-boundary checkpoint prevents PATCH", async () => {
+  const ledger = new FakeLedger()
+  ledger.failPutAt = 2
+  const { orchestrator, github } = setup({ ledger })
+  const result = await orchestrator.execute(makeInput())
+  assert.equal(result.status, "blocked")
+  assert.equal(github.publishCalls, 0)
+  assert.equal(ledger.state?.stage, "claimed")
 })
 
 test("published durable state resumes only Notion receipt writeback", async () => {
@@ -394,7 +516,7 @@ test("published durable state resumes only Notion receipt writeback", async () =
 
 test("Redis outage immediately after publication reports published partial failure accurately", async () => {
   const ledger = new FakeLedger()
-  ledger.failPutAt = 2 // claimed succeeds; published checkpoint fails
+  ledger.failPutAt = 3 // claimed + mutation boundary succeed; published fails
   const { orchestrator, github, notion } = setup({ ledger })
   const result = await orchestrator.execute(makeInput())
   assert.equal(github.publishCalls, 1)
@@ -408,7 +530,7 @@ test("Redis outage immediately after publication reports published partial failu
 
 test("final ledger outage preserves both completed external records", async () => {
   const ledger = new FakeLedger()
-  ledger.failPutAt = 3 // claimed, published, then completed transition
+  ledger.failPutAt = 4 // claimed, mutation boundary, published, completed
   const { orchestrator, notion } = setup({ ledger })
   const result = await orchestrator.execute(makeInput())
   assert.equal(result.status, "partial_failure")
@@ -446,7 +568,23 @@ test("ambiguous publication returns exact-release reconciliation repair", async 
   assert.equal(result.status, "ambiguous")
   assert.equal(result.published, false)
   assert.equal(result.retryable, true)
-  assert.match(result.repair ?? "", /exact release ID/)
+  assert.match(result.repair ?? "", /prevents another PATCH/)
+})
+
+test("ambiguous publication persists a non-rearmable reconciliation-only state", async () => {
+  const github = new FakeGitHub()
+  github.ambiguousPublish = true
+  const dependencies = setup({ github })
+  const first = await dependencies.orchestrator.execute(makeInput())
+  assert.equal(first.status, "ambiguous")
+  assert.equal(dependencies.ledger.state?.stage, "mutation_unknown")
+  assert.equal(github.publishCalls, 1)
+
+  github.ambiguousPublish = false
+  const retry = await dependencies.orchestrator.execute(makeInput())
+  assert.equal(retry.status, "ambiguous")
+  assert.equal(github.publishCalls, 1)
+  assert.match(retry.repair ?? "", /never issue another PATCH/)
 })
 
 test("post-PATCH precondition drift can never be returned as an unpublished conflict", async () => {
@@ -457,7 +595,18 @@ test("post-PATCH precondition drift can never be returned as an unpublished conf
   assert.equal(result.status, "ambiguous")
   assert.equal(result.published, false)
   assert.equal(result.retryable, true)
-  assert.match(result.repair ?? "", /exact release ID/)
+  assert.match(result.repair ?? "", /prevents another PATCH/)
+})
+
+test("GitHub retry delay is exposed as bounded typed repair guidance", async () => {
+  const github = new FakeGitHub()
+  github.rateLimitVerifyAt = 1
+  github.rateLimitSeconds = 100_000
+  const result = await setup({ github }).orchestrator.execute(makeInput())
+  assert.equal(result.status, "blocked")
+  assert.equal(result.retryable, true)
+  assert.equal(result.retryAfterSeconds, 86_400)
+  assert.match(result.repair ?? "", /86400 seconds/)
 })
 
 test("published release with failed latest policy remains accurately published", async () => {
@@ -489,7 +638,7 @@ test("every terminal result family validates against the strict output schema", 
   )
 
   const partialLedger = new FakeLedger()
-  partialLedger.failPutAt = 2
+  partialLedger.failPutAt = 3
   receipts.push(
     await setup({ ledger: partialLedger }).orchestrator.execute(makeInput())
   )

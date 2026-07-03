@@ -13,6 +13,7 @@ export const MAX_TAG_BYTES = 128
 export const MAX_CHECK_NAME_BYTES = 160
 export const MAX_ASSET_NAME_BYTES = 255
 export const MAX_APPROVAL_VALUE_BYTES = 160
+export const MAX_RETRY_AFTER_SECONDS = 86_400
 
 const SHA256 = /^[a-f0-9]{64}$/
 const FULL_COMMIT_SHA = /^[a-f0-9]{40}$/
@@ -31,6 +32,15 @@ export class PolicyError extends Error {
 
 export function sha256(value: string | Uint8Array): string {
   return createHash("sha256").update(value).digest("hex")
+}
+
+export function boundedRetryAfterSeconds(
+  value: number | null | undefined
+): number | null {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return null
+  }
+  return Math.min(MAX_RETRY_AFTER_SECONDS, Math.max(0, Math.ceil(value)))
 }
 
 export function normalizeRepository(value: string): string {
@@ -261,6 +271,7 @@ export function assertReceipt(receipt: PublishReceipt): void {
       "steps",
       "warnings",
       "retryable",
+      "retryAfterSeconds",
       "resumeToken",
       "repair",
     ]) ||
@@ -284,6 +295,10 @@ export function assertReceipt(receipt: PublishReceipt): void {
     !Array.isArray(receipt.records) ||
     !Array.isArray(receipt.warnings) ||
     typeof receipt.retryable !== "boolean" ||
+    (receipt.retryAfterSeconds !== null &&
+      (!Number.isSafeInteger(receipt.retryAfterSeconds) ||
+        receipt.retryAfterSeconds < 0 ||
+        receipt.retryAfterSeconds > MAX_RETRY_AFTER_SECONDS)) ||
     (receipt.resumeToken !== null &&
       (typeof receipt.resumeToken !== "string" ||
         receipt.resumeToken.length > 100)) ||

@@ -66,6 +66,8 @@ function harness(
     patchMode?: PatchMode
     latestReleaseId?: number
     repositoryFailures?: number[]
+    repositoryFailureHeaders?: HeadersInit
+    repositoryFailureMessage?: string
     rateLimitWithoutHeader?: boolean
     throwRepositoryReads?: number
     assetPages?: unknown[][]
@@ -74,6 +76,7 @@ function harness(
     targetCommitish?: string
     publishedBody?: string
     hangRepositoryBodies?: boolean
+    now?: number
   } = {}
 ) {
   let published = options.initialPublished ?? false
@@ -120,13 +123,18 @@ function harness(
       const failure = repositoryFailures.shift()
       if (failure !== undefined) {
         return json(
-          { message: "SECRET provider-controlled error body" },
+          {
+            message:
+              options.repositoryFailureMessage ??
+              "SECRET provider-controlled error body",
+          },
           failure,
-          failure === 429 && !options.rateLimitWithoutHeader
-            ? { "Retry-After": "0" }
-            : failure === 403
-              ? { "X-RateLimit-Remaining": "1" }
-              : {}
+          options.repositoryFailureHeaders ??
+            (failure === 429 && !options.rateLimitWithoutHeader
+              ? { "Retry-After": "0" }
+              : failure === 403
+                ? { "X-RateLimit-Remaining": "1" }
+                : {})
         )
       }
       return json({
@@ -226,6 +234,7 @@ function harness(
     apiBaseUrl: "https://api.github.test",
     fetch,
     sleep: async () => {},
+    now: () => options.now ?? Date.now(),
     requestTimeoutMs: 50,
     getAccessToken: async (repositoryId) => {
       authRepositoryIds.push(repositoryId)
@@ -357,6 +366,26 @@ test("published checkpoint resume ignores advanced branches, latest changes, and
   )
 })
 
+test("uncheckpointed already-published adoption still enforces App-bound gates", async () => {
+  const h = harness({ initialPublished: true, checkAppId: 999 })
+  await assert.rejects(
+    h.client.verifyPreparedRelease(makeInput(), REPOSITORY_ID),
+    (error: unknown) => {
+      assert.ok(error instanceof GitHubPublishedPostconditionError)
+      assert.match(error.message, /Required check-run/)
+      return true
+    }
+  )
+  assert.equal(
+    h.requests.some((request) => request.url.pathname.endsWith("/check-runs")),
+    true
+  )
+  assert.equal(
+    h.requests.some((request) => request.method === "PATCH"),
+    false
+  )
+})
+
 test("post-PATCH checkpoint drift is reported as published, not as a precondition conflict", async () => {
   const h = harness({
     patchMode: "success-drift",
@@ -484,6 +513,63 @@ test("safe reads retry bounded 429 and 5xx, but not 404", async () => {
       error.retryable
   )
   assert.equal(noHeader.requests.length, 1)
+})
+
+test("primary rate-limit reset and headerless secondary limits return actionable delays", async () => {
+  const now = 1_720_000_000_000
+  const primary = harness({
+    repositoryFailures: [403],
+    repositoryFailureHeaders: {
+      "X-RateLimit-Remaining": "0",
+      "X-RateLimit-Reset": String(now / 1_000 + 120),
+    },
+    now,
+  })
+  await assert.rejects(
+    primary.client.verifyPreparedRelease(makeInput(), REPOSITORY_ID),
+    (error: unknown) => {
+      assert.ok(error instanceof GitHubApiError)
+      assert.equal(error.retryable, true)
+      assert.equal(error.retryAfterSeconds, 120)
+      assert.match(error.message, /retry after 120 seconds/)
+      return true
+    }
+  )
+  assert.equal(primary.requests.length, 1)
+
+  const capped = harness({
+    repositoryFailures: [403],
+    repositoryFailureHeaders: {
+      "X-RateLimit-Remaining": "0",
+      "X-RateLimit-Reset": String(now / 1_000 + 900_000),
+    },
+    now,
+  })
+  await assert.rejects(
+    capped.client.verifyPreparedRelease(makeInput(), REPOSITORY_ID),
+    (error: unknown) =>
+      error instanceof GitHubApiError && error.retryAfterSeconds === 86_400
+  )
+
+  const secondary = harness({
+    repositoryFailures: [403],
+    repositoryFailureHeaders: {},
+    repositoryFailureMessage:
+      "You have exceeded a secondary rate limit. Please wait.",
+    now,
+  })
+  await assert.rejects(
+    secondary.client.verifyPreparedRelease(makeInput(), REPOSITORY_ID),
+    (error: unknown) => {
+      assert.ok(error instanceof GitHubApiError)
+      assert.equal(error.retryable, true)
+      assert.equal(error.retryAfterSeconds, 60)
+      assert.match(error.message, /retry after 60 seconds/)
+      assert.equal(error.message.includes("Please wait"), false)
+      return true
+    }
+  )
+  assert.equal(secondary.requests.length, 1)
 })
 
 test("read timeout exhausts before mutation and remains retryable", async () => {

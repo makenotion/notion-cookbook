@@ -94,6 +94,7 @@ function completedState(id: LedgerIdentity): OperationState {
       steps: [],
       warnings: [],
       retryable: false,
+      retryAfterSeconds: null,
       resumeToken: null,
       repair: null,
     },
@@ -243,6 +244,18 @@ test("rejects corrupt nested release checkpoints before persistence", async () =
 
   await assert.rejects(store.putState(id, corrupt), /invalid identity or URL/)
   assert.equal(fake.commands.length, 0)
+})
+
+test("persists the closed mutation-unknown boundary without publication data", async () => {
+  const fake = redisFake()
+  const store = ledger(fake.fetch)
+  const id = identity("mutation-boundary")
+  const mutationUnknown: OperationState = {
+    ...state(id),
+    stage: "mutation_unknown",
+  }
+  await store.putState(id, mutationUnknown)
+  assert.deepEqual(await store.readState(id), mutationUnknown)
 })
 
 test("rejects corrupt canonical receipts loaded from Redis", async () => {

@@ -1,5 +1,9 @@
 import type { GetAccessToken } from "./auth.js"
-import { normalizeRepository, sha256 } from "./policy.js"
+import {
+  boundedRetryAfterSeconds,
+  normalizeRepository,
+  sha256,
+} from "./policy.js"
 import type {
   PublishPreparedReleaseInput,
   ReleaseRecord,
@@ -14,11 +18,13 @@ const MAX_GATE_PAGES = 3
 
 type Fetch = typeof globalThis.fetch
 type Sleep = (ms: number) => Promise<void>
+type Now = () => number
 
 export type GitHubClientOptions = {
   getAccessToken: GetAccessToken
   fetch?: Fetch
   sleep?: Sleep
+  now?: Now
   requestTimeoutMs?: number
   apiBaseUrl?: string
 }
@@ -61,7 +67,8 @@ export class GitHubPublishedPostconditionError extends Error {
   constructor(
     message: string,
     readonly record: ReleaseRecord,
-    readonly retryable: boolean
+    readonly retryable: boolean,
+    readonly retryAfterSeconds: number | null = null
   ) {
     super(message)
     this.name = "GitHubPublishedPostconditionError"
@@ -127,14 +134,31 @@ export type PublishResult = {
   reconciledAfterAmbiguousResponse: boolean
 }
 
-function retryAfterSeconds(response: Response): number | null {
+function retryAfterSeconds(response: Response, now: number): number | null {
   const value = response.headers.get("Retry-After")
   if (!value) return null
   const seconds = Number(value)
-  if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds)
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return boundedRetryAfterSeconds(seconds)
+  }
   const date = Date.parse(value)
   if (Number.isNaN(date)) return null
-  return Math.max(0, Math.ceil((date - Date.now()) / 1_000))
+  return boundedRetryAfterSeconds((date - now) / 1_000)
+}
+
+function rateLimitResetSeconds(response: Response, now: number): number | null {
+  if (response.headers.get("X-RateLimit-Remaining") !== "0") return null
+  const value = response.headers.get("X-RateLimit-Reset")
+  if (!value) return null
+  const reset = Number(value)
+  if (!Number.isFinite(reset) || reset < 0) return null
+  return boundedRetryAfterSeconds(reset - now / 1_000)
+}
+
+function rateLimitMessage(status: number, delay: number | null): string {
+  return `GitHub request is rate limited (HTTP ${status})${
+    delay === null ? "" : `; retry after ${delay} seconds`
+  }`
 }
 
 function hasNextPage(link: string | null): boolean {
@@ -175,6 +199,7 @@ export class GitHubClient {
   private readonly sleep: Sleep
   private readonly timeoutMs: number
   private readonly apiBaseUrl: string
+  private readonly now: Now
   private calls = 0
 
   constructor(private readonly options: GitHubClientOptions) {
@@ -184,6 +209,7 @@ export class GitHubClient {
       ((ms) => new Promise((resolve) => setTimeout(resolve, ms)))
     this.timeoutMs = options.requestTimeoutMs ?? 8_000
     this.apiBaseUrl = (options.apiBaseUrl ?? DEFAULT_API_URL).replace(/\/$/, "")
+    this.now = options.now ?? Date.now
   }
 
   get callCount(): number {
@@ -313,7 +339,7 @@ export class GitHubClient {
         )
       }
 
-      if (!published && options.verifyGates) {
+      if (options.verifyGates) {
         await this.verifyChecks(
           repository,
           input.targetCommit,
@@ -351,7 +377,8 @@ export class GitHubClient {
           throw new GitHubPublishedPostconditionError(
             "Release is published, but the observable latest-release read is unavailable",
             verified.record,
-            error instanceof GitHubApiError && error.retryable
+            error instanceof GitHubApiError && error.retryable,
+            error instanceof GitHubApiError ? error.retryAfterSeconds : null
           )
         }
         if (latest.id !== input.releaseId) {
@@ -372,7 +399,8 @@ export class GitHubClient {
               : "a required provider read was unavailable"
           }`,
           observedRecord,
-          error instanceof GitHubApiError && error.retryable
+          error instanceof GitHubApiError && error.retryable,
+          error instanceof GitHubApiError ? error.retryAfterSeconds : null
         )
       }
       throw error
@@ -730,11 +758,13 @@ export class GitHubClient {
           return { data, headers: response.headers }
         }
 
-        // Drain but never surface provider response text; it can contain secrets,
-        // attacker-controlled content, or confusing instructions. The same timer
-        // remains active until this body has been consumed.
+        // Inspect only for GitHub's documented secondary-limit marker. Never
+        // surface provider response text; it can contain secrets,
+        // attacker-controlled content, or confusing instructions. The same
+        // timer remains active until this body has been consumed.
+        let responseText: string
         try {
-          await response.text()
+          responseText = await response.text()
         } catch (error) {
           if (safeToRetry && attempt < attempts) {
             await this.sleep(100)
@@ -757,14 +787,18 @@ export class GitHubClient {
           response.status === 429 ||
           (response.status === 403 &&
             (response.headers.has("Retry-After") ||
-              response.headers.get("X-RateLimit-Remaining") === "0"))
+              response.headers.get("X-RateLimit-Remaining") === "0" ||
+              /secondary rate limit|abuse detection/i.test(responseText)))
+        const now = this.now()
         const retryAfter =
-          retryAfterSeconds(response) ?? (isRateLimit ? 60 : null)
+          retryAfterSeconds(response, now) ??
+          rateLimitResetSeconds(response, now) ??
+          (isRateLimit ? 60 : null)
         const retryableStatus = isRateLimit || response.status >= 500
         if (safeToRetry && retryableStatus && attempt < attempts) {
           if (retryAfter !== null && retryAfter > 2) {
             throw new GitHubApiError(
-              `GitHub read is rate limited (HTTP ${response.status})`,
+              rateLimitMessage(response.status, retryAfter),
               {
                 status: response.status,
                 retryable: true,
@@ -778,7 +812,9 @@ export class GitHubClient {
         }
 
         throw new GitHubApiError(
-          `GitHub rejected the request (HTTP ${response.status})`,
+          isRateLimit
+            ? rateLimitMessage(response.status, retryAfter)
+            : `GitHub rejected the request (HTTP ${response.status})`,
           {
             status: response.status,
             retryable: retryableStatus,
