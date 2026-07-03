@@ -405,6 +405,25 @@
       }
     },
     {
+      "id": "readwise-sync",
+      "title": "Readwise and Reader sync",
+      "summary": "Sync a Reader library and Readwise highlights into related Sources and Highlights databases with safe incremental checkpoints and daily repair sweeps.",
+      "path": "workers/readwise-sync",
+      "kind": "worker-sync",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "readwise", "reader"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name readwise-sync"
+      }
+    },
+    {
       "id": "salesforce-sync",
       "title": "Salesforce sync",
       "summary": "Sync Salesforce accounts and opportunities into related managed Notion databases.",
