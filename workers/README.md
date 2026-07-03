@@ -1,17 +1,14 @@
 # Notion Worker examples
+[Notion Workers](https://developers.notion.com/docs/workers) are server-side extensions deployed to Notion. Each direct child of this directory is an independently executable and deployable Worker.
 
-Runnable [Notion Workers](https://developers.notion.com/docs/workers) written in
-TypeScript. Each direct child of this directory is an independently installable
-and deployable project.
-
+There are 3 different type of Worker capabilties:
 - A **sync** imports external records into a managed Notion database on a
   schedule or on demand.
-- A tool lets a Notion Agent query context or execute a repeatable API workflow
+- A **Agent tool** lets a Notion Agent query context or execute a repeatable API workflow
   in one step.
-- A **webhook** verifies and handles events sent by another service.
+- A **webhook** handles events sent by another app to trigger workflows in Notion or other places.
 
-For local programs built directly on the Notion API, see the
-[API examples](../examples/).
+For self-hosted integrations built directly with the Notion API, see the [API examples](../examples/).
 
 ## Syncs
 
