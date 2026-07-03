@@ -519,6 +519,25 @@
       }
     },
     {
+      "id": "todoist-completed-work-sync",
+      "title": "Todoist completed work sync",
+      "summary": "Keep a durable journal of completed Todoist tasks related to last-known active and archived project context.",
+      "path": "workers/todoist-completed-work-sync",
+      "kind": "worker-sync",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "todoist"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name todoist-completed-work-sync"
+      }
+    },
+    {
       "id": "vercel-production-deployment-tools",
       "title": "Vercel production deployment tools",
       "summary": "Inspect, promote, or roll back one Vercel project with live release checks.",

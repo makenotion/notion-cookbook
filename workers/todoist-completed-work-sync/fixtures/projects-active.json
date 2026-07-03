@@ -1,0 +1,31 @@
+{
+  "results": [
+    {
+      "id": "6XGgm6PHrGgMpCFX",
+      "can_assign_tasks": true,
+      "can_comment": true,
+      "child_order": 1,
+      "is_collapsed": false,
+      "color": "berry_red",
+      "creator_uid": "user-1",
+      "created_at": "2026-01-15T10:30:00Z",
+      "is_archived": false,
+      "is_deleted": false,
+      "is_favorite": true,
+      "is_frozen": false,
+      "name": "Launch plan",
+      "is_shared": true,
+      "updated_at": "2026-07-02T10:30:00Z",
+      "view_style": "board",
+      "default_order": 1,
+      "description": "Cross-functional launch work.",
+      "public_key": "",
+      "access": null,
+      "role": "admin",
+      "goal_ids": [],
+      "parent_id": null,
+      "inbox_project": false
+    }
+  ],
+  "next_cursor": null
+}
