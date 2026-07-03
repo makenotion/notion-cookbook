@@ -6,6 +6,7 @@ import { directoryKey } from "./keys.js"
 
 export const INITIAL_TITLE = "Workday People"
 export const PRIMARY_KEY = "Directory Key"
+export const MAX_MANAGER_RELATIONS = 100
 
 export type DirectoryTeamReference = {
   workdayWid: string
@@ -49,6 +50,12 @@ export function personToChange(
         .filter((key) => key !== personKey)
     ),
   ].sort()
+
+  if (managerKeys.length > MAX_MANAGER_RELATIONS) {
+    throw new Error(
+      `Workday employee has more than ${MAX_MANAGER_RELATIONS} manager relations.`
+    )
+  }
 
   return {
     type: "upsert",

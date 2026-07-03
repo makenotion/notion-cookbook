@@ -16,6 +16,7 @@ import {
   runPeopleSyncPage,
   runTeamsSyncPage,
   type DirectorySyncState,
+  type WorkdayDirectoryClient,
 } from "./sync.js"
 import {
   INITIAL_TITLE as TEAMS_TITLE,
@@ -26,8 +27,6 @@ import {
   createWorkdayClient,
   createWorkdayTokenProvider,
   getWorkdayConfig,
-  type WorkdayConfig,
-  type WorkdayTokenProvider,
 } from "./workday.js"
 
 const worker = new Worker()
@@ -41,24 +40,17 @@ const pacer = worker.pacer("workday", {
 })
 const beforeWorkdayRequest = () => pacer.wait()
 
-let runtime:
-  | { config: WorkdayConfig; tokenProvider: WorkdayTokenProvider }
-  | undefined
+let client: WorkdayDirectoryClient | undefined
 
 function workdayClient() {
-  runtime ??= (() => {
+  return (client ??= (() => {
     const config = getWorkdayConfig()
-    return {
+    const tokenProvider = createWorkdayTokenProvider(
       config,
-      tokenProvider: createWorkdayTokenProvider(config, beforeWorkdayRequest),
-    }
-  })()
-
-  return createWorkdayClient(
-    runtime.config,
-    runtime.tokenProvider,
-    beforeWorkdayRequest
-  )
+      beforeWorkdayRequest
+    )
+    return createWorkdayClient(config, tokenProvider, beforeWorkdayRequest)
+  })())
 }
 
 const teams = worker.database("teams", {

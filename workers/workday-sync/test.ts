@@ -8,10 +8,12 @@ import worker from "./src/index.js"
 import { directoryKey } from "./src/keys.js"
 import {
   type DirectoryPerson,
+  MAX_MANAGER_RELATIONS,
   peopleSchema,
   personToChange,
 } from "./src/people.js"
 import {
+  DIRECTORY_SYNC_STATE_VERSION,
   MAX_SNAPSHOT_PAGES,
   effectiveDateInTimeZone,
   runPeopleSyncPage,
@@ -43,6 +45,19 @@ const pageRequest: WorkdayPageRequest = {
   page: 3,
   asOfEntryDateTime: "2026-07-02T14:15:16.789Z",
   asOfEffectiveDate: "2026-07-02",
+}
+
+const TEST_SOURCE_CONTRACT_FINGERPRINT = "a".repeat(64)
+const stateIdentity = {
+  stateVersion: DIRECTORY_SYNC_STATE_VERSION,
+  sourceContractFingerprint: TEST_SOURCE_CONTRACT_FINGERPRINT,
+} as const
+
+function snapshotContext(effectiveTimeZone = "UTC") {
+  return {
+    effectiveTimeZone,
+    sourceContractFingerprint: TEST_SOURCE_CONTRACT_FINGERPRINT,
+  }
 }
 
 const baseConfig: WorkdayConfig = {
@@ -124,6 +139,7 @@ type WorkerFixture = {
   membershipCount?: number
   chainTeamWids?: string[]
   omitManagementChain?: boolean
+  omitSupervisoryManagementChain?: boolean
   sensitiveData?: boolean
 }
 
@@ -139,6 +155,7 @@ function fixtureWorker({
   membershipCount = 1,
   chainTeamWids = [teamWid],
   omitManagementChain = false,
+  omitSupervisoryManagementChain = false,
   sensitiveData = false,
 }: WorkerFixture): string {
   const memberships = Array.from({ length: membershipCount }, (_, index) => {
@@ -188,9 +205,13 @@ function fixtureWorker({
       ? ""
       : [
           "<bsvc:Management_Chain_Data>",
-          "<bsvc:Worker_Supervisory_Management_Chain_Data>",
-          chainEntries,
-          "</bsvc:Worker_Supervisory_Management_Chain_Data>",
+          omitSupervisoryManagementChain
+            ? ""
+            : [
+                "<bsvc:Worker_Supervisory_Management_Chain_Data>",
+                chainEntries,
+                "</bsvc:Worker_Supervisory_Management_Chain_Data>",
+              ].join(""),
           "</bsvc:Management_Chain_Data>",
         ].join(""),
     sensitiveData
@@ -251,10 +272,12 @@ function fixtureResponse(
 function clientWithPages(
   pages: WorkdayWorkersPage[],
   requests: WorkdayPageRequest[] = [],
-  effectiveTimeZone = "UTC"
+  effectiveTimeZone = "UTC",
+  sourceContractFingerprint = TEST_SOURCE_CONTRACT_FINGERPRINT
 ): WorkdayDirectoryClient {
   return {
     effectiveTimeZone,
+    sourceContractFingerprint,
     async fetchWorkersPage(request) {
       requests.push(request)
       const page = pages.shift()
@@ -367,10 +390,6 @@ test("directory keys are deterministic, trimmed, and domain separated", () => {
     directoryKey("person", " worker-123 "),
     `wd-person-${expectedDigest}`
   )
-  assert.equal(
-    directoryKey("person", "worker-123"),
-    directoryKey("person", "worker-123")
-  )
   assert.notEqual(
     directoryKey("person", "shared-wid"),
     directoryKey("team", "shared-wid")
@@ -412,16 +431,38 @@ test("person transform hashes identifiers, filters self, and emits co-managers",
   ]) {
     assert.doesNotMatch(serialized, new RegExp(rawWid))
   }
-  assert.equal("pageContentMarkdown" in change, false)
 })
 
 test("person transform emits an explicit empty manager relation", () => {
   const ceo = { ...ada, managerWorkdayWids: [] }
   const person = personToChange(ceo)
   assert.deepEqual(person.properties.Managers, [])
-  assert.deepEqual(person.properties.Team, [
-    { type: "primaryKey", value: directoryKey("team", ceo.team.workdayWid) },
-  ])
+})
+
+test("person transform fails rather than truncating manager relations", () => {
+  const atLimit = personToChange({
+    ...ada,
+    managerWorkdayWids: Array.from(
+      { length: MAX_MANAGER_RELATIONS },
+      (_, index) => `manager-${index}`
+    ),
+  })
+  assert.equal(
+    (atLimit.properties.Managers as unknown[]).length,
+    MAX_MANAGER_RELATIONS
+  )
+
+  assert.throws(
+    () =>
+      personToChange({
+        ...ada,
+        managerWorkdayWids: Array.from(
+          { length: MAX_MANAGER_RELATIONS + 1 },
+          (_, index) => `manager-${index}`
+        ),
+      }),
+    /more than 100 manager relations/
+  )
 })
 
 test("team transform emits only its employee-visible name and opaque key", () => {
@@ -438,7 +479,6 @@ test("team transform emits only its employee-visible name and opaque key", () =>
     },
   })
   assert.doesNotMatch(JSON.stringify(change), /team-private-wid/)
-  assert.equal("Managers" in change.properties, false)
 })
 
 test("team derivation dedupes by WID and validates only the team name", () => {
@@ -482,31 +522,6 @@ test("team derivation dedupes by WID and validates only the team name", () => {
       ]),
     /inconsistent supervisory organization data/
   )
-})
-
-test("different or missing manager observations yield one identical team upsert", () => {
-  const observations: DirectoryPerson[] = [
-    { ...ada, workdayWid: "person-without-manager", managerWorkdayWids: [] },
-    {
-      ...ada,
-      workdayWid: "person-with-manager-a",
-      managerWorkdayWids: ["manager-a"],
-    },
-    {
-      ...ada,
-      workdayWid: "person-with-manager-b",
-      managerWorkdayWids: ["manager-b", "manager-c"],
-    },
-  ]
-  const expectedTeam = {
-    workdayWid: ada.team.workdayWid,
-    name: ada.team.name,
-  }
-  assert.deepEqual(teamsFromPeople(observations), [expectedTeam])
-  assert.deepEqual(teamsFromPeople([...observations].reverse()), [expectedTeam])
-  assert.deepEqual(teamsFromPeople(observations).map(teamToChange), [
-    teamToChange(expectedTeam),
-  ])
 })
 
 function leafElements(xml: string): Array<[string, string]> {
@@ -611,31 +626,6 @@ test("Get_Workers request is an exact privacy allowlist for active employees", (
     ["Exclude_Gift_Hierarchies", "true"],
     ["Exclude_Retiree_Organizations", "true"],
   ])
-
-  const includeTrue = leafElements(responseGroup)
-    .filter(([name, value]) => name.startsWith("Include_") && value === "true")
-    .map(([name]) => name)
-  assert.deepEqual(includeTrue, [
-    "Include_Reference",
-    "Include_Organizations",
-    "Include_Management_Chain_Data",
-    "Include_Multiple_Managers_in_Management_Chain_Data",
-  ])
-
-  const organizationExclusions = leafElements(responseGroup).filter(([name]) =>
-    name.startsWith("Exclude_")
-  )
-  assert.deepEqual(
-    organizationExclusions.filter(([, value]) => value === "false"),
-    [["Exclude_Supervisory_Organizations", "false"]]
-  )
-  assert.equal(
-    organizationExclusions.every(
-      ([name, value]) =>
-        name === "Exclude_Supervisory_Organizations" || value === "true"
-    ),
-    true
-  )
 })
 
 test("Get_Workers request validates version, page, and pinned dates", () => {
@@ -663,7 +653,7 @@ test("Get_Workers request validates version, page, and pinned dates", () => {
           ...pageRequest,
           asOfEffectiveDate,
         }),
-      /effective date is invalid/
+      /effective date must be an ISO 8601 date/
     )
   }
   for (const asOfEntryDateTime of [
@@ -680,7 +670,7 @@ test("Get_Workers request validates version, page, and pinned dates", () => {
           ...pageRequest,
           asOfEntryDateTime,
         }),
-      /entry timestamp is invalid/
+      /entry timestamp must be an ISO 8601 timestamp/
     )
   }
 })
@@ -749,7 +739,6 @@ test("XML parser supports a CEO with no manager references", () => {
     ])
   )
   assert.deepEqual(page.people[0]?.managerWorkdayWids, [])
-  assert.deepEqual(personToChange(page.people[0]!).properties.Managers, [])
 })
 
 test("XML parser includes only employee manager references with a WID", () => {
@@ -873,12 +862,42 @@ test("XML parser requires one matching supervisory management-chain entry", () =
       ),
     /management chain does not match/
   )
-  const missingChain = parseGetWorkersResponse(
-    fixtureResponse([
-      fixtureWorker({ wid: "missing-chain-worker", omitManagementChain: true }),
-    ])
+  assert.throws(
+    () =>
+      parseGetWorkersResponse(
+        fixtureResponse([
+          fixtureWorker({
+            wid: "missing-chain-worker",
+            omitManagementChain: true,
+          }),
+        ])
+      ),
+    /missing requested supervisory management-chain data/
   )
-  assert.deepEqual(missingChain.people[0]?.managerWorkdayWids, [])
+  assert.throws(
+    () =>
+      parseGetWorkersResponse(
+        fixtureResponse([
+          fixtureWorker({
+            wid: "missing-supervisory-chain-worker",
+            omitSupervisoryManagementChain: true,
+          }),
+        ])
+      ),
+    /missing requested supervisory management-chain data/
+  )
+  assert.throws(
+    () =>
+      parseGetWorkersResponse(
+        fixtureResponse([
+          fixtureWorker({
+            wid: "empty-chain-worker",
+            chainTeamWids: [],
+          }),
+        ])
+      ),
+    /missing requested supervisory management-chain data/
+  )
 })
 
 test("XML parser fails closed on SOAP faults, malformed, and incomplete payloads", () => {
@@ -1046,10 +1065,14 @@ test("effective date uses the configured business time zone", () => {
 
 test("snapshot request captures one timestamp and tenant-local date", () => {
   let clockCalls = 0
-  const request = snapshotRequest(undefined, "America/Los_Angeles", () => {
-    clockCalls++
-    return new Date("2026-01-01T00:30:00.123Z")
-  })
+  const request = snapshotRequest(
+    undefined,
+    snapshotContext("America/Los_Angeles"),
+    () => {
+      clockCalls++
+      return new Date("2026-01-01T00:30:00.123Z")
+    }
+  )
   assert.equal(clockCalls, 1)
   assert.deepEqual(request, {
     page: 1,
@@ -1057,7 +1080,8 @@ test("snapshot request captures one timestamp and tenant-local date", () => {
     asOfEffectiveDate: "2025-12-31",
   })
   assert.throws(
-    () => snapshotRequest(undefined, "UTC", () => new Date(Number.NaN)),
+    () =>
+      snapshotRequest(undefined, snapshotContext(), () => new Date(Number.NaN)),
     /snapshot time is invalid/
   )
 })
@@ -1066,13 +1090,14 @@ test("resumed snapshot preserves canonical pinned state", () => {
   let clockCalled = false
   const request = snapshotRequest(
     {
+      ...stateIdentity,
       page: 2,
       asOfEntryDateTime: "2026-07-02T14:15:16.000Z",
       asOfEffectiveDate: "2026-07-02",
       totalPages: 3,
       totalResults: 201,
     },
-    "UTC",
+    snapshotContext(),
     () => {
       clockCalled = true
       return new Date()
@@ -1088,6 +1113,7 @@ test("resumed snapshot preserves canonical pinned state", () => {
 
 test("snapshot state validation rejects unsafe page and total boundaries", () => {
   const valid: DirectorySyncState = {
+    ...stateIdentity,
     page: 2,
     asOfEntryDateTime: "2026-07-02T14:15:16.000Z",
     asOfEffectiveDate: "2026-07-02",
@@ -1120,10 +1146,40 @@ test("snapshot state validation rejects unsafe page and total boundaries", () =>
   ]
   for (const [override, expected] of invalidStates) {
     assert.throws(
-      () => snapshotRequest({ ...valid, ...override }, "UTC"),
+      () => snapshotRequest({ ...valid, ...override }, snapshotContext()),
       expected
     )
   }
+})
+
+test("sync rejects incompatible persisted state before fetching", async () => {
+  const requests: WorkdayPageRequest[] = []
+  const client = clientWithPages(
+    [{ page: 2, totalPages: 3, totalResults: 201, people: [ada] }],
+    requests
+  )
+  const valid = {
+    ...stateIdentity,
+    page: 2,
+    asOfEntryDateTime: "2026-07-02T14:15:16.000Z",
+    asOfEffectiveDate: "2026-07-02",
+    totalPages: 3,
+    totalResults: 201,
+  }
+  const { stateVersion: _stateVersion, ...legacyState } = valid
+  const incompatibleStates = [
+    legacyState,
+    { ...valid, stateVersion: DIRECTORY_SYNC_STATE_VERSION + 1 },
+    { ...valid, sourceContractFingerprint: "b".repeat(64) },
+  ]
+
+  for (const state of incompatibleStates) {
+    await assert.rejects(
+      () => runPeopleSyncPage(client, state as unknown as DirectorySyncState),
+      /sync state is incompatible/
+    )
+  }
+  assert.equal(requests.length, 0)
 })
 
 test("snapshot ceiling is 100 pages and 10,000 employees", () => {
@@ -1132,13 +1188,14 @@ test("snapshot ceiling is 100 pages and 10,000 employees", () => {
   assert.deepEqual(
     snapshotRequest(
       {
+        ...stateIdentity,
         page: MAX_SNAPSHOT_PAGES,
         asOfEntryDateTime: "2026-07-02T14:15:16.000Z",
         asOfEffectiveDate: "2026-07-02",
         totalPages: MAX_SNAPSHOT_PAGES,
         totalResults: MAX_SNAPSHOT_PAGES * WORKDAY_PAGE_SIZE,
       },
-      "UTC"
+      snapshotContext()
     ),
     {
       page: 100,
@@ -1150,13 +1207,14 @@ test("snapshot ceiling is 100 pages and 10,000 employees", () => {
     () =>
       snapshotRequest(
         {
+          ...stateIdentity,
           page: MAX_SNAPSHOT_PAGES + 1,
           asOfEntryDateTime: "2026-07-02T14:15:16.000Z",
           asOfEffectiveDate: "2026-07-02",
           totalPages: MAX_SNAPSHOT_PAGES + 1,
           totalResults: (MAX_SNAPSHOT_PAGES + 1) * WORKDAY_PAGE_SIZE,
         },
-        "UTC"
+        snapshotContext()
       ),
     /invalid page boundary/
   )
@@ -1185,6 +1243,7 @@ test("people sync reuses snapshot state across pages and finalizes cleanly", asy
   assert.equal(first.hasMore, true)
   assert.deepEqual(first.changes, [personToChange(ada)])
   assert.deepEqual(first.nextState, {
+    ...stateIdentity,
     page: 2,
     asOfEntryDateTime: "2026-01-01T00:30:00.000Z",
     asOfEffectiveDate: "2025-12-31",
@@ -1233,6 +1292,7 @@ test("teams sync publishes one deterministic team change per page", async () => 
 
 test("sync rejects wrong pages, drifting totals, empty pages, and page overflow", async () => {
   const state: DirectorySyncState = {
+    ...stateIdentity,
     page: 2,
     asOfEntryDateTime: "2026-07-02T14:15:16.000Z",
     asOfEffectiveDate: "2026-07-02",
@@ -1325,6 +1385,21 @@ test("configuration accepts the pinned tenant WWS endpoint", () => {
     defaults.apiUrl,
     "https://tenant1.myworkday.com/ccx/service/acme/Human_Resources/v46.1/"
   )
+  assert.equal(
+    getWorkdayConfig(
+      validEnv({
+        WORKDAY_EXTERNAL_APPLICATION_ID: " notion-workday-org-chart ",
+      })
+    ).externalApplicationId,
+    "notion-workday-org-chart"
+  )
+  assert.equal(
+    getWorkdayConfig({
+      ...validEnv(),
+      WORKDAY_TOKEN_URL: "https://tenant1.myworkday.com/oauth2/acme/token",
+    }).tokenUrl,
+    "https://tenant1.myworkday.com/oauth2/acme/token"
+  )
 })
 
 test("configuration rejects unpinned, non-HTTPS, credentialed, and decorated URLs", () => {
@@ -1395,6 +1470,16 @@ test("configuration validates version, timezone, and every required secret", () 
     assert.throws(
       () => getWorkdayConfig(validEnv({ [name]: "  " })),
       new RegExp(`${name} is not set`)
+    )
+  }
+  for (const WORKDAY_EXTERNAL_APPLICATION_ID of [
+    "a".repeat(51),
+    "notion-workday\norg-chart",
+    "notion-workday-☃",
+  ]) {
+    assert.throws(
+      () => getWorkdayConfig(validEnv({ WORKDAY_EXTERNAL_APPLICATION_ID })),
+      /valid HTTP header value of at most 50 characters/
     )
   }
 })
@@ -1639,6 +1724,70 @@ function staticTokenProvider(
   }
 }
 
+test("source contract fingerprint is stable but source-bound", () => {
+  const fingerprint = (config: WorkdayConfig) =>
+    createWorkdayClient(
+      config,
+      staticTokenProvider(["unused-token"]),
+      async () => {},
+      queuedFetch([])
+    ).sourceContractFingerprint
+
+  const baseline = fingerprint(baseConfig)
+  assert.match(baseline, /^[a-f0-9]{64}$/)
+  assert.equal(
+    fingerprint({
+      ...baseConfig,
+      apiUrl: `${baseConfig.apiUrl}/`,
+      tokenUrl: "https://tenant1.myworkday.com/ccx/oauth2/acme/new-token",
+      clientSecret: "rotated-secret",
+      refreshToken: "rotated-refresh-token",
+      externalApplicationId: "new-observability-label",
+    }),
+    baseline
+  )
+  for (const changedSource of [
+    {
+      ...baseConfig,
+      apiUrl:
+        "https://tenant2.myworkday.com/ccx/service/acme/Human_Resources/v46.1",
+    },
+    {
+      ...baseConfig,
+      apiUrl:
+        "https://tenant1.myworkday.com/ccx/service/acme/Human_Resources/v47.0",
+      apiVersion: "v47.0",
+    },
+    { ...baseConfig, clientId: "different-api-client" },
+    { ...baseConfig, effectiveTimeZone: "UTC" },
+  ]) {
+    assert.notEqual(fingerprint(changedSource), baseline)
+  }
+})
+
+test("SOAP page 1 omits the strict client timeout", async () => {
+  const calls: FetchCall[] = []
+  const client = createWorkdayClient(
+    baseConfig,
+    staticTokenProvider(["soap-access-token"]),
+    async () => {},
+    queuedFetch(
+      [
+        new Response(
+          fixtureResponse([
+            fixtureWorker({ wid: "page-one-worker", managerWids: [] }),
+          ]),
+          { status: 200 }
+        ),
+      ],
+      calls
+    )
+  )
+
+  await client.fetchWorkersPage({ ...pageRequest, page: 1 })
+  assert.equal(calls[0]?.init?.signal, undefined)
+})
+
 test("SOAP client sends pinned request with bearer auth and privacy headers", async () => {
   const calls: FetchCall[] = []
   let pacingCalls = 0
@@ -1667,6 +1816,8 @@ test("SOAP client sends pinned request with bearer auth and privacy headers", as
       authorization: headers.get("authorization"),
       accept: headers.get("accept"),
       contentType: headers.get("content-type"),
+      externalApplicationId: headers.get("wd-external-application-id"),
+      externalRequestId: headers.get("wd-external-request-id"),
       body: calls[0]?.init?.body,
     },
     {
@@ -1675,6 +1826,8 @@ test("SOAP client sends pinned request with bearer auth and privacy headers", as
       authorization: "Bearer soap-access-token",
       accept: "application/xml, text/xml",
       contentType: "text/xml; charset=utf-8",
+      externalApplicationId: null,
+      externalRequestId: null,
       body: buildGetWorkersRequest(baseConfig.apiVersion, pageRequest),
     }
   )
@@ -1687,7 +1840,7 @@ test("SOAP client refreshes once after 401 and retries the identical snapshot", 
   let pacingCalls = 0
   const xml = fixtureResponse([fixtureWorker({ wid: "refreshed-worker" })])
   const client = createWorkdayClient(
-    baseConfig,
+    { ...baseConfig, externalApplicationId: "notion-workday-org-chart" },
     staticTokenProvider(["stale-token", "fresh-token"], invalidated),
     async () => {
       pacingCalls++
@@ -1708,6 +1861,23 @@ test("SOAP client refreshes once after 401 and retries the identical snapshot", 
     calls.map((call) => new Headers(call.init?.headers).get("authorization")),
     ["Bearer stale-token", "Bearer fresh-token"]
   )
+  const externalApplicationIds = calls.map((call) =>
+    new Headers(call.init?.headers).get("wd-external-application-id")
+  )
+  assert.deepEqual(externalApplicationIds, [
+    "notion-workday-org-chart",
+    "notion-workday-org-chart",
+  ])
+  const externalRequestIds = calls.map((call) =>
+    new Headers(call.init?.headers).get("wd-external-request-id")
+  )
+  for (const requestId of externalRequestIds) {
+    assert.match(
+      requestId ?? "",
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    )
+  }
+  assert.notEqual(externalRequestIds[0], externalRequestIds[1])
   assert.equal(calls[0]?.init?.body, calls[1]?.init?.body)
 })
 

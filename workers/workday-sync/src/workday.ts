@@ -5,16 +5,20 @@
 // off every broad HR section. Only worker reference, supervisory organization,
 // and supervisory management-chain data are parsed into the directory model.
 
+import { createHash, randomUUID } from "node:crypto"
+
 import { RateLimitError } from "@notionhq/workers"
 import { XMLParser, XMLValidator } from "fast-xml-parser"
 
 import type { DirectoryPerson } from "./people.js"
 import {
+  DIRECTORY_SYNC_CONTRACT_VERSION,
   WORKDAY_PAGE_SIZE,
   type WorkdayDirectoryClient,
   type WorkdayPageRequest,
   type WorkdayWorkersPage,
 } from "./sync.js"
+import { validatePageRequest } from "./validation.js"
 
 export { WORKDAY_PAGE_SIZE } from "./sync.js"
 
@@ -34,6 +38,7 @@ export type WorkdayConfig = {
   clientSecret: string
   refreshToken: string
   effectiveTimeZone: string
+  externalApplicationId?: string
 }
 
 export type WorkdayTokenProvider = {
@@ -123,7 +128,9 @@ export function getWorkdayConfig(
   }
   const tenant = tenantMatch[1]
   const escapedTenant = tenant.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-  const expectedTokenPath = new RegExp(`^/ccx/oauth2/${escapedTenant}/token$`)
+  const expectedTokenPath = new RegExp(
+    `^(?:/ccx)?/oauth2/${escapedTenant}/token$`
+  )
   if (
     tokenUrl.origin !== apiUrl.origin ||
     !expectedTokenPath.test(tokenUrl.pathname.replace(/\/+$/, ""))
@@ -140,6 +147,18 @@ export function getWorkdayConfig(
     throw new Error("WORKDAY_EFFECTIVE_TIME_ZONE must be a valid IANA zone.")
   }
 
+  const externalApplicationId = env.WORKDAY_EXTERNAL_APPLICATION_ID?.trim()
+  if (externalApplicationId) {
+    try {
+      if (externalApplicationId.length > 50) throw new Error()
+      new Headers({ "wd-external-application-id": externalApplicationId })
+    } catch {
+      throw new Error(
+        "WORKDAY_EXTERNAL_APPLICATION_ID must be a valid HTTP header value of at most 50 characters."
+      )
+    }
+  }
+
   return {
     apiUrl: apiUrl.toString(),
     apiVersion,
@@ -148,6 +167,7 @@ export function getWorkdayConfig(
     clientSecret: requiredEnv(env, "WORKDAY_CLIENT_SECRET"),
     refreshToken: requiredEnv(env, "WORKDAY_REFRESH_TOKEN"),
     effectiveTimeZone,
+    ...(externalApplicationId ? { externalApplicationId } : {}),
   }
 }
 
@@ -312,35 +332,6 @@ export function createWorkdayTokenProvider(
 
 function xmlElement(name: string, value: boolean | string | number): string {
   return `<bsvc:${name}>${String(value)}</bsvc:${name}>`
-}
-
-function validatePageRequest(request: WorkdayPageRequest) {
-  if (!Number.isSafeInteger(request.page) || request.page < 1) {
-    throw new Error("Workday page must be a positive integer.")
-  }
-  if (!isStrictIsoDate(request.asOfEffectiveDate)) {
-    throw new Error("Workday effective date is invalid.")
-  }
-  if (!isCanonicalIsoDateTime(request.asOfEntryDateTime)) {
-    throw new Error("Workday entry timestamp is invalid.")
-  }
-}
-
-function isCanonicalIsoDateTime(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) {
-    return false
-  }
-  const parsed = new Date(value)
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString() === value
-}
-
-function isStrictIsoDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
-  const parsed = new Date(`${value}T00:00:00.000Z`)
-  return (
-    !Number.isNaN(parsed.getTime()) &&
-    parsed.toISOString().slice(0, 10) === value
-  )
 }
 
 /**
@@ -544,11 +535,21 @@ function parseDirectoryPerson(value: unknown): DirectoryPerson {
     )
   }
 
-  const managementChain = jsonObject(workerData.Management_Chain_Data)
-  const supervisoryChain = jsonObject(
-    managementChain.Worker_Supervisory_Management_Chain_Data
-  )
+  const managementChain = workerData.Management_Chain_Data
+  const supervisoryChain = isObject(managementChain)
+    ? managementChain.Worker_Supervisory_Management_Chain_Data
+    : undefined
+  if (!isObject(supervisoryChain)) {
+    throw new Error(
+      "Workday response is missing requested supervisory management-chain data."
+    )
+  }
   const chainEntries = asArray(supervisoryChain.Management_Chain_Data)
+  if (chainEntries.length === 0) {
+    throw new Error(
+      "Workday response is missing requested supervisory management-chain data."
+    )
+  }
   const matchingChainEntries = chainEntries.filter((entry) => {
     if (!isObject(entry)) return false
     try {
@@ -560,21 +561,7 @@ function parseDirectoryPerson(value: unknown): DirectoryPerson {
       return false
     }
   })
-  if (matchingChainEntries.length > 1) {
-    throw new Error(
-      "Workday management chain does not match the supervisory organization."
-    )
-  }
-
-  if (chainEntries.length === 0) {
-    return {
-      workdayWid,
-      name,
-      team: { workdayWid: teamWid, name: teamName },
-      managerWorkdayWids: [],
-    }
-  }
-  if (matchingChainEntries.length === 0) {
+  if (matchingChainEntries.length !== 1) {
     throw new Error(
       "Workday management chain does not match the supervisory organization."
     )
@@ -688,8 +675,23 @@ export function createWorkdayClient(
   beforeRequest: BeforeRequest,
   fetchImplementation: FetchImplementation = fetch
 ): WorkdayDirectoryClient {
+  const sourceContractFingerprint = createHash("sha256")
+    .update(
+      JSON.stringify({
+        contractVersion: DIRECTORY_SYNC_CONTRACT_VERSION,
+        apiUrl: config.apiUrl.replace(/\/+$/, ""),
+        apiVersion: config.apiVersion,
+        clientId: config.clientId,
+        effectiveTimeZone: config.effectiveTimeZone,
+        pageSize: WORKDAY_PAGE_SIZE,
+      }),
+      "utf8"
+    )
+    .digest("hex")
+
   return {
     effectiveTimeZone: config.effectiveTimeZone,
+    sourceContractFingerprint,
     async fetchWorkersPage(request) {
       const body = buildGetWorkersRequest(config.apiVersion, request)
 
@@ -705,10 +707,21 @@ export function createWorkdayClient(
               Authorization: `Bearer ${accessToken}`,
               Accept: "application/xml, text/xml",
               "Content-Type": "text/xml; charset=utf-8",
+              ...(config.externalApplicationId
+                ? {
+                    "wd-external-application-id": config.externalApplicationId,
+                    // Workday recommends a unique ID for each HTTP attempt.
+                    "wd-external-request-id": randomUUID(),
+                  }
+                : {}),
             },
             body,
             redirect: "error",
-            signal: AbortSignal.timeout(WORKDAY_REQUEST_TIMEOUT_MS),
+            // Page 1 builds Workday's paging cache and can legitimately take
+            // longer; Workday explicitly advises against a strict timeout.
+            ...(request.page > 1
+              ? { signal: AbortSignal.timeout(WORKDAY_REQUEST_TIMEOUT_MS) }
+              : {}),
           })
         } catch {
           throw new Error(
