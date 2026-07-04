@@ -14,23 +14,23 @@ For self-hosted integrations built directly with the Notion API, see the [API ex
 
 ## Syncs
 
-| Worker                                                 | What it maintains                                                                                                                    |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
-| [DuckDB sync](duckdb-sync/)                            | A self-contained managed database populated from seeded, in-memory DuckDB data; useful for learning the sync contract.               |
-| [GitHub stars sync](github-stars-sync/)                | The authenticated user's starred repositories as a current research and evaluation library.                                          |
-| [GitHub sync](github-sync/)                            | Issues, all pull requests, and open pull requests with review and CI status.                                                         |
-| [HubSpot sync](hubspot-sync/)                          | CRM contacts, deals, and companies.                                                                                                  |
-| [Intercom sync](intercom-sync/)                        | Companies, contacts, conversations, and tickets linked for support operations and customer context.                                  |
-| [Jira sync](jira-sync/)                                | Jira Cloud issues, current sprints, sprint analytics, and projects.                                                                  |
-| [Linear sync](linear-sync/)                            | Linear projects, issues, and initiatives.                                                                                            |
-| [PagerDuty sync](pagerduty-sync/)                      | Active and recent incidents linked to service readiness, current on-call coverage, ownership, and routing context.                   |
-| [Readwise and Reader sync](readwise-sync/)             | A Reader library and Readwise highlights linked into a durable archive that preserves Notion pages.                                  |
-| [Salesforce sync](salesforce-sync/)                    | Salesforce accounts and opportunities, with related account context.                                                                 |
-| [Sentry sync](sentry-sync/)                            | Issue triage, project reliability trends, and recent release health for cross-functional follow-up.                                  |
-| [Snowflake sync](snowflake-sync/)                      | Rows returned by a configurable Snowflake query.                                                                                     |
-| [Todoist completed work](todoist-completed-work-sync/) | A durable journal of completed tasks related to last-known active and archived project context.                                      |
-| [Workday employee directory sync](workday-sync/)       | A daily employee-facing directory of people, work email, Notion People references, supervisory organizations, and manager relations. |
-| [Zendesk sync](zendesk-sync/)                          | Related tickets, organizations, users, CSAT responses, metrics, and SLA policies with manual repair sweeps.                          |
+| Worker                                           | What it maintains                                                                                                                    |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| [DuckDB sync](duckdb-sync/)                      | A self-contained managed database populated from seeded, in-memory DuckDB data; useful for learning the sync contract.               |
+| [GitHub stars sync](github-stars-sync/)          | The authenticated user's starred repositories as a current research and evaluation library.                                          |
+| [GitHub sync](github-sync/)                      | Issues, all pull requests, and open pull requests with review and CI status.                                                         |
+| [HubSpot sync](hubspot-sync/)                    | CRM contacts, deals, and companies.                                                                                                  |
+| [Intercom sync](intercom-sync/)                  | Companies, contacts, conversations, and tickets linked for support operations and customer context.                                  |
+| [Jira sync](jira-sync/)                          | Jira Cloud issues, current sprints, sprint analytics, and projects.                                                                  |
+| [Linear sync](linear-sync/)                      | Linear projects, issues, and initiatives.                                                                                            |
+| [PagerDuty sync](pagerduty-sync/)                | Active and recent incidents linked to service readiness, current on-call coverage, ownership, and routing context.                   |
+| [Readwise and Reader sync](readwise-sync/)       | A Reader library and Readwise highlights linked into a durable archive that preserves Notion pages.                                  |
+| [Salesforce sync](salesforce-sync/)              | Salesforce accounts and opportunities, with related account context.                                                                 |
+| [Sentry sync](sentry-sync/)                      | Issue triage, project reliability trends, and recent release health for cross-functional follow-up.                                  |
+| [Snowflake sync](snowflake-sync/)                | Rows returned by a configurable Snowflake query.                                                                                     |
+| [Todoist sync](todoist-sync/)                    | Open tasks and project summaries with recent completion context.                                                                     |
+| [Workday employee directory sync](workday-sync/) | A daily employee-facing directory of people, work email, Notion People references, supervisory organizations, and manager relations. |
+| [Zendesk sync](zendesk-sync/)                    | Related tickets, organizations, users, CSAT responses, metrics, and SLA policies with manual repair sweeps.                          |
 
 ## Agent tools
 

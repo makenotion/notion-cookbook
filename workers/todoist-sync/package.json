@@ -1,5 +1,5 @@
 {
-  "name": "@notion-cookbook/todoist-completed-work-sync",
+  "name": "@notion-cookbook/todoist-sync",
   "version": "0.0.0",
   "private": true,
   "scripts": {

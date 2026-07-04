@@ -1,6 +1,6 @@
-// Typed Todoist API v1 client for completed tasks plus active and archived
-// projects. It deliberately uses the public HTTP contract directly so the
-// cookbook exposes date-window and cursor behavior rather than hiding it.
+// Typed Todoist API v1 client for active tasks, active projects, and a bounded
+// completion window. It deliberately uses the public HTTP contract directly
+// so the cookbook exposes snapshot and cursor behavior rather than hiding it.
 
 import { RateLimitError } from "@notionhq/workers"
 
@@ -14,15 +14,13 @@ export const MAX_USER_ID_CHARACTERS = 256
 const DEFAULT_RATE_LIMIT_DELAY_SECONDS = 60
 
 export type TodoistDue = {
-  date: string | null
-  string: string | null
+  date: string
   isRecurring: boolean
-  timeZone: string | null
 }
 
 export type TodoistDuration = {
   amount: number
-  unit: string
+  unit: "minute" | "day"
 }
 
 export class InvalidCursorError extends Error {
@@ -32,25 +30,26 @@ export class InvalidCursorError extends Error {
   }
 }
 
-export type TodoistCompletedTask = {
+export type TodoistTask = {
   id: string
   projectId: string
-  sectionId: string | null
   parentId: string | null
   content: string
   description: string
   labels: string[]
   priority: number
   addedAt: string | null
-  completedAt: string | null
-  completedByUserId: string | null
-  responsibleUserId: string | null
   updatedAt: string | null
   due: TodoistDue | null
   deadline: string | null
   duration: TodoistDuration | null
-  completedCount: number
-  postponedCount: number
+}
+
+export type TodoistCompletedTask = {
+  id: string
+  projectId: string
+  content: string
+  completedAt: string
   isDeleted: boolean
 }
 
@@ -63,19 +62,12 @@ export type TodoistProject = {
   id: string
   name: string
   description: string
-  color: string
-  isArchived: boolean
-  isDeleted: boolean
-  isFavorite: boolean
-  isShared: boolean
-  inboxProject: boolean
-  viewStyle: string
-  role: string | null
-  status: string | null
-  workspaceId: string | null
-  parentId: string | null
-  createdAt: string | null
   updatedAt: string | null
+}
+
+export type TodoistTasksPage = {
+  resources: TodoistTask[]
+  nextCursor: string | undefined
 }
 
 export type TodoistCompletedTasksPage = {
@@ -88,19 +80,15 @@ export type TodoistProjectsPage = {
   nextCursor: string | undefined
 }
 
-export type TodoistProjectCollection = "active" | "archived"
-
 export type TodoistClient = {
   fetchAuthenticatedUser(): Promise<TodoistAuthenticatedUser>
+  fetchTasksPage(cursor?: string): Promise<TodoistTasksPage>
   fetchCompletedTasksPage(options: {
     since: string
     until: string
     cursor?: string
   }): Promise<TodoistCompletedTasksPage>
-  fetchProjectsPage(
-    collection: TodoistProjectCollection,
-    cursor?: string
-  ): Promise<TodoistProjectsPage>
+  fetchProjectsPage(cursor?: string): Promise<TodoistProjectsPage>
 }
 
 export type TodoistClientOptions = {
@@ -127,8 +115,23 @@ function string(value: unknown, context: string): string {
   return value
 }
 
-function nullableString(value: unknown, context: string): string | null {
-  return value === null ? null : string(value, context)
+function identifier(value: unknown, context: string): string {
+  const id = string(value, context).trim()
+  if (!id || Array.from(id).length > MAX_USER_ID_CHARACTERS) {
+    throw new Error(`Todoist API returned invalid ${context}.`)
+  }
+  return id
+}
+
+function absoluteTimestamp(value: unknown, context: string): string {
+  const timestamp = string(value, context)
+  if (
+    !/(?:Z|[+-]\d{2}:\d{2})$/iu.test(timestamp) ||
+    !Number.isFinite(Date.parse(timestamp))
+  ) {
+    throw new Error(`Todoist API returned invalid ${context}.`)
+  }
+  return timestamp
 }
 
 function boolean(value: unknown, context: string): boolean {
@@ -145,16 +148,35 @@ function number(value: unknown, context: string): number {
   return value
 }
 
+function integerInRange(
+  value: unknown,
+  minimum: number,
+  maximum: number,
+  context: string
+): number {
+  const parsed = number(value, context)
+  if (!Number.isSafeInteger(parsed) || parsed < minimum || parsed > maximum) {
+    throw new Error(`Todoist API returned invalid ${context}.`)
+  }
+  return parsed
+}
+
 function optionalString(value: unknown, context: string): string | null {
   return value === undefined || value === null ? null : string(value, context)
 }
 
-function optionalBoolean(value: unknown, context: string): boolean {
-  return value === undefined || value === null ? false : boolean(value, context)
+function optionalTimestamp(value: unknown, context: string): string | null {
+  return value === undefined || value === null
+    ? null
+    : absoluteTimestamp(value, context)
+}
+
+function optionalText(value: unknown, context: string): string {
+  return optionalString(value, context) ?? ""
 }
 
 function stringArray(value: unknown, context: string): string[] {
-  if (value === null) return []
+  if (value === undefined || value === null) return []
   if (!Array.isArray(value)) {
     throw new Error(`Todoist API returned invalid ${context}.`)
   }
@@ -162,31 +184,59 @@ function stringArray(value: unknown, context: string): string[] {
 }
 
 function parseDue(value: unknown, context: string): TodoistDue | null {
-  if (value === null) return null
+  if (value === undefined || value === null) return null
   const due = object(value, context)
   return {
-    date: optionalString(due.date, `${context}.date`),
-    string: optionalString(due.string, `${context}.string`),
-    isRecurring: optionalBoolean(due.is_recurring, `${context}.is_recurring`),
-    timeZone: optionalString(due.timezone, `${context}.timezone`),
+    date: string(due.date, `${context}.date`),
+    isRecurring: boolean(due.is_recurring, `${context}.is_recurring`),
   }
 }
 
 function parseDeadline(value: unknown, context: string): string | null {
-  if (value === null) return null
+  if (value === undefined || value === null) return null
   const deadline = object(value, context)
-  return optionalString(deadline.date, `${context}.date`)
+  return string(deadline.date, `${context}.date`)
 }
 
 function parseDuration(
   value: unknown,
   context: string
 ): TodoistDuration | null {
-  if (value === null) return null
+  if (value === undefined || value === null) return null
   const duration = object(value, context)
+  const amount = number(duration.amount, `${context}.amount`)
+  if (!Number.isSafeInteger(amount) || amount <= 0) {
+    throw new Error(`Todoist API returned invalid ${context}.amount.`)
+  }
+  const unit = string(duration.unit, `${context}.unit`)
+  if (unit !== "minute" && unit !== "day") {
+    throw new Error(`Todoist API returned invalid ${context}.unit.`)
+  }
   return {
-    amount: number(duration.amount, `${context}.amount`),
-    unit: string(duration.unit, `${context}.unit`),
+    amount,
+    unit,
+  }
+}
+
+function parseTask(value: unknown, index: number): TodoistTask {
+  const context = `task ${index}`
+  const task = object(value, context)
+  return {
+    id: identifier(task.id, `${context}.id`),
+    projectId: identifier(task.project_id, `${context}.project_id`),
+    parentId:
+      task.parent_id === undefined || task.parent_id === null
+        ? null
+        : identifier(task.parent_id, `${context}.parent_id`),
+    content: string(task.content, `${context}.content`),
+    description: optionalText(task.description, `${context}.description`),
+    labels: stringArray(task.labels, `${context}.labels`),
+    priority: integerInRange(task.priority, 1, 4, `${context}.priority`),
+    addedAt: optionalTimestamp(task.added_at, `${context}.added_at`),
+    updatedAt: optionalTimestamp(task.updated_at, `${context}.updated_at`),
+    due: parseDue(task.due, `${context}.due`),
+    deadline: parseDeadline(task.deadline, `${context}.deadline`),
+    duration: parseDuration(task.duration, `${context}.duration`),
   }
 }
 
@@ -197,30 +247,13 @@ function parseCompletedTask(
   const context = `completed task ${index}`
   const task = object(value, context)
   return {
-    id: string(task.id, `${context}.id`),
-    projectId: string(task.project_id, `${context}.project_id`),
-    sectionId: nullableString(task.section_id, `${context}.section_id`),
-    parentId: nullableString(task.parent_id, `${context}.parent_id`),
+    id: identifier(task.id, `${context}.id`),
+    projectId: identifier(task.project_id, `${context}.project_id`),
     content: string(task.content, `${context}.content`),
-    description: string(task.description, `${context}.description`),
-    labels: stringArray(task.labels, `${context}.labels`),
-    priority: number(task.priority, `${context}.priority`),
-    addedAt: nullableString(task.added_at, `${context}.added_at`),
-    completedAt: nullableString(task.completed_at, `${context}.completed_at`),
-    completedByUserId: nullableString(
-      task.completed_by_uid,
-      `${context}.completed_by_uid`
+    completedAt: absoluteTimestamp(
+      task.completed_at,
+      `${context}.completed_at`
     ),
-    responsibleUserId: nullableString(
-      task.responsible_uid,
-      `${context}.responsible_uid`
-    ),
-    updatedAt: nullableString(task.updated_at, `${context}.updated_at`),
-    due: parseDue(task.due, `${context}.due`),
-    deadline: parseDeadline(task.deadline, `${context}.deadline`),
-    duration: parseDuration(task.duration, `${context}.duration`),
-    completedCount: number(task.completed_count, `${context}.completed_count`),
-    postponedCount: number(task.postponed_count, `${context}.postponed_count`),
     isDeleted: boolean(task.is_deleted, `${context}.is_deleted`),
   }
 }
@@ -258,28 +291,10 @@ function parseProject(value: unknown, index: number): TodoistProject {
   const context = `project ${index}`
   const project = object(value, context)
   return {
-    id: string(project.id, `${context}.id`),
+    id: identifier(project.id, `${context}.id`),
     name: string(project.name, `${context}.name`),
-    description: string(project.description, `${context}.description`),
-    color: string(project.color, `${context}.color`),
-    isArchived: boolean(project.is_archived, `${context}.is_archived`),
-    isDeleted: boolean(project.is_deleted, `${context}.is_deleted`),
-    isFavorite: boolean(project.is_favorite, `${context}.is_favorite`),
-    isShared: boolean(project.is_shared, `${context}.is_shared`),
-    inboxProject: optionalBoolean(
-      project.inbox_project,
-      `${context}.inbox_project`
-    ),
-    viewStyle: string(project.view_style, `${context}.view_style`),
-    role: optionalString(project.role, `${context}.role`),
-    status: optionalString(project.status, `${context}.status`),
-    workspaceId: optionalString(
-      project.workspace_id,
-      `${context}.workspace_id`
-    ),
-    parentId: optionalString(project.parent_id, `${context}.parent_id`),
-    createdAt: nullableString(project.created_at, `${context}.created_at`),
-    updatedAt: nullableString(project.updated_at, `${context}.updated_at`),
+    description: optionalText(project.description, `${context}.description`),
+    updatedAt: optionalTimestamp(project.updated_at, `${context}.updated_at`),
   }
 }
 
@@ -295,45 +310,70 @@ function nextCursor(value: unknown, context: string): string | undefined {
   return cursor
 }
 
-function parseCompletedTasksPage(value: unknown): TodoistCompletedTasksPage {
-  const response = object(value, "completed tasks response")
-  if (!("items" in response)) {
-    throw new Error("Todoist API completed tasks response is missing items.")
+function parseResourcePage<T>(
+  value: unknown,
+  options: {
+    context: string
+    resourceField: "results" | "items"
+    resourceName: string
+    parseResource: (value: unknown, index: number) => T
+    allowMissingCursorOnEmpty?: boolean
   }
-  if (!Array.isArray(response.items)) {
-    throw new Error("Todoist API returned invalid completed tasks items.")
-  }
-  if (!("next_cursor" in response) && response.items.length > 0) {
+): { resources: T[]; nextCursor: string | undefined } {
+  const response = object(value, options.context)
+  if (!(options.resourceField in response)) {
     throw new Error(
-      "Todoist API completed tasks response is missing next_cursor."
+      `Todoist API ${options.context} is missing ${options.resourceField}.`
     )
   }
+  const resources = response[options.resourceField]
+  if (!Array.isArray(resources)) {
+    throw new Error(`Todoist API returned invalid ${options.resourceName}.`)
+  }
+  if (
+    !("next_cursor" in response) &&
+    !(options.allowMissingCursorOnEmpty && resources.length === 0)
+  ) {
+    throw new Error(`Todoist API ${options.context} is missing next_cursor.`)
+  }
   return {
-    resources: response.items.map(parseCompletedTask),
-    // Todoist omits next_cursor on an empty terminal page instead of returning
-    // the documented null value. A non-empty page still requires the cursor
-    // field so a malformed response cannot silently advance the checkpoint.
+    resources: resources.map(options.parseResource),
+    // The completion-history endpoint has been observed omitting next_cursor
+    // on an empty terminal page. Replacement inventories never get that
+    // exception because an ambiguous empty page could sweep every managed row.
     nextCursor:
       "next_cursor" in response
-        ? nextCursor(response.next_cursor, "completed tasks response")
+        ? nextCursor(response.next_cursor, options.context)
         : undefined,
   }
 }
 
+function parseTasksPage(value: unknown): TodoistTasksPage {
+  return parseResourcePage(value, {
+    context: "tasks response",
+    resourceField: "results",
+    resourceName: "task results",
+    parseResource: parseTask,
+  })
+}
+
+function parseCompletedTasksPage(value: unknown): TodoistCompletedTasksPage {
+  return parseResourcePage(value, {
+    context: "completed tasks response",
+    resourceField: "items",
+    resourceName: "completed task items",
+    parseResource: parseCompletedTask,
+    allowMissingCursorOnEmpty: true,
+  })
+}
+
 function parseProjectsPage(value: unknown): TodoistProjectsPage {
-  const response = object(value, "projects response")
-  if (!("results" in response) || !("next_cursor" in response)) {
-    throw new Error(
-      "Todoist API projects response is missing results or next_cursor."
-    )
-  }
-  if (!Array.isArray(response.results)) {
-    throw new Error("Todoist API returned invalid project results.")
-  }
-  return {
-    resources: response.results.map(parseProject),
-    nextCursor: nextCursor(response.next_cursor, "projects response"),
-  }
+  return parseResourcePage(value, {
+    context: "projects response",
+    resourceField: "results",
+    resourceName: "project results",
+    parseResource: parseProject,
+  })
 }
 
 export function parseRetryAfterSeconds(
@@ -463,7 +503,7 @@ export function createTodoistClient(
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
-          "User-Agent": "notion-cookbook-todoist-completed-work-sync",
+          "User-Agent": "notion-cookbook-todoist-sync",
         },
         redirect: "error",
         signal,
@@ -570,6 +610,13 @@ export function createTodoistClient(
       return parseAuthenticatedUser(await fetchJson(new URL(`${baseUrl}/user`)))
     },
 
+    async fetchTasksPage(cursor) {
+      const url = new URL(`${baseUrl}/tasks`)
+      url.searchParams.set("limit", String(TODOIST_PAGE_SIZE))
+      if (cursor) url.searchParams.set("cursor", cursor)
+      return parseTasksPage(await fetchJson(url))
+    },
+
     async fetchCompletedTasksPage({ since, until, cursor }) {
       const url = new URL(`${baseUrl}/tasks/completed/by_completion_date`)
       url.searchParams.set("since", since)
@@ -579,9 +626,8 @@ export function createTodoistClient(
       return parseCompletedTasksPage(await fetchJson(url))
     },
 
-    async fetchProjectsPage(collection, cursor) {
-      const suffix = collection === "archived" ? "/archived" : ""
-      const url = new URL(`${baseUrl}/projects${suffix}`)
+    async fetchProjectsPage(cursor) {
+      const url = new URL(`${baseUrl}/projects`)
       url.searchParams.set("limit", String(TODOIST_PAGE_SIZE))
       if (cursor) url.searchParams.set("cursor", cursor)
       return parseProjectsPage(await fetchJson(url))

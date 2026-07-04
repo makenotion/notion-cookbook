@@ -519,10 +519,10 @@
       }
     },
     {
-      "id": "todoist-completed-work-sync",
-      "title": "Todoist completed work sync",
-      "summary": "Keep a durable journal of completed Todoist tasks related to last-known active and archived project context.",
-      "path": "workers/todoist-completed-work-sync",
+      "id": "todoist-sync",
+      "title": "Todoist sync",
+      "summary": "Sync open Todoist tasks and project summaries with recent completion context.",
+      "path": "workers/todoist-sync",
       "kind": "worker-sync",
       "status": "ready",
       "language": "typescript",
@@ -534,7 +534,7 @@
         "check": "npm run check",
         "test": "npm test",
         "build": "npm run build",
-        "deploy": "ntn workers deploy --name todoist-completed-work-sync"
+        "deploy": "ntn workers deploy --name todoist-sync"
       }
     },
     {

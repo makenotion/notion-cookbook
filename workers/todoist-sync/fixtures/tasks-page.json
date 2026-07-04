@@ -1,0 +1,63 @@
+{
+  "results": [
+    {
+      "id": "task-overdue",
+      "project_id": "project-launch",
+      "parent_id": null,
+      "content": "Resolve launch blocker",
+      "description": "Confirm the owner and unblock the release.",
+      "labels": ["launch", "needs-review"],
+      "priority": 4,
+      "added_at": "2026-06-30T14:00:00Z",
+      "updated_at": "2026-07-03T18:00:00Z",
+      "due": {
+        "date": "2026-07-03",
+        "is_recurring": false,
+        "timezone": null
+      },
+      "deadline": {
+        "date": "2026-07-05"
+      },
+      "duration": {
+        "amount": 30,
+        "unit": "minute"
+      }
+    },
+    {
+      "id": "task-upcoming",
+      "project_id": "project-launch",
+      "parent_id": "task-parent",
+      "content": "Publish launch notes",
+      "description": "",
+      "labels": ["Launch, 2026"],
+      "priority": 2,
+      "added_at": "2026-07-01T12:00:00Z",
+      "updated_at": "2026-07-04T12:00:00Z",
+      "due": {
+        "date": "2026-07-08T09:00:00",
+        "is_recurring": true,
+        "timezone": null
+      },
+      "deadline": null,
+      "duration": {
+        "amount": 90,
+        "unit": "minute"
+      }
+    },
+    {
+      "id": "task-unscheduled",
+      "project_id": "project-operations",
+      "parent_id": null,
+      "content": "Document support handoff",
+      "description": "Add the agreed escalation path.",
+      "labels": null,
+      "priority": 4,
+      "added_at": "2026-07-02T12:00:00Z",
+      "updated_at": null,
+      "due": null,
+      "deadline": null,
+      "duration": null
+    }
+  ],
+  "next_cursor": null
+}
