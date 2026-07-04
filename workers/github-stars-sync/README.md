@@ -60,9 +60,9 @@ judgment and notes.
 
 ### Synced database and schedule
 
-| Database                        | Sync                      | Mode    | Schedule   |
-| ------------------------------- | ------------------------- | ------- | ---------- |
-| **GitHub Starred Repositories** | `starredRepositoriesSync` | replace | Every hour |
+| Database                        | Sync                      | Mode        | Schedule   |
+| ------------------------------- | ------------------------- | ----------- | ---------- |
+| **GitHub Starred Repositories** | `starredRepositoriesSync` | incremental | Every hour |
 
 The database contains one page per repository:
 
@@ -99,51 +99,53 @@ overwritten during refreshes.
 
 GitHub provides paginated star timestamps, but no update cursor, unstar
 tombstones, or webhook for a user's complete star collection. A newest-first
-incremental sync could capture new stars but could not remove unstarred
-repositories reliably.
+scan could capture new stars but could not remove unstarred repositories
+reliably.
 
-This Worker uses a guarded hourly replacement instead:
+This Worker uses incremental mode so removals are explicit, but it still scans
+the complete star collection every hour:
 
 1. For every stars page, it calls `GET /user` with the same credential and
    verifies the returned ID against `GITHUB_USER_ID` and the account pinned in
    sync state.
-2. A baseline pass reads stars in ascending `starred_at` order and upserts each
+2. One pass reads stars in ascending `starred_at` order and upserts each
    repository by numeric ID.
-3. A confirmation pass reads the complete membership again without emitting
-   duplicate upserts.
-4. Only matching membership sets complete the replacement and allow Notion to
-   remove pages that are no longer returned by GitHub.
+3. A repository missing from one completed hourly inventory is retained and
+   recorded as a possible absence.
+4. Only a second consecutive completed inventory without that repository emits
+   an explicit delete. Seeing it again clears the absence evidence.
 
-If authentication, pagination, or either pass fails, replacement does not
-complete and Notion does not sweep existing pages. A star or unstar can shift a
-repository across an offset-pagination boundary and make the two membership
-sets disagree. That mismatch fails closed and retains confirmation state; reset
-the capability before starting a new baseline:
+Authentication, pagination, or validation failures do not count as completed
+inventories and never confirm a deletion. Ordinary failures resume from the
+saved page. If a cross-page duplicate proves that offset pagination shifted,
+the Worker ends without advancing absence evidence and starts from page one on
+the next schedule. Stars and unstars do not require a manual state reset.
 
-```sh
-ntn workers sync state reset starredRepositoriesSync
-```
-
-The next stable run then reconciles the collection.
-
-Each pass supports up to 100 GitHub pages, or 10,000 stars. A larger or known
+Each inventory supports up to 100 GitHub pages, or 10,000 stars. A larger or known
 truncated collection fails instead of being treated as complete. Requests use
 GitHub's star media type and pinned REST API version, share a conservative rate
 pacer, respect rate-limit reset timing, and have bounded time and response size.
 
 ### Deletion and access behavior
 
-After two stable passes, unstarred repositories are removed from the managed
-database. Removing a managed page also removes its page-body notes and custom
-property values. If that context must remain durable, mark the repository with
-an **Archive** or **Evaluation** property instead of un-starring, or move the
-durable record to another database first.
+After a repository is absent from two consecutive completed inventories, the
+Worker removes it from the managed database. Removing a managed page also
+removes its page-body notes and custom property values. If that context must
+remain durable, mark the repository with an **Archive** or **Evaluation**
+property instead of un-starring, or move the durable record elsewhere first.
+The two-inventory delay protects against one shifted offset traversal; GitHub
+does not provide an atomic snapshot of the star collection.
 
 GitHub also omits private repositories that the current credential can no
-longer read. That absence is indistinguishable from an unstar, so a stable
-replacement removes those pages too. Preserve durable notes before narrowing
+longer read. That absence is indistinguishable from an unstar, so two completed
+inventories remove those pages too. Preserve durable notes before narrowing
 PAT, GitHub App, or organization access. Preview the reduced scope as
 verification, but do not treat preview as a pause on the hourly schedule.
+
+Deployments preserve inventory state. Do not reset state to recover from normal
+membership changes. A reset safely starts a new baseline, but it forgets
+already-managed repositories that are no longer visible to GitHub; those stale
+Notion pages may then require manual removal.
 
 ### Authentication
 
@@ -161,11 +163,19 @@ needed for private stars. The Worker requests no write permission.
 For GitHub App user OAuth:
 
 1. Deploy once in PAT mode so Workers allocates the OAuth callback URL.
-2. Create a GitHub App with **Starring: Read-only** account permission and no
-   webhook.
-3. Print the callback URL with `ntn workers oauth show-redirect-url` and add it
+2. Create a GitHub App with no webhook. Under **Where can this GitHub App be
+   installed?**, choose **Any account** if private stars belong to accounts
+   other than the app owner.
+3. Grant **Starring: Read-only** under account permissions.
+4. Print the callback URL with `ntn workers oauth show-redirect-url` and add it
    to the app's callback URLs.
-4. Configure the app credentials and redeploy:
+5. From the app's **Install App** page, install it on every account that owns
+   private starred repositories you expect to sync: the user's personal account
+   for personal repositories and each relevant organization. Request an
+   organization owner's approval when needed. If GitHub shows a
+   repository-access choice, select all repositories or include every expected
+   private repository.
+6. Configure the app credentials and redeploy:
 
    ```sh
    ntn workers env set GITHUB_AUTH_MODE=user
@@ -175,15 +185,20 @@ For GitHub App user OAuth:
    ntn workers deploy
    ```
 
-5. Authorize the GitHub user:
+7. Authorize the GitHub user:
 
    ```sh
    ntn workers oauth start githubUserOAuth
    ```
 
-Keep expiring user authorization tokens enabled. Installation tokens are not
-supported because `GET /user/starred` represents a person, not an app
-installation.
+8. Immediately run a preview and confirm that expected private repositories
+   are present. If coverage is incomplete, restore installation access before
+   leaving the scheduled capability enabled.
+
+Authorization does not install a GitHub App. GitHub App user tokens can access
+resources only in accounts where the app is installed. Keep expiring user
+authorization tokens enabled. Installation tokens are not supported because
+`GET /user/starred` represents a person, not an app installation.
 
 | Variable                   | Modes  | Description                               |
 | -------------------------- | ------ | ----------------------------------------- |
@@ -193,10 +208,10 @@ installation.
 | `GITHUB_APP_CLIENT_ID`     | `user` | GitHub App client ID                      |
 | `GITHUB_APP_CLIENT_SECRET` | `user` | GitHub App client secret                  |
 
-`GITHUB_USER_ID` verifies the credential and protects an in-flight replacement;
-it is not a permanent deployment binding. Never change both the expected ID and
-credential to repoint an existing deployment. Create a separate Worker and
-managed database for the other account.
+`GITHUB_USER_ID` verifies the credential and pins persisted inventory state to
+one account. Never change both the expected ID and credential to repoint an
+existing deployment. Create a separate Worker and managed database for the
+other account.
 
 ### Adapt the sync
 
@@ -206,9 +221,9 @@ managed database for the other account.
   property in `src/repositories.ts`, emit the matching `Builder.*` value, and
   update the fixture and property table. Emit `[]` when a nullable source value
   disappears so stale values are cleared.
-- **Change the schedule.** Edit `schedule: "1h"` in `src/index.ts`. Do not
-  replace the guarded full sweep with an incremental-only scan unless another
-  automatic reconciliation path handles unstars and permission changes.
+- **Change the schedule.** Edit `schedule: "1h"` in `src/index.ts`. Keep the
+  complete inventory and two-inventory absence confirmation so unstars and
+  permission changes cannot delete pages after one incomplete view.
 
 Keep the numeric repository ID as the sync key and leave page bodies unmanaged
 when users are expected to keep notes there.
@@ -244,4 +259,5 @@ private repository metadata.
 - [GitHub REST API endpoint for the authenticated user](https://docs.github.com/en/rest/users/users#get-the-authenticated-user)
 - [GitHub REST API pagination](https://docs.github.com/en/rest/using-the-rest-api/using-pagination-in-the-rest-api)
 - [GitHub App user authentication](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/authenticating-with-a-github-app-on-behalf-of-a-user)
+- [Install your own GitHub App](https://docs.github.com/en/apps/using-github-apps/installing-your-own-github-app)
 - [Contributing guide](../../CONTRIBUTING.md)
