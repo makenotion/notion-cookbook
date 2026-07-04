@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+  <deploymentStatus>Deployed</deploymentStatus>
+  <description>Durable, provider-enforced operation ledger for the Notion recordMeetingOutcome Worker.</description>
+  <label>Notion Meeting Operation</label>
+  <nameField>
+    <displayFormat>NMO-{000000}</displayFormat>
+    <label>Operation Number</label>
+    <type>AutoNumber</type>
+  </nameField>
+  <pluralLabel>Notion Meeting Operations</pluralLabel>
+  <sharingModel>Private</sharingModel>
+</CustomObject>

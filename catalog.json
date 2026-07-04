@@ -405,6 +405,25 @@
       }
     },
     {
+      "id": "salesforce-record-meeting-outcome",
+      "title": "Salesforce record meeting outcome agent tool",
+      "summary": "Record one human-approved meeting outcome as an idempotent Salesforce activity, allowlisted Opportunity changes, follow-up Tasks, and a Notion receipt.",
+      "path": "workers/salesforce-record-meeting-outcome",
+      "kind": "worker-tool",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "salesforce"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name salesforce-record-meeting-outcome"
+      }
+    },
+    {
       "id": "salesforce-sync",
       "title": "Salesforce sync",
       "summary": "Sync Salesforce accounts and opportunities into related managed Notion databases.",

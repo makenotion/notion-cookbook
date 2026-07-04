@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+  <caseSensitive>true</caseSensitive>
+  <description>Stable SHA-256 key for one Notion meeting page and Opportunity. Unique insertion is the concurrency claim.</description>
+  <externalId>true</externalId>
+  <label>Operation Key</label>
+  <length>64</length>
+  <required>true</required>
+  <type>Text</type>
+  <unique>true</unique>
+</CustomField>
