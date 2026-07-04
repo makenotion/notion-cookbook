@@ -1,22 +1,24 @@
+import {
+  DEPLOYMENT_ID,
+  GIT_SHA,
+  HOSTNAME,
+  MAX_HEALTH_DOMAINS,
+  MAX_PRODUCTION_DOMAINS,
+} from "./config.js"
 import type {
   ProductionObservation,
+  RollingReleaseState,
   TransitionAction,
   VercelClientLike,
   VercelDeployment,
 } from "./types.js"
 import { SafetyError, VercelHttpError } from "./types.js"
-import { DEPLOYMENT_ID, GIT_SHA, HOSTNAME } from "./config.js"
 
 const API_ORIGIN = "https://api.vercel.com"
 const DEPLOYMENT_HOSTNAME =
   /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:vercel\.app|now\.sh)$/
 
 export const MAX_VERCEL_RESPONSE_BYTES = 1_048_576
-export const MAX_CHECK_DEFINITIONS = 100
-export const MAX_CHECK_RUNS = 100
-export const MAX_PROJECT_ALIAS_INVENTORY = 100
-export const MAX_PRODUCTION_HEALTH_DOMAINS = 5
-
 export interface VercelClientOptions {
   token: string
   protectionBypassSecret: string | null
@@ -25,37 +27,6 @@ export interface VercelClientOptions {
   fetchImpl?: typeof fetch
   sleep?: (milliseconds: number) => Promise<void>
   now?: () => Date
-}
-
-export interface VercelProject {
-  id: string
-  accountId?: string
-  alias?: Array<{
-    domain?: string
-    target?: string
-    environment?: string
-    deployment?: { id?: string } | null
-    redirect?: string | null
-  }>
-}
-
-export interface VercelCheckDefinition {
-  id?: string
-  ownerId?: string
-  projectId?: string
-  deletedAt?: number | null
-}
-
-export interface VercelCheckRun {
-  checkId?: string
-  ownerId?: string
-  deploymentId?: string
-  projectId?: string
-  status?: string
-  conclusion?: string
-  createdAt?: number
-  updatedAt?: number
-  completedAt?: number
 }
 
 interface RawDeployment {
@@ -73,6 +44,18 @@ interface RawDeployment {
   gitSource?: { sha?: string }
 }
 
+interface VercelProject {
+  id?: string
+  accountId?: string
+  alias?: Array<{
+    domain?: string
+    target?: string
+    environment?: string
+    deployment?: { id?: string } | null
+    redirect?: string | null
+  }>
+}
+
 function fail(code: string, message: string): never {
   throw new SafetyError(code, message)
 }
@@ -83,12 +66,14 @@ function retryDelay(response: Response, now: Date): number {
     const seconds = Number(retryAfter)
     if (Number.isFinite(seconds)) return Math.max(0, seconds * 1_000)
     const date = new Date(retryAfter)
-    if (!Number.isNaN(date.getTime()))
+    if (!Number.isNaN(date.getTime())) {
       return Math.max(0, date.getTime() - now.getTime())
+    }
   }
   const reset = Number(response.headers.get("x-ratelimit-reset"))
-  if (Number.isFinite(reset) && reset > 0)
+  if (Number.isFinite(reset) && reset > 0) {
     return Math.max(0, reset * 1_000 - now.getTime())
+  }
   return 250
 }
 
@@ -134,13 +119,12 @@ async function boundedJson(response: Response): Promise<unknown> {
     if (error instanceof VercelHttpError) throw error
     throw new VercelHttpError(
       "A successful Vercel response could not be read.",
-      {
-        status: response.status,
-      }
+      { status: response.status }
     )
   } finally {
     reader.releaseLock()
   }
+
   try {
     const bytes = new Uint8Array(length)
     let offset = 0
@@ -190,6 +174,7 @@ export class VercelClient implements VercelClientLike {
         throw new VercelHttpError("A Vercel read request timed out or failed.")
       }
       if (response.ok) return boundedJson(response)
+
       const retryAfterMs = retryDelay(response, this.now())
       await disposeBody(response)
       if (
@@ -202,119 +187,31 @@ export class VercelClient implements VercelClientLike {
       }
       throw new VercelHttpError(
         `Vercel read request failed with HTTP ${response.status}.`,
-        { status: response.status, retryAfterMs }
+        { status: response.status }
       )
     }
     throw new VercelHttpError("Vercel read retry bound was exhausted.")
   }
 
-  private async getRawDeployment(
+  async getDeployment(
     teamId: string,
+    projectId: string,
     deploymentId: string
-  ): Promise<RawDeployment> {
-    return (await this.read(
+  ): Promise<VercelDeployment> {
+    if (!DEPLOYMENT_ID.test(deploymentId)) {
+      fail("INVALID_DEPLOYMENT_ID", "The deployment ID must start with dpl_.")
+    }
+    const raw = (await this.read(
       `/v13/deployments/${encodeURIComponent(deploymentId)}?withGitRepoInfo=true&teamId=${encodeURIComponent(teamId)}`
     )) as RawDeployment
+    return normalizeDeployment(raw, teamId, projectId, deploymentId)
   }
 
-  private async getCollection<T>(
-    path: string,
-    key: string,
-    limit: number
-  ): Promise<T[]> {
-    const body = (await this.read(path)) as Record<string, unknown>
-    const values = body[key]
-    if (!Array.isArray(values)) {
-      throw new VercelHttpError(`Vercel returned no ${key} array.`)
-    }
-    if (values.length > limit) {
-      throw new VercelHttpError(`Vercel returned more than ${limit} ${key}.`)
-    }
-    return values as T[]
-  }
-
-  async verifyDeployment(
-    teamId: string,
-    projectId: string,
-    deploymentId: string,
-    expectedGitSha: string,
-    expectedState: "staged" | "promoted"
-  ): Promise<VercelDeployment> {
-    const raw = await this.getRawDeployment(teamId, deploymentId)
-    const deployment = normalizeDeployment(raw, teamId, projectId, deploymentId)
-    if (
-      raw.target !== "production" ||
-      raw.readyState !== "READY" ||
-      raw.readySubstate !== expectedState.toUpperCase()
-    ) {
-      fail(
-        "DEPLOYMENT_STATE_MISMATCH",
-        `The deployment must be READY/${expectedState.toUpperCase()} with a production target.`
-      )
-    }
-    if (!GIT_SHA.test(expectedGitSha) || deployment.gitSha !== expectedGitSha) {
-      fail(
-        "GIT_IDENTITY_MISMATCH",
-        "The deployment Git SHA differs from the approved identity."
-      )
-    }
-    return deployment
-  }
-
-  async verifyDeploymentChecks(
-    teamId: string,
-    projectId: string,
-    deploymentId: string,
-    requiredCheckIds: string[]
-  ): Promise<void> {
-    if (requiredCheckIds.length === 0) return
-    if (
-      requiredCheckIds.length > 20 ||
-      new Set(requiredCheckIds).size !== requiredCheckIds.length
-    ) {
-      fail(
-        "DEPLOYMENT_CHECKS_INVALID",
-        "Required Deployment Check IDs are duplicated or unbounded."
-      )
-    }
-    const [deployment, definitions, runs] = await Promise.all([
-      this.getRawDeployment(teamId, deploymentId),
-      this.getCollection<VercelCheckDefinition>(
-        `/v2/projects/${encodeURIComponent(projectId)}/checks?teamId=${encodeURIComponent(teamId)}`,
-        "checks",
-        MAX_CHECK_DEFINITIONS
-      ),
-      this.getCollection<VercelCheckRun>(
-        `/v2/deployments/${encodeURIComponent(deploymentId)}/check-runs?teamId=${encodeURIComponent(teamId)}`,
-        "runs",
-        MAX_CHECK_RUNS
-      ),
-    ])
-    normalizeDeployment(deployment, teamId, projectId, deploymentId)
-    if (
-      deployment.checksState !== "completed" ||
-      deployment.checksConclusion !== "succeeded"
-    ) {
-      fail(
-        "DEPLOYMENT_CHECKS_INCOMPLETE",
-        "The deployment aggregate check state is not completed/succeeded."
-      )
-    }
-    verifyCheckRuns(
-      definitions,
-      runs,
-      requiredCheckIds,
-      teamId,
-      projectId,
-      deploymentId
-    )
-  }
-
-  async assertRollingReleasesDisabled(
+  async getRollingReleaseState(
     teamId: string,
     projectId: string
-  ): Promise<void> {
-    const [configuration, activeState] = await Promise.all([
+  ): Promise<RollingReleaseState> {
+    const [configuration, active] = await Promise.all([
       this.read(
         `/v1/projects/${encodeURIComponent(projectId)}/rolling-release/config?teamId=${encodeURIComponent(teamId)}`
       ),
@@ -322,23 +219,18 @@ export class VercelClient implements VercelClientLike {
         `/v1/projects/${encodeURIComponent(projectId)}/rolling-release?teamId=${encodeURIComponent(teamId)}&state=ACTIVE`
       ),
     ])
-    assertRollingReleaseWrapper(configuration, "configured")
-    assertRollingReleaseWrapper(activeState, "active")
+    if (hasRollingRelease(active)) return "active"
+    return hasRollingRelease(configuration) ? "configured" : "none"
   }
 
   async observeProduction(
     teamId: string,
-    projectId: string,
-    productionDomains: string[]
+    projectId: string
   ): Promise<ProductionObservation> {
-    return observeProject(
-      (await this.read(
-        `/v9/projects/${encodeURIComponent(projectId)}?teamId=${encodeURIComponent(teamId)}`
-      )) as VercelProject,
-      teamId,
-      projectId,
-      productionDomains
-    )
+    const project = (await this.read(
+      `/v9/projects/${encodeURIComponent(projectId)}?teamId=${encodeURIComponent(teamId)}`
+    )) as VercelProject
+    return observeProject(project, teamId, projectId)
   }
 
   async requestTransition(
@@ -347,11 +239,10 @@ export class VercelClient implements VercelClientLike {
     projectId: string,
     targetDeploymentId: string
   ): Promise<void> {
-    const description = `Notion-approved rollback to ${targetDeploymentId}`
     const path =
       action === "promote"
         ? `/v10/projects/${encodeURIComponent(projectId)}/promote/${encodeURIComponent(targetDeploymentId)}?teamId=${encodeURIComponent(teamId)}`
-        : `/v1/projects/${encodeURIComponent(projectId)}/rollback/${encodeURIComponent(targetDeploymentId)}?teamId=${encodeURIComponent(teamId)}&description=${encodeURIComponent(description)}`
+        : `/v1/projects/${encodeURIComponent(projectId)}/rollback/${encodeURIComponent(targetDeploymentId)}?teamId=${encodeURIComponent(teamId)}&description=${encodeURIComponent("Rollback requested from Notion")}`
     let response: Response
     try {
       response = await this.fetchImpl(`${API_ORIGIN}${path}`, {
@@ -369,22 +260,22 @@ export class VercelClient implements VercelClientLike {
         { ambiguous: true }
       )
     }
-    const retryAfterMs = retryDelay(response, this.now())
+
     await disposeBody(response)
     const accepted =
       action === "promote"
         ? response.status === 201 || response.status === 202
         : response.status === 201
     if (accepted) return
+
     const definite =
       action === "promote"
         ? [400, 401, 403, 409, 429]
         : [400, 401, 402, 403, 409, 422, 429]
     throw new VercelHttpError(
-      `Vercel ${action} returned HTTP ${response.status}; reconcile before retrying.`,
+      `Vercel ${action} returned HTTP ${response.status}; inspect live state before another request.`,
       {
         status: response.status,
-        retryAfterMs: Math.min(retryAfterMs, 300_000),
         ambiguous: !definite.includes(response.status),
       }
     )
@@ -394,10 +285,11 @@ export class VercelClient implements VercelClientLike {
     hostname: string,
     paths: string[]
   ): Promise<void> {
+    if (paths.length === 0) return
     if (!DEPLOYMENT_HOSTNAME.test(hostname)) {
       fail(
         "DEPLOYMENT_URL_UNSAFE",
-        "The deployment hostname is outside vercel.app/now.sh."
+        "Vercel returned an unsafe deployment hostname."
       )
     }
     await this.checkHosts([hostname], paths, true)
@@ -407,7 +299,8 @@ export class VercelClient implements VercelClientLike {
     domains: string[],
     paths: string[]
   ): Promise<void> {
-    assertDomains(domains)
+    if (paths.length === 0) return
+    assertHealthDomains(domains)
     await this.checkHosts(domains, paths, false)
   }
 
@@ -470,132 +363,93 @@ function normalizeDeployment(
   ) {
     fail(
       "DEPLOYMENT_IDENTITY_MISMATCH",
-      "Vercel returned a deployment outside the configured team/project identity."
+      "Vercel returned a deployment outside the configured team and project."
     )
   }
   if (!raw.url || !DEPLOYMENT_HOSTNAME.test(raw.url)) {
     fail(
       "DEPLOYMENT_URL_UNSAFE",
-      "Vercel returned no safe canonical deployment hostname."
+      "Vercel returned no safe deployment hostname."
     )
   }
-  if (!raw.gitSource?.sha || !GIT_SHA.test(raw.gitSource.sha)) {
-    fail(
-      "GIT_IDENTITY_MISMATCH",
-      "Vercel returned no valid deployment Git SHA."
-    )
+  const gitSha = raw.gitSource?.sha ?? null
+  if (gitSha !== null && !GIT_SHA.test(gitSha)) {
+    fail("GIT_IDENTITY_INVALID", "Vercel returned an invalid Git SHA.")
   }
   return {
     id: deploymentId,
     projectId,
     teamId,
     url: raw.url,
+    target: raw.target ?? null,
     readyState: raw.readyState ?? "UNKNOWN",
-    gitSha: raw.gitSource.sha,
+    readySubstate: raw.readySubstate ?? null,
+    gitSha,
+    checksState: raw.checksState ?? null,
+    checksConclusion: raw.checksConclusion ?? null,
   }
 }
 
-function verifyCheckRuns(
-  definitions: VercelCheckDefinition[],
-  runs: VercelCheckRun[],
-  requiredCheckIds: string[],
-  teamId: string,
-  projectId: string,
-  deploymentId: string
-): void {
-  for (const checkId of requiredCheckIds) {
-    const matchingDefinitions = definitions.filter(
-      (definition) =>
-        definition.id === checkId &&
-        definition.ownerId === teamId &&
-        definition.deletedAt == null &&
-        definition.projectId === projectId
-    )
-    const matchingRuns = runs.filter(
-      (run) =>
-        run.checkId === checkId &&
-        run.ownerId === teamId &&
-        run.deploymentId === deploymentId &&
-        (run.projectId === undefined || run.projectId === projectId)
-    )
-    const timestampsValid = matchingRuns.every(
-      (run) => Number.isFinite(run.createdAt) && Number.isFinite(run.updatedAt)
-    )
-    const latest = timestampsValid
-      ? matchingRuns.sort(
-          (a, b) => b.createdAt! - a.createdAt! || b.updatedAt! - a.updatedAt!
-        )[0]
-      : undefined
-    if (
-      matchingDefinitions.length !== 1 ||
-      typeof latest?.completedAt !== "number" ||
-      latest?.status !== "completed" ||
-      latest.conclusion !== "succeeded"
-    ) {
-      fail(
-        "DEPLOYMENT_CHECK_FAILED",
-        `Required Deployment Check ${checkId} is missing or unsuccessful.`
-      )
-    }
-  }
-}
-
-function assertRollingReleaseWrapper(value: unknown, state: string): void {
-  const wrapper = value as Record<string, unknown> | null
+function hasRollingRelease(value: unknown): boolean {
   if (
-    !wrapper ||
-    Array.isArray(wrapper) ||
-    !Object.hasOwn(wrapper, "rollingRelease")
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    !Object.hasOwn(value, "rollingRelease")
   ) {
     fail(
       "ROLLING_RELEASE_RESPONSE_INVALID",
-      "Vercel returned an invalid rolling-release wrapper."
+      "Vercel returned an invalid rolling-release response."
     )
   }
-  if (wrapper.rollingRelease !== null) {
+  const rollingRelease = (value as { rollingRelease: unknown }).rollingRelease
+  if (
+    rollingRelease !== null &&
+    (typeof rollingRelease !== "object" || Array.isArray(rollingRelease))
+  ) {
     fail(
-      state === "configured"
-        ? "ROLLING_RELEASE_CONFIGURED"
-        : "ROLLING_RELEASE_ACTIVE",
-      `A rolling release is ${state} for this project; the transition is disabled.`
+      "ROLLING_RELEASE_RESPONSE_INVALID",
+      "Vercel returned an invalid rolling-release response."
     )
   }
+  return rollingRelease !== null
 }
 
 function observeProject(
   project: VercelProject,
   teamId: string,
-  projectId: string,
-  productionDomains: string[]
+  projectId: string
 ): ProductionObservation {
   if (project.id !== projectId || project.accountId !== teamId) {
     fail(
       "PROJECT_IDENTITY_MISMATCH",
-      "Vercel returned a project outside the configured team/project identity."
+      "Vercel returned a project outside the configured team and project."
     )
   }
   if (!Array.isArray(project.alias)) {
     fail("PROJECT_ALIASES_MISSING", "Vercel did not return project aliases.")
   }
-  if (project.alias.length > MAX_PROJECT_ALIAS_INVENTORY) {
+  const directProductionAliases = project.alias.filter(
+    (alias) =>
+      alias.redirect == null &&
+      (alias.target?.toUpperCase() === "PRODUCTION" ||
+        alias.environment?.toLowerCase() === "production")
+  )
+  if (
+    directProductionAliases.length < 1 ||
+    directProductionAliases.length > MAX_PRODUCTION_DOMAINS
+  ) {
     fail(
-      "PROJECT_ALIAS_INVENTORY_TOO_LARGE",
-      `Vercel returned more than ${MAX_PROJECT_ALIAS_INVENTORY} aliases.`
+      "PRODUCTION_DOMAINS_UNSUPPORTED",
+      `The project must expose 1–${MAX_PRODUCTION_DOMAINS} direct Production domains.`
     )
   }
-  assertDomains(productionDomains)
-  const configured = [...productionDomains].sort()
-  const aliases = project.alias.filter(
-    (alias) =>
-      alias.target?.toUpperCase() === "PRODUCTION" ||
-      alias.environment?.toLowerCase() === "production"
-  )
-  const domainDeploymentIds: Record<string, string | null> = {}
-  for (const alias of aliases) {
+
+  const domainDeploymentIds: Record<string, string> = {}
+  for (const alias of directProductionAliases) {
     const domain = alias.domain
     const deploymentId = alias.deployment?.id
     if (
-      alias.redirect != null ||
       typeof domain !== "string" ||
       domain !== domain.toLowerCase() ||
       !HOSTNAME.test(domain) ||
@@ -603,37 +457,30 @@ function observeProject(
       !DEPLOYMENT_ID.test(deploymentId)
     ) {
       fail(
-        "PROJECT_ALIAS_SET_MALFORMED",
-        "Vercel returned an invalid production alias mapping."
+        "PROJECT_ALIAS_MALFORMED",
+        "Vercel returned an invalid Production alias mapping."
       )
     }
     if (Object.hasOwn(domainDeploymentIds, domain)) {
-      fail("PROJECT_ALIAS_SET_MISMATCH", "Vercel returned duplicate aliases.")
+      fail("PROJECT_ALIAS_MALFORMED", "Vercel returned duplicate aliases.")
     }
     domainDeploymentIds[domain] = deploymentId
   }
-  const observed = Object.keys(domainDeploymentIds).sort()
-  if (
-    observed.length !== configured.length ||
-    configured.some((domain, index) => domain !== observed[index])
-  ) {
-    fail(
-      "PROJECT_ALIAS_SET_MISMATCH",
-      "Vercel production aliases do not exactly match configured domains."
-    )
-  }
-  const values = Object.values(domainDeploymentIds)
+
+  const productionDomains = Object.keys(domainDeploymentIds).sort()
+  const deploymentIds = Object.values(domainDeploymentIds)
   return {
     domainDeploymentIds,
-    exactDomainSet: true,
-    currentDeploymentId: new Set(values).size === 1 ? values[0] : null,
+    productionDomains,
+    currentDeploymentId:
+      new Set(deploymentIds).size === 1 ? deploymentIds[0] : null,
   }
 }
 
-function assertDomains(domains: string[]): void {
+function assertHealthDomains(domains: string[]): void {
   if (
     domains.length < 1 ||
-    domains.length > MAX_PRODUCTION_HEALTH_DOMAINS ||
+    domains.length > MAX_HEALTH_DOMAINS ||
     new Set(domains).size !== domains.length ||
     domains.some(
       (domain) => domain !== domain.toLowerCase() || !HOSTNAME.test(domain)

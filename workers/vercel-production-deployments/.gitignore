@@ -7,5 +7,5 @@ workers.*.json
 dist/
 node_modules/
 
-# This recipe intentionally tracks its reproducible standalone lockfile.
+# Keep the reproducible standalone lockfile.
 !package-lock.json

@@ -135,7 +135,7 @@ and a **webhook** handles events from another service. See the complete
 | Turn a Notion page into PowerPoint slides (`.pptx`) | [PowerPoint creator](workers/powerpoint-creator/)                       | Notion, PowerPoint  |
 | Query a warehouse with read-only SQL                | [Snowflake query](workers/snowflake-query/)                             | Snowflake           |
 | Learn the database-query pattern with seeded data   | [SQLite query](workers/sqlite-query/)                                   | SQLite              |
-| Promote or roll back an approved Vercel deployment  | [Vercel release approvals](workers/vercel-promote-approved-deployment/) | Notion, Vercel      |
+| Inspect, promote, or roll back a Vercel deployment  | [Vercel Production deployments](workers/vercel-production-deployments/) | Notion, Vercel      |
 
 ### Handle webhooks
 

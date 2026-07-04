@@ -41,7 +41,7 @@ For self-hosted integrations built directly with the Notion API, see the [API ex
 | [PowerPoint creator](powerpoint-creator/)                       | Turn a Notion page into PowerPoint slides and attach the generated `.pptx` file.   |
 | [Snowflake query](snowflake-query/)                             | Discover tables and query Snowflake with guarded, read-only SQL.                   |
 | [SQLite query](sqlite-query/)                                   | Query a seeded, in-memory SQLite database; no secrets required.                    |
-| [Vercel release approvals](vercel-promote-approved-deployment/) | Promote or roll back one Vercel project from an approved deployment page.          |
+| [Vercel Production deployments](vercel-production-deployments/) | Inspect, promote, or roll back one Vercel project with live release checks.        |
 
 ## Webhooks
 

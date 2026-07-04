@@ -1,5 +1,5 @@
 {
-  "name": "@notion-cookbook/vercel-promote-approved-deployment",
+  "name": "@notion-cookbook/vercel-production-deployments",
   "version": "0.0.0",
   "private": true,
   "scripts": {

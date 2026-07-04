@@ -481,10 +481,10 @@
       }
     },
     {
-      "id": "vercel-promote-approved-deployment",
-      "title": "Vercel release approvals",
-      "summary": "Promote or roll back one Vercel project from a Notion-approved deployment page.",
-      "path": "workers/vercel-promote-approved-deployment",
+      "id": "vercel-production-deployments",
+      "title": "Vercel Production deployments",
+      "summary": "Inspect, promote, or roll back one Vercel project with live release checks.",
+      "path": "workers/vercel-production-deployments",
       "kind": "worker-tool",
       "status": "ready",
       "language": "typescript",
@@ -496,7 +496,7 @@
         "check": "npm run check",
         "test": "npm test",
         "build": "npm run build",
-        "deploy": "ntn workers deploy --name vercel-promote-approved-deployment"
+        "deploy": "ntn workers deploy --name vercel-production-deployments"
       }
     },
     {
