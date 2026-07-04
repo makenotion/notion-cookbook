@@ -330,6 +330,25 @@
       }
     },
     {
+      "id": "jira-publish-implementation-plan",
+      "title": "Publish an approved Jira implementation plan",
+      "summary": "Publish an approved Notion work breakdown as one replay-safe Jira hierarchy with dependencies, backlinks, and a canonical receipt.",
+      "path": "workers/jira-publish-implementation-plan",
+      "kind": "worker-tool",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "jira-cloud", "redis"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name jira-publish-implementation-plan"
+      }
+    },
+    {
       "id": "jira-sync",
       "title": "Jira sync",
       "summary": "Sync Jira Cloud issues, current sprints, sprint analytics, and projects into managed Notion databases.",

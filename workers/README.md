@@ -42,6 +42,7 @@ For self-hosted integrations built directly with the Notion API, see the [API ex
 | [CloudWatch Logs](cloudwatch-logs/)                                       | Find log groups and streams and read AWS CloudWatch log events.                    |
 | [DuckDB query](duckdb-query/)                                             | Query a seeded, in-memory DuckDB database with read-only SQL; no secrets required. |
 | [GitHub draft release tools](github-draft-release-tools/)                 | Review an existing draft release and publish it after confirmation.                |
+| [Jira plan publisher](jira-publish-implementation-plan/)                  | Preview, publish, and inspect a bounded implementation plan in one Jira project.   |
 | [Postgres query](postgres-query/)                                         | Discover tables and query PostgreSQL with guarded, read-only SQL.                  |
 | [PowerPoint creator](powerpoint-creator/)                                 | Turn a Notion page into PowerPoint slides and attach the generated `.pptx` file.   |
 | [Snowflake query](snowflake-query/)                                       | Discover tables and query Snowflake with guarded, read-only SQL.                   |
