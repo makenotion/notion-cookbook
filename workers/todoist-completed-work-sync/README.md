@@ -57,9 +57,9 @@ platform supplies Notion authentication; do not add a `NOTION_API_TOKEN`.
 | **Todoist Completed Work** | What did I finish this week? Which tasks took longest, were postponed often, or lacked labels or due dates? What belongs in a status update, one-on-one, performance review, or retrospective? |
 | **Todoist Projects**       | Which active or archived projects account for completed work? How is finished work distributed across projects and workspaces?                                                                 |
 
-Useful Completed Work properties include **Completed**, **Project**,
-**Priority**, **Labels**, **Due**, **Deadline**, **Planned Duration**,
-**Days to Complete**, **Postponed Count**, and a direct **Task Link**. Projects
+Useful Completed Work properties include **Completed**, **Project**, **Labels**,
+**Days to Complete**, **Postponed Count**, **Due**, **Priority**,
+**Planned Duration**, **Deadline**, and a direct **Task Link**. Projects
 include their active or archived state, workspace context, and source metadata.
 See `src/completed-work.ts` and `src/projects.ts` for the complete schemas.
 

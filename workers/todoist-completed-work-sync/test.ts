@@ -108,20 +108,34 @@ test("worker manifest registers durable incremental syncs and shared pacing", ()
       key: database.key,
       title: database.config.initialTitle,
       primaryKey: database.config.primaryKeyProperty,
-      firstFive: Object.keys(database.config.schema.properties).slice(0, 5),
+      firstSix: Object.keys(database.config.schema.properties).slice(0, 6),
     })),
     [
       {
         key: "projects",
         title: "Todoist Projects",
         primaryKey: "Todoist Project ID",
-        firstFive: ["Project", "State", "Kind", "Workspace Status", "Color"],
+        firstSix: [
+          "Project",
+          "State",
+          "Kind",
+          "Workspace Status",
+          "Color",
+          "Favorite",
+        ],
       },
       {
         key: "completedWork",
         title: "Todoist Completed Work",
         primaryKey: "Completion ID",
-        firstFive: ["Task", "Completed", "Project", "Priority", "Labels"],
+        firstSix: [
+          "Task",
+          "Completed",
+          "Project",
+          "Labels",
+          "Days to Complete",
+          "Postponed Count",
+        ],
       },
     ]
   )
@@ -168,6 +182,56 @@ test("worker manifest registers durable incremental syncs and shared pacing", ()
       key: "todoist",
       config: { allowedRequests: 60, intervalMs: 60_000 },
     },
+  ])
+})
+
+test("schemas keep review signals ahead of drill-down and source metadata", () => {
+  assert.deepEqual(Object.keys(completedWorkSchema.properties), [
+    "Task",
+    "Completed",
+    "Project",
+    "Labels",
+    "Days to Complete",
+    "Postponed Count",
+    "Due",
+    "Priority",
+    "Planned Duration (min)",
+    "Deadline",
+    "Description",
+    "Task Link",
+    "Recurring",
+    "Completion Count",
+    "Due Text",
+    "Is Subtask",
+    "Created",
+    "Updated",
+    "Description Truncated",
+    "Responsible User ID",
+    "Completed By User ID",
+    "Parent Task ID",
+    "Section ID",
+    "Todoist Project ID",
+    "Todoist Task ID",
+    "Completion ID",
+  ])
+  assert.deepEqual(Object.keys(projectSchema.properties), [
+    "Project",
+    "State",
+    "Kind",
+    "Workspace Status",
+    "Color",
+    "Favorite",
+    "Shared",
+    "Inbox",
+    "Description",
+    "Updated",
+    "View",
+    "Role",
+    "Created",
+    "Workspace ID",
+    "Parent Project ID",
+    "Todoist Project ID",
+    "Description Truncated",
   ])
 })
 

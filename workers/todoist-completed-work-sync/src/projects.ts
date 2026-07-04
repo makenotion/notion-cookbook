@@ -32,15 +32,15 @@ export const projectSchema = {
     Favorite: Schema.checkbox(),
     Shared: Schema.checkbox(),
     Inbox: Schema.checkbox(),
+    Description: Schema.richText(),
+    Updated: Schema.date(),
     View: Schema.select([]),
     Role: Schema.select([]),
-    Description: Schema.richText(),
-    "Description Truncated": Schema.checkbox(),
     Created: Schema.date(),
-    Updated: Schema.date(),
     "Workspace ID": Schema.richText(),
     "Parent Project ID": Schema.richText(),
     "Todoist Project ID": Schema.richText(),
+    "Description Truncated": Schema.checkbox(),
   },
 } satisfies Schema.Schema<typeof PRIMARY_KEY>
 
@@ -77,14 +77,11 @@ export function projectToChange(
       Favorite: Builder.checkbox(project.isFavorite),
       Shared: Builder.checkbox(project.isShared),
       Inbox: Builder.checkbox(project.inboxProject),
+      Description: description ? Builder.richText(description) : [],
+      Updated: dateProperty(project.updatedAt, `project ${project.id} updated`),
       View: view ? Builder.select(view) : [],
       Role: role ? Builder.select(role) : [],
-      Description: description ? Builder.richText(description) : [],
-      "Description Truncated": Builder.checkbox(
-        textWasTruncated(project.description)
-      ),
       Created: dateProperty(project.createdAt, `project ${project.id} created`),
-      Updated: dateProperty(project.updatedAt, `project ${project.id} updated`),
       "Workspace ID": project.workspaceId
         ? Builder.richText(project.workspaceId)
         : [],
@@ -92,6 +89,9 @@ export function projectToChange(
         ? Builder.richText(project.parentId)
         : [],
       "Todoist Project ID": Builder.richText(project.id),
+      "Description Truncated": Builder.checkbox(
+        textWasTruncated(project.description)
+      ),
     },
   }
 }

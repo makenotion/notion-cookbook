@@ -29,31 +29,31 @@ export const completedWorkSchema = {
       twoWay: true,
       relatedPropertyName: "Completed Work",
     }),
+    Labels: Schema.multiSelect([]),
+    "Days to Complete": Schema.number(),
+    "Postponed Count": Schema.number(),
+    Due: Schema.date(),
     Priority: Schema.select([
       { name: "P1 · Urgent", color: "red" },
       { name: "P2 · High", color: "orange" },
       { name: "P3 · Medium", color: "blue" },
       { name: "P4 · Normal", color: "gray" },
     ]),
-    Labels: Schema.multiSelect([]),
-    "Task Link": Schema.url(),
-    Description: Schema.richText(),
-    "Description Truncated": Schema.checkbox(),
-    Due: Schema.date(),
-    "Due Text": Schema.richText(),
-    Recurring: Schema.checkbox(),
-    Deadline: Schema.date(),
     "Planned Duration (min)": Schema.number(),
-    "Days to Complete": Schema.number(),
+    Deadline: Schema.date(),
+    Description: Schema.richText(),
+    "Task Link": Schema.url(),
+    Recurring: Schema.checkbox(),
     "Completion Count": Schema.number(),
-    "Postponed Count": Schema.number(),
+    "Due Text": Schema.richText(),
+    "Is Subtask": Schema.checkbox(),
     Created: Schema.date(),
     Updated: Schema.date(),
-    "Is Subtask": Schema.checkbox(),
-    "Completed By User ID": Schema.richText(),
+    "Description Truncated": Schema.checkbox(),
     "Responsible User ID": Schema.richText(),
-    "Section ID": Schema.richText(),
+    "Completed By User ID": Schema.richText(),
     "Parent Task ID": Schema.richText(),
+    "Section ID": Schema.richText(),
     "Todoist Project ID": Schema.richText(),
     "Todoist Task ID": Schema.richText(),
     "Completion ID": Schema.richText(),
@@ -129,40 +129,40 @@ export function completedTaskToChange(
       Task: Builder.title(title),
       Completed: Builder.dateTime(completedAtUtc, "UTC"),
       Project: [Builder.relation(task.projectId)],
-      Priority: priority ? Builder.select(priority) : [],
       Labels: labels.length > 0 ? Builder.multiSelect(...labels) : [],
-      "Task Link": Builder.url(todoistTaskUrl(task.id)),
-      Description: description ? Builder.richText(description) : [],
-      "Description Truncated": Builder.checkbox(
-        textWasTruncated(task.description)
-      ),
+      "Days to Complete":
+        daysToComplete !== null ? Builder.number(daysToComplete) : [],
+      "Postponed Count": Builder.number(task.postponedCount),
       Due: dateProperty(
         task.due?.date,
         `task ${task.id} due`,
         task.due?.timeZone ?? userTimeZone
       ),
+      Priority: priority ? Builder.select(priority) : [],
+      "Planned Duration (min)":
+        plannedMinutes !== null ? Builder.number(plannedMinutes) : [],
+      Deadline: dateProperty(task.deadline, `task ${task.id} deadline`),
+      Description: description ? Builder.richText(description) : [],
+      "Task Link": Builder.url(todoistTaskUrl(task.id)),
+      Recurring: Builder.checkbox(recurring),
+      "Completion Count": Builder.number(task.completedCount),
       "Due Text": task.due?.string
         ? Builder.richText(boundedText(task.due.string) ?? "")
         : [],
-      Recurring: Builder.checkbox(recurring),
-      Deadline: dateProperty(task.deadline, `task ${task.id} deadline`),
-      "Planned Duration (min)":
-        plannedMinutes !== null ? Builder.number(plannedMinutes) : [],
-      "Days to Complete":
-        daysToComplete !== null ? Builder.number(daysToComplete) : [],
-      "Completion Count": Builder.number(task.completedCount),
-      "Postponed Count": Builder.number(task.postponedCount),
+      "Is Subtask": Builder.checkbox(Boolean(task.parentId)),
       Created: dateProperty(task.addedAt, `task ${task.id} created`),
       Updated: dateProperty(task.updatedAt, `task ${task.id} updated`),
-      "Is Subtask": Builder.checkbox(Boolean(task.parentId)),
-      "Completed By User ID": task.completedByUserId
-        ? Builder.richText(task.completedByUserId)
-        : [],
+      "Description Truncated": Builder.checkbox(
+        textWasTruncated(task.description)
+      ),
       "Responsible User ID": task.responsibleUserId
         ? Builder.richText(task.responsibleUserId)
         : [],
-      "Section ID": task.sectionId ? Builder.richText(task.sectionId) : [],
+      "Completed By User ID": task.completedByUserId
+        ? Builder.richText(task.completedByUserId)
+        : [],
       "Parent Task ID": task.parentId ? Builder.richText(task.parentId) : [],
+      "Section ID": task.sectionId ? Builder.richText(task.sectionId) : [],
       "Todoist Project ID": Builder.richText(task.projectId),
       "Todoist Task ID": Builder.richText(task.id),
       "Completion ID": Builder.richText(occurrenceId),
