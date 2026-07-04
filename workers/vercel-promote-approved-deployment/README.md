@@ -2,8 +2,8 @@
 
 **TL;DR:** Let a Notion Agent promote or roll back one Vercel project after a
 person approves the exact deployment in Notion. The worker checks the deployment,
-Git SHA, production domains, Deployment Checks, rolling-release state, and health
-endpoints before changing traffic.
+Git SHA, production domains, rolling-release state, and health endpoints before
+changing traffic. Promotions can also require configured Deployment Checks.
 
 Use this recipe for a straightforward release workflow that your team can adapt.
 It keeps the decision and outcome together in Notion and uses live Vercel state
@@ -70,8 +70,9 @@ release details come from the page and fixed worker configuration.
 2. It checks that the page is approved for the selected action and matches the
    configured Vercel team and project.
 3. It verifies the target deployment, Git SHA, current production deployment,
-   exact production-domain set, rolling-release state, and configured Deployment
-   Checks. The target's fixed health paths must pass before promotion or rollback.
+   exact production-domain set, and rolling-release state. Promotions also require
+   the configured Deployment Checks. The target's fixed health paths must pass
+   before promotion or rollback.
 4. Immediately before the Vercel request, it repeats the mutable Notion and
    Vercel checks and writes a canonical `request_started` receipt to the page.
 5. It changes traffic with Vercel's documented promotion or rollback endpoint,
@@ -101,7 +102,9 @@ Property names are case-sensitive.
 
 For a rollback, the target should be a previously promoted deployment. Vercel
 restores that existing build without rebuilding it, so later environment-variable
-changes are not applied to the restored deployment.
+changes are not applied to the restored deployment. Hobby plans can restore only
+the immediately previous production deployment; Pro and Enterprise plans can
+select an older eligible deployment.
 
 ## Safety boundaries
 
@@ -119,10 +122,11 @@ changes are not applied to the restored deployment.
 
 The Notion receipt stops the same approval from sending another request after a
 call finishes. It cannot stop two calls that start at the same time, so this basic
-recipe has three operating requirements:
+recipe has four operating requirements:
 
 - Use one approval page for each exact current-to-target transition.
 - Never clear or edit **Worker receipt**.
+- Do not edit the approval status or release fields while a call is running.
 - Do not invoke a transition concurrently or create a replacement approval while
   a `request_started` receipt is unresolved.
 
@@ -141,10 +145,12 @@ Both tools return the same compact result:
 - `blocked`: approval, configuration, identity, check, health, or rolling-release
   validation failed before a safe transition.
 - `conflict`: production points to an unexpected or split set of deployments.
-- `ambiguous`: a request may have been sent, but the target was not confirmed.
+- `ambiguous`: the worker cannot safely finish reconciliation—for example, a
+  request outcome is unknown or the target is live but not healthy.
 
 `nextStep` explains whether to correct the approval, inspect Vercel, or create a
-new approval. The worker never automatically repeats an ambiguous request.
+new approval. `receiptState` is the last state the worker confirmed from Notion.
+The worker never automatically repeats an ambiguous request.
 
 ## Adapt it
 

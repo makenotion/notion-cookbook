@@ -36,7 +36,7 @@ const outputSchema = j.object({
   receiptState: j
     .enum("none", "request_started", "completed", "rejected", "cancelled")
     .describe(
-      "Canonical Worker receipt currently recorded on the approval page."
+      "Last canonical Worker receipt state confirmed from the approval page."
     ),
   targetDeploymentId: j
     .string()
@@ -78,7 +78,7 @@ async function execute(
 worker.tool("promoteApprovedDeployment", {
   title: "Promote an approved Vercel deployment",
   description:
-    "Promote the exact Vercel deployment on an approved Notion page. The Worker rechecks the approval, project, Git SHA, deployment checks, rolling-release state, production owner, and fixed health endpoints before changing traffic. This basic recipe requires one approval page and one caller per transition; never clear its Worker receipt.",
+    "Promote the exact Vercel deployment on an approved Notion page. The Worker rechecks the approval, project, Git SHA, deployment checks, rolling-release state, production owner, and fixed health endpoints before changing traffic. This basic recipe requires one caller and an unchanged approval page per transition; never clear its Worker receipt.",
   schema: inputSchema,
   outputSchema,
   hints: { readOnlyHint: false },
@@ -93,7 +93,7 @@ worker.tool("promoteApprovedDeployment", {
 worker.tool("rollbackApprovedDeployment", {
   title: "Roll back to an approved Vercel deployment",
   description:
-    "Restore the exact Vercel deployment on an approved Notion page. The Worker applies the same project, Git SHA, rolling-release, production-owner, and health checks used for promotion. It reuses an existing deployment; it does not rebuild with current environment variables. This basic recipe requires one approval page and one caller per transition; never clear its Worker receipt.",
+    "Restore the exact Vercel deployment on an approved Notion page. The Worker applies the same project, Git SHA, rolling-release, production-owner, and health checks used for promotion. It reuses an existing deployment; it does not rebuild with current environment variables. This basic recipe requires one caller and an unchanged approval page per transition; never clear its Worker receipt.",
   schema: inputSchema,
   outputSchema,
   hints: { readOnlyHint: false },

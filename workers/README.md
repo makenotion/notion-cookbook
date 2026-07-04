@@ -31,17 +31,17 @@ For self-hosted integrations built directly with the Notion API, see the [API ex
 
 ## Agent tools
 
-| Worker                                                                        | What an agent can do                                                                                                                               |
-| ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Airflow](airflow/)                                                           | Inspect DAGs, runs, tasks, logs, and service health through the Airflow REST API.                                                                  |
-| [Chart generator](chart-generator/)                                           | Render a Vega-Lite chart, upload the PNG, and insert it into a Notion page.                                                                        |
-| [CloudWatch Logs](cloudwatch-logs/)                                           | Find log groups and streams and read AWS CloudWatch log events.                                                                                    |
-| [DuckDB query](duckdb-query/)                                                 | Query a seeded, in-memory DuckDB database with read-only SQL; no secrets required.                                                                 |
-| [Postgres query](postgres-query/)                                             | Discover tables and query PostgreSQL with guarded, read-only SQL.                                                                                  |
-| [PowerPoint creator](powerpoint-creator/)                                     | Turn a Notion page into PowerPoint slides and attach the generated `.pptx` file.                                                                   |
-| [Snowflake query](snowflake-query/)                                           | Discover tables and query Snowflake with guarded, read-only SQL.                                                                                   |
-| [SQLite query](sqlite-query/)                                                 | Query a seeded, in-memory SQLite database; no secrets required.                                                                                    |
-| [Vercel approved promotion and rollback](vercel-promote-approved-deployment/) | Promote an exact approved staged deployment, or restore its exact prior deployment from a canonical incident and separate fresh rollback approval. |
+| Worker                                                          | What an agent can do                                                               |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| [Airflow](airflow/)                                             | Inspect DAGs, runs, tasks, logs, and service health through the Airflow REST API.  |
+| [Chart generator](chart-generator/)                             | Render a Vega-Lite chart, upload the PNG, and insert it into a Notion page.        |
+| [CloudWatch Logs](cloudwatch-logs/)                             | Find log groups and streams and read AWS CloudWatch log events.                    |
+| [DuckDB query](duckdb-query/)                                   | Query a seeded, in-memory DuckDB database with read-only SQL; no secrets required. |
+| [Postgres query](postgres-query/)                               | Discover tables and query PostgreSQL with guarded, read-only SQL.                  |
+| [PowerPoint creator](powerpoint-creator/)                       | Turn a Notion page into PowerPoint slides and attach the generated `.pptx` file.   |
+| [Snowflake query](snowflake-query/)                             | Discover tables and query Snowflake with guarded, read-only SQL.                   |
+| [SQLite query](sqlite-query/)                                   | Query a seeded, in-memory SQLite database; no secrets required.                    |
+| [Vercel release approvals](vercel-promote-approved-deployment/) | Promote or roll back one Vercel project from an approved deployment page.          |
 
 ## Webhooks
 
