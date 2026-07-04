@@ -59,15 +59,18 @@ function assertParent(page: Record<string, unknown>, expectedId: string): void {
     fail("INVALID_PARENT_ID", "The configured approval parent ID is invalid.")
   }
   const parent = record(page.parent, "APPROVAL_PARENT_MISMATCH")
-  const actualId =
+  const actualIds =
     parent.type === "data_source_id"
-      ? parent.data_source_id
+      ? [parent.data_source_id, parent.database_id]
       : parent.type === "database_id"
-        ? parent.database_id
-        : null
+        ? [parent.database_id]
+        : []
   if (
-    typeof actualId !== "string" ||
-    normalizeId(actualId) !== normalizeId(expectedId)
+    !actualIds.some(
+      (actualId) =>
+        typeof actualId === "string" &&
+        normalizeId(actualId) === normalizeId(expectedId)
+    )
   ) {
     fail(
       "APPROVAL_PARENT_MISMATCH",

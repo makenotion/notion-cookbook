@@ -35,21 +35,26 @@ export interface VercelProject {
     target?: string
     environment?: string
     deployment?: { id?: string } | null
+    redirect?: string | null
   }>
 }
 
 export interface VercelCheckDefinition {
   id?: string
+  ownerId?: string
   projectId?: string
   deletedAt?: number | null
 }
 
 export interface VercelCheckRun {
   checkId?: string
+  ownerId?: string
   deploymentId?: string
   projectId?: string
   status?: string
   conclusion?: string
+  createdAt?: number
+  updatedAt?: number
   completedAt?: number
 }
 
@@ -57,7 +62,8 @@ interface RawDeployment {
   id?: string
   projectId?: string
   project?: { id?: string }
-  teamId?: string
+  ownerId?: string
+  team?: { id?: string }
   url?: string
   target?: string | null
   readyState?: string
@@ -298,6 +304,7 @@ export class VercelClient implements VercelClientLike {
       definitions,
       runs,
       requiredCheckIds,
+      teamId,
       projectId,
       deploymentId
     )
@@ -371,8 +378,8 @@ export class VercelClient implements VercelClientLike {
     if (accepted) return
     const definite =
       action === "promote"
-        ? [400, 401, 403, 429]
-        : [400, 401, 402, 403, 422, 429]
+        ? [400, 401, 403, 409, 429]
+        : [400, 401, 402, 403, 409, 422, 429]
     throw new VercelHttpError(
       `Vercel ${action} returned HTTP ${response.status}; reconcile before retrying.`,
       {
@@ -456,8 +463,10 @@ function normalizeDeployment(
 ): VercelDeployment {
   if (
     raw.id !== deploymentId ||
-    raw.teamId !== teamId ||
-    (raw.projectId ?? raw.project?.id) !== projectId
+    raw.ownerId !== teamId ||
+    (raw.team?.id !== undefined && raw.team.id !== teamId) ||
+    raw.projectId !== projectId ||
+    (raw.project?.id !== undefined && raw.project.id !== projectId)
   ) {
     fail(
       "DEPLOYMENT_IDENTITY_MISMATCH",
@@ -490,6 +499,7 @@ function verifyCheckRuns(
   definitions: VercelCheckDefinition[],
   runs: VercelCheckRun[],
   requiredCheckIds: string[],
+  teamId: string,
   projectId: string,
   deploymentId: string
 ): void {
@@ -497,18 +507,25 @@ function verifyCheckRuns(
     const matchingDefinitions = definitions.filter(
       (definition) =>
         definition.id === checkId &&
+        definition.ownerId === teamId &&
         definition.deletedAt == null &&
-        (definition.projectId === undefined ||
-          definition.projectId === projectId)
+        definition.projectId === projectId
     )
-    const latest = runs
-      .filter(
-        (run) =>
-          run.checkId === checkId &&
-          run.deploymentId === deploymentId &&
-          run.projectId === projectId
-      )
-      .sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0))[0]
+    const matchingRuns = runs.filter(
+      (run) =>
+        run.checkId === checkId &&
+        run.ownerId === teamId &&
+        run.deploymentId === deploymentId &&
+        (run.projectId === undefined || run.projectId === projectId)
+    )
+    const timestampsValid = matchingRuns.every(
+      (run) => Number.isFinite(run.createdAt) && Number.isFinite(run.updatedAt)
+    )
+    const latest = timestampsValid
+      ? matchingRuns.sort(
+          (a, b) => b.createdAt! - a.createdAt! || b.updatedAt! - a.updatedAt!
+        )[0]
+      : undefined
     if (
       matchingDefinitions.length !== 1 ||
       typeof latest?.completedAt !== "number" ||
@@ -528,7 +545,6 @@ function assertRollingReleaseWrapper(value: unknown, state: string): void {
   if (
     !wrapper ||
     Array.isArray(wrapper) ||
-    Object.keys(wrapper).length !== 1 ||
     !Object.hasOwn(wrapper, "rollingRelease")
   ) {
     fail(
@@ -579,6 +595,7 @@ function observeProject(
     const domain = alias.domain
     const deploymentId = alias.deployment?.id
     if (
+      alias.redirect != null ||
       typeof domain !== "string" ||
       domain !== domain.toLowerCase() ||
       !HOSTNAME.test(domain) ||

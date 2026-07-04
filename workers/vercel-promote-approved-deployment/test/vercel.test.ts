@@ -34,7 +34,12 @@ function json(value: unknown, status = 200): Response {
 function deployment(overrides: Record<string, unknown> = {}) {
   return {
     id: "dpl_candidate",
-    teamId: "team_acme",
+    ownerId: "team_acme",
+    team: {
+      id: "team_acme",
+      name: "Acme",
+      slug: "acme",
+    },
     projectId: "prj_checkout",
     url: "checkout-git-abc.vercel.app",
     target: "production",
@@ -110,8 +115,8 @@ test("transition POSTs use exact endpoints, manual redirects, no body, and one a
 
 test("transition errors use a closed definite set and never retry", async () => {
   const definite = {
-    promote: [400, 401, 403, 429],
-    rollback: [400, 401, 402, 403, 422, 429],
+    promote: [400, 401, 403, 409, 429],
+    rollback: [400, 401, 402, 403, 409, 422, 429],
   }
   for (const action of ["promote", "rollback"] as const) {
     for (const status of [
@@ -163,7 +168,7 @@ test("rolling-release guard reads configuration and ACTIVE state and fails close
   const urls: string[] = []
   const goodFetch = (async (request: string | URL | Request) => {
     urls.push(String(request))
-    return json({ rollingRelease: null })
+    return json({ rollingRelease: null, requestId: "iad1::request" })
   }) as typeof fetch
   await client(goodFetch).assertRollingReleasesDisabled(TEAM, PROJECT)
   assert.deepEqual(urls.sort(), [
@@ -183,7 +188,7 @@ test("rolling-release guard reads configuration and ACTIVE state and fails close
       "ROLLING_RELEASE_ACTIVE",
     ],
     [
-      { rollingRelease: null, unexpected: true },
+      { requestId: "iad1::request" },
       { rollingRelease: null },
       "ROLLING_RELEASE_RESPONSE_INVALID",
     ],
@@ -295,6 +300,51 @@ function checksFetch(
   }) as typeof fetch
 }
 
+function checkDefinition(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "check_build",
+    name: "Build",
+    ownerId: TEAM,
+    projectId: PROJECT,
+    isRerequestable: true,
+    requires: "build-ready",
+    source: {
+      kind: "integration",
+      integrationId: "oac_example",
+      integrationConfigurationId: "icfg_example",
+    },
+    blocks: "deployment-promotion",
+    targets: ["production"],
+    sourceKind: "integration",
+    timeout: 300,
+    createdAt: 1,
+    updatedAt: 1,
+    ...overrides,
+  }
+}
+
+function checkRun(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "checkrun_build",
+    name: "Build",
+    ownerId: TEAM,
+    deploymentId: DEPLOYMENT,
+    checkId: "check_build",
+    status: "completed",
+    conclusion: "succeeded",
+    timeout: 300,
+    createdAt: 1,
+    updatedAt: 2,
+    completedAt: 2,
+    source: {
+      kind: "integration",
+      integrationId: "oac_example",
+      integrationConfigurationId: "icfg_example",
+    },
+    ...overrides,
+  }
+}
+
 test("check inventories are capped at 100 items", async () => {
   const cases = [
     {
@@ -325,23 +375,83 @@ test("check inventories are capped at 100 items", async () => {
   }
 })
 
-test("the latest completed run determines each required check", async () => {
-  const definition = { id: "check_build", projectId: "prj_checkout" }
-  const run = (completedAt: number, conclusion: string) => ({
-    checkId: "check_build",
-    deploymentId: "dpl_candidate",
-    projectId: "prj_checkout",
-    status: "completed",
-    conclusion,
-    completedAt,
-  })
+test("the latest contract-valid run determines each required check", async () => {
+  const definition = checkDefinition()
   await client(
-    checksFetch([definition], [run(1, "failed"), run(2, "succeeded")])
+    checksFetch(
+      [definition],
+      [
+        checkRun({ createdAt: 1, updatedAt: 10, completedAt: 10 }),
+        checkRun({ createdAt: 2, updatedAt: 3, completedAt: 3 }),
+      ]
+    )
   ).verifyDeploymentChecks(TEAM, PROJECT, DEPLOYMENT, ["check_build"])
   await assert.rejects(
     () =>
       client(
-        checksFetch([definition], [run(1, "succeeded"), run(2, "failed")])
+        checksFetch(
+          [definition],
+          [
+            checkRun({ createdAt: 1, updatedAt: 10, completedAt: 10 }),
+            checkRun({
+              createdAt: 2,
+              updatedAt: 3,
+              completedAt: 3,
+              conclusion: "failed",
+            }),
+          ]
+        )
+      ).verifyDeploymentChecks(TEAM, PROJECT, DEPLOYMENT, ["check_build"]),
+    errorCode("DEPLOYMENT_CHECK_FAILED")
+  )
+})
+
+test("check runs may omit projectId but must match the configured owner", async () => {
+  await client(
+    checksFetch([checkDefinition()], [checkRun()])
+  ).verifyDeploymentChecks(TEAM, PROJECT, DEPLOYMENT, ["check_build"])
+
+  await assert.rejects(
+    () =>
+      client(
+        checksFetch([checkDefinition()], [checkRun({ ownerId: "team_other" })])
+      ).verifyDeploymentChecks(TEAM, PROJECT, DEPLOYMENT, ["check_build"]),
+    errorCode("DEPLOYMENT_CHECK_FAILED")
+  )
+})
+
+test("a newer pending or updated check run cannot reuse an older success", async () => {
+  const definition = checkDefinition()
+  const oldSuccess = checkRun({
+    createdAt: 1,
+    updatedAt: 100,
+    completedAt: 100,
+  })
+  const newerPending = checkRun({
+    createdAt: 2,
+    updatedAt: 2,
+    status: "running",
+    conclusion: undefined,
+    completedAt: undefined,
+  })
+  await assert.rejects(
+    () =>
+      client(
+        checksFetch([definition], [oldSuccess, newerPending])
+      ).verifyDeploymentChecks(TEAM, PROJECT, DEPLOYMENT, ["check_build"]),
+    errorCode("DEPLOYMENT_CHECK_FAILED")
+  )
+
+  const sameCreatedAtFailure = checkRun({
+    createdAt: 1,
+    updatedAt: 101,
+    completedAt: 101,
+    conclusion: "failed",
+  })
+  await assert.rejects(
+    () =>
+      client(
+        checksFetch([definition], [oldSuccess, sameCreatedAtFailure])
       ).verifyDeploymentChecks(TEAM, PROJECT, DEPLOYMENT, ["check_build"]),
     errorCode("DEPLOYMENT_CHECK_FAILED")
   )
@@ -356,9 +466,23 @@ test("deployment reads normalize identity and validate state and Git SHA", async
     readyState: "READY",
     gitSha: SHA,
   })
+  assert.equal(
+    (await verify(deployment({ team: undefined }))).teamId,
+    "team_acme"
+  )
   const cases: Array<[unknown, string]> = [
-    [deployment({ teamId: "team_other" }), "DEPLOYMENT_IDENTITY_MISMATCH"],
+    [deployment({ ownerId: undefined }), "DEPLOYMENT_IDENTITY_MISMATCH"],
+    [deployment({ ownerId: "team_other" }), "DEPLOYMENT_IDENTITY_MISMATCH"],
+    [
+      deployment({ team: { id: "team_other", name: "Other", slug: "other" } }),
+      "DEPLOYMENT_IDENTITY_MISMATCH",
+    ],
+    [deployment({ projectId: undefined }), "DEPLOYMENT_IDENTITY_MISMATCH"],
     [deployment({ projectId: "prj_other" }), "DEPLOYMENT_IDENTITY_MISMATCH"],
+    [
+      deployment({ project: { id: "prj_other" } }),
+      "DEPLOYMENT_IDENTITY_MISMATCH",
+    ],
     [deployment({ url: "internal.example.com" }), "DEPLOYMENT_URL_UNSAFE"],
     [deployment({ gitSource: { sha: "bad" } }), "GIT_IDENTITY_MISMATCH"],
     [deployment({ readySubstate: "PROMOTED" }), "DEPLOYMENT_STATE_MISMATCH"],
@@ -384,6 +508,7 @@ function project(aliases: unknown[], overrides: Record<string, unknown> = {}) {
 function alias(domain: string, deploymentId: string) {
   return {
     domain,
+    environment: "production",
     target: "PRODUCTION",
     deployment: { id: deploymentId },
   }
@@ -424,6 +549,18 @@ test("production observation fails closed on identity, alias drift, and inventor
       "PROJECT_ALIAS_SET_MISMATCH",
     ],
     [project([...good, ...good]), "PROJECT_ALIAS_SET_MISMATCH"],
+    [
+      project([
+        {
+          domain: "checkout.example.com",
+          environment: "production",
+          target: "PRODUCTION",
+          deployment: null,
+          redirect: "www.example.com",
+        },
+      ]),
+      "PROJECT_ALIAS_SET_MALFORMED",
+    ],
     [
       project(
         Array.from({ length: MAX_PROJECT_ALIAS_INVENTORY + 1 }, (_, i) => ({

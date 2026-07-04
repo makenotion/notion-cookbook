@@ -26,6 +26,7 @@ import { SafetyError, VercelHttpError } from "../src/types.js"
 
 const PAGE_ID = "11111111-1111-4111-8111-111111111111"
 const PARENT_ID = "22222222-2222-4222-8222-222222222222"
+const DATABASE_ID = "44444444-4444-4444-8444-444444444444"
 const TEAM_ID = "team_acme"
 const PROJECT_ID = "prj_checkout"
 const EXPECTED_ID = "dpl_previous"
@@ -55,6 +56,7 @@ class FakeNotion implements NotionClientLike {
   pageId = PAGE_ID
   parentId = PARENT_ID
   parentType: "data_source_id" | "database_id" = "data_source_id"
+  parentDatabaseId: string | null = DATABASE_ID
   status = "Approved"
   action: ApprovalAction = "Promote"
   revision = "release-42"
@@ -81,7 +83,16 @@ class FakeNotion implements NotionClientLike {
         id: this.pageId,
         archived: false,
         in_trash: false,
-        parent: { type: this.parentType, [this.parentType]: this.parentId },
+        parent:
+          this.parentType === "data_source_id"
+            ? {
+                type: this.parentType,
+                data_source_id: this.parentId,
+                ...(this.parentDatabaseId
+                  ? { database_id: this.parentDatabaseId }
+                  : {}),
+              }
+            : { type: this.parentType, database_id: this.parentId },
         properties: {
           "Approval status": {
             type: "status",
@@ -460,7 +471,7 @@ test("an ambiguous transport outcome is never reposted", async () => {
   assert.equal(first.value.currentDeploymentId, EXPECTED_ID)
   assert.equal(notion.receiptState(), "request_started")
   assert.equal(vercel.requestCalls.length, 1)
-  assert.deepEqual(first.sleeps, [1_000, 1_000])
+  assert.deepEqual(first.sleeps, [1_000, 1_000, 1_000, 1_000, 1_000])
 
   vercel.productionId = TARGET_ID
   const second = await run("promote", notion, vercel)
@@ -468,6 +479,72 @@ test("an ambiguous transport outcome is never reposted", async () => {
   assert.equal(second.value.requestAttempted, false)
   assert.equal(notion.receiptState(), "completed")
   assert.equal(vercel.requestCalls.length, 1)
+})
+
+test("an asynchronous transition can converge on the sixth observation", async () => {
+  const notion = new FakeNotion()
+  const vercel = new FakeVercel()
+  vercel.requestMode = "ambiguous"
+  vercel.observeHook = (call, current) => {
+    if (call === 9) current.productionId = TARGET_ID
+  }
+
+  const { value, sleeps } = await run("promote", notion, vercel)
+
+  assert.equal(value.status, "completed")
+  assert.equal(value.requestAttempted, true)
+  assert.equal(value.changed, true)
+  assert.equal(value.currentDeploymentId, TARGET_ID)
+  assert.equal(notion.receiptState(), "completed")
+  assert.equal(vercel.requestCalls.length, 1)
+  assert.deepEqual(sleeps, [1_000, 1_000, 1_000, 1_000, 1_000])
+})
+
+test("reconciliation tolerates only the approved old-to-new alias split", async (t) => {
+  await t.test("approved split keeps polling", async () => {
+    const notion = new FakeNotion()
+    const vercel = new FakeVercel()
+    vercel.requestMode = "ambiguous"
+    vercel.observeHook = (call, current) => {
+      if (call === 4) {
+        current.productionId = null
+        current.customDomainDeploymentIds = {
+          "app.example.com": EXPECTED_ID,
+          "www.example.com": TARGET_ID,
+        }
+      }
+      if (call === 5) {
+        current.productionId = TARGET_ID
+        current.customDomainDeploymentIds = {
+          "app.example.com": TARGET_ID,
+          "www.example.com": TARGET_ID,
+        }
+      }
+    }
+
+    const { value, sleeps } = await run("promote", notion, vercel)
+
+    assert.equal(value.status, "completed")
+    assert.equal(vercel.requestCalls.length, 1)
+    assert.deepEqual(sleeps, [1_000])
+  })
+
+  await t.test("unknown deployment conflicts immediately", async () => {
+    const notion = new FakeNotion()
+    notion.setReceipt("request_started")
+    const vercel = new FakeVercel()
+    vercel.productionId = null
+    vercel.customDomainDeploymentIds = {
+      "app.example.com": EXPECTED_ID,
+      "www.example.com": "dpl_unknown",
+    }
+
+    const { value, sleeps } = await run("promote", notion, vercel)
+
+    assert.equal(value.status, "conflict")
+    assert.equal(vercel.requestCalls.length, 0)
+    assert.deepEqual(sleeps, [])
+  })
 })
 
 test("a definite rejection is recorded and blocks reuse", async () => {
@@ -798,4 +875,42 @@ test("Notion reads canonical approvals from data-source or legacy database paren
     )
     assert.equal(approval.receipt, null)
   }
+})
+
+test("Notion accepts either ID from a current data-source parent", async (t) => {
+  await t.test("data source ID", async () => {
+    const notion = new FakeNotion()
+    const approval = await readApproval(notion, {
+      pageId: PAGE_ID,
+      parentId: config.approvalParentId,
+      expectedAction: "promote",
+    })
+    assert.equal(approval.pageId, PAGE_ID)
+  })
+
+  await t.test("database ID", async () => {
+    const notion = new FakeNotion()
+    const approval = await readApproval(notion, {
+      pageId: PAGE_ID,
+      parentId: DATABASE_ID,
+      expectedAction: "promote",
+    })
+    assert.equal(approval.pageId, PAGE_ID)
+  })
+
+  await t.test("neither ID", async () => {
+    const notion = new FakeNotion()
+    notion.parentId = "33333333-3333-4333-8333-333333333333"
+    notion.parentDatabaseId = DATABASE_ID
+    await assert.rejects(
+      readApproval(notion, {
+        pageId: PAGE_ID,
+        parentId: config.approvalParentId,
+        expectedAction: "promote",
+      }),
+      (error: unknown) =>
+        error instanceof SafetyError &&
+        error.code === "APPROVAL_PARENT_MISMATCH"
+    )
+  })
 })

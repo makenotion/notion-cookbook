@@ -13,12 +13,24 @@ separate database or coordination service.
 ## Quickstart
 
 You need Node.js 22, npm 10.9.2 or newer, access to deploy Notion Workers, and a
-Vercel project that uses staged production deployments. Create a dedicated
-Vercel access token scoped to the team that owns the project.
+Vercel project that uses staged production deployments. This recipe does not
+promote Preview deployments. Create each candidate with
+`vercel --prod --skip-domain`. If you do not use Deployment Checks, you can
+instead turn off **Auto-assign Custom Production Domains** under **Project
+settings > Environments > Production > Branch Tracking**. Keep automatic
+assignment enabled when using Deployment Checks; Vercel requires it for their
+checks lifecycle, while `--skip-domain` stages the individual candidate.
+
+Create a dedicated Vercel access token scoped to the team that owns the project.
+The token acts with its creator's permissions, so that person needs project
+access and **Full Production Deployment** permission for promotion and rollback.
+The Worker configuration—not the token itself—limits this recipe to one project.
 
 1. Create a Notion database using the [approval schema](#approval-database).
-   Share it with the people who can approve releases, and copy its data source or
-   database ID.
+   Share it with the people who can approve releases. Under **Manage data
+   sources**, copy the data source ID to bind this Worker to that table. The
+   parent database ID also works, but authorizes matching pages in any of its
+   data sources.
 
 2. From the repository root, install the worker and deploy it:
 
@@ -39,16 +51,35 @@ Vercel access token scoped to the team that owns the project.
    ntn workers env set VERCEL_PROJECT_ID=prj_your_project
    ntn workers env set NOTION_VERCEL_APPROVAL_PARENT_ID=your-notion-data-source-id
    ntn workers env set 'VERCEL_PRODUCTION_DOMAINS_JSON=["app.example.com"]'
-   ntn workers env set 'VERCEL_DEPLOYMENT_CHECK_IDS_JSON=["check_tests"]'
+   ntn workers env set 'VERCEL_DEPLOYMENT_CHECK_IDS_JSON=[]'
    ntn workers env set 'VERCEL_HEALTH_PATHS_JSON=["/healthz"]'
    ```
 
-   If Deployment Protection applies to the deployment health URL, also set
-   `VERCEL_PROTECTION_BYPASS_SECRET`.
+   Run `vercel link` in the Vercel project to write its team ID as `orgId` and
+   project ID to `.vercel/project.json`. Use `vercel list --prod` and
+   `vercel inspect <deployment-id-or-url>` to confirm the current deployment ID,
+   staged target ID, and target Git SHA. Leave
+   `VERCEL_DEPLOYMENT_CHECK_IDS_JSON` empty for the basic workflow. If you enable
+   it, use definition IDs returned by
+   `GET /v2/projects/{projectId}/checks?teamId={teamId}`, not display names or CI
+   job names.
+
+   `VERCEL_PRODUCTION_DOMAINS_JSON` is the complete set of directly serving
+   Production aliases reported by Vercel, not only the primary domain. Include
+   every generated or custom hostname that Vercel marks as Production.
+   Redirect-only Production aliases are unsupported by this basic recipe. One
+   Worker accepts 1–5 domains, 0–20 Check IDs, and 1–3 health paths; values must
+   be unique and exact.
+
+   Every configured health path must return a direct 2xx response, without a
+   redirect, on the generated deployment URL and each configured production
+   domain. If Deployment Protection applies to the generated deployment URL,
+   also set `VERCEL_PROTECTION_BYPASS_SECRET`. The bypass is not sent to custom
+   production domains, so their health paths must be reachable without it.
 
 4. In Notion, add the deployed worker to a Custom Agent under
-   **Tools and access > Add connection**. Give the agent access to the approval
-   database.
+   **Tools and access > Add connection**. Give the agent permission to read the
+   approval database and update **Worker receipt**.
 
 Create an approval row, set **Approval status** to `Approved`, and ask the agent
 to run it.
@@ -114,7 +145,10 @@ select an older eligible deployment.
   fixed in worker configuration rather than accepted from an agent call.
 - Rolling Releases are intentionally unsupported. The worker stops if they are
   configured or active, because their traffic lifecycle differs from a basic
-  promotion.
+  promotion. Complete or abort an active rollout and disable Rolling Releases
+  before using this recipe. It also stops if the rolling-release configuration
+  or active-state endpoints cannot be read, including because of plan or token
+  access; do not assume an unreadable feature is disabled.
 - Redirects are never followed for Vercel API or health requests. Provider
   response sizes, collection sizes, retries, and timeouts are bounded.
 - The worker rechecks Vercel immediately before each request. Another dashboard,
@@ -152,10 +186,13 @@ Both tools return the same compact result:
 new approval. `receiptState` is the last state the worker confirmed from Notion.
 The worker never automatically repeats an ambiguous request.
 
-## Adapt it
+Vercel traffic changes are asynchronous: API acceptance is not completion. After
+an accepted request, the worker makes up to six production observations. If
+alias assignment takes longer, wait and run the same tool with the same approval
+page. The next call reads Vercel and reconciles without sending another traffic
+request. Do not clear the receipt or create a replacement approval.
 
-The implementation keeps provider access, approval parsing, and the shared
-release flow separate:
+## Adapt it
 
 ```text
 src/
@@ -170,13 +207,9 @@ test/
   vercel.test.ts      — offline HTTP boundary tests
 ```
 
-Useful extension points are:
-
 - Add organization-specific preflight checks in `verifyPreconditions`.
-- Add another notification or audit sink after a completed receipt.
 - Wrap `executeApprovedTransition` with durable coordination for concurrent calls.
-- Deploy another worker instance for a second project, or replace the single
-  project config with an allowlist when that complexity is genuinely needed.
+- Add a completion notification, or deploy a separate Worker for another project.
 
 Keep fixed policy on the server and continue rereading approval and provider
 state immediately before any new mutation.
@@ -201,4 +234,6 @@ production release.
 - [Using the Notion API from a Worker](https://developers.notion.com/workers/guides/api-client)
 - [Vercel promotion](https://vercel.com/docs/deployments/promoting-a-deployment)
 - [Vercel rollback](https://vercel.com/docs/deployments/rollback-production-deployment)
+- [Vercel access tokens](https://vercel.com/kb/guide/how-do-i-use-a-vercel-api-access-token)
+- [Vercel access roles](https://vercel.com/docs/rbac/access-roles)
 - [Vercel REST API](https://vercel.com/docs/rest-api)

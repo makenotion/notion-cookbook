@@ -15,7 +15,9 @@ import type {
 } from "./types.js"
 import { SafetyError, VercelHttpError } from "./types.js"
 
-const RECONCILIATION_ATTEMPTS = 3
+// Alias assignment is asynchronous. Poll briefly in one invocation, then rely on
+// the durable receipt for a later read-only reconciliation rather than reposting.
+const RECONCILIATION_ATTEMPTS = 6
 const RECONCILIATION_DELAY_MS = 1_000
 
 function result(options: {
@@ -99,6 +101,22 @@ function routingState(
     return "expected"
   }
   return "conflict"
+}
+
+function isTransitionInProgress(
+  observation: ProductionObservation,
+  approval: ApprovalSnapshot
+): boolean {
+  if (!observation.exactDomainSet) return false
+  const deploymentIds = Object.values(observation.domainDeploymentIds)
+  return (
+    deploymentIds.length > 0 &&
+    deploymentIds.every(
+      (deploymentId) =>
+        deploymentId === approval.expectedCurrentDeploymentId ||
+        deploymentId === approval.targetDeploymentId
+    )
+  )
 }
 
 async function verifyPreconditions(
@@ -300,6 +318,13 @@ async function reconcile(
       )
     }
     if (state === "conflict") {
+      if (isTransitionInProgress(observation, approval)) {
+        if (attempt + 1 < RECONCILIATION_ATTEMPTS) {
+          await dependencies.sleep(RECONCILIATION_DELAY_MS)
+          continue
+        }
+        break
+      }
       return result({
         action,
         approval,
