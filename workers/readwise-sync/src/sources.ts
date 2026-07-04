@@ -11,6 +11,7 @@ import type { ReaderDocument, ReadwiseSource } from "./readwise.js"
 import {
   boundedText,
   dateValue,
+  displayLabel,
   displayTitle,
   finiteNumber,
   normalizedCategory,
@@ -28,34 +29,34 @@ export const SOURCES_PRIMARY_KEY = "Source Key"
 export const sourceSchema = {
   databaseIcon: notionIcon("folder"),
   properties: {
-    Name: Schema.title(),
-    Origin: Schema.select([]),
-    Category: Schema.select([]),
+    Source: Schema.title(),
     Location: Schema.select([
-      { name: "new" },
-      { name: "later" },
-      { name: "shortlist" },
-      { name: "archive" },
-      { name: "feed" },
+      { name: "Inbox", color: "blue" },
+      { name: "Later", color: "yellow" },
+      { name: "Shortlist", color: "green" },
+      { name: "Archive", color: "gray" },
+      { name: "Feed", color: "purple" },
     ]),
-    Archived: Schema.checkbox(),
+    "Reading Progress": Schema.number("percent"),
+    Category: Schema.select([]),
     Author: Schema.richText(),
     Site: Schema.richText(),
     Tags: Schema.multiSelect([]),
-    "Original URL": Schema.url(),
     "Open in Reader": Schema.url(),
-    "Readwise Review": Schema.url(),
-    Summary: Schema.richText(),
-    "Summary Truncated": Schema.checkbox(),
-    Note: Schema.richText(),
-    "Note Truncated": Schema.checkbox(),
-    "Reading Progress": Schema.number(),
-    "Word Count": Schema.number(),
-    "Reading Time": Schema.richText(),
-    Published: Schema.date(),
     Saved: Schema.date(),
     "Last Opened": Schema.date(),
+    Summary: Schema.richText(),
+    Note: Schema.richText(),
+    Origin: Schema.select([]),
+    Archived: Schema.checkbox(),
+    "Reading Time": Schema.richText(),
+    "Word Count": Schema.number(),
+    Published: Schema.date(),
     Updated: Schema.date(),
+    "Original URL": Schema.url(),
+    "Readwise Review": Schema.url(),
+    "Summary Truncated": Schema.checkbox(),
+    "Note Truncated": Schema.checkbox(),
     "Reader Document ID": Schema.richText(),
     "Readwise Source ID": Schema.richText(),
     "Source Key": Schema.richText(),
@@ -87,6 +88,24 @@ function readwiseTagNames(source: ReadwiseSource): string[] {
   return uniqueSelectNames(source.book_tags.map((tag) => tag.name))
 }
 
+const READER_LOCATION_LABELS: Record<string, string> = {
+  new: "Inbox",
+  later: "Later",
+  shortlist: "Shortlist",
+  archive: "Archive",
+  feed: "Feed",
+}
+
+function readerLocationLabel(value: string | undefined): string | undefined {
+  return value
+    ? (READER_LOCATION_LABELS[value] ?? displayLabel(value))
+    : undefined
+}
+
+function categoryLabel(value: string | undefined): string | undefined {
+  return displayLabel(value)
+}
+
 export function readerDocumentToChange(
   document: ReaderDocument,
   options: { exportPresent?: boolean } = {}
@@ -98,8 +117,9 @@ export function readerDocumentToChange(
   const key = readerSourceKey(document.id)
   const summary = boundedText(document.summary)
   const note = boundedText(document.notes)
-  const category = normalizedCategory(document.category)
-  const location = trimmed(document.location)?.toLowerCase()
+  const category = categoryLabel(normalizedCategory(document.category))
+  const rawLocation = trimmed(document.location)?.toLowerCase()
+  const location = readerLocationLabel(rawLocation)
   const progress = finiteNumber(document.reading_progress)
   const wordCount = finiteNumber(document.word_count)
   const updatedAt = validDate(document.updated_at)
@@ -109,13 +129,15 @@ export function readerDocumentToChange(
     key,
     ...(updatedAt ? { upstreamUpdatedAt: updatedAt } : {}),
     properties: {
-      Name: Builder.title(
+      Source: Builder.title(
         displayTitle(document.title, `Untitled Reader document ${document.id}`)
       ),
-      Origin: Builder.select("Reader"),
-      Category: category ? Builder.select(category) : [],
       Location: location ? Builder.select(location) : [],
-      Archived: Builder.checkbox(location === "archive"),
+      "Reading Progress":
+        progress !== undefined && progress >= 0 && progress <= 1
+          ? Builder.number(progress)
+          : [],
+      Category: category ? Builder.select(category) : [],
       Author: trimmed(document.author)
         ? Builder.richText(document.author!.trim())
         : [],
@@ -123,35 +145,37 @@ export function readerDocumentToChange(
         ? Builder.richText(document.site_name!.trim())
         : [],
       Tags: Builder.multiSelect(...readerTagNames(document.tags)),
-      "Original URL": validUrl(document.source_url)
-        ? Builder.url(validUrl(document.source_url)!)
-        : [],
       "Open in Reader": validUrl(document.url)
         ? Builder.url(validUrl(document.url)!)
         : [],
+      Saved: dateValue(document.saved_at),
+      "Last Opened": dateValue(document.last_opened_at),
       Summary: summary.text ? Builder.richText(summary.text) : [],
-      "Summary Truncated": Builder.checkbox(summary.truncated),
       Note: note.text ? Builder.richText(note.text) : [],
-      "Note Truncated": Builder.checkbox(note.truncated),
-      "Reading Progress":
-        progress !== undefined && progress >= 0 && progress <= 1
-          ? Builder.number(progress)
-          : [],
+      Origin: Builder.select("Reader"),
+      Archived: Builder.checkbox(rawLocation === "archive"),
+      "Reading Time": trimmed(document.reading_time)
+        ? Builder.richText(document.reading_time!.trim())
+        : [],
       "Word Count":
         wordCount !== undefined && wordCount >= 0
           ? Builder.number(wordCount)
           : [],
-      "Reading Time": trimmed(document.reading_time)
-        ? Builder.richText(document.reading_time!.trim())
-        : [],
       Published: dateValue(document.published_date),
-      Saved: dateValue(document.saved_at),
-      "Last Opened": dateValue(document.last_opened_at),
       Updated: dateValue(document.updated_at),
-      "Reader Document ID": Builder.richText(document.id),
+      "Original URL": validUrl(document.source_url)
+        ? Builder.url(validUrl(document.source_url)!)
+        : [],
       ...(options.exportPresent === false
         ? {
             "Readwise Review": [],
+          }
+        : {}),
+      "Summary Truncated": Builder.checkbox(summary.truncated),
+      "Note Truncated": Builder.checkbox(note.truncated),
+      "Reader Document ID": Builder.richText(document.id),
+      ...(options.exportPresent === false
+        ? {
             "Readwise Source ID": [],
           }
         : {}),
@@ -172,39 +196,41 @@ function fullExportProperties(source: ReadwiseSource) {
   const key = exportSourceKey(source)
   const summary = boundedText(source.summary)
   const note = boundedText(source.document_note)
-  const category = normalizedCategory(source.category)
+  const category = categoryLabel(normalizedCategory(source.category))
   const readerId = readerExternalId(source)
   const title = trimmed(source.readable_title) ?? trimmed(source.title)
   const originalUrl = validUrl(source.source_url) ?? validUrl(source.unique_url)
+  const exportOwned = exportOwnedProperties(source)
 
   return {
-    Name: Builder.title(
+    Source: Builder.title(
       displayTitle(title, `Untitled Readwise source ${source.user_book_id}`)
     ),
-    Origin: Builder.select(sourceName(source.source)),
-    Category: category ? Builder.select(category) : [],
     Location: [],
-    Archived: Builder.checkbox(false),
+    "Reading Progress": [],
+    Category: category ? Builder.select(category) : [],
     Author: trimmed(source.author)
       ? Builder.richText(source.author!.trim())
       : [],
     Site: [],
     Tags: Builder.multiSelect(...readwiseTagNames(source)),
-    "Original URL": originalUrl ? Builder.url(originalUrl) : [],
     "Open in Reader": [],
-    ...exportOwnedProperties(source),
-    Summary: summary.text ? Builder.richText(summary.text) : [],
-    "Summary Truncated": Builder.checkbox(summary.truncated),
-    Note: note.text ? Builder.richText(note.text) : [],
-    "Note Truncated": Builder.checkbox(note.truncated),
-    "Reading Progress": [],
-    "Word Count": [],
-    "Reading Time": [],
-    Published: [],
     Saved: [],
     "Last Opened": [],
+    Summary: summary.text ? Builder.richText(summary.text) : [],
+    Note: note.text ? Builder.richText(note.text) : [],
+    Origin: Builder.select(sourceName(source.source)),
+    Archived: Builder.checkbox(false),
+    "Reading Time": [],
+    "Word Count": [],
+    Published: [],
     Updated: [],
+    "Original URL": originalUrl ? Builder.url(originalUrl) : [],
+    "Readwise Review": exportOwned["Readwise Review"],
+    "Summary Truncated": Builder.checkbox(summary.truncated),
+    "Note Truncated": Builder.checkbox(note.truncated),
     "Reader Document ID": readerId ? Builder.richText(readerId) : [],
+    "Readwise Source ID": exportOwned["Readwise Source ID"],
     "Source Key": Builder.richText(key),
   }
 }

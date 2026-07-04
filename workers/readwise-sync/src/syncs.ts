@@ -19,6 +19,7 @@ import {
   advanceGuardedInventory,
   advanceMatchingInventory,
   assertInventoryCanContinue,
+  boundCredentialFingerprint,
   boundedSyncState,
   completeInventory,
   completedIncrementalState,
@@ -26,7 +27,9 @@ import {
   incrementalWindow,
   inventoriesMatch,
   inventorySnapshot,
+  incrementalRestartCount,
   nextCursorState,
+  nextIncrementalRestartCount,
   nextReconciliationRestartCount,
   phase,
   reconciliationCursor,
@@ -122,7 +125,7 @@ export async function runSourcesIncrementalPage(
   state: SourcesIncrementalSyncState | undefined,
   now = Date.now()
 ): Promise<SourcesIncrementalPageResult> {
-  const window = incrementalWindow(state, now)
+  const window = incrementalWindow(state, client.credentialFingerprint(), now)
   const currentPhase = phase(state?.phase)
   const page = await sourceIncrementalPage(client, currentPhase, {
     updatedAfter: window.updatedAfter,
@@ -131,17 +134,47 @@ export async function runSourcesIncrementalPage(
   })
 
   if (page.nextPageCursor) {
+    let cursorState
+    try {
+      cursorState = nextCursorState(
+        state,
+        page.nextPageCursor,
+        `${currentPhase} sources`
+      )
+    } catch (error) {
+      if (!(error instanceof ReplacementInstabilityError)) throw error
+      const paginationRestartCount = nextIncrementalRestartCount(
+        state?.paginationRestartCount,
+        `${currentPhase} sources`
+      )
+      return {
+        changes: [],
+        hasMore: true,
+        nextState: boundedSyncState(
+          {
+            stateVersion: SYNC_STATE_VERSION,
+            credentialFingerprint: window.credentialFingerprint,
+            updatedAfter: window.updatedAfter,
+            checkpoint: window.checkpoint,
+            phase: currentPhase,
+            paginationRestartCount,
+          } satisfies SourcesIncrementalSyncState,
+          "incremental sources"
+        ),
+      }
+    }
+    const paginationRestartCount = incrementalRestartCount(
+      state?.paginationRestartCount
+    )
     const nextState = boundedSyncState(
       {
         stateVersion: SYNC_STATE_VERSION,
+        credentialFingerprint: window.credentialFingerprint,
         updatedAfter: window.updatedAfter,
         checkpoint: window.checkpoint,
         phase: currentPhase,
-        ...nextCursorState(
-          state,
-          page.nextPageCursor,
-          `${currentPhase} sources`
-        ),
+        ...(paginationRestartCount > 0 ? { paginationRestartCount } : {}),
+        ...cursorState,
       } satisfies SourcesIncrementalSyncState,
       "incremental sources"
     )
@@ -152,6 +185,7 @@ export async function runSourcesIncrementalPage(
     const nextState = boundedSyncState(
       {
         stateVersion: SYNC_STATE_VERSION,
+        credentialFingerprint: window.credentialFingerprint,
         updatedAfter: window.updatedAfter,
         checkpoint: window.checkpoint,
         phase: "reader",
@@ -165,7 +199,10 @@ export async function runSourcesIncrementalPage(
     changes: page.changes,
     hasMore: false,
     nextState: boundedSyncState(
-      completedIncrementalState(window.checkpoint),
+      completedIncrementalState(
+        window.checkpoint,
+        window.credentialFingerprint
+      ),
       "incremental sources"
     ),
   }
@@ -174,6 +211,8 @@ export async function runSourcesIncrementalPage(
 function readerInventories(documents: ReaderDocument[]): {
   raw: InventoryIdentity[]
   output: InventoryIdentity[]
+  guard: InventoryIdentity[]
+  guardConflicts: InventoryIdentity[][]
 } {
   const raw = documents.map((document) => ({
     namespace: "reader-document",
@@ -185,10 +224,21 @@ function readerInventories(documents: ReaderDocument[]): {
       namespace: "reader-source-key",
       value: `reader:${document.id}`,
     }))
-  return { raw, output }
+  const guard = documents.map((document) =>
+    document.parent_id === null
+      ? { namespace: "reader-source-key", value: `reader:${document.id}` }
+      : { namespace: "reader-child-document", value: document.id }
+  )
+  const guardConflicts = documents.map((document) => [
+    document.parent_id === null
+      ? { namespace: "reader-child-document", value: document.id }
+      : { namespace: "reader-source-key", value: `reader:${document.id}` },
+  ])
+  return { raw, output, guard, guardConflicts }
 }
 
 function sourceStateBase(
+  credentialFingerprint: string,
   pass: ReconciliationPass,
   restartCount: number,
   baselineReadwise: InventorySnapshot | undefined,
@@ -196,6 +246,7 @@ function sourceStateBase(
 ) {
   return {
     stateVersion: SYNC_STATE_VERSION,
+    credentialFingerprint,
     pass,
     restartCount,
     ...(baselineReadwise ? { baselineReadwise } : {}),
@@ -205,6 +256,7 @@ function sourceStateBase(
 
 function sourceContinuationState(options: {
   state: SourcesReconciliationSyncState | undefined
+  credentialFingerprint: string
   pass: ReconciliationPass
   restartCount: number
   phase: SourcesReconciliationPhase
@@ -219,6 +271,7 @@ function sourceContinuationState(options: {
   return boundedSyncState(
     {
       ...sourceStateBase(
+        options.credentialFingerprint,
         options.pass,
         options.restartCount,
         options.baselineReadwise,
@@ -245,11 +298,13 @@ function sourceContinuationState(options: {
 }
 
 function restartSourcesReconciliation(
-  state: SourcesReconciliationSyncState | undefined
+  state: SourcesReconciliationSyncState | undefined,
+  credentialFingerprint: string
 ) {
   const nextState = boundedSyncState(
     {
       stateVersion: SYNC_STATE_VERSION,
+      credentialFingerprint,
       pass: "observe",
       phase: "collect-reader",
       restartCount: nextReconciliationRestartCount(
@@ -267,13 +322,19 @@ export async function runSourcesReconciliationPage(
   state: SourcesReconciliationSyncState | undefined
 ) {
   validateSourcesReconciliationState(state)
+  const credentialFingerprint = boundCredentialFingerprint(
+    state,
+    client.credentialFingerprint(),
+    "source reconciliation"
+  )
   const pass = reconciliationPass(state?.pass)
   const restartCount = reconciliationRestartCount(state?.restartCount)
   const currentPhase = sourcesReconciliationPhase(state?.phase)
   const pageCursor = state?.pageCursor
   const baselineReadwise = inventorySnapshot(
     state?.baselineReadwise,
-    "Readwise baseline inventory"
+    "Readwise baseline inventory",
+    "export"
   )
   const baselineReader = inventorySnapshot(
     state?.baselineReader,
@@ -285,7 +346,8 @@ export async function runSourcesReconciliationPage(
   )
   const completedReadwise = inventorySnapshot(
     state?.completedReadwise,
-    "completed Readwise inventory"
+    "completed Readwise inventory",
+    "export"
   )
 
   try {
@@ -300,7 +362,11 @@ export async function runSourcesReconciliationPage(
         page.count,
         identities.raw,
         identities.output,
-        "Reader collection"
+        "Reader collection",
+        {
+          guardIdentities: identities.guard,
+          guardConflictIdentities: identities.guardConflicts,
+        }
       )
       if (page.nextPageCursor) {
         assertInventoryCanContinue(advanced.active, "Reader collection")
@@ -309,6 +375,7 @@ export async function runSourcesReconciliationPage(
           hasMore: true,
           nextState: sourceContinuationState({
             state,
+            credentialFingerprint,
             pass,
             restartCount,
             phase: currentPhase,
@@ -328,6 +395,7 @@ export async function runSourcesReconciliationPage(
       const nextState = boundedSyncState(
         {
           ...sourceStateBase(
+            credentialFingerprint,
             pass,
             restartCount,
             baselineReadwise,
@@ -350,6 +418,17 @@ export async function runSourcesReconciliationPage(
         ...(pageCursor ? { pageCursor } : {}),
         includeDeleted: false,
       })
+      if (
+        page.sources.some(
+          (source) =>
+            source.is_deleted ||
+            source.highlights.some((highlight) => highlight.is_deleted)
+        )
+      ) {
+        throw new Error(
+          "Readwise source reconciliation unexpectedly returned deleted records."
+        )
+      }
       const changes = page.sources.map((source) => {
         const readerId = readerExternalId(source)
         const readerPresent = Boolean(
@@ -369,22 +448,41 @@ export async function runSourcesReconciliationPage(
         namespace: "readwise-source-key",
         value: change.key,
       }))
+      const providerItems = page.sources.flatMap((source) =>
+        source.highlights.map((highlight) => ({
+          namespace: "readwise-export-highlight",
+          value: highlight.id,
+        }))
+      )
       const advanced = advanceGuardedInventory(
         state?.active,
         state,
         page.count,
         raw,
         output,
-        "Readwise source Export"
+        "Readwise source Export",
+        {
+          countMode: "export",
+          guardIdentities: [...raw, ...output, ...providerItems],
+          providerItemIdentities: providerItems,
+          uncoveredRawCount: page.sources.filter(
+            (source) => source.highlights.length === 0
+          ).length,
+        }
       )
       const emittedChanges = pass === "emit" ? changes : []
       if (page.nextPageCursor) {
-        assertInventoryCanContinue(advanced.active, "Readwise source Export")
+        assertInventoryCanContinue(
+          advanced.active,
+          "Readwise source Export",
+          "export"
+        )
         return {
           changes: emittedChanges,
           hasMore: true,
           nextState: sourceContinuationState({
             state,
+            credentialFingerprint,
             pass,
             restartCount,
             phase: currentPhase,
@@ -400,11 +498,13 @@ export async function runSourcesReconciliationPage(
 
       const completedExport = completeInventory(
         advanced.active,
-        "Readwise source Export"
+        "Readwise source Export",
+        "export"
       )
       const nextState = boundedSyncState(
         {
           ...sourceStateBase(
+            credentialFingerprint,
             pass,
             restartCount,
             baselineReadwise,
@@ -455,6 +555,7 @@ export async function runSourcesReconciliationPage(
         hasMore: true,
         nextState: sourceContinuationState({
           state,
+          credentialFingerprint,
           pass,
           restartCount,
           phase: currentPhase,
@@ -487,6 +588,7 @@ export async function runSourcesReconciliationPage(
       const nextState = boundedSyncState(
         {
           stateVersion: SYNC_STATE_VERSION,
+          credentialFingerprint,
           pass: "confirm",
           phase: "collect-reader",
           restartCount,
@@ -508,6 +610,7 @@ export async function runSourcesReconciliationPage(
       const nextState = boundedSyncState(
         {
           stateVersion: SYNC_STATE_VERSION,
+          credentialFingerprint,
           pass: "emit",
           phase: "collect-reader",
           restartCount,
@@ -530,6 +633,7 @@ export async function runSourcesReconciliationPage(
     const nextState = boundedSyncState(
       {
         stateVersion: SYNC_STATE_VERSION,
+        credentialFingerprint,
         pass: "confirm",
         phase: "collect-reader",
         restartCount: nextReconciliationRestartCount(restartCount, "source"),
@@ -541,7 +645,7 @@ export async function runSourcesReconciliationPage(
     return { changes: emittedChanges, hasMore: true, nextState }
   } catch (error) {
     if (error instanceof ReplacementInstabilityError) {
-      return restartSourcesReconciliation(state)
+      return restartSourcesReconciliation(state, credentialFingerprint)
     }
     throw error
   }
@@ -564,7 +668,7 @@ export async function runHighlightsIncrementalPage(
   state: IncrementalSyncState | undefined,
   now = Date.now()
 ) {
-  const window = incrementalWindow(state, now)
+  const window = incrementalWindow(state, client.credentialFingerprint(), now)
   const page = await client.exportHighlights({
     updatedAfter: window.updatedAfter,
     ...(window.pageCursor ? { pageCursor: window.pageCursor } : {}),
@@ -573,12 +677,41 @@ export async function runHighlightsIncrementalPage(
   const changes = highlightChanges(page.sources)
 
   if (page.nextPageCursor) {
+    let cursorState
+    try {
+      cursorState = nextCursorState(state, page.nextPageCursor, "highlights")
+    } catch (error) {
+      if (!(error instanceof ReplacementInstabilityError)) throw error
+      const paginationRestartCount = nextIncrementalRestartCount(
+        state?.paginationRestartCount,
+        "highlights"
+      )
+      return {
+        changes: [],
+        hasMore: true,
+        nextState: boundedSyncState(
+          {
+            stateVersion: SYNC_STATE_VERSION,
+            credentialFingerprint: window.credentialFingerprint,
+            updatedAfter: window.updatedAfter,
+            checkpoint: window.checkpoint,
+            paginationRestartCount,
+          } satisfies IncrementalSyncState,
+          "incremental highlights"
+        ),
+      }
+    }
+    const paginationRestartCount = incrementalRestartCount(
+      state?.paginationRestartCount
+    )
     const nextState = boundedSyncState(
       {
         stateVersion: SYNC_STATE_VERSION,
+        credentialFingerprint: window.credentialFingerprint,
         updatedAfter: window.updatedAfter,
         checkpoint: window.checkpoint,
-        ...nextCursorState(state, page.nextPageCursor, "highlights"),
+        ...(paginationRestartCount > 0 ? { paginationRestartCount } : {}),
+        ...cursorState,
       } satisfies IncrementalSyncState,
       "incremental highlights"
     )
@@ -589,18 +722,23 @@ export async function runHighlightsIncrementalPage(
     changes,
     hasMore: false,
     nextState: boundedSyncState(
-      completedIncrementalState(window.checkpoint),
+      completedIncrementalState(
+        window.checkpoint,
+        window.credentialFingerprint
+      ),
       "incremental highlights"
     ),
   }
 }
 
 function restartHighlightsReconciliation(
-  state: ReconciliationSyncState | undefined
+  state: ReconciliationSyncState | undefined,
+  credentialFingerprint: string
 ) {
   const nextState = boundedSyncState(
     {
       stateVersion: SYNC_STATE_VERSION,
+      credentialFingerprint,
       pass: "observe",
       restartCount: nextReconciliationRestartCount(
         state?.restartCount,
@@ -617,9 +755,18 @@ export async function runHighlightsReconciliationPage(
   state: ReconciliationSyncState | undefined
 ) {
   const pageCursor = reconciliationCursor(state)
+  const credentialFingerprint = boundCredentialFingerprint(
+    state,
+    client.credentialFingerprint(),
+    "highlight reconciliation"
+  )
   const pass = reconciliationPass(state?.pass)
   const restartCount = reconciliationRestartCount(state?.restartCount)
-  const baseline = inventorySnapshot(state?.baseline, "baseline inventory")
+  const baseline = inventorySnapshot(
+    state?.baseline,
+    "baseline inventory",
+    "export"
+  )
 
   try {
     const page = await client.exportHighlights({
@@ -663,15 +810,20 @@ export async function runHighlightsReconciliationPage(
       raw,
       output,
       "highlight Export",
-      duplicateIds
+      {
+        countMode: "export",
+        guardIdentities: [...raw, ...duplicateIds],
+        providerItemIdentities: duplicateIds,
+      }
     )
     const emittedChanges = pass === "emit" ? changes : []
 
     if (page.nextPageCursor) {
-      assertInventoryCanContinue(advanced.active, "highlight Export")
+      assertInventoryCanContinue(advanced.active, "highlight Export", "export")
       const nextState = boundedSyncState(
         {
           stateVersion: SYNC_STATE_VERSION,
+          credentialFingerprint,
           pass,
           restartCount,
           ...(baseline ? { baseline } : {}),
@@ -689,11 +841,16 @@ export async function runHighlightsReconciliationPage(
       return { changes: emittedChanges, hasMore: true, nextState }
     }
 
-    const completed = completeInventory(advanced.active, "highlight Export")
+    const completed = completeInventory(
+      advanced.active,
+      "highlight Export",
+      "export"
+    )
     if (pass === "observe") {
       const nextState = boundedSyncState(
         {
           stateVersion: SYNC_STATE_VERSION,
+          credentialFingerprint,
           pass: "confirm",
           restartCount,
           baseline: completed,
@@ -710,6 +867,7 @@ export async function runHighlightsReconciliationPage(
       const nextState = boundedSyncState(
         {
           stateVersion: SYNC_STATE_VERSION,
+          credentialFingerprint,
           pass: "emit",
           restartCount,
           baseline: completed,
@@ -730,6 +888,7 @@ export async function runHighlightsReconciliationPage(
     const nextState = boundedSyncState(
       {
         stateVersion: SYNC_STATE_VERSION,
+        credentialFingerprint,
         pass: "confirm",
         restartCount: nextReconciliationRestartCount(restartCount, "highlight"),
         baseline: completed,
@@ -739,7 +898,7 @@ export async function runHighlightsReconciliationPage(
     return { changes: emittedChanges, hasMore: true, nextState }
   } catch (error) {
     if (error instanceof ReplacementInstabilityError) {
-      return restartHighlightsReconciliation(state)
+      return restartHighlightsReconciliation(state, credentialFingerprint)
     }
     throw error
   }

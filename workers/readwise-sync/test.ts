@@ -1,12 +1,11 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
-import { join } from "node:path"
 import test from "node:test"
 
 import { RateLimitError } from "@notionhq/workers"
 import * as Builder from "@notionhq/workers/builder"
 
-import { highlightToChange } from "./src/highlights.js"
+import { credentialFingerprintForToken } from "./src/credential.js"
+import { highlightSchema, highlightToChange } from "./src/highlights.js"
 import worker from "./src/index.js"
 import {
   MAX_RESPONSE_BYTES,
@@ -23,6 +22,7 @@ import {
   exportSourceToReconciliationChange,
   readerDocumentToChange,
   readerSourceKey,
+  sourceSchema,
 } from "./src/sources.js"
 import {
   CONSISTENCY_BUFFER_MS,
@@ -30,6 +30,7 @@ import {
   MAX_CURSOR_LENGTH,
   MAX_REPLACEMENT_CURSOR_PAGES,
   MAX_REPLACEMENT_IDENTITIES,
+  MAX_REPLACEMENT_RECORDS,
   MAX_SAFE_SYNC_STATE_BYTES,
   SYNC_STATE_VERSION,
   WATERMARK_OVERLAP_MS,
@@ -41,6 +42,7 @@ import {
   syncStateSize,
   validateReconciliationState,
   type CursorGuardState,
+  type IncrementalSyncState,
   type ReconciliationSyncState,
   type SourcesReconciliationSyncState,
 } from "./src/state.js"
@@ -50,16 +52,217 @@ import {
   runSourcesIncrementalPage,
   runSourcesReconciliationPage,
 } from "./src/syncs.js"
-import { boundedText, readerTagNames, validUrl } from "./src/values.js"
+import {
+  boundedText,
+  displayLabel,
+  readerTagNames,
+  validUrl,
+} from "./src/values.js"
 
-const readerFixture = JSON.parse(
-  readFileSync(join(process.cwd(), "fixtures/reader-page.json"), "utf8")
-) as unknown
-const exportFixture = JSON.parse(
-  readFileSync(join(process.cwd(), "fixtures/export-page.json"), "utf8")
-) as unknown
+const readerFixture = {
+  count: 3,
+  nextPageCursor: "reader-page-2",
+  results: [
+    {
+      id: "reader-document-1",
+      url: "https://read.readwise.io/new/read/reader-document-1",
+      source_url: "https://example.com/durable-notes",
+      title: "Durable notes for software teams",
+      author: "A. Reader",
+      source: "Reader add from import URL",
+      category: "article",
+      location: "later",
+      tags: {
+        engineering: { name: "Engineering" },
+        "to-share": { name: "To share" },
+      },
+      site_name: "Example Engineering",
+      word_count: 2_400,
+      reading_time: "12 mins",
+      listening_time: null,
+      created_at: "2026-06-01T10:00:00Z",
+      updated_at: "2026-06-02T12:00:00Z",
+      published_date: "2026-05-31",
+      notes: "Discuss this with the platform team.",
+      summary: "How durable notes preserve decisions across tools.",
+      image_url: "https://example.com/cover.png",
+      parent_id: null,
+      reading_progress: 0.55,
+      first_opened_at: "2026-06-01T11:00:00Z",
+      last_opened_at: "2026-06-02T11:45:00Z",
+      saved_at: "2026-06-01T10:00:00Z",
+      last_moved_at: "2026-06-01T10:05:00Z",
+    },
+    {
+      id: "reader-note-1",
+      url: "https://read.readwise.io/new/read/reader-note-1",
+      source_url: null,
+      title: "A nested Reader note",
+      author: null,
+      source: "Reader",
+      category: "note",
+      location: "new",
+      tags: {},
+      site_name: null,
+      word_count: 8,
+      reading_time: null,
+      listening_time: null,
+      created_at: "2026-06-02T12:00:00Z",
+      updated_at: "2026-06-02T12:00:00Z",
+      published_date: null,
+      notes: null,
+      summary: null,
+      image_url: null,
+      parent_id: "reader-document-1",
+      reading_progress: null,
+      first_opened_at: null,
+      last_opened_at: null,
+      saved_at: "2026-06-02T12:00:00Z",
+      last_moved_at: null,
+    },
+    {
+      id: "reader-document-2",
+      url: "https://read.readwise.io/archive/read/reader-document-2",
+      source_url: "https://example.com/design.pdf",
+      title: "A practical systems design guide",
+      author: "B. Builder",
+      source: "Reader upload",
+      category: "pdf",
+      location: "archive",
+      tags: {},
+      site_name: "Example Research",
+      word_count: 12_000,
+      reading_time: "60 mins",
+      listening_time: null,
+      created_at: "2026-05-01T10:00:00Z",
+      updated_at: "2026-06-03T09:00:00Z",
+      published_date: "2026-04-15",
+      notes: "Finished.",
+      summary: "A systems design reference.",
+      image_url: null,
+      parent_id: null,
+      reading_progress: 1,
+      first_opened_at: "2026-05-02T10:00:00Z",
+      last_opened_at: "2026-06-03T08:00:00Z",
+      saved_at: "2026-05-01T10:00:00Z",
+      last_moved_at: "2026-06-03T09:00:00Z",
+    },
+  ],
+} satisfies Record<string, unknown>
+
+const exportFixture = {
+  count: 2,
+  nextPageCursor: "export-page-2",
+  results: [
+    {
+      user_book_id: 501,
+      is_deleted: false,
+      title: "Durable notes for software teams",
+      readable_title: "Durable notes for software teams",
+      author: "A. Reader",
+      source: "reader",
+      cover_image_url: "https://example.com/cover.png",
+      unique_url: "https://example.com/durable-notes",
+      book_tags: [{ id: 1, name: "Engineering" }],
+      category: "articles",
+      document_note: "Discuss this with the platform team.",
+      summary: "How durable notes preserve decisions across tools.",
+      readwise_url: "https://readwise.io/bookreview/501",
+      source_url: "https://example.com/durable-notes",
+      external_id: "reader-document-1",
+      asin: null,
+      highlights: [
+        {
+          id: 9_001,
+          is_deleted: false,
+          text: "A durable note should retain the decision, its context, and the source that changed the team's mind.",
+          location: 12,
+          location_type: "order",
+          note: "This should become an architecture-decision prompt.",
+          color: "yellow",
+          highlighted_at: "2026-06-02T11:30:00Z",
+          created_at: "2026-06-02T11:30:01Z",
+          updated_at: "2026-06-02T12:30:00Z",
+          external_id: "reader-highlight-9001",
+          end_location: 13,
+          url: "https://example.com/durable-notes#decision",
+          book_id: 501,
+          tags: [{ id: 2, name: "Architecture" }],
+          is_favorite: true,
+          is_discard: false,
+          readwise_url: "https://readwise.io/open/9001",
+        },
+        {
+          id: 9_002,
+          is_deleted: true,
+          text: null,
+          location: null,
+          location_type: null,
+          note: null,
+          color: null,
+          highlighted_at: null,
+          created_at: null,
+          updated_at: "2026-06-02T12:35:00Z",
+          external_id: null,
+          end_location: null,
+          url: null,
+          book_id: 501,
+          tags: [],
+          is_favorite: false,
+          is_discard: false,
+          readwise_url: null,
+        },
+      ],
+    },
+    {
+      user_book_id: 502,
+      is_deleted: false,
+      title: "Designing Data-Intensive Applications",
+      readable_title: "Designing Data-Intensive Applications",
+      author: "Martin Kleppmann",
+      source: "kindle",
+      cover_image_url: null,
+      unique_url: "",
+      book_tags: [{ id: 3, name: "Distributed systems" }],
+      category: "books",
+      document_note: "",
+      summary: "",
+      readwise_url: "https://readwise.io/bookreview/502",
+      source_url: "",
+      external_id: null,
+      asin: "1449373321",
+      highlights: [
+        {
+          id: 9_100,
+          is_deleted: false,
+          text: "Reliability means continuing to work correctly, even when things go wrong.",
+          location: 42,
+          location_type: "location",
+          note: null,
+          color: "blue",
+          highlighted_at: "2026-05-20T10:00:00Z",
+          created_at: "2026-05-20T10:00:00Z",
+          updated_at: "2026-05-20T10:00:00Z",
+          external_id: "kindle-9100",
+          end_location: 43,
+          url: null,
+          book_id: 502,
+          tags: [],
+          is_favorite: false,
+          is_discard: false,
+          readwise_url: "https://readwise.io/open/9100",
+        },
+      ],
+    },
+  ],
+} satisfies Record<string, unknown>
 
 process.env.READWISE_ACCESS_TOKEN = "offline-fixture-token"
+process.env.READWISE_CREDENTIAL_FINGERPRINT = credentialFingerprintForToken(
+  process.env.READWISE_ACCESS_TOKEN
+)
+
+const TEST_CREDENTIAL_FINGERPRINT = "f".repeat(64)
 
 test("worker manifest registers related databases and four guarded schedules", () => {
   assert.deepEqual(
@@ -87,6 +290,63 @@ test("worker manifest registers related databases and four guarded schedules", (
       config: { allowedRequests: 15, intervalMs: 60_000 },
     },
   ])
+
+  assert.deepEqual(Object.keys(sourceSchema.properties), [
+    "Source",
+    "Location",
+    "Reading Progress",
+    "Category",
+    "Author",
+    "Site",
+    "Tags",
+    "Open in Reader",
+    "Saved",
+    "Last Opened",
+    "Summary",
+    "Note",
+    "Origin",
+    "Archived",
+    "Reading Time",
+    "Word Count",
+    "Published",
+    "Updated",
+    "Original URL",
+    "Readwise Review",
+    "Summary Truncated",
+    "Note Truncated",
+    "Reader Document ID",
+    "Readwise Source ID",
+    "Source Key",
+  ])
+  assert.deepEqual(Object.keys(highlightSchema.properties), [
+    "Highlight",
+    "Source",
+    "Note",
+    "Tags",
+    "Highlighted",
+    "Favorite",
+    "Discarded",
+    "Open in Readwise",
+    "Source Author",
+    "Quote",
+    "Origin",
+    "Color",
+    "Source URL",
+    "Location",
+    "Location Type",
+    "Created",
+    "Updated",
+    "Source Title",
+    "Quote Truncated",
+    "Note Truncated",
+    "External ID",
+    "Readwise Source ID",
+    "Highlight Key",
+  ])
+  assert.equal(
+    (sourceSchema.properties["Reading Progress"] as { format?: string }).format,
+    "percent"
+  )
 
   type SyncConfig = {
     databaseKey: string
@@ -177,10 +437,14 @@ function activeExportPage(page: ReadwiseExportPage): ReadwiseExportPage {
 function queuedClient(options: {
   reader?: ReaderDocumentPage[]
   exported?: ReadwiseExportPage[]
+  credentialFingerprint?: string
 }): ReadwiseClient {
   let readerIndex = 0
   let exportIndex = 0
   return {
+    credentialFingerprint() {
+      return options.credentialFingerprint ?? TEST_CREDENTIAL_FINGERPRINT
+    },
     async listReaderDocuments() {
       const page = options.reader?.[readerIndex]
       assert.ok(page, `unexpected Reader request ${readerIndex + 1}`)
@@ -319,16 +583,84 @@ test("429 responses become retryable Workers errors", async () => {
 })
 
 test("malformed provider pages fail closed", async () => {
-  const client = createReadwiseClient(async () => {}, (async () =>
+  for (const nextPageCursor of [undefined, "   ", 42]) {
+    const body: Record<string, unknown> = { count: 0, results: [] }
+    if (nextPageCursor !== undefined) body.nextPageCursor = nextPageCursor
+    const client = createReadwiseClient(async () => {}, (async () =>
+      jsonResponse(body)) as typeof fetch)
+    await assert.rejects(
+      () => client.listReaderDocuments({}),
+      /invalid nextPageCursor/
+    )
+    await assert.rejects(
+      () => client.exportHighlights({ includeDeleted: false }),
+      /invalid nextPageCursor/
+    )
+  }
+
+  const terminalClient = createReadwiseClient(async () => {}, (async () =>
     jsonResponse({
       count: 0,
-      nextPageCursor: 42,
+      nextPageCursor: null,
       results: [],
     })) as typeof fetch)
-  await assert.rejects(
-    () => client.listReaderDocuments({}),
-    /invalid nextPageCursor/
+  assert.equal(
+    (await terminalClient.listReaderDocuments({})).nextPageCursor,
+    undefined
   )
+  assert.equal(
+    (await terminalClient.exportHighlights({ includeDeleted: false }))
+      .nextPageCursor,
+    undefined
+  )
+})
+
+test("the deployment fingerprint rejects credential changes before requests", async () => {
+  const originalToken = process.env.READWISE_ACCESS_TOKEN
+  const originalFingerprint = process.env.READWISE_CREDENTIAL_FINGERPRINT
+  let requests = 0
+  try {
+    const client = createReadwiseClient(async () => {}, (async () => {
+      requests += 1
+      return jsonResponse({ count: 0, nextPageCursor: null, results: [] })
+    }) as typeof fetch)
+    process.env.READWISE_ACCESS_TOKEN = "  first-private-token  "
+    process.env.READWISE_CREDENTIAL_FINGERPRINT = credentialFingerprintForToken(
+      "first-private-token"
+    )
+    const first = client.credentialFingerprint()
+    process.env.READWISE_ACCESS_TOKEN = "first-private-token"
+    assert.equal(client.credentialFingerprint(), first)
+
+    process.env.READWISE_ACCESS_TOKEN = "second-private-token"
+    assert.throws(
+      () => client.credentialFingerprint(),
+      /does not match READWISE_CREDENTIAL_FINGERPRINT/
+    )
+    await assert.rejects(
+      () => client.listReaderDocuments({}),
+      /does not match READWISE_CREDENTIAL_FINGERPRINT/
+    )
+    assert.equal(requests, 0)
+
+    process.env.READWISE_CREDENTIAL_FINGERPRINT = credentialFingerprintForToken(
+      "second-private-token"
+    )
+    const second = client.credentialFingerprint()
+
+    assert.match(first, /^[0-9a-f]{64}$/)
+    assert.notEqual(second, first)
+    assert.equal(first.includes("first-private-token"), false)
+    assert.equal(second.includes("second-private-token"), false)
+  } finally {
+    if (originalToken === undefined) delete process.env.READWISE_ACCESS_TOKEN
+    else process.env.READWISE_ACCESS_TOKEN = originalToken
+    if (originalFingerprint === undefined) {
+      delete process.env.READWISE_CREDENTIAL_FINGERPRINT
+    } else {
+      process.env.READWISE_CREDENTIAL_FINGERPRINT = originalFingerprint
+    }
+  }
 })
 
 test("successful response bodies are byte-bounded before JSON parsing", async () => {
@@ -441,6 +773,214 @@ test("provider parsers require source highlights and an explicit Reader parent_i
   )
 })
 
+test("provider parsers reject malformed identity and ownership fields", async (t) => {
+  const exportCases: Array<{
+    name: string
+    mutate: (source: Record<string, unknown>) => void
+    message: RegExp
+  }> = [
+    {
+      name: "missing source discriminator",
+      mutate: (source) => delete source.source,
+      message: /source source must be a non-empty string/,
+    },
+    {
+      name: "wrong source discriminator type",
+      mutate: (source) => {
+        source.source = 42
+      },
+      message: /source source must be a non-empty string/,
+    },
+    {
+      name: "missing source external id",
+      mutate: (source) => delete source.external_id,
+      message: /source external_id must be a string or null/,
+    },
+    {
+      name: "wrong source external id type",
+      mutate: (source) => {
+        source.external_id = 42
+      },
+      message: /source external_id must be a string or null/,
+    },
+    {
+      name: "missing source tags",
+      mutate: (source) => delete source.book_tags,
+      message: /source tags must be an array/,
+    },
+    {
+      name: "non-numeric source id",
+      mutate: (source) => {
+        source.user_book_id = "501"
+      },
+      message: /source is missing a valid stable id/,
+    },
+  ]
+
+  for (const fixture of exportCases) {
+    await t.test(fixture.name, async () => {
+      const body = structuredClone(exportFixture) as Record<string, unknown>
+      const [source] = body.results as Array<Record<string, unknown>>
+      fixture.mutate(source)
+      const client = createReadwiseClient(async () => {}, (async () =>
+        jsonResponse(body)) as typeof fetch)
+      await assert.rejects(
+        () => client.exportHighlights({ includeDeleted: true }),
+        fixture.message
+      )
+    })
+  }
+
+  const highlightCases: Array<{
+    name: string
+    mutate: (highlight: Record<string, unknown>) => void
+    message: RegExp
+  }> = [
+    {
+      name: "missing highlight external id",
+      mutate: (highlight) => delete highlight.external_id,
+      message: /highlight external_id must be a string or null/,
+    },
+    {
+      name: "malformed highlight tags",
+      mutate: (highlight) => {
+        highlight.tags = null
+      },
+      message: /highlight tags must be an array/,
+    },
+    {
+      name: "missing favorite flag",
+      mutate: (highlight) => delete highlight.is_favorite,
+      message: /highlight is_favorite must be a boolean/,
+    },
+    {
+      name: "malformed discarded flag",
+      mutate: (highlight) => {
+        highlight.is_discard = "false"
+      },
+      message: /highlight is_discard must be a boolean/,
+    },
+    {
+      name: "non-numeric highlight id",
+      mutate: (highlight) => {
+        highlight.id = "9001"
+      },
+      message: /highlight is missing a valid stable id/,
+    },
+    {
+      name: "missing documented updated_at",
+      mutate: (highlight) => {
+        delete highlight.updated_at
+        highlight.updated = "2026-06-02T12:30:00Z"
+      },
+      message: /highlight updated_at must be a string or null/,
+    },
+  ]
+
+  for (const fixture of highlightCases) {
+    await t.test(fixture.name, async () => {
+      const body = structuredClone(exportFixture) as Record<string, unknown>
+      const [source] = body.results as Array<Record<string, unknown>>
+      const [highlight] = source.highlights as Array<Record<string, unknown>>
+      fixture.mutate(highlight)
+      const client = createReadwiseClient(async () => {}, (async () =>
+        jsonResponse(body)) as typeof fetch)
+      await assert.rejects(
+        () => client.exportHighlights({ includeDeleted: true }),
+        fixture.message
+      )
+    })
+  }
+
+  const malformedReader = structuredClone(readerFixture) as Record<
+    string,
+    unknown
+  >
+  const [document] = malformedReader.results as Array<Record<string, unknown>>
+  document.tags = []
+  const readerClient = createReadwiseClient(async () => {}, (async () =>
+    jsonResponse(malformedReader)) as typeof fetch)
+  await assert.rejects(
+    () => readerClient.listReaderDocuments({}),
+    /Reader document tags must be an object/
+  )
+})
+
+test("provider parsers reject invalid dates and numeric domains", async (t) => {
+  const readerCases: Array<{
+    name: string
+    field: string
+    value: unknown
+    message: RegExp
+  }> = [
+    {
+      name: "invalid updated date",
+      field: "updated_at",
+      value: "not-a-date",
+      message: /updated_at must be a valid date or null/,
+    },
+    {
+      name: "out-of-range reading progress",
+      field: "reading_progress",
+      value: 1.1,
+      message: /reading_progress must be between 0 and 1 or null/,
+    },
+    {
+      name: "negative word count",
+      field: "word_count",
+      value: -1,
+      message: /word_count must be a non-negative integer or null/,
+    },
+  ]
+  for (const fixture of readerCases) {
+    await t.test(fixture.name, async () => {
+      const body = structuredClone(readerFixture) as Record<string, unknown>
+      const [document] = body.results as Array<Record<string, unknown>>
+      document[fixture.field] = fixture.value
+      const client = createReadwiseClient(async () => {}, (async () =>
+        jsonResponse(body)) as typeof fetch)
+      await assert.rejects(
+        () => client.listReaderDocuments({}),
+        fixture.message
+      )
+    })
+  }
+
+  const highlightCases: Array<{
+    name: string
+    field: string
+    value: unknown
+    message: RegExp
+  }> = [
+    {
+      name: "invalid highlight date",
+      field: "updated_at",
+      value: "not-a-date",
+      message: /highlight updated_at must be a valid date or null/,
+    },
+    {
+      name: "fractional highlight location",
+      field: "location",
+      value: 1.5,
+      message: /highlight location must be a non-negative integer or null/,
+    },
+  ]
+  for (const fixture of highlightCases) {
+    await t.test(fixture.name, async () => {
+      const body = structuredClone(exportFixture) as Record<string, unknown>
+      const [source] = body.results as Array<Record<string, unknown>>
+      const [highlight] = source.highlights as Array<Record<string, unknown>>
+      highlight[fixture.field] = fixture.value
+      const client = createReadwiseClient(async () => {}, (async () =>
+        jsonResponse(body)) as typeof fetch)
+      await assert.rejects(
+        () => client.exportHighlights({ includeDeleted: true }),
+        fixture.message
+      )
+    })
+  }
+})
+
 test("provider parsers require non-negative safe integer counts", async (t) => {
   for (const count of [undefined, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
     await t.test(`rejects ${String(count)}`, async () => {
@@ -482,6 +1022,13 @@ test("Reader children are excluded while top-level documents keep archive state"
     changes.map((change) => change.key),
     ["reader:reader-document-1", "reader:reader-document-2"]
   )
+  assert.deepEqual(changes[0].properties.Location, Builder.select("Later"))
+  assert.deepEqual(changes[0].properties.Category, Builder.select("Article"))
+  assert.deepEqual(
+    changes[0].properties["Reading Progress"],
+    Builder.number(0.55)
+  )
+  assert.deepEqual(changes[1].properties.Location, Builder.select("Archive"))
   assert.deepEqual(changes[1].properties.Archived, Builder.checkbox(true))
   assert.equal("pageContentMarkdown" in changes[0], false)
   assert.equal("Readwise Source ID" in changes[0].properties, false)
@@ -512,6 +1059,12 @@ test("highlights relate to stable Sources and preserve user-owned page content",
     Builder.relation("reader:reader-document-1"),
   ])
   assert.deepEqual(change.properties.Favorite, Builder.checkbox(true))
+  assert.deepEqual(change.properties.Color, Builder.select("Yellow"))
+  assert.deepEqual(change.properties["Location Type"], Builder.select("Order"))
+  assert.deepEqual(
+    change.properties["Open in Readwise"],
+    Builder.url("https://readwise.io/open/9001")
+  )
   assert.equal("pageContentMarkdown" in change, false)
 })
 
@@ -560,7 +1113,7 @@ test("Reader-backed Export deltas update only Export-owned identity fields", asy
     "Readwise Source ID",
     "Source Key",
   ])
-  assert.equal("Name" in change.properties, false)
+  assert.equal("Source" in change.properties, false)
   assert.equal("Original URL" in change.properties, false)
 })
 
@@ -598,11 +1151,11 @@ test("empty or invalid preferred source metadata falls back safely", async () =>
   }
   const sourceChange = exportSourceToChange(source)
   assert.ok(sourceChange && sourceChange.type === "upsert")
-  if (!("Name" in sourceChange.properties)) {
+  if (!("Source" in sourceChange.properties)) {
     assert.fail("expected a complete standalone Export row")
   }
   assert.deepEqual(
-    sourceChange.properties.Name,
+    sourceChange.properties.Source,
     Builder.title("Fallback source title")
   )
   assert.deepEqual(
@@ -633,7 +1186,11 @@ test("long text is visibly bounded instead of silently overflowing Notion", () =
   assert.ok(result.text?.endsWith("…"))
 })
 
-test("tag and URL normalization is deterministic and safe", () => {
+test("labels, tags, and URLs are deterministic and safe", () => {
+  assert.equal(displayLabel("pdf"), "PDF")
+  assert.equal(displayLabel("rss_feed"), "RSS Feed")
+  assert.equal(displayLabel("time-offset"), "Time Offset")
+  assert.equal(displayLabel("  "), undefined)
   assert.deepEqual(
     readerTagNames({ z: { name: "Zed" }, a: { name: "Alpha" }, raw: null }),
     ["Alpha", "raw", "Zed"]
@@ -657,14 +1214,17 @@ test("tag and URL normalization is deterministic and safe", () => {
 
 test("incremental windows pin a checkpoint and retain a five-minute overlap", () => {
   const now = Date.parse("2026-07-03T12:00:00.000Z")
-  const initial = incrementalWindow(undefined, now)
+  const initial = incrementalWindow(undefined, TEST_CREDENTIAL_FINGERPRINT, now)
   assert.equal(initial.updatedAfter, INITIAL_UPDATED_AFTER)
   assert.equal(
     initial.checkpoint,
     new Date(now - CONSISTENCY_BUFFER_MS).toISOString()
   )
 
-  const completed = completedIncrementalState(initial.checkpoint)
+  const completed = completedIncrementalState(
+    initial.checkpoint,
+    TEST_CREDENTIAL_FINGERPRINT
+  )
   assert.equal(
     completed.updatedAfter,
     new Date(
@@ -692,22 +1252,30 @@ test("cursor guards reject cycles and incompatible continuation state", () => {
   )
   assert.throws(
     () =>
-      incrementalWindow({
-        stateVersion: SYNC_STATE_VERSION,
-        updatedAfter: INITIAL_UPDATED_AFTER,
-        checkpoint: "2026-07-03T00:00:00.000Z",
-        ...guarded,
-        cursorFingerprints: `${guarded.cursorFingerprints}x`,
-      }),
+      incrementalWindow(
+        {
+          stateVersion: SYNC_STATE_VERSION,
+          credentialFingerprint: TEST_CREDENTIAL_FINGERPRINT,
+          updatedAfter: INITIAL_UPDATED_AFTER,
+          checkpoint: "2026-07-03T00:00:00.000Z",
+          ...guarded,
+          cursorFingerprints: `${guarded.cursorFingerprints}x`,
+        },
+        TEST_CREDENTIAL_FINGERPRINT
+      ),
     /invalid cursor history/
   )
   assert.throws(
     () =>
-      incrementalWindow({
-        stateVersion: SYNC_STATE_VERSION,
-        updatedAfter: INITIAL_UPDATED_AFTER,
-        pageCursor: "orphaned-cursor",
-      }),
+      incrementalWindow(
+        {
+          stateVersion: SYNC_STATE_VERSION,
+          credentialFingerprint: TEST_CREDENTIAL_FINGERPRINT,
+          updatedAfter: INITIAL_UPDATED_AFTER,
+          pageCursor: "orphaned-cursor",
+        },
+        TEST_CREDENTIAL_FINGERPRINT
+      ),
     /without a pinned checkpoint/
   )
 })
@@ -717,17 +1285,30 @@ test("worst-case packed reconciliation state stays below 240 and 256 KiB", () =>
     namespace: "raw",
     value: `raw-${index}`,
   }))
-  const output = Array.from(
-    { length: MAX_REPLACEMENT_IDENTITIES - raw.length },
-    (_, index) => ({ namespace: "output", value: `output-${index}` })
+  const output = raw.map((_, index) => ({
+    namespace: "output",
+    value: `output-${index}`,
+  }))
+  const providerItems = raw.map((_, index) => ({
+    namespace: "provider-item",
+    value: `provider-item-${index}`,
+  }))
+  assert.equal(
+    raw.length + output.length + providerItems.length,
+    MAX_REPLACEMENT_IDENTITIES
   )
   const inventory = advanceGuardedInventory(
     undefined,
     undefined,
-    MAX_REPLACEMENT_IDENTITIES,
+    MAX_REPLACEMENT_RECORDS,
     raw,
     output,
-    "state-size fixture"
+    "state-size fixture",
+    {
+      countMode: "export",
+      guardIdentities: [...raw, ...output, ...providerItems],
+      providerItemIdentities: providerItems,
+    }
   )
 
   let cursors: CursorGuardState | undefined
@@ -744,6 +1325,7 @@ test("worst-case packed reconciliation state stays below 240 and 256 KiB", () =>
   assert.ok(cursors)
   const state: ReconciliationSyncState = {
     stateVersion: SYNC_STATE_VERSION,
+    credentialFingerprint: TEST_CREDENTIAL_FINGERPRINT,
     pass: "observe",
     active: inventory.active,
     ...inventory.guard,
@@ -755,6 +1337,75 @@ test("worst-case packed reconciliation state stays below 240 and 256 KiB", () =>
   const bytes = syncStateSize(state)
   assert.ok(bytes < MAX_SAFE_SYNC_STATE_BYTES, `${bytes} is not below 240 KiB`)
   assert.ok(bytes < 256 * 1_024, `${bytes} is not below 256 KiB`)
+
+  assert.throws(
+    () =>
+      advanceGuardedInventory(
+        undefined,
+        undefined,
+        MAX_REPLACEMENT_RECORDS + 1,
+        [],
+        [],
+        "oversized fixture"
+      ),
+    /cannot fit in bounded replacement state/
+  )
+})
+
+test("combined Source guards fit 7,500 fully unified rows", () => {
+  function sourceGuardFixture(count: number) {
+    const readerRaw = Array.from({ length: count }, (_, index) => ({
+      namespace: "reader-document",
+      value: `reader-${index}`,
+    }))
+    const readerOutput = readerRaw.map((_, index) => ({
+      namespace: "reader-source-key",
+      value: `reader:reader-${index}`,
+    }))
+    const reader = advanceGuardedInventory(
+      undefined,
+      undefined,
+      count,
+      readerRaw,
+      readerOutput,
+      "Reader capacity fixture",
+      { guardIdentities: readerOutput }
+    )
+
+    const exportRaw = readerRaw.map((_, index) => ({
+      namespace: "readwise-source",
+      value: `source-${index}`,
+    }))
+    const exportOutput = readerRaw.map((_, index) => ({
+      namespace: "readwise-source-key",
+      value: `reader:reader-${index}`,
+    }))
+    const highlights = readerRaw.map((_, index) => ({
+      namespace: "readwise-export-highlight",
+      value: `highlight-${index}`,
+    }))
+    return advanceGuardedInventory(
+      undefined,
+      reader.guard,
+      count,
+      exportRaw,
+      exportOutput,
+      "Export capacity fixture",
+      {
+        countMode: "export",
+        guardIdentities: [...exportRaw, ...exportOutput, ...highlights],
+        providerItemIdentities: highlights,
+      }
+    )
+  }
+
+  const maximumFullyUnifiedRows = Math.floor(MAX_REPLACEMENT_IDENTITIES / 4)
+  const atLimit = sourceGuardFixture(maximumFullyUnifiedRows)
+  assert.equal(atLimit.guard.identityCount, MAX_REPLACEMENT_IDENTITIES)
+  assert.throws(
+    () => sourceGuardFixture(maximumFullyUnifiedRows + 1),
+    /exceeded 30000 bounded uniqueness checks/
+  )
 })
 
 test("Sources keep one updatedAfter boundary across both cursor phases", async () => {
@@ -767,6 +1418,9 @@ test("Sources keep one updatedAfter boundary across both cursor phases", async (
   let readerCall = 0
   let exportCall = 0
   const client: ReadwiseClient = {
+    credentialFingerprint() {
+      return TEST_CREDENTIAL_FINGERPRINT
+    },
     async listReaderDocuments(options) {
       calls.push({ endpoint: "reader", ...options })
       readerCall += 1
@@ -801,7 +1455,7 @@ test("Sources keep one updatedAfter boundary across both cursor phases", async (
   assert.ok(
     initialReaderBackedExport && initialReaderBackedExport.type === "upsert"
   )
-  assert.equal("Name" in initialReaderBackedExport.properties, true)
+  assert.equal("Source" in initialReaderBackedExport.properties, true)
 
   const second = await runSourcesIncrementalPage(client, first.nextState, now)
   assert.equal(second.nextState.phase, "reader")
@@ -856,6 +1510,9 @@ test("a failed continuation replays from the last committed cursor", async () =>
   let fail = false
   let successfulCalls = 0
   const client: ReadwiseClient = {
+    credentialFingerprint() {
+      return TEST_CREDENTIAL_FINGERPRINT
+    },
     async listReaderDocuments() {
       return { documents: [], count: 0, nextPageCursor: undefined }
     },
@@ -889,12 +1546,223 @@ test("a failed continuation replays from the last committed cursor", async () =>
   assert.equal(seen[1].updatedAfter, INITIAL_UPDATED_AFTER)
 })
 
+test("credential changes fail before all four capabilities make requests", async (t) => {
+  const { reader, exported } = await parsedFixtures()
+  const readerPage = { ...reader, nextPageCursor: undefined }
+  const exportPage = activeExportPage(exported)
+
+  const sourceIncremental = await runSourcesIncrementalPage(
+    queuedClient({ exported: [exportPage] }),
+    undefined
+  )
+  const highlightIncremental = await runHighlightsIncrementalPage(
+    queuedClient({ exported: [exportPage] }),
+    undefined
+  )
+  const sourceReconciliation = await runSourcesReconciliationPage(
+    queuedClient({ reader: [readerPage] }),
+    undefined
+  )
+  const highlightReconciliation = await runHighlightsReconciliationPage(
+    queuedClient({ exported: [exportPage] }),
+    undefined
+  )
+
+  const cases: Array<{
+    name: string
+    run: (client: ReadwiseClient) => Promise<unknown>
+  }> = [
+    {
+      name: "Sources incremental",
+      run: (client) =>
+        runSourcesIncrementalPage(client, sourceIncremental.nextState),
+    },
+    {
+      name: "Highlights incremental",
+      run: (client) =>
+        runHighlightsIncrementalPage(client, highlightIncremental.nextState),
+    },
+    {
+      name: "Sources reconciliation",
+      run: (client) =>
+        runSourcesReconciliationPage(
+          client,
+          requiredSourceState(sourceReconciliation)
+        ),
+    },
+    {
+      name: "Highlights reconciliation",
+      run: (client) =>
+        runHighlightsReconciliationPage(
+          client,
+          requiredHighlightState(highlightReconciliation)
+        ),
+    },
+  ]
+
+  for (const fixture of cases) {
+    await t.test(fixture.name, async () => {
+      let requests = 0
+      const changedClient: ReadwiseClient = {
+        credentialFingerprint() {
+          return "e".repeat(64)
+        },
+        async listReaderDocuments() {
+          requests += 1
+          throw new Error("request should not run")
+        },
+        async exportHighlights() {
+          requests += 1
+          throw new Error("request should not run")
+        },
+      }
+      await assert.rejects(
+        () => fixture.run(changedClient),
+        /credentials changed/
+      )
+      assert.equal(requests, 0)
+    })
+  }
+
+  const rebound = await runHighlightsIncrementalPage(
+    queuedClient({
+      credentialFingerprint: "e".repeat(64),
+      exported: [{ sources: [], count: 0, nextPageCursor: undefined }],
+    }),
+    undefined
+  )
+  assert.equal(rebound.nextState.credentialFingerprint, "e".repeat(64))
+})
+
+test("incremental cursor loops restart the pinned traversal and recover", async (t) => {
+  await t.test("Highlights", async () => {
+    const calls: Array<{ updatedAfter?: string; pageCursor?: string }> = []
+    const client: ReadwiseClient = {
+      credentialFingerprint() {
+        return TEST_CREDENTIAL_FINGERPRINT
+      },
+      async listReaderDocuments() {
+        throw new Error("unexpected Reader request")
+      },
+      async exportHighlights(options) {
+        calls.push(options)
+        return {
+          sources: [],
+          count: 0,
+          nextPageCursor: calls.length < 3 ? "loop" : undefined,
+        }
+      },
+    }
+
+    const first = await runHighlightsIncrementalPage(client, undefined)
+    const restarted = await runHighlightsIncrementalPage(
+      client,
+      first.nextState
+    )
+    assert.equal(restarted.hasMore, true)
+    assert.deepEqual(restarted.changes, [])
+    assert.equal(
+      "pageCursor" in restarted.nextState
+        ? restarted.nextState.pageCursor
+        : undefined,
+      undefined
+    )
+    assert.equal(restarted.nextState.paginationRestartCount, 1)
+
+    const recovered = await runHighlightsIncrementalPage(
+      client,
+      restarted.nextState
+    )
+    assert.equal(recovered.hasMore, false)
+    assert.deepEqual(
+      calls.map(({ updatedAfter, pageCursor }) => ({
+        updatedAfter,
+        pageCursor,
+      })),
+      [
+        { updatedAfter: INITIAL_UPDATED_AFTER, pageCursor: undefined },
+        { updatedAfter: INITIAL_UPDATED_AFTER, pageCursor: "loop" },
+        { updatedAfter: INITIAL_UPDATED_AFTER, pageCursor: undefined },
+      ]
+    )
+  })
+
+  await t.test("Sources preserve their current phase", async () => {
+    const exportCursors: Array<string | undefined> = []
+    const client: ReadwiseClient = {
+      credentialFingerprint() {
+        return TEST_CREDENTIAL_FINGERPRINT
+      },
+      async listReaderDocuments() {
+        return { documents: [], count: 0, nextPageCursor: undefined }
+      },
+      async exportHighlights(options) {
+        exportCursors.push(options.pageCursor)
+        return {
+          sources: [],
+          count: 0,
+          nextPageCursor: exportCursors.length < 3 ? "loop" : undefined,
+        }
+      },
+    }
+
+    const first = await runSourcesIncrementalPage(client, undefined)
+    const restarted = await runSourcesIncrementalPage(client, first.nextState)
+    assert.equal(restarted.nextState.phase, "readwise")
+    assert.equal(restarted.nextState.pageCursor, undefined)
+    assert.equal(restarted.nextState.paginationRestartCount, 1)
+    const exportFinished = await runSourcesIncrementalPage(
+      client,
+      restarted.nextState
+    )
+    assert.equal(exportFinished.nextState.phase, "reader")
+    const recovered = await runSourcesIncrementalPage(
+      client,
+      exportFinished.nextState
+    )
+    assert.equal(recovered.hasMore, false)
+    assert.deepEqual(exportCursors, [undefined, "loop", undefined])
+  })
+
+  await t.test("Stops after three bounded restarts", async () => {
+    const client: ReadwiseClient = {
+      credentialFingerprint() {
+        return TEST_CREDENTIAL_FINGERPRINT
+      },
+      async listReaderDocuments() {
+        throw new Error("unexpected Reader request")
+      },
+      async exportHighlights() {
+        return { sources: [], count: 0, nextPageCursor: "loop" }
+      },
+    }
+    let state: IncrementalSyncState | undefined
+    for (let restart = 1; restart <= 3; restart += 1) {
+      const page = await runHighlightsIncrementalPage(client, state)
+      const repeated = await runHighlightsIncrementalPage(
+        client,
+        page.nextState
+      )
+      assert.equal(repeated.nextState.paginationRestartCount, restart)
+      state = repeated.nextState
+    }
+    const page = await runHighlightsIncrementalPage(client, state)
+    await assert.rejects(
+      () => runHighlightsIncrementalPage(client, page.nextState),
+      /pagination remained unstable after 3 retries/
+    )
+  })
+})
+
 test("highlight delta requests tombstones while stable reconciliation confirms before emitting", async () => {
   const { exported } = await parsedFixtures()
   const incrementalPage = { ...exported, nextPageCursor: undefined }
   const reconciliationPage = activeExportPage(exported)
   const includeDeleted: boolean[] = []
   const client: ReadwiseClient = {
+    credentialFingerprint() {
+      return TEST_CREDENTIAL_FINGERPRINT
+    },
     async listReaderDocuments() {
       return { documents: [], count: 0, nextPageCursor: undefined }
     },
@@ -931,6 +1799,179 @@ test("highlight delta requests tombstones while stable reconciliation confirms b
   assert.equal(requiredHighlightState(confirmation).pass, "emit")
   assert.equal(emission.hasMore, false)
   assert.equal(emission.changes.length, 2)
+})
+
+test("replacement inventories validate Export count units and nested identities", async (t) => {
+  const { exported } = await parsedFixtures()
+  const expanded = activeExportPage(structuredClone(exported))
+  const firstHighlight = expanded.sources[0].highlights[0]
+  expanded.sources[0].highlights.push({
+    ...firstHighlight,
+    id: "9003",
+    external_id: "reader-highlight-9003",
+  })
+
+  await t.test("accepts a source-container count", async () => {
+    const result = await runHighlightsReconciliationPage(
+      queuedClient({
+        exported: [{ ...expanded, count: expanded.sources.length }],
+      }),
+      undefined
+    )
+    assert.equal(
+      requiredHighlightState(result).baseline?.providerCountUnit,
+      "raw"
+    )
+  })
+
+  await t.test("accepts a nested-highlight count", async () => {
+    const highlightCount = expanded.sources.reduce(
+      (total, source) => total + source.highlights.length,
+      0
+    )
+    const result = await runHighlightsReconciliationPage(
+      queuedClient({ exported: [{ ...expanded, count: highlightCount }] }),
+      undefined
+    )
+    assert.equal(
+      requiredHighlightState(result).baseline?.providerCountUnit,
+      "provider-items"
+    )
+  })
+
+  await t.test("rejects a count matching neither unit", async () => {
+    const result = await runHighlightsReconciliationPage(
+      queuedClient({ exported: [{ ...expanded, count: 99 }] }),
+      undefined
+    )
+    const restarted = requiredHighlightState(result)
+    assert.equal(restarted.pass, "observe")
+    assert.equal(restarted.restartCount, 1)
+    assert.equal(restarted.baseline, undefined)
+  })
+
+  await t.test("does not emit when the count unit changes", async () => {
+    const highlightCount = expanded.sources.reduce(
+      (total, source) => total + source.highlights.length,
+      0
+    )
+    const client = queuedClient({
+      exported: [
+        { ...expanded, count: expanded.sources.length },
+        { ...expanded, count: highlightCount },
+      ],
+    })
+    const observation = await runHighlightsReconciliationPage(client, undefined)
+    const confirmation = await runHighlightsReconciliationPage(
+      client,
+      requiredHighlightState(observation)
+    )
+    const retry = requiredHighlightState(confirmation)
+    assert.deepEqual(confirmation.changes, [])
+    assert.equal(retry.pass, "confirm")
+    assert.equal(retry.restartCount, 1)
+    assert.equal(retry.baseline?.providerCountUnit, "provider-items")
+  })
+
+  await t.test(
+    "fails closed when a highlight count omits an empty source",
+    async () => {
+      const emptySource = { ...expanded.sources[0], highlights: [] }
+      const client = queuedClient({
+        reader: [{ documents: [], count: 0, nextPageCursor: undefined }],
+        exported: [
+          { sources: [emptySource], count: 0, nextPageCursor: undefined },
+        ],
+      })
+      const collected = await runSourcesReconciliationPage(client, undefined)
+      await assert.rejects(
+        () =>
+          runSourcesReconciliationPage(client, requiredSourceState(collected)),
+        /highlight-based count does not cover 1 empty source container/
+      )
+    }
+  )
+
+  await t.test(
+    "accepts an empty source when the source count proves it",
+    async () => {
+      const emptySource = { ...expanded.sources[0], highlights: [] }
+      const client = queuedClient({
+        reader: [{ documents: [], count: 0, nextPageCursor: undefined }],
+        exported: [
+          { sources: [emptySource], count: 1, nextPageCursor: undefined },
+        ],
+      })
+      const collected = await runSourcesReconciliationPage(client, undefined)
+      const exportedPage = await runSourcesReconciliationPage(
+        client,
+        requiredSourceState(collected)
+      )
+      assert.equal(requiredSourceState(exportedPage).phase, "reader")
+    }
+  )
+
+  await t.test(
+    "rejects an ambiguous count when one source is empty",
+    async () => {
+      const ambiguousSources = [
+        expanded.sources[0],
+        { ...expanded.sources[1], highlights: [] },
+      ]
+      const client = queuedClient({
+        reader: [{ documents: [], count: 0, nextPageCursor: undefined }],
+        exported: [
+          {
+            sources: ambiguousSources,
+            count: ambiguousSources.length,
+            nextPageCursor: undefined,
+          },
+        ],
+      })
+      const collected = await runSourcesReconciliationPage(client, undefined)
+      await assert.rejects(
+        () =>
+          runSourcesReconciliationPage(client, requiredSourceState(collected)),
+        /highlight-based count does not cover 1 empty source container/
+      )
+    }
+  )
+
+  await t.test("restarts on a cross-page duplicate highlight id", async () => {
+    const firstSource = {
+      ...expanded.sources[0],
+      highlights: [expanded.sources[0].highlights[0]],
+    }
+    const secondSource = {
+      ...expanded.sources[1],
+      highlights: [
+        {
+          ...expanded.sources[1].highlights[0],
+          id: expanded.sources[0].highlights[0].id,
+        },
+      ],
+    }
+    const client = queuedClient({
+      reader: [{ documents: [], count: 0, nextPageCursor: undefined }],
+      exported: [
+        { sources: [firstSource], count: 2, nextPageCursor: "next" },
+        { sources: [secondSource], count: 2, nextPageCursor: undefined },
+      ],
+    })
+    const collected = await runSourcesReconciliationPage(client, undefined)
+    const firstPage = await runSourcesReconciliationPage(
+      client,
+      requiredSourceState(collected)
+    )
+    const duplicate = await runSourcesReconciliationPage(
+      client,
+      requiredSourceState(firstPage)
+    )
+    const restarted = requiredSourceState(duplicate)
+    assert.deepEqual(duplicate.changes, [])
+    assert.equal(restarted.phase, "collect-reader")
+    assert.equal(restarted.restartCount, 1)
+  })
 })
 
 test("source reconciliation counts Reader children and preserves unified ownership", async () => {
@@ -980,6 +2021,81 @@ test("source reconciliation counts Reader children and preserves unified ownersh
   assert.equal("Readwise Review" in readerChange.properties, false)
   assert.equal("Readwise Source ID" in readerChange.properties, false)
   assert.equal(emission.reader.hasMore, false)
+})
+
+test("multi-page reconciliation completes observe, confirm, and emit passes", async (t) => {
+  const { reader, exported } = await parsedFixtures()
+  const active = activeExportPage(exported)
+  const readerPages: ReaderDocumentPage[] = [
+    {
+      documents: reader.documents.slice(0, 2),
+      count: reader.documents.length,
+      nextPageCursor: "reader-page-2",
+    },
+    {
+      documents: reader.documents.slice(2),
+      count: reader.documents.length,
+      nextPageCursor: undefined,
+    },
+  ]
+  const exportPages: ReadwiseExportPage[] = [
+    {
+      sources: active.sources.slice(0, 1),
+      count: active.sources.length,
+      nextPageCursor: "export-page-2",
+    },
+    {
+      sources: active.sources.slice(1),
+      count: active.sources.length,
+      nextPageCursor: undefined,
+    },
+  ]
+
+  await t.test("Sources", async () => {
+    const client = queuedClient({
+      reader: Array.from({ length: 6 }, () => readerPages).flat(),
+      exported: Array.from({ length: 3 }, () => exportPages).flat(),
+    })
+    let state: SourcesReconciliationSyncState | undefined
+    const emittedKeys: string[] = []
+    let calls = 0
+    while (true) {
+      calls += 1
+      assert.ok(calls <= 18, "source reconciliation did not terminate")
+      const result = await runSourcesReconciliationPage(client, state)
+      emittedKeys.push(...result.changes.map((change) => change.key))
+      if (!result.hasMore) break
+      state = requiredSourceState(result)
+    }
+
+    assert.equal(calls, 18)
+    assert.deepEqual(emittedKeys.sort(), [
+      "reader:reader-document-1",
+      "reader:reader-document-1",
+      "reader:reader-document-2",
+      "readwise:502",
+    ])
+  })
+
+  await t.test("Highlights", async () => {
+    const client = queuedClient({
+      exported: Array.from({ length: 3 }, () => exportPages).flat(),
+    })
+    let state: ReconciliationSyncState | undefined
+    const emittedKeys: string[] = []
+    let calls = 0
+    while (true) {
+      calls += 1
+      assert.ok(calls <= 6, "highlight reconciliation did not terminate")
+      const result = await runHighlightsReconciliationPage(client, state)
+      emittedKeys.push(...result.changes.map((change) => change.key))
+      if (!result.hasMore) break
+      state = requiredHighlightState(result)
+    }
+
+    assert.equal(calls, 6)
+    assert.deepEqual(emittedKeys.sort(), ["highlight:9001", "highlight:9100"])
+  })
 })
 
 test("source reconciliation handles one-sided and absent representations", async (t) => {
@@ -1048,7 +2164,7 @@ test("source reconciliation handles one-sided and absent representations", async
     if (!("Location" in change.properties)) {
       assert.fail("expected a complete Export fallback row")
     }
-    assert.equal("Name" in change.properties, true)
+    assert.equal("Source" in change.properties, true)
     for (const property of [
       "Location",
       "Site",

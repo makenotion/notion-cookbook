@@ -7,6 +7,7 @@ import { exportSourceKey } from "./sources.js"
 import {
   boundedText,
   dateValue,
+  displayLabel,
   displayTitle,
   finiteNumber,
   sourceName,
@@ -22,29 +23,29 @@ export const HIGHLIGHTS_PRIMARY_KEY = "Highlight Key"
 export const highlightSchema = {
   databaseIcon: notionIcon("target"),
   properties: {
-    Name: Schema.title(),
-    Quote: Schema.richText(),
-    "Quote Truncated": Schema.checkbox(),
-    Note: Schema.richText(),
-    "Note Truncated": Schema.checkbox(),
+    Highlight: Schema.title(),
     Source: Schema.relation("sources", {
       twoWay: true,
       relatedPropertyName: "Highlights",
     }),
-    "Source Title": Schema.richText(),
-    "Source Author": Schema.richText(),
-    Origin: Schema.select([]),
+    Note: Schema.richText(),
     Tags: Schema.multiSelect([]),
-    Color: Schema.select([]),
+    Highlighted: Schema.date(),
     Favorite: Schema.checkbox(),
     Discarded: Schema.checkbox(),
+    "Open in Readwise": Schema.url(),
+    "Source Author": Schema.richText(),
+    Quote: Schema.richText(),
+    Origin: Schema.select([]),
+    Color: Schema.select([]),
+    "Source URL": Schema.url(),
     Location: Schema.number(),
     "Location Type": Schema.select([]),
-    Highlighted: Schema.date(),
     Created: Schema.date(),
     Updated: Schema.date(),
-    "Readwise URL": Schema.url(),
-    "Source URL": Schema.url(),
+    "Source Title": Schema.richText(),
+    "Quote Truncated": Schema.checkbox(),
+    "Note Truncated": Schema.checkbox(),
     "External ID": Schema.richText(),
     "Readwise Source ID": Schema.richText(),
     "Highlight Key": Schema.richText(),
@@ -76,8 +77,8 @@ export function highlightToChange(
   const location = finiteNumber(highlight.location)
   const sourceTitle = trimmed(source.readable_title) ?? trimmed(source.title)
   const sourceAuthor = trimmed(source.author)
-  const color = trimmed(highlight.color)?.toLowerCase()
-  const locationType = trimmed(highlight.location_type)?.toLowerCase()
+  const color = displayLabel(highlight.color)
+  const locationType = displayLabel(highlight.location_type)
   const readwiseUrl = validUrl(highlight.readwise_url)
   const sourceUrl =
     validUrl(highlight.url) ??
@@ -89,28 +90,28 @@ export function highlightToChange(
     key,
     ...(updatedAt ? { upstreamUpdatedAt: updatedAt } : {}),
     properties: {
-      Name: Builder.title(title),
-      Quote: quote.text ? Builder.richText(quote.text) : [],
-      "Quote Truncated": Builder.checkbox(quote.truncated),
-      Note: note.text ? Builder.richText(note.text) : [],
-      "Note Truncated": Builder.checkbox(note.truncated),
+      Highlight: Builder.title(title),
       Source: [Builder.relation(exportSourceKey(source))],
-      "Source Title": sourceTitle ? Builder.richText(sourceTitle) : [],
-      "Source Author": sourceAuthor ? Builder.richText(sourceAuthor) : [],
-      Origin: Builder.select(sourceName(source.source)),
+      Note: note.text ? Builder.richText(note.text) : [],
       Tags: Builder.multiSelect(
         ...uniqueSelectNames(highlight.tags.map((tag) => tag.name))
       ),
-      Color: color ? Builder.select(color) : [],
+      Highlighted: dateValue(highlight.highlighted_at),
       Favorite: Builder.checkbox(highlight.is_favorite),
       Discarded: Builder.checkbox(highlight.is_discard),
+      "Open in Readwise": readwiseUrl ? Builder.url(readwiseUrl) : [],
+      "Source Author": sourceAuthor ? Builder.richText(sourceAuthor) : [],
+      Quote: quote.text ? Builder.richText(quote.text) : [],
+      Origin: Builder.select(sourceName(source.source)),
+      Color: color ? Builder.select(color) : [],
+      "Source URL": sourceUrl ? Builder.url(sourceUrl) : [],
       Location: location !== undefined ? Builder.number(location) : [],
       "Location Type": locationType ? Builder.select(locationType) : [],
-      Highlighted: dateValue(highlight.highlighted_at),
       Created: dateValue(highlight.created_at),
       Updated: dateValue(highlight.updated_at),
-      "Readwise URL": readwiseUrl ? Builder.url(readwiseUrl) : [],
-      "Source URL": sourceUrl ? Builder.url(sourceUrl) : [],
+      "Source Title": sourceTitle ? Builder.richText(sourceTitle) : [],
+      "Quote Truncated": Builder.checkbox(quote.truncated),
+      "Note Truncated": Builder.checkbox(note.truncated),
       "External ID": trimmed(highlight.external_id)
         ? Builder.richText(highlight.external_id!.trim())
         : [],

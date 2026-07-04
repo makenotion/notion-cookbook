@@ -4,7 +4,9 @@
 
 import { createHash } from "node:crypto"
 
-export const SYNC_STATE_VERSION = 2
+import { isCredentialFingerprint } from "./credential.js"
+
+export const SYNC_STATE_VERSION = 3
 export const INITIAL_UPDATED_AFTER = new Date(0).toISOString()
 export const CONSISTENCY_BUFFER_MS = 60_000
 export const WATERMARK_OVERLAP_MS = 5 * 60_000
@@ -12,8 +14,13 @@ export const MAX_INCREMENTAL_CURSOR_PAGES = 10_000
 export const MAX_REPLACEMENT_CURSOR_PAGES = 2_048
 export const MAX_CURSOR_LENGTH = 4_096
 export const MAX_SAFE_SYNC_STATE_BYTES = 240 * 1_024
+export const MAX_REPLACEMENT_RECORDS = 10_000
+// A record can require multiple uniqueness constraints (for example, both an
+// upstream source ID and its unified Notion key). This is a guard-entry bound,
+// not the advertised record capacity.
 export const MAX_REPLACEMENT_IDENTITIES = 30_000
 export const MAX_REPLACEMENT_RESTARTS = 3
+export const MAX_INCREMENTAL_RESTARTS = 3
 
 const CURSOR_FINGERPRINT_BYTES = 12
 const IDENTITY_BLOOM_BYTES = 144 * 1_024
@@ -38,8 +45,10 @@ export type CursorGuardState = {
 
 export type IncrementalSyncState = CursorGuardState & {
   stateVersion: typeof SYNC_STATE_VERSION
+  credentialFingerprint: string
   updatedAfter: string
   checkpoint?: string
+  paginationRestartCount?: number
 }
 
 export type SourcesIncrementalSyncState = IncrementalSyncState & {
@@ -52,13 +61,23 @@ export type InventoryDigest = {
   sum: string
 }
 
-export type InventorySnapshot = {
+type InventoryBase = {
   providerCount: number
   raw: InventoryDigest
   output: InventoryDigest
+  providerItems: InventoryDigest
+  uncoveredRawCount: number
 }
 
-export type ActiveInventory = InventorySnapshot
+export type ProviderCountUnit = "raw" | "provider-items" | "both"
+
+export type InventorySnapshot = InventoryBase & {
+  providerCountUnit: ProviderCountUnit
+}
+
+export type ActiveInventory = InventoryBase & {
+  providerCountUnit?: ProviderCountUnit
+}
 
 export type IdentityGuardState = {
   identityBloom?: string
@@ -68,6 +87,7 @@ export type IdentityGuardState = {
 export type ReconciliationSyncState = CursorGuardState &
   IdentityGuardState & {
     stateVersion: typeof SYNC_STATE_VERSION
+    credentialFingerprint: string
     pass?: ReconciliationPass
     restartCount?: number
     baseline?: InventorySnapshot
@@ -90,6 +110,8 @@ export type InventoryIdentity = {
   value: string
 }
 
+export type ProviderCountMode = "exact" | "export"
+
 export class ReplacementInstabilityError extends Error {
   constructor(message: string) {
     super(message)
@@ -110,6 +132,61 @@ function validVersion(state: { stateVersion?: unknown } | undefined) {
       "Readwise sync state is incompatible; reset the sync state before retrying."
     )
   }
+}
+
+function validCredentialFingerprint(value: unknown, resource: string): string {
+  if (!isCredentialFingerprint(value)) {
+    throw new Error(
+      `Readwise ${resource} state is missing its credential binding; reset this sync's state before retrying.`
+    )
+  }
+  return value
+}
+
+export function boundCredentialFingerprint(
+  state: { credentialFingerprint?: unknown } | undefined,
+  currentFingerprint: string,
+  resource: string
+): string {
+  const current = validCredentialFingerprint(currentFingerprint, resource)
+  if (!state) return current
+  const persisted = validCredentialFingerprint(
+    state.credentialFingerprint,
+    resource
+  )
+  if (persisted !== current) {
+    throw new Error(
+      `Readwise credentials changed for ${resource}. Verify the intended account, then explicitly reset this sync's state to rebind it.`
+    )
+  }
+  return current
+}
+
+export function incrementalRestartCount(value: unknown): number {
+  if (value === undefined) return 0
+  if (
+    !Number.isSafeInteger(value) ||
+    (value as number) < 0 ||
+    (value as number) > MAX_INCREMENTAL_RESTARTS
+  ) {
+    throw new Error(
+      "Readwise incremental sync state has an invalid pagination restart count."
+    )
+  }
+  return value as number
+}
+
+export function nextIncrementalRestartCount(
+  value: unknown,
+  resource: string
+): number {
+  const current = incrementalRestartCount(value)
+  if (current >= MAX_INCREMENTAL_RESTARTS) {
+    throw new Error(
+      `Readwise ${resource} pagination remained unstable after ${MAX_INCREMENTAL_RESTARTS} retries; reset this sync's continuation state before retrying.`
+    )
+  }
+  return current + 1
 }
 
 function validPageCursor(value: unknown): string | undefined {
@@ -189,10 +266,22 @@ function decodedCursorFingerprints(
 
 export function incrementalWindow(
   state: IncrementalSyncState | undefined,
+  currentFingerprint: string,
   now = Date.now()
-): { updatedAfter: string; checkpoint: string; pageCursor?: string } {
+): {
+  credentialFingerprint: string
+  updatedAfter: string
+  checkpoint: string
+  pageCursor?: string
+} {
   validVersion(state)
   if (state) boundedSyncState(state, "incremental")
+  const credentialFingerprint = boundCredentialFingerprint(
+    state,
+    currentFingerprint,
+    "incremental"
+  )
+  incrementalRestartCount(state?.paginationRestartCount)
   if (!Number.isFinite(now) || now < 0) {
     throw new Error("Readwise sync clock is invalid.")
   }
@@ -215,7 +304,12 @@ export function incrementalWindow(
   }
   decodedCursorFingerprints(state, MAX_INCREMENTAL_CURSOR_PAGES)
 
-  return { updatedAfter, checkpoint, ...(pageCursor ? { pageCursor } : {}) }
+  return {
+    credentialFingerprint,
+    updatedAfter,
+    checkpoint,
+    ...(pageCursor ? { pageCursor } : {}),
+  }
 }
 
 export function nextCursorState(
@@ -256,11 +350,14 @@ export function nextCursorState(
 }
 
 export function completedIncrementalState(
-  checkpoint: string
+  checkpoint: string,
+  credentialFingerprint: string
 ): IncrementalSyncState {
+  validCredentialFingerprint(credentialFingerprint, "incremental")
   const parsed = Date.parse(isoDateTime(checkpoint, "checkpoint"))
   return {
     stateVersion: SYNC_STATE_VERSION,
+    credentialFingerprint,
     updatedAfter: new Date(
       Math.max(0, parsed - WATERMARK_OVERLAP_MS)
     ).toISOString(),
@@ -349,7 +446,7 @@ export function inventoryDigest(
   }
   const digest = value as Partial<InventoryDigest>
   const count = nonNegativeInteger(digest.count, `${label} count`)
-  if (count > MAX_REPLACEMENT_IDENTITIES) {
+  if (count > MAX_REPLACEMENT_RECORDS) {
     throw new Error(`Readwise sync state has an oversized ${label}.`)
   }
   return {
@@ -362,7 +459,7 @@ export function inventoryDigest(
 function parsedInventory(
   value: unknown,
   label: string
-): InventorySnapshot | undefined {
+): ActiveInventory | undefined {
   if (value === undefined) return undefined
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`Readwise sync state has an invalid ${label}.`)
@@ -372,33 +469,100 @@ function parsedInventory(
     snapshot.providerCount,
     `${label} provider count`
   )
-  if (providerCount > MAX_REPLACEMENT_IDENTITIES) {
-    throw new Error(`Readwise sync state has an oversized ${label}.`)
+  const providerCountUnit = snapshot.providerCountUnit
+  if (
+    providerCountUnit !== undefined &&
+    providerCountUnit !== "raw" &&
+    providerCountUnit !== "provider-items" &&
+    providerCountUnit !== "both"
+  ) {
+    throw new Error(
+      `Readwise sync state has an invalid ${label} provider count unit.`
+    )
+  }
+  const raw = inventoryDigest(snapshot.raw, `${label} raw inventory`)
+  const uncoveredRawCount = nonNegativeInteger(
+    snapshot.uncoveredRawCount,
+    `${label} uncovered raw count`
+  )
+  if (uncoveredRawCount > raw.count) {
+    throw new Error(
+      `Readwise sync state has an invalid ${label} uncovered raw count.`
+    )
   }
   return {
     providerCount,
-    raw: inventoryDigest(snapshot.raw, `${label} raw inventory`),
+    raw,
     output: inventoryDigest(snapshot.output, `${label} output inventory`),
+    providerItems: inventoryDigest(
+      snapshot.providerItems,
+      `${label} provider-item inventory`
+    ),
+    uncoveredRawCount,
+    ...(providerCountUnit ? { providerCountUnit } : {}),
   }
+}
+
+function completedCountUnit(
+  inventory: ActiveInventory,
+  label: string,
+  countMode: ProviderCountMode
+): ProviderCountUnit {
+  const rawMatches = inventory.raw.count === inventory.providerCount
+  if (countMode === "exact") {
+    if (!rawMatches) {
+      throw new ReplacementInstabilityError(
+        `Readwise ${label} replacement ended before its count was reached.`
+      )
+    }
+    return "raw"
+  }
+
+  const providerItemsMatch =
+    inventory.providerItems.count === inventory.providerCount
+  if (!rawMatches && !providerItemsMatch) {
+    throw new ReplacementInstabilityError(
+      `Readwise ${label} count matched neither source containers nor nested highlights.`
+    )
+  }
+  if (providerItemsMatch && inventory.uncoveredRawCount > 0) {
+    throw new Error(
+      `Readwise ${label} cannot prove completeness because its highlight-based count does not cover ${inventory.uncoveredRawCount} empty source container(s).`
+    )
+  }
+  return rawMatches ? (providerItemsMatch ? "both" : "raw") : "provider-items"
 }
 
 export function inventorySnapshot(
   value: unknown,
-  label: string
+  label: string,
+  countMode: ProviderCountMode = "exact"
 ): InventorySnapshot | undefined {
   const snapshot = parsedInventory(value, label)
-  if (snapshot && snapshot.raw.count !== snapshot.providerCount) {
-    throw new Error(`Readwise sync state has an incomplete ${label}.`)
+  if (!snapshot) return undefined
+  const providerCountUnit = completedCountUnit(snapshot, label, countMode)
+  if (snapshot.providerCountUnit !== providerCountUnit) {
+    throw new Error(
+      `Readwise sync state has an inconsistent ${label} provider count unit.`
+    )
   }
-  return snapshot
+  return { ...snapshot, providerCountUnit }
 }
 
 function activeInventory(
   value: unknown,
-  label: string
+  label: string,
+  countMode: ProviderCountMode
 ): ActiveInventory | undefined {
   const active = parsedInventory(value, label)
-  if (active && active.raw.count > active.providerCount) {
+  if (active?.providerCountUnit !== undefined) {
+    throw new Error(`Readwise sync state has a completed ${label} in progress.`)
+  }
+  if (
+    active &&
+    countMode === "exact" &&
+    active.raw.count > active.providerCount
+  ) {
     throw new Error(`Readwise sync state has an invalid ${label}.`)
   }
   return active
@@ -413,7 +577,7 @@ function addToDigest(
   identities: InventoryIdentity[]
 ): InventoryDigest {
   const count = current.count + identities.length
-  if (!Number.isSafeInteger(count) || count > MAX_REPLACEMENT_IDENTITIES) {
+  if (!Number.isSafeInteger(count) || count > MAX_REPLACEMENT_RECORDS) {
     throw new Error("Readwise replacement inventory exceeded its safe bound.")
   }
   let xor = BigInt(`0x${current.xor}`)
@@ -440,27 +604,34 @@ function advanceInventory(
   providerCount: number,
   rawIdentities: InventoryIdentity[],
   outputIdentities: InventoryIdentity[],
-  label: string
+  providerItemIdentities: InventoryIdentity[],
+  uncoveredRawCount: number,
+  label: string,
+  countMode: ProviderCountMode
 ): ActiveInventory {
-  if (
-    !Number.isSafeInteger(providerCount) ||
-    providerCount < 0 ||
-    providerCount > MAX_REPLACEMENT_IDENTITIES
-  ) {
-    throw new Error(
-      `Readwise ${label} count exceeds the supported replacement bound.`
-    )
+  if (!Number.isSafeInteger(providerCount) || providerCount < 0) {
+    throw new Error(`Readwise ${label} returned an invalid count.`)
   }
   const active = current
     ? {
         providerCount: current.providerCount,
         raw: inventoryDigest(current.raw, `${label} raw inventory`),
         output: inventoryDigest(current.output, `${label} output inventory`),
+        providerItems: inventoryDigest(
+          current.providerItems,
+          `${label} provider-item inventory`
+        ),
+        uncoveredRawCount: nonNegativeInteger(
+          current.uncoveredRawCount,
+          `${label} uncovered raw count`
+        ),
       }
     : {
         providerCount,
         raw: emptyInventoryDigest(),
         output: emptyInventoryDigest(),
+        providerItems: emptyInventoryDigest(),
+        uncoveredRawCount: 0,
       }
   if (active.providerCount !== providerCount) {
     throw new ReplacementInstabilityError(
@@ -468,15 +639,26 @@ function advanceInventory(
     )
   }
   const raw = addToDigest(active.raw, rawIdentities)
-  if (raw.count > providerCount) {
+  if (countMode === "exact" && raw.count > providerCount) {
     throw new ReplacementInstabilityError(
       `Readwise ${label} returned more records than its count.`
     )
+  }
+  const nextUncoveredRawCount = active.uncoveredRawCount + uncoveredRawCount
+  if (
+    !Number.isSafeInteger(uncoveredRawCount) ||
+    uncoveredRawCount < 0 ||
+    !Number.isSafeInteger(nextUncoveredRawCount) ||
+    nextUncoveredRawCount > raw.count
+  ) {
+    throw new Error(`Readwise ${label} has an invalid uncovered raw count.`)
   }
   return {
     providerCount,
     raw,
     output: addToDigest(active.output, outputIdentities),
+    providerItems: addToDigest(active.providerItems, providerItemIdentities),
+    uncoveredRawCount: nextUncoveredRawCount,
   }
 }
 
@@ -533,22 +715,28 @@ function bloomContains(bytes: Buffer, identity: InventoryIdentity): boolean {
 function appendIdentityBloom(
   state: IdentityGuardState | undefined,
   identities: InventoryIdentity[],
-  label: string
+  label: string,
+  conflictIdentities: InventoryIdentity[][] = []
 ): IdentityGuardState {
   const decoded = decodedIdentityBloom(state)
   if (decoded.count + identities.length > MAX_REPLACEMENT_IDENTITIES) {
     throw new Error(
-      `Readwise ${label} exceeded ${MAX_REPLACEMENT_IDENTITIES} guarded identities.`
+      `Readwise ${label} exceeded ${MAX_REPLACEMENT_IDENTITIES} bounded uniqueness checks for ${MAX_REPLACEMENT_RECORDS} supported records.`
     )
   }
-  for (const identity of identities) {
+  if (
+    conflictIdentities.length > 0 &&
+    conflictIdentities.length !== identities.length
+  ) {
+    throw new Error(`Readwise ${label} has an invalid identity guard plan.`)
+  }
+  for (const [index, identity] of identities.entries()) {
     const positions = bloomPositions(identity)
     if (
-      positions.every((position) => {
-        const byte = Math.floor(position / 8)
-        const bit = position % 8
-        return (decoded.bytes[byte] & (1 << bit)) !== 0
-      })
+      bloomContains(decoded.bytes, identity) ||
+      (conflictIdentities[index] ?? []).some((candidate) =>
+        bloomContains(decoded.bytes, candidate)
+      )
     ) {
       throw new ReplacementInstabilityError(
         `Readwise ${label} repeated an identity during replacement.`
@@ -575,21 +763,23 @@ export function advanceGuardedInventory(
   rawIdentities: InventoryIdentity[],
   outputIdentities: InventoryIdentity[],
   label: string,
-  additionalGuardIdentities: InventoryIdentity[] = []
+  options: {
+    countMode?: ProviderCountMode
+    guardIdentities?: InventoryIdentity[]
+    guardConflictIdentities?: InventoryIdentity[][]
+    providerItemIdentities?: InventoryIdentity[]
+    uncoveredRawCount?: number
+  } = {}
 ): { active: ActiveInventory; guard: IdentityGuardState } {
-  const decoded = decodedIdentityBloom(guardState)
-  if (
-    current === undefined &&
-    decoded.count + providerCount > MAX_REPLACEMENT_IDENTITIES
-  ) {
+  const countMode = options.countMode ?? "exact"
+  if (current === undefined && providerCount > MAX_REPLACEMENT_RECORDS) {
     throw new Error(
       `Readwise ${label} count cannot fit in bounded replacement state.`
     )
   }
-  const identities = [
+  const identities = options.guardIdentities ?? [
     ...rawIdentities,
     ...outputIdentities,
-    ...additionalGuardIdentities,
   ]
   return {
     active: advanceInventory(
@@ -597,9 +787,17 @@ export function advanceGuardedInventory(
       providerCount,
       rawIdentities,
       outputIdentities,
-      label
+      options.providerItemIdentities ?? rawIdentities,
+      options.uncoveredRawCount ?? 0,
+      label,
+      countMode
     ),
-    guard: appendIdentityBloom(guardState, identities, label),
+    guard: appendIdentityBloom(
+      guardState,
+      identities,
+      label,
+      options.guardConflictIdentities
+    ),
   }
 }
 
@@ -611,22 +809,31 @@ export function advanceMatchingInventory(
   providerCount: number,
   rawIdentities: InventoryIdentity[],
   outputIdentities: InventoryIdentity[],
-  label: string
+  label: string,
+  countMode: ProviderCountMode = "exact",
+  options: {
+    providerItemIdentities?: InventoryIdentity[]
+    uncoveredRawCount?: number
+  } = {}
 ): ActiveInventory {
   return advanceInventory(
     current,
     providerCount,
     rawIdentities,
     outputIdentities,
-    label
+    options.providerItemIdentities ?? rawIdentities,
+    options.uncoveredRawCount ?? 0,
+    label,
+    countMode
   )
 }
 
 export function assertInventoryCanContinue(
   active: ActiveInventory,
-  label: string
+  label: string,
+  countMode: ProviderCountMode = "exact"
 ) {
-  if (active.raw.count >= active.providerCount) {
+  if (countMode === "exact" && active.raw.count >= active.providerCount) {
     throw new ReplacementInstabilityError(
       `Readwise ${label} returned a continuation cursor after its count was reached.`
     )
@@ -635,16 +842,15 @@ export function assertInventoryCanContinue(
 
 export function completeInventory(
   value: ActiveInventory,
-  label: string
+  label: string,
+  countMode: ProviderCountMode = "exact"
 ): InventorySnapshot {
   const snapshot = parsedInventory(value, label)
   if (!snapshot) throw new Error(`Readwise ${label} inventory is missing.`)
-  if (snapshot.raw.count !== snapshot.providerCount) {
-    throw new ReplacementInstabilityError(
-      `Readwise ${label} replacement ended before its count was reached.`
-    )
+  return {
+    ...snapshot,
+    providerCountUnit: completedCountUnit(snapshot, label, countMode),
   }
-  return snapshot
 }
 
 export function inventoriesMatch(
@@ -653,12 +859,17 @@ export function inventoriesMatch(
 ): boolean {
   return (
     left.providerCount === right.providerCount &&
+    left.providerCountUnit === right.providerCountUnit &&
     left.raw.count === right.raw.count &&
     left.raw.xor === right.raw.xor &&
     left.raw.sum === right.raw.sum &&
     left.output.count === right.output.count &&
     left.output.xor === right.output.xor &&
-    left.output.sum === right.output.sum
+    left.output.sum === right.output.sum &&
+    left.providerItems.count === right.providerItems.count &&
+    left.providerItems.xor === right.providerItems.xor &&
+    left.providerItems.sum === right.providerItems.sum &&
+    left.uncoveredRawCount === right.uncoveredRawCount
   )
 }
 
@@ -687,11 +898,16 @@ export function boundedSyncState<T>(state: T, resource: string): T {
 
 function validateCursorAndActive(
   state: CursorGuardState & { active?: ActiveInventory },
-  label: string
+  label: string,
+  countMode: ProviderCountMode
 ) {
   const cursor = validPageCursor(state.pageCursor)
   decodedCursorFingerprints(state, MAX_REPLACEMENT_CURSOR_PAGES)
-  const active = activeInventory(state.active, `${label} active inventory`)
+  const active = activeInventory(
+    state.active,
+    `${label} active inventory`,
+    countMode
+  )
   if ((cursor === undefined) !== (active === undefined)) {
     throw new Error(
       `Readwise ${label} continuation state must pair its cursor and active inventory.`
@@ -705,11 +921,19 @@ export function validateReconciliationState(
   validVersion(state)
   if (!state) return
   boundedSyncState(state, "highlight reconciliation")
+  validCredentialFingerprint(
+    state.credentialFingerprint,
+    "highlight reconciliation"
+  )
   const pass = reconciliationPass(state.pass)
   reconciliationRestartCount(state.restartCount)
-  validateCursorAndActive(state, "highlight reconciliation")
+  validateCursorAndActive(state, "highlight reconciliation", "export")
   decodedIdentityBloom(state)
-  const baseline = inventorySnapshot(state.baseline, "baseline inventory")
+  const baseline = inventorySnapshot(
+    state.baseline,
+    "baseline inventory",
+    "export"
+  )
   if ((pass === "confirm" || pass === "emit") && !baseline) {
     throw new Error(
       "Readwise confirmation state is missing its baseline inventory."
@@ -728,14 +952,23 @@ export function validateSourcesReconciliationState(
   validVersion(state)
   if (!state) return
   boundedSyncState(state, "source reconciliation")
+  validCredentialFingerprint(
+    state.credentialFingerprint,
+    "source reconciliation"
+  )
   const pass = reconciliationPass(state.pass)
   const currentPhase = sourcesReconciliationPhase(state.phase)
   reconciliationRestartCount(state.restartCount)
-  validateCursorAndActive(state, "source reconciliation")
+  validateCursorAndActive(
+    state,
+    "source reconciliation",
+    currentPhase === "readwise" ? "export" : "exact"
+  )
   decodedIdentityBloom(state)
   const baselineReadwise = inventorySnapshot(
     state.baselineReadwise,
-    "Readwise baseline inventory"
+    "Readwise baseline inventory",
+    "export"
   )
   const baselineReader = inventorySnapshot(
     state.baselineReader,
@@ -747,7 +980,8 @@ export function validateSourcesReconciliationState(
   )
   const completedReadwise = inventorySnapshot(
     state.completedReadwise,
-    "completed Readwise inventory"
+    "completed Readwise inventory",
+    "export"
   )
 
   if (

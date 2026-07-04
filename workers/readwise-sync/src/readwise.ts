@@ -4,6 +4,11 @@
 
 import { RateLimitError } from "@notionhq/workers"
 
+import {
+  credentialFingerprintForToken,
+  isCredentialFingerprint,
+} from "./credential.js"
+
 export const READER_PAGE_SIZE = 100
 export const REQUEST_TIMEOUT_MS = 30_000
 export const MAX_RESPONSE_BYTES = 16 * 1024 * 1024
@@ -19,7 +24,7 @@ export type ReaderDocument = {
   author: string | null
   category: string | null
   location: string | null
-  tags: unknown
+  tags: Record<string, { name: string }>
   site_name: string | null
   word_count: number | null
   reading_time: string | null
@@ -34,7 +39,7 @@ export type ReaderDocument = {
 }
 
 export type ReadwiseTag = {
-  name: string | null
+  name: string
 }
 
 export type ReadwiseHighlight = {
@@ -62,7 +67,7 @@ export type ReadwiseSource = {
   title: string | null
   readable_title: string | null
   author: string | null
-  source: string | null
+  source: string
   unique_url: string | null
   book_tags: ReadwiseTag[]
   category: string | null
@@ -87,6 +92,7 @@ export type ReadwiseExportPage = {
 }
 
 export type ReadwiseClient = {
+  credentialFingerprint(): string
   listReaderDocuments(options: {
     updatedAfter?: string
     pageCursor?: string
@@ -116,6 +122,23 @@ function requiredToken(): string {
   return token
 }
 
+function boundCredential(): { token: string; fingerprint: string } {
+  const token = requiredToken()
+  const fingerprint = credentialFingerprintForToken(token)
+  const configured = process.env.READWISE_CREDENTIAL_FINGERPRINT?.trim()
+  if (!isCredentialFingerprint(configured)) {
+    throw new Error(
+      "READWISE_CREDENTIAL_FINGERPRINT is not set to a valid 64-character fingerprint."
+    )
+  }
+  if (configured !== fingerprint) {
+    throw new Error(
+      "READWISE_ACCESS_TOKEN does not match READWISE_CREDENTIAL_FINGERPRINT."
+    )
+  }
+  return { token, fingerprint }
+}
+
 function record(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`Readwise ${label} must be an object.`)
@@ -130,16 +153,54 @@ function array(value: unknown, label: string): unknown[] {
   return value
 }
 
-function nullableString(value: unknown): string | null {
-  return typeof value === "string" ? value : null
+function requiredString(value: unknown, label: string): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`Readwise ${label} must be a non-empty string.`)
+  }
+  return value
 }
 
-function nullableNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null
+function nullableString(value: unknown, label: string): string | null {
+  if (value === null) return null
+  if (typeof value !== "string") {
+    throw new Error(`Readwise ${label} must be a string or null.`)
+  }
+  return value
 }
 
-function boolean(value: unknown): boolean {
-  return value === true
+function nullableNumber(value: unknown, label: string): number | null {
+  if (value === null) return null
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`Readwise ${label} must be a finite number or null.`)
+  }
+  return value
+}
+
+function nullableDate(value: unknown, label: string): string | null {
+  const date = nullableString(value, label)
+  if (date !== null && (!date.trim() || !Number.isFinite(Date.parse(date)))) {
+    throw new Error(`Readwise ${label} must be a valid date or null.`)
+  }
+  return date
+}
+
+function nullableNonNegativeInteger(
+  value: unknown,
+  label: string
+): number | null {
+  const number = nullableNumber(value, label)
+  if (number !== null && (!Number.isSafeInteger(number) || number < 0)) {
+    throw new Error(`Readwise ${label} must be a non-negative integer or null.`)
+  }
+  return number
+}
+
+function nullableProgress(value: unknown, label: string): number | null {
+  const number = nullableNumber(value, label)
+  if (number !== null && (number < 0 || number > 1)) {
+    throw new Error(`Readwise ${label} must be between 0 and 1 or null.`)
+  }
+  return number
 }
 
 function requiredBoolean(value: unknown, label: string): boolean {
@@ -149,17 +210,19 @@ function requiredBoolean(value: unknown, label: string): boolean {
   return value
 }
 
-function identifier(value: unknown, label: string): string {
-  const id =
-    typeof value === "string"
-      ? value.trim()
-      : typeof value === "number" && Number.isSafeInteger(value)
-        ? String(value)
-        : ""
+function stringIdentifier(value: unknown, label: string): string {
+  const id = typeof value === "string" ? value.trim() : ""
   if (!id || id.length > 512) {
     throw new Error(`Readwise ${label} is missing a valid stable id.`)
   }
   return id
+}
+
+function numericIdentifier(value: unknown, label: string): string {
+  if (!Number.isSafeInteger(value) || Number(value) < 1) {
+    throw new Error(`Readwise ${label} is missing a valid stable id.`)
+  }
+  return String(value)
 }
 
 function nullableStringIdentifier(
@@ -185,87 +248,125 @@ function nonNegativeInteger(value: unknown, label: string): number {
 }
 
 function tags(value: unknown, label: string): ReadwiseTag[] {
-  if (value == null) return []
   return array(value, label).map((candidate) => {
     const item = record(candidate, `${label} item`)
     return {
-      name: nullableString(item.name),
+      name: requiredString(item.name, `${label} item name`),
     }
   })
+}
+
+function readerTags(
+  value: unknown,
+  label: string
+): Record<string, { name: string }> {
+  const parsed = record(value, label)
+  return Object.fromEntries(
+    Object.entries(parsed).map(([key, candidate]) => {
+      const item = record(candidate, `${label} item`)
+      return [key, { name: requiredString(item.name, `${label} item name`) }]
+    })
+  )
 }
 
 function parseReaderDocument(value: unknown): ReaderDocument {
   const item = record(value, "Reader document")
   return {
-    id: identifier(item.id, "Reader document"),
-    url: nullableString(item.url),
-    source_url: nullableString(item.source_url),
-    title: nullableString(item.title),
-    author: nullableString(item.author),
-    category: nullableString(item.category),
-    location: nullableString(item.location),
-    tags: item.tags,
-    site_name: nullableString(item.site_name),
-    word_count: nullableNumber(item.word_count),
-    reading_time: nullableString(item.reading_time),
-    updated_at: nullableString(item.updated_at),
-    published_date: nullableString(item.published_date),
-    notes: nullableString(item.notes),
-    summary: nullableString(item.summary),
+    id: stringIdentifier(item.id, "Reader document"),
+    url: nullableString(item.url, "Reader document url"),
+    source_url: nullableString(item.source_url, "Reader document source_url"),
+    title: nullableString(item.title, "Reader document title"),
+    author: nullableString(item.author, "Reader document author"),
+    category: nullableString(item.category, "Reader document category"),
+    location: nullableString(item.location, "Reader document location"),
+    tags: readerTags(item.tags, "Reader document tags"),
+    site_name: nullableString(item.site_name, "Reader document site_name"),
+    word_count: nullableNonNegativeInteger(
+      item.word_count,
+      "Reader document word_count"
+    ),
+    reading_time: nullableString(
+      item.reading_time,
+      "Reader document reading_time"
+    ),
+    updated_at: nullableDate(item.updated_at, "Reader document updated_at"),
+    published_date: nullableDate(
+      item.published_date,
+      "Reader document published_date"
+    ),
+    notes: nullableString(item.notes, "Reader document notes"),
+    summary: nullableString(item.summary, "Reader document summary"),
     parent_id: nullableStringIdentifier(item.parent_id, "Reader parent_id"),
-    reading_progress: nullableNumber(item.reading_progress),
-    last_opened_at: nullableString(item.last_opened_at),
-    saved_at: nullableString(item.saved_at),
+    reading_progress: nullableProgress(
+      item.reading_progress,
+      "Reader document reading_progress"
+    ),
+    last_opened_at: nullableDate(
+      item.last_opened_at,
+      "Reader document last_opened_at"
+    ),
+    saved_at: nullableDate(item.saved_at, "Reader document saved_at"),
   }
 }
 
 function parseHighlight(value: unknown): ReadwiseHighlight {
   const item = record(value, "highlight")
   return {
-    id: identifier(item.id, "highlight"),
+    id: numericIdentifier(item.id, "highlight"),
     is_deleted: requiredBoolean(item.is_deleted, "highlight is_deleted"),
-    text: nullableString(item.text),
-    location: nullableNumber(item.location),
-    location_type: nullableString(item.location_type),
-    note: nullableString(item.note),
-    color: nullableString(item.color),
-    highlighted_at: nullableString(item.highlighted_at),
-    created_at: nullableString(item.created_at),
-    updated_at: nullableString(item.updated_at ?? item.updated),
-    external_id: nullableString(item.external_id),
-    url: nullableString(item.url),
+    text: nullableString(item.text, "highlight text"),
+    location: nullableNonNegativeInteger(item.location, "highlight location"),
+    location_type: nullableString(
+      item.location_type,
+      "highlight location_type"
+    ),
+    note: nullableString(item.note, "highlight note"),
+    color: nullableString(item.color, "highlight color"),
+    highlighted_at: nullableDate(
+      item.highlighted_at,
+      "highlight highlighted_at"
+    ),
+    created_at: nullableDate(item.created_at, "highlight created_at"),
+    updated_at: nullableDate(item.updated_at, "highlight updated_at"),
+    external_id: nullableString(item.external_id, "highlight external_id"),
+    url: nullableString(item.url, "highlight url"),
     tags: tags(item.tags, "highlight tags"),
-    is_favorite: boolean(item.is_favorite),
-    is_discard: boolean(item.is_discard),
-    readwise_url: nullableString(item.readwise_url),
+    is_favorite: requiredBoolean(item.is_favorite, "highlight is_favorite"),
+    is_discard: requiredBoolean(item.is_discard, "highlight is_discard"),
+    readwise_url: nullableString(item.readwise_url, "highlight readwise_url"),
   }
 }
 
 function parseSource(value: unknown): ReadwiseSource {
   const item = record(value, "source")
   return {
-    user_book_id: identifier(item.user_book_id, "source"),
+    user_book_id: numericIdentifier(item.user_book_id, "source"),
     is_deleted: requiredBoolean(item.is_deleted, "source is_deleted"),
-    title: nullableString(item.title),
-    readable_title: nullableString(item.readable_title),
-    author: nullableString(item.author),
-    source: nullableString(item.source),
-    unique_url: nullableString(item.unique_url),
+    title: nullableString(item.title, "source title"),
+    readable_title: nullableString(
+      item.readable_title,
+      "source readable_title"
+    ),
+    author: nullableString(item.author, "source author"),
+    source: requiredString(item.source, "source source"),
+    unique_url: nullableString(item.unique_url, "source unique_url"),
     book_tags: tags(item.book_tags, "source tags"),
-    category: nullableString(item.category),
-    document_note: nullableString(item.document_note),
-    summary: nullableString(item.summary),
-    readwise_url: nullableString(item.readwise_url),
-    source_url: nullableString(item.source_url),
-    external_id: nullableString(item.external_id),
+    category: nullableString(item.category, "source category"),
+    document_note: nullableString(item.document_note, "source document_note"),
+    summary: nullableString(item.summary, "source summary"),
+    readwise_url: nullableString(item.readwise_url, "source readwise_url"),
+    source_url: nullableString(item.source_url, "source source_url"),
+    external_id: nullableString(item.external_id, "source external_id"),
     highlights: array(item.highlights, "source highlights").map(parseHighlight),
   }
 }
 
 function parseCursor(value: unknown, label: string): string | undefined {
-  if (value == null) return undefined
+  if (value === null) return undefined
   if (typeof value !== "string" || !value.trim()) {
-    throw new Error(`Readwise ${label} has an invalid nextPageCursor.`)
+    throw new Error(
+      `Readwise ${label} has an invalid nextPageCursor; expected null or a non-empty string.`
+    )
   }
   return value
 }
@@ -351,7 +452,7 @@ export function createReadwiseClient(
   fetchImpl: Fetch = fetch
 ): ReadwiseClient {
   async function fetchObject(url: URL, label: string) {
-    const token = requiredToken()
+    const { token } = boundCredential()
     await beforeRequest()
     const response = await fetchImpl(url, {
       method: "GET",
@@ -379,6 +480,10 @@ export function createReadwiseClient(
   }
 
   return {
+    credentialFingerprint() {
+      return boundCredential().fingerprint
+    },
+
     async listReaderDocuments({ updatedAfter, pageCursor }) {
       const url = new URL("https://readwise.io/api/v3/list/")
       url.searchParams.set("limit", String(READER_PAGE_SIZE))

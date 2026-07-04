@@ -141,14 +141,33 @@ export function normalizedCategory(
   return singular[category] ?? category
 }
 
+const DISPLAY_ACRONYMS: Record<string, string> = {
+  api: "API",
+  epub: "EPUB",
+  pdf: "PDF",
+  rss: "RSS",
+  url: "URL",
+}
+
+export function displayLabel(
+  value: string | null | undefined
+): string | undefined {
+  const normalized = trimmed(value)
+  if (!normalized) return undefined
+  const display = normalized
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((part) => {
+      const lower = part.toLowerCase()
+      return DISPLAY_ACRONYMS[lower] ?? lower[0].toUpperCase() + lower.slice(1)
+    })
+    .join(" ")
+  return selectName(display)
+}
+
 export function sourceName(value: string | null | undefined): string {
   const source = trimmed(value)
   if (!source) return "Readwise"
   if (source.toLowerCase() === "reader") return "Reader"
-  const display = source
-    .split(/[\s_-]+/)
-    .filter(Boolean)
-    .map((part) => part[0].toUpperCase() + part.slice(1))
-    .join(" ")
-  return selectName(display) ?? "Readwise"
+  return displayLabel(source) ?? "Readwise"
 }

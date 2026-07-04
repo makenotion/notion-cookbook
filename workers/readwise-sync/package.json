@@ -5,6 +5,7 @@
   "scripts": {
     "build": "tsc",
     "check": "tsc --project tsconfig.test.json",
+    "credential:fingerprint": "node --import tsx credential-fingerprint.ts",
     "test": "node --import tsx --test test.ts"
   },
   "engines": {

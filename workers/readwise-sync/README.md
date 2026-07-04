@@ -17,13 +17,31 @@ token authenticates the Readwise and Reader APIs.
 From the repository root:
 
 ```sh
-npm install --global ntn
+npm install --global ntn@latest
 cd workers/readwise-sync
 npm install
 ntn login
 ntn workers deploy --name readwise-sync
-ntn workers env set READWISE_ACCESS_TOKEN=your-token
+ntn workers sync pause sourcesSync
+ntn workers sync pause highlightsSync
+ntn workers sync pause sourcesReconciliationSync
+ntn workers sync pause highlightsReconciliationSync
+export READWISE_ACCESS_TOKEN=your-token
+export READWISE_CREDENTIAL_FINGERPRINT="$(npm run --silent credential:fingerprint)"
+ntn workers env set \
+  READWISE_ACCESS_TOKEN="$READWISE_ACCESS_TOKEN" \
+  READWISE_CREDENTIAL_FINGERPRINT="$READWISE_CREDENTIAL_FINGERPRINT"
+unset READWISE_ACCESS_TOKEN READWISE_CREDENTIAL_FINGERPRINT
 ```
+
+Use `--name readwise-sync` only for the first deployment. After `workers.json`
+identifies the deployed Worker, update it with `ntn workers deploy`.
+
+Keep the schedules paused while you configure and review the deployment.
+Highlights, notes, tags, document titles, URLs, and reading activity can reveal
+private interests or routines. Review both managed databases' Notion sharing
+settings before writing data. Preview output contains the same sensitive reading
+context, so protect terminal output and logs.
 
 Preview the initial backfills without writing to Notion:
 
@@ -32,37 +50,71 @@ ntn workers sync trigger sourcesSync --preview
 ntn workers sync trigger highlightsSync --preview
 ```
 
-Then populate Sources before Highlights so relations can resolve immediately:
+Populate Sources first, then wait for it to succeed so Highlight relations can
+resolve immediately:
 
 ```sh
 ntn workers sync trigger sourcesSync
-ntn workers sync trigger highlightsSync
+ntn workers sync status sourcesSync
 ```
 
-The first incremental runs backfill all available history. Subsequent changes
-sync every 15 minutes, and daily reconciliation repairs omissions and removals.
-No `NOTION_API_TOKEN` is needed; the Workers platform handles Notion
-authentication.
+When Sources succeeds, press Ctrl-C and populate Highlights:
 
-Keep each deployment bound to one Readwise account. The APIs do not expose a
-stable account ID that this recipe can verify before a replacement sweep. To
-sync another account, create a separate deployment and managed databases rather
-than changing the token on an existing deployment.
+```sh
+ntn workers sync trigger highlightsSync
+ntn workers sync status highlightsSync
+```
 
-Highlights, notes, tags, document titles, URLs, and reading activity can reveal
-private interests or routines. Review both managed databases' Notion sharing
-settings before giving a broader audience access.
+When Highlights succeeds, press Ctrl-C. Initialize the Source deletion
+safeguard. It verifies complete inventories before removing unseen rows:
+
+```sh
+ntn workers sync trigger sourcesReconciliationSync
+ntn workers sync status sourcesReconciliationSync
+```
+
+When it succeeds, press Ctrl-C and initialize the Highlight safeguard:
+
+```sh
+ntn workers sync trigger highlightsReconciliationSync
+ntn workers sync status highlightsReconciliationSync
+```
+
+When it succeeds, press Ctrl-C. Review both databases, then start the recurring
+schedules:
+
+```sh
+ntn workers sync resume sourcesSync
+ntn workers sync resume highlightsSync
+ntn workers sync resume sourcesReconciliationSync
+ntn workers sync resume highlightsReconciliationSync
+```
+
+The first run of each incremental sync backfills all available history.
+Subsequent changes sync every 15 minutes, and daily reconciliation repairs
+omissions and removals. No `NOTION_API_TOKEN` is needed; the Workers platform
+handles Notion authentication.
+
+The separately stored fingerprint binds the deployment to the configured token
+and is verified before every API request. Capability state also pins it across
+retries. To sync another account, create a separate deployment and managed
+databases rather than resetting state and changing both values on an existing
+deployment.
 
 ## What you can answer
 
 | Managed database       | Questions it helps answer                                                                                                               |
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | **Reading Sources**    | What is in my Reader inbox or archive? Which books and articles have I not finished? What have I saved by author, site, topic, or type? |
-| **Reading Highlights** | Which ideas have I saved or annotated recently? What are my favorite highlights, and which source, project, or topic do they support?   |
+| **Reading Highlights** | Which ideas have I saved or annotated recently? What are my favorite highlights, and which source or topic do they support?             |
 
 The result is richer than a flat highlight export: Reader documents and sources
 imported from Kindle, Apple Books, Instapaper, and other services share one
 source database, with every highlight connected by a Notion relation.
+
+Add a Project relation or other workflow properties directly in Notion when you
+want to connect reading to active work. The Worker preserves user-added
+properties and page content.
 
 ## Reference
 
@@ -89,8 +141,8 @@ highlights related to that row.
 
 | Database               | Key contents                                                                                               |
 | ---------------------- | ---------------------------------------------------------------------------------------------------------- |
-| **Reading Sources**    | Title, origin, category, location, archive state, author, site, tags, URLs, summary, progress, and dates   |
-| **Reading Highlights** | Quote, note, source relation, tags, color, review state, location, dates, Readwise URL, and source context |
+| **Reading Sources**    | Source, location, reading progress, category, author, site, tags, links, notes, and reading dates          |
+| **Reading Highlights** | Highlight, source relation, note, tags, highlighted date, favorite state, links, quote, and source context |
 
 | Capability                     | Mode        | Schedule     | Purpose                                               |
 | ------------------------------ | ----------- | ------------ | ----------------------------------------------------- |
@@ -107,17 +159,20 @@ fields; Readwise Export owns **Readwise Review** and **Readwise Source ID**.
 Reconciliation clears fields owned by a representation that has disappeared.
 
 Quote, note, and summary properties are bounded to 1,900 Unicode characters.
-The adjacent **Truncated** checkbox discloses shortened values, and links back
-to Readwise preserve access to the full source. Tag values are normalized into
-deterministic options; commas become full-width commas (`，`) because the
+The corresponding **Truncated** checkbox discloses shortened values, and links
+back to Readwise preserve access to the full source. Tag values are normalized
+into deterministic options; commas become full-width commas (`，`) because the
 current multi-select wire format uses commas as separators. More than 100 tags
 or a tag longer than 100 characters fails visibly instead of dropping data.
 
 ### How it works
 
 1. Each API request fetches and transforms one provider page before its
-   `pageCursor` is saved. Cursor loops, malformed cursors, incompatible state,
-   and more than 10,000 pages per phase fail closed.
+   `pageCursor` is saved. Incremental cursor loops restart the same pinned
+   traversal up to three times; malformed cursors and incompatible state fail
+   closed. Incremental traversals cap at 10,000 cursor pages. Daily inventory
+   phases cap at 2,048 cursor pages, 10,000 records per inventory, and 30,000
+   bounded uniqueness checks.
 2. An incremental cycle pins one `updatedAfter` value and advances its
    checkpoint only after every page succeeds. The next cycle overlaps the
    checkpoint by five minutes to replay equal timestamps, indexing lag, and
@@ -126,9 +181,12 @@ or a tag longer than 100 characters fails visibly instead of dropping data.
 3. Reader and Readwise Export can update the same `reader:<id>` Source
    independently. Each update writes only the fields its API owns.
 4. Daily replacement scans require two consecutive complete inventories to
-   match before a verified emission pass can delete unseen rows. Each pass pins
-   the provider-reported count and rejects duplicate identities; partial or
-   changing scans do not delete data.
+   match before a verified emission pass can delete unseen rows. Readwise does
+   not document whether Export `count` measures source containers or nested
+   highlights, so the Worker records both, accepts only a matching completed
+   inventory, and requires the same count unit across all three passes. Empty
+   source containers require source-count proof. Partial, duplicate, or changing
+   scans do not delete data.
 5. All capabilities share a conservative pacer of 15 requests per minute,
    below Reader's documented 20 requests per minute. Provider `429` responses
    preserve `Retry-After` for the Worker runtime.
@@ -136,6 +194,12 @@ or a tag longer than 100 characters fails visibly instead of dropping data.
 This design favors eventual convergence over webhook-like latency. Provider
 indexing, a failed run, rate limiting, and the 15-minute schedule can delay an
 update.
+
+Source-reconciliation capacity depends on library shape because one bounded
+guard covers Reader documents, Readwise source IDs, unified Notion keys, and
+nested highlight IDs. It fits 7,500 fully unified Sources with one highlight
+each; libraries with less overlap may fit up to 10,000 records in an individual
+inventory. Exceeding either bound fails before replacement deletion.
 
 ### Deletion and data safety
 
@@ -162,13 +226,14 @@ never writes page body content. User-added properties, views, and page bodies
 remain outside its write set.
 
 Reader-backed identity depends on Readwise's documented `external_id`. If a
-Reader source omits it, the Worker creates a separate
+Reader source returns it as null or empty, the Worker creates a separate
 `readwise:<user_book_id>` Source rather than guessing from a title or URL.
 
 ### Project structure
 
 ```text
 src/
+├── credential.ts  — token fingerprinting and validation
 ├── index.ts       — databases, schedules, and shared pacing
 ├── readwise.ts    — typed clients and response validation
 ├── state.ts       — cursor guards, checkpoints, and overlap transitions
@@ -176,8 +241,8 @@ src/
 ├── sources.ts     — Source schema, keys, and transforms
 ├── highlights.ts  — Highlight schema, relations, deletes, and transforms
 └── values.ts      — bounded text, tags, dates, URLs, and labels
-fixtures/          — fixed Reader and Readwise API responses
-test.ts            — offline client, transform, state, and sync tests
+credential-fingerprint.ts — local fingerprint command
+test.ts                   — inline fixtures and offline tests
 ```
 
 ### Adapt the recipe
@@ -198,6 +263,13 @@ test.ts            — offline client, transform, state, and sync tests
 If a code change alters source selection, key construction, response parsing,
 or state shape, bump `SYNC_STATE_VERSION` and reset the affected capability
 state after deployment.
+
+Rotating a token for the same account also requires an explicit rebind: pause
+all four capabilities, generate and store the new token fingerprint, reset all
+four capability states, and repeat the preview and initialization sequence
+above before resuming. Updating both values and resetting state is explicit
+authorization to rebind, so do not use that procedure to switch accounts on an
+existing deployment.
 
 ### Local testing
 
