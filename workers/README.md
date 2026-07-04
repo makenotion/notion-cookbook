@@ -44,6 +44,7 @@ For self-hosted integrations built directly with the Notion API, see the [API ex
 | [GitHub draft release tools](github-draft-release-tools/)                 | Review an existing draft release and publish it after confirmation.                |
 | [Postgres query](postgres-query/)                                         | Discover tables and query PostgreSQL with guarded, read-only SQL.                  |
 | [PowerPoint creator](powerpoint-creator/)                                 | Turn a Notion page into PowerPoint slides and attach the generated `.pptx` file.   |
+| [Sentry to PagerDuty incident tools](sentry-pagerduty-incident-tools/)    | Find production Sentry issues and declare prioritized PagerDuty incidents.         |
 | [Snowflake query](snowflake-query/)                                       | Discover tables and query Snowflake with guarded, read-only SQL.                   |
 | [SQLite query](sqlite-query/)                                             | Query a seeded, in-memory SQLite database; no secrets required.                    |
 | [Vercel production deployment tools](vercel-production-deployment-tools/) | Inspect, promote, or roll back one Vercel project with live release checks.        |

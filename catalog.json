@@ -481,6 +481,25 @@
       }
     },
     {
+      "id": "sentry-pagerduty-incident-tools",
+      "title": "Sentry to PagerDuty incident tools",
+      "summary": "Find and inspect production Sentry issues, then safely declare prioritized PagerDuty incidents from a Notion Agent.",
+      "path": "workers/sentry-pagerduty-incident-tools",
+      "kind": "worker-tool",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "sentry", "pagerduty"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name sentry-pagerduty-incident-tools"
+      }
+    },
+    {
       "id": "sentry-sync",
       "title": "Sentry sync",
       "summary": "Sync Sentry issue triage, project reliability trends, and recent release health into three managed Notion databases.",
