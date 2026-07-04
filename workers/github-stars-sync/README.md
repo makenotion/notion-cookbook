@@ -219,8 +219,8 @@ other account.
   `repositoryToChange()` so GitHub refreshes do not overwrite them.
 - **Sync another GitHub field.** Validate it in `src/github.ts`, add its schema
   property in `src/repositories.ts`, emit the matching `Builder.*` value, and
-  update the fixture and property table. Emit `[]` when a nullable source value
-  disappears so stale values are cleared.
+  update the test payload and property table. Emit `[]` when a nullable source
+  value disappears so stale values are cleared.
 - **Change the schedule.** Edit `schedule: "1h"` in `src/index.ts`. Keep the
   complete inventory and two-inventory absence confirmation so unstars and
   permission changes cannot delete pages after one incomplete view.

@@ -1,6 +1,4 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
-import { resolve } from "node:path"
 import test from "node:test"
 
 import {
@@ -45,11 +43,103 @@ import {
   type StarsSyncState,
 } from "./src/sync.js"
 
-function fixture(name: string): unknown {
-  return JSON.parse(
-    readFileSync(resolve(process.cwd(), "fixtures", name), "utf8")
-  ) as unknown
-}
+const firstPagePayload: unknown = [
+  {
+    starred_at: "2024-01-15T09:30:00Z",
+    repo: {
+      id: 1296269,
+      name: "Hello-World",
+      full_name: "octocat/Hello-World",
+      owner: {
+        login: "octocat",
+      },
+      private: false,
+      html_url: "https://github.com/octocat/Hello-World",
+      description: "A small repository used in GitHub API examples.",
+      fork: false,
+      homepage: "https://github.com",
+      language: "TypeScript",
+      forks_count: 9,
+      stargazers_count: 80,
+      open_issues_count: 2,
+      default_branch: "main",
+      topics: ["api", "example", "api"],
+      archived: false,
+      disabled: false,
+      visibility: "public",
+      pushed_at: "2024-07-01T08:00:00Z",
+      created_at: "2011-01-26T19:01:12Z",
+      updated_at: "2024-07-01T08:10:00Z",
+      license: {
+        name: "MIT License",
+        spdx_id: "MIT",
+      },
+    },
+  },
+  {
+    starred_at: "2024-03-02T18:45:00Z",
+    repo: {
+      id: 987654321,
+      name: "internal-toolkit",
+      full_name: "acme/internal-toolkit",
+      owner: {
+        login: "acme",
+      },
+      private: true,
+      html_url: "https://github.com/acme/internal-toolkit",
+      description: null,
+      fork: true,
+      homepage: "not a valid URL",
+      language: null,
+      forks_count: 1,
+      stargazers_count: 4,
+      open_issues_count: 0,
+      default_branch: "trunk",
+      archived: true,
+      disabled: false,
+      visibility: "private",
+      pushed_at: null,
+      created_at: null,
+      updated_at: null,
+      license: null,
+    },
+  },
+]
+
+const secondPagePayload: unknown = [
+  {
+    starred_at: "2025-06-11T16:20:00Z",
+    repo: {
+      id: 555000111,
+      name: "edge-runtime",
+      full_name: "example/edge-runtime",
+      owner: {
+        login: "example",
+      },
+      private: false,
+      html_url: "https://github.com/example/edge-runtime",
+      description: "Experiments for a compact JavaScript runtime.",
+      fork: false,
+      homepage: "",
+      language: "Rust",
+      forks_count: 31,
+      stargazers_count: 820,
+      open_issues_count: 14,
+      default_branch: "main",
+      topics: ["edge", "runtime", "rust"],
+      archived: false,
+      disabled: false,
+      visibility: "public",
+      pushed_at: "2025-06-15T14:00:00Z",
+      created_at: "2024-08-20T10:00:00Z",
+      updated_at: "2025-06-15T14:05:00Z",
+      license: {
+        name: "Other",
+        spdx_id: "NOASSERTION",
+      },
+    },
+  },
+]
 
 function queuedFetch(
   responses: Response[],
@@ -82,8 +172,8 @@ function isEmptyProperty(value: unknown): boolean {
   return Array.isArray(value) && value.length === 0
 }
 
-const firstPage = parseStarredRepositories(fixture("starred-page-1.json"))
-const secondPage = parseStarredRepositories(fixture("starred-page-2.json"))
+const firstPage = parseStarredRepositories(firstPagePayload)
+const secondPage = parseStarredRepositories(secondPagePayload)
 const EXPECTED_USER_ID = "583231"
 
 function authenticatedUserResponse(userId = EXPECTED_USER_ID): Response {
@@ -100,7 +190,7 @@ function starWithId(id: number): GitHubStarredRepository {
   return star
 }
 
-test("star media-type fixtures parse into typed repository records", () => {
+test("star media-type payloads parse into typed repository records", () => {
   assert.equal(firstPage.length, 2)
   assert.equal(firstPage[0].starred_at, "2024-01-15T09:30:00Z")
   assert.equal(firstPage[0].repo.id, 1296269)
@@ -121,7 +211,7 @@ test("parser rejects the default repository representation without starred_at", 
 })
 
 test("parser normalizes optional fields and rejects malformed values", () => {
-  const unsafeId = structuredClone(fixture("starred-page-1.json")) as Array<{
+  const unsafeId = structuredClone(firstPagePayload) as Array<{
     repo: { id: number }
   }>
   unsafeId[0].repo.id = Number.MAX_SAFE_INTEGER + 1
@@ -130,25 +220,25 @@ test("parser normalizes optional fields and rejects malformed values", () => {
     /invalid repository ID/
   )
 
-  const malformedTopics = structuredClone(
-    fixture("starred-page-1.json")
-  ) as Array<{ repo: { topics?: unknown[] } }>
+  const malformedTopics = structuredClone(firstPagePayload) as Array<{
+    repo: { topics?: unknown[] }
+  }>
   malformedTopics[0].repo.topics = ["valid", 42]
   assert.throws(
     () => parseStarredRepositories(malformedTopics),
     /invalid repository topics/
   )
 
-  const malformedCreatedAt = structuredClone(
-    fixture("starred-page-1.json")
-  ) as Array<{ repo: { created_at: unknown } }>
+  const malformedCreatedAt = structuredClone(firstPagePayload) as Array<{
+    repo: { created_at: unknown }
+  }>
   malformedCreatedAt[0].repo.created_at = "not-a-timestamp"
   assert.throws(
     () => parseStarredRepositories(malformedCreatedAt),
     /invalid repository created_at/
   )
 
-  const duplicate = structuredClone(fixture("starred-page-1.json")) as Array<{
+  const duplicate = structuredClone(firstPagePayload) as Array<{
     repo: { id: number }
   }>
   duplicate[1].repo.id = duplicate[0].repo.id
@@ -302,14 +392,14 @@ test("GitHub client sends a read-only star-media request and follows Link pages"
     fetchImplementation: queuedFetch(
       [
         authenticatedUserResponse(),
-        new Response(JSON.stringify(fixture("starred-page-1.json")), {
+        new Response(JSON.stringify(firstPagePayload), {
           status: 200,
           headers: {
             Link: `<https://api.github.com/user/starred?sort=created&direction=asc&per_page=100&page=2>; rel="next", <https://api.github.com/user/starred?sort=created&direction=asc&per_page=100&page=2>; rel="last"`,
           },
         }),
         authenticatedUserResponse(),
-        new Response(JSON.stringify(fixture("starred-page-2.json")), {
+        new Response(JSON.stringify(secondPagePayload), {
           status: 200,
         }),
       ],
@@ -407,7 +497,7 @@ test("GitHub client rejects malformed pagination before a truncated inventory ca
     getExpectedUserId: () => EXPECTED_USER_ID,
     fetchImplementation: queuedFetch([
       authenticatedUserResponse(),
-      new Response(JSON.stringify(fixture("starred-page-1.json")), {
+      new Response(JSON.stringify(firstPagePayload), {
         status: 200,
         headers: {
           Link: '<https://api.github.com/user/starred?page=1>; rel="next"',
