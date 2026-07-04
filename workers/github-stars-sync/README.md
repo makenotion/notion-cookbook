@@ -80,21 +80,21 @@ The database contains one page per repository:
 | ------------------- | ------------------------ | ------------ |
 | Repository          | `repo.full_name`         | title        |
 | Description         | `repo.description`       | rich text    |
-| Owner               | `repo.owner.login`       | rich text    |
-| Repository link     | `repo.html_url`          | URL          |
-| Homepage            | `repo.homepage`          | URL          |
+| Starred at          | `starred_at`             | date         |
+| Last pushed         | `repo.pushed_at`         | date         |
 | Language            | `repo.language`          | select       |
-| Topics              | `repo.topics`            | multi-select |
-| Visibility          | `repo.visibility`        | select       |
-| Archived            | `repo.archived`          | checkbox     |
-| Fork                | `repo.fork`              | checkbox     |
 | Stars               | `repo.stargazers_count`  | number       |
+| Archived            | `repo.archived`          | checkbox     |
+| Topics              | `repo.topics`            | multi-select |
+| Repository link     | `repo.html_url`          | URL          |
+| Owner               | `repo.owner.login`       | rich text    |
+| Visibility          | `repo.visibility`        | select       |
+| Homepage            | `repo.homepage`          | URL          |
+| Fork                | `repo.fork`              | checkbox     |
 | Forks               | `repo.forks_count`       | number       |
 | Open issues and PRs | `repo.open_issues_count` | number       |
 | License             | `repo.license`           | rich text    |
 | Default branch      | `repo.default_branch`    | rich text    |
-| Starred at          | `starred_at`             | date         |
-| Last pushed         | `repo.pushed_at`         | date         |
 | Repository created  | `repo.created_at`        | date         |
 | Repository ID       | `repo.id`                | rich text    |
 

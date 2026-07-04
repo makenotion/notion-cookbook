@@ -300,26 +300,26 @@ test("nullable upstream fields are explicitly cleared without touching page note
   assert.equal("pageContentMarkdown" in change, false)
 })
 
-test("worker manifest exposes one hourly incremental inventory and the curated schema", () => {
+test("worker manifest exposes one hourly inventory and a decision-first schema", () => {
   assert.equal(PRIMARY_KEY, "Repository ID")
   assert.deepEqual(Object.keys(repositorySchema.properties), [
     "Repository",
     "Description",
-    "Owner",
-    "Repository link",
-    "Homepage",
+    "Starred at",
+    "Last pushed",
     "Language",
-    "Topics",
-    "Visibility",
-    "Archived",
-    "Fork",
     "Stars",
+    "Archived",
+    "Topics",
+    "Repository link",
+    "Owner",
+    "Visibility",
+    "Homepage",
+    "Fork",
     "Forks",
     "Open issues and PRs",
     "License",
     "Default branch",
-    "Starred at",
-    "Last pushed",
     "Repository created",
     "Repository ID",
   ])
