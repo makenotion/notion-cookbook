@@ -44,8 +44,7 @@ export type GitHubRepository = {
   disabled: boolean
   visibility: string
   pushed_at: string | null
-  created_at: string
-  updated_at: string
+  created_at: string | null
   license: GitHubRepositoryLicense | null
 }
 
@@ -200,7 +199,10 @@ function parseRepository(value: unknown): GitHubRepository {
       value.default_branch,
       "repository default branch"
     ),
-    topics: stringArray(value.topics, "repository topics"),
+    topics:
+      value.topics === undefined
+        ? []
+        : stringArray(value.topics, "repository topics"),
     archived: requiredBoolean(value.archived, "repository archived flag"),
     disabled: requiredBoolean(value.disabled, "repository disabled flag"),
     visibility:
@@ -210,8 +212,7 @@ function parseRepository(value: unknown): GitHubRepository {
           ? "private"
           : "public",
     pushed_at: nullableTimestamp(value.pushed_at, "repository pushed_at"),
-    created_at: isoTimestamp(value.created_at, "repository created_at"),
-    updated_at: isoTimestamp(value.updated_at, "repository updated_at"),
+    created_at: nullableTimestamp(value.created_at, "repository created_at"),
     license: parseLicense(value.license),
   }
 }

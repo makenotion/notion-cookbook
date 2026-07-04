@@ -107,7 +107,9 @@ export function repositoryToChange(
       "Last pushed": repository.pushed_at
         ? Builder.dateTime(repository.pushed_at)
         : [],
-      "Repository created": Builder.dateTime(repository.created_at),
+      "Repository created": repository.created_at
+        ? Builder.dateTime(repository.created_at)
+        : [],
       "Repository ID": Builder.richText(String(repository.id)),
     },
   }

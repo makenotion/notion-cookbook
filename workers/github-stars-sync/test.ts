@@ -35,10 +35,13 @@ import {
   repositoryToChange,
 } from "./src/repositories.js"
 import {
-  membershipDigest,
+  createReadyState,
+  MAX_SAFE_STARS_SYNC_STATE_BYTES,
+  MAX_TRACKED_REPOSITORIES,
   pageFromState,
   runStarsSyncPage,
   STARS_SYNC_STATE_VERSION,
+  starsSyncStateSize,
   type StarsSyncState,
 } from "./src/sync.js"
 
@@ -103,6 +106,9 @@ test("star media-type fixtures parse into typed repository records", () => {
   assert.equal(firstPage[0].repo.id, 1296269)
   assert.equal(firstPage[0].repo.full_name, "octocat/Hello-World")
   assert.equal(firstPage[1].repo.visibility, "private")
+  assert.deepEqual(firstPage[1].repo.topics, [])
+  assert.equal(firstPage[1].repo.created_at, null)
+  assert.equal("updated_at" in firstPage[1].repo, false)
   assert.equal(secondPage[0].repo.license?.spdx_id, "NOASSERTION")
 })
 
@@ -114,7 +120,7 @@ test("parser rejects the default repository representation without starred_at", 
   )
 })
 
-test("parser fails closed on unsafe repository IDs and malformed fields", () => {
+test("parser normalizes optional fields and rejects malformed values", () => {
   const unsafeId = structuredClone(fixture("starred-page-1.json")) as Array<{
     repo: { id: number }
   }>
@@ -124,13 +130,22 @@ test("parser fails closed on unsafe repository IDs and malformed fields", () => 
     /invalid repository ID/
   )
 
-  const missingTopics = structuredClone(
+  const malformedTopics = structuredClone(
     fixture("starred-page-1.json")
-  ) as Array<{ repo: { topics?: string[] } }>
-  delete missingTopics[0].repo.topics
+  ) as Array<{ repo: { topics?: unknown[] } }>
+  malformedTopics[0].repo.topics = ["valid", 42]
   assert.throws(
-    () => parseStarredRepositories(missingTopics),
+    () => parseStarredRepositories(malformedTopics),
     /invalid repository topics/
+  )
+
+  const malformedCreatedAt = structuredClone(
+    fixture("starred-page-1.json")
+  ) as Array<{ repo: { created_at: unknown } }>
+  malformedCreatedAt[0].repo.created_at = "not-a-timestamp"
+  assert.throws(
+    () => parseStarredRepositories(malformedCreatedAt),
+    /invalid repository created_at/
   )
 
   const duplicate = structuredClone(fixture("starred-page-1.json")) as Array<{
@@ -189,12 +204,13 @@ test("nullable upstream fields are explicitly cleared without touching page note
   assert.ok(isEmptyProperty(change.properties.Topics))
   assert.ok(isEmptyProperty(change.properties.License))
   assert.ok(isEmptyProperty(change.properties["Last pushed"]))
+  assert.ok(isEmptyProperty(change.properties["Repository created"]))
   assert.ok(propertyIncludes(change.properties.Archived, "Yes"))
   assert.ok(propertyIncludes(change.properties.Fork, "Yes"))
   assert.equal("pageContentMarkdown" in change, false)
 })
 
-test("worker manifest exposes one hourly replace sync and the curated schema", () => {
+test("worker manifest exposes one hourly incremental inventory and the curated schema", () => {
   assert.equal(PRIMARY_KEY, "Repository ID")
   assert.deepEqual(Object.keys(repositorySchema.properties), [
     "Repository",
@@ -251,7 +267,7 @@ test("worker manifest exposes one hourly replace sync and the curated schema", (
   assert.deepEqual(config, {
     databaseKey: "starredRepositories",
     primaryKeyProperty: "Repository ID",
-    mode: "replace",
+    mode: "incremental",
     schedule: { type: "interval", intervalMs: 60 * 60_000 },
   })
   assert.deepEqual(worker.manifest.pacers, [
@@ -351,7 +367,7 @@ test("GitHub client sends a read-only star-media request and follows Link pages"
   assert.equal(GITHUB_REQUEST_TIMEOUT_MS, 30_000)
 })
 
-test("GitHub client rejects malformed pagination before a truncated replace can finish", async () => {
+test("GitHub client rejects malformed pagination before a truncated inventory can finish", async () => {
   assert.throws(
     () =>
       nextPageFromLink(
@@ -611,115 +627,200 @@ test("GitHub client surfaces provider rate-limit timing without leaking credenti
   assert.doesNotMatch(forbiddenError.message, /secret-token-value/)
 })
 
-test("replace sync completes only after two identical membership scans", async () => {
-  const calls: number[] = []
-  const scriptedPages = [
-    { page: 1, repositories: firstPage, nextPage: 2 },
-    { page: 2, repositories: secondPage, nextPage: undefined },
-    { page: 1, repositories: firstPage, nextPage: 2 },
-    { page: 2, repositories: secondPage, nextPage: undefined },
-  ]
-  const client: GitHubStarsClient = {
+type ScriptedStarsPage = {
+  page: number
+  repositories: GitHubStarredRepository[]
+  nextPage?: number
+  accountId?: string
+}
+
+function scriptedStarsClient(
+  scriptedPages: ScriptedStarsPage[],
+  calls: number[] = []
+): GitHubStarsClient {
+  return {
     async fetchPage(page) {
       calls.push(page)
       const scripted = scriptedPages.shift()
-      assert.ok(scripted)
+      assert.ok(scripted, "mock stars page queue was exhausted")
       assert.equal(page, scripted.page)
       return {
-        authenticatedUserId: EXPECTED_USER_ID,
+        authenticatedUserId: scripted.accountId ?? EXPECTED_USER_ID,
         repositories: scripted.repositories,
         nextPage: scripted.nextPage,
       }
     },
   }
-  const allRepositoryIds = [...firstPage, ...secondPage].map(
-    (star) => star.repo.id
+}
+
+function deletedKeys(changes: ReadonlyArray<{ type: string; key: string }>) {
+  return changes
+    .filter((change) => change.type === "delete")
+    .map((change) => change.key)
+}
+
+test("hourly inventory persists a terminal checkpoint without deleting", async () => {
+  const calls: number[] = []
+  const client = scriptedStarsClient(
+    [
+      { page: 1, repositories: firstPage, nextPage: 2 },
+      { page: 2, repositories: secondPage },
+    ],
+    calls
   )
 
   const first = await runStarsSyncPage(client, undefined)
   assert.equal(first.hasMore, true)
-  if (!first.hasMore) return
   assert.equal(first.changes.length, 2)
-  assert.deepEqual(first.nextState, {
-    stateVersion: STARS_SYNC_STATE_VERSION,
-    phase: "baseline",
-    accountId: EXPECTED_USER_ID,
-    page: 2,
-    seenRepositoryIds: firstPage.map((star) => star.repo.id),
-  })
+  assert.equal(first.nextState.phase, "scan")
+  assert.equal(pageFromState(first.nextState), 2)
 
   const second = await runStarsSyncPage(client, first.nextState)
-  assert.equal(second.hasMore, true)
-  if (!second.hasMore) return
+  assert.equal(second.hasMore, false)
+  assert.equal(second.nextState.phase, "ready")
+  assert.equal(pageFromState(second.nextState), 1)
   assert.equal(second.changes.length, 1)
-  assert.deepEqual(second.nextState, {
-    stateVersion: STARS_SYNC_STATE_VERSION,
-    phase: "confirmation",
-    accountId: EXPECTED_USER_ID,
-    page: 1,
-    seenRepositoryIds: [],
-    expectedCount: allRepositoryIds.length,
-    expectedDigest: membershipDigest(allRepositoryIds),
-  })
-
-  const third = await runStarsSyncPage(client, second.nextState)
-  assert.equal(third.hasMore, true)
-  if (!third.hasMore) return
-  assert.equal(third.changes.length, 0)
-  assert.deepEqual(third.nextState, {
-    ...second.nextState,
-    page: 2,
-    seenRepositoryIds: firstPage.map((star) => star.repo.id),
-  })
-
-  const fourth = await runStarsSyncPage(client, third.nextState)
-  assert.equal(fourth.hasMore, false)
-  assert.equal(fourth.changes.length, 0)
-  assert.equal("nextState" in fourth, false)
-  assert.deepEqual(calls, [1, 2, 1, 2])
+  assert.deepEqual(deletedKeys(second.changes), [])
+  assert.deepEqual(calls, [1, 2])
 })
 
-test("membership mutation between offset pages cannot complete replacement", async () => {
-  const [a, b, c, d] = [101, 102, 103, 104].map(starWithId)
-  // A is unstarred after baseline page 1. C shifts onto the already-read page
-  // and is skipped by baseline page 2; the stable confirmation pass finds it.
-  const scriptedPages = [
-    { page: 1, repositories: [a, b], nextPage: 2 },
-    { page: 2, repositories: [d], nextPage: undefined },
-    { page: 1, repositories: [b, c], nextPage: 2 },
-    { page: 2, repositories: [d], nextPage: undefined },
-  ]
-  const client: GitHubStarsClient = {
-    async fetchPage(page) {
-      const scripted = scriptedPages.shift()
-      assert.ok(scripted)
-      assert.equal(page, scripted.page)
-      return {
-        authenticatedUserId: EXPECTED_USER_ID,
-        repositories: scripted.repositories,
-        nextPage: scripted.nextPage,
-      }
-    },
-  }
+test("membership changes recover from persisted state and delay deletion", async () => {
+  const [one, two, three] = [1, 2, 3].map(starWithId)
+  const client = scriptedStarsClient([
+    { page: 1, repositories: [one, two] },
+    { page: 1, repositories: [one, three] },
+    { page: 1, repositories: [one, three] },
+  ])
 
-  const first = await runStarsSyncPage(client, undefined)
-  assert.equal(first.hasMore, true)
-  if (!first.hasMore) return
-  const second = await runStarsSyncPage(client, first.nextState)
-  assert.equal(second.hasMore, true)
-  if (!second.hasMore) return
-  const third = await runStarsSyncPage(client, second.nextState)
-  assert.equal(third.hasMore, true)
-  if (!third.hasMore) return
-  assert.equal(third.changes.length, 0)
+  const initial = await runStarsSyncPage(client, undefined)
+  assert.equal(initial.hasMore, false)
+  const firstAbsence = await runStarsSyncPage(client, initial.nextState)
+  assert.equal(firstAbsence.hasMore, false)
+  assert.deepEqual(deletedKeys(firstAbsence.changes), [])
 
-  await assert.rejects(
-    () => runStarsSyncPage(client, third.nextState),
-    /stars changed during pagination.*not completed/
+  // The terminal state from [1,3] is persisted. Retrying the next scheduled
+  // inventory does not compare against a stranded [1,2] confirmation digest.
+  const confirmedAbsence = await runStarsSyncPage(
+    client,
+    firstAbsence.nextState
   )
+  assert.equal(confirmedAbsence.hasMore, false)
+  assert.deepEqual(deletedKeys(confirmedAbsence.changes), ["2"])
 })
 
-test("account identity cannot change during a replacement cycle", async () => {
+test("a reappearing repository cancels its absence evidence", async () => {
+  const [one, two, three] = [1, 2, 3].map(starWithId)
+  const client = scriptedStarsClient([
+    { page: 1, repositories: [one, two] },
+    { page: 1, repositories: [one, three] },
+    { page: 1, repositories: [one, two] },
+    { page: 1, repositories: [one, three] },
+  ])
+
+  const initial = await runStarsSyncPage(client, undefined)
+  const missingOnce = await runStarsSyncPage(client, initial.nextState)
+  const reappeared = await runStarsSyncPage(client, missingOnce.nextState)
+  assert.deepEqual(deletedKeys(reappeared.changes), [])
+
+  const missingAgain = await runStarsSyncPage(client, reappeared.nextState)
+  assert.deepEqual(deletedKeys(missingAgain.changes), [])
+})
+
+test("one offset-shifted inventory cannot delete a currently starred repository", async () => {
+  const [a, b, c, d] = [101, 102, 103, 104].map(starWithId)
+  const client = scriptedStarsClient([
+    { page: 1, repositories: [a, b, c, d] },
+    // C shifts onto an already-read page and is absent from this completed
+    // inventory. Incremental mode records only first-absence evidence.
+    { page: 1, repositories: [a, b], nextPage: 2 },
+    { page: 2, repositories: [d] },
+    { page: 1, repositories: [a, b, c, d] },
+  ])
+
+  const initial = await runStarsSyncPage(client, undefined)
+  const shiftedFirstPage = await runStarsSyncPage(client, initial.nextState)
+  assert.equal(shiftedFirstPage.hasMore, true)
+  const shiftedTerminal = await runStarsSyncPage(
+    client,
+    shiftedFirstPage.nextState
+  )
+  assert.equal(shiftedTerminal.hasMore, false)
+  assert.deepEqual(deletedKeys(shiftedTerminal.changes), [])
+
+  const recovered = await runStarsSyncPage(client, shiftedTerminal.nextState)
+  assert.deepEqual(deletedKeys(recovered.changes), [])
+})
+
+test("cross-page duplicates abort safely and the next schedule recovers", async () => {
+  const [a, b, c] = [101, 102, 103].map(starWithId)
+  const client = scriptedStarsClient([
+    { page: 1, repositories: [a, b, c] },
+    { page: 1, repositories: [a, b] },
+    { page: 1, repositories: [a, b], nextPage: 2 },
+    // B proves that this page shifted, but C appears later in the same page.
+    // The abort must still clear C's existing first-absence evidence.
+    { page: 2, repositories: [b, c] },
+    { page: 1, repositories: [a, b] },
+  ])
+
+  const initial = await runStarsSyncPage(client, undefined)
+  const missingOnce = await runStarsSyncPage(client, initial.nextState)
+  assert.deepEqual(deletedKeys(missingOnce.changes), [])
+  const unstable = await runStarsSyncPage(client, missingOnce.nextState)
+  assert.equal(unstable.hasMore, true)
+  const aborted = await runStarsSyncPage(client, unstable.nextState)
+  assert.equal(aborted.hasMore, false)
+  assert.equal(aborted.nextState.phase, "ready")
+  assert.deepEqual(aborted.changes, [])
+
+  const recovered = await runStarsSyncPage(client, aborted.nextState)
+  assert.equal(recovered.hasMore, false)
+  assert.deepEqual(deletedKeys(recovered.changes), [])
+})
+
+test("packed worst-case state remains below the Worker limit", () => {
+  const active = Array.from(
+    { length: MAX_TRACKED_REPOSITORIES / 2 },
+    (_, i) => i + 1
+  )
+  const missing = Array.from(
+    { length: MAX_TRACKED_REPOSITORIES / 2 },
+    (_, i) => active.length + i + 1
+  )
+  const state = createReadyState(EXPECTED_USER_ID, active, missing)
+  const bytes = starsSyncStateSize(state)
+  assert.ok(
+    bytes < MAX_SAFE_STARS_SYNC_STATE_BYTES,
+    `${bytes} is not below 240 KiB`
+  )
+  assert.ok(bytes < 256 * 1_024, `${bytes} is not below 256 KiB`)
+  assert.equal(JSON.stringify(state).includes(active.join(",")), false)
+})
+
+test("state-cap recovery preserves existing deletion evidence", async () => {
+  const active = Array.from(
+    { length: MAX_TRACKED_REPOSITORIES / 2 },
+    (_, index) => index + 1
+  )
+  const missing = Array.from(
+    { length: MAX_TRACKED_REPOSITORIES / 2 },
+    (_, index) => active.length + index + 1
+  )
+  const ready = createReadyState(EXPECTED_USER_ID, active, missing)
+  const newStars = Array.from({ length: GITHUB_PAGE_SIZE }, (_, index) =>
+    starWithId(MAX_TRACKED_REPOSITORIES + index + 1)
+  )
+  const client = scriptedStarsClient([
+    { page: 1, repositories: newStars, nextPage: 2 },
+  ])
+
+  const aborted = await runStarsSyncPage(client, ready)
+  assert.equal(aborted.hasMore, false)
+  assert.deepEqual(aborted.changes, [])
+  assert.deepEqual(aborted.nextState, ready)
+})
+
+test("account identity cannot change during an inventory scan", async () => {
   let call = 0
   const client: GitHubStarsClient = {
     async fetchPage(page) {
@@ -737,21 +838,18 @@ test("account identity cannot change during a replacement cycle", async () => {
   if (!first.hasMore) return
   await assert.rejects(
     () => runStarsSyncPage(client, first.nextState),
-    /account changed during the replacement cycle/
+    /account changed during the inventory scan/
   )
 })
 
 test("invalid or incompatible sync state fails before requesting GitHub", async () => {
-  const validState: StarsSyncState = {
-    stateVersion: STARS_SYNC_STATE_VERSION,
-    phase: "baseline",
-    accountId: EXPECTED_USER_ID,
-    page: 2,
-    seenRepositoryIds: [firstPage[0].repo.id],
-  }
+  const validState = createReadyState(
+    EXPECTED_USER_ID,
+    [firstPage[0].repo.id],
+    []
+  )
   assert.equal(pageFromState(undefined), 1)
-  assert.equal(pageFromState(validState), 2)
-  assert.throws(() => pageFromState({ ...validState, page: 0 }), /invalid page/)
+  assert.equal(pageFromState(validState), 1)
   assert.throws(
     () => pageFromState({ ...validState, stateVersion: 99 } as never),
     /incompatible/
@@ -761,20 +859,7 @@ test("invalid or incompatible sync state fails before requesting GitHub", async 
     /invalid account ID/
   )
   assert.throws(
-    () =>
-      pageFromState({
-        ...validState,
-        page: 1,
-        seenRepositoryIds: [firstPage[0].repo.id],
-      }),
-    /too many repository IDs/
-  )
-  assert.throws(
-    () =>
-      pageFromState({
-        ...validState,
-        seenRepositoryIds: [firstPage[0].repo.id, firstPage[0].repo.id],
-      }),
+    () => pageFromState({ ...validState, repositoryIds: "not-base64!" }),
     /invalid repository IDs/
   )
 
@@ -793,8 +878,9 @@ test("invalid or incompatible sync state fails before requesting GitHub", async 
     () =>
       runStarsSyncPage(client, {
         ...validState,
+        phase: "scan",
         page: MAX_STAR_PAGES + 1,
-      }),
+      } as StarsSyncState),
     /invalid page/
   )
   assert.equal(requested, false)

@@ -1,6 +1,6 @@
 // Authenticated GitHub stars become a current, filterable Notion research
-// library. A full hourly replacement is deliberate: GitHub has no unstar feed,
-// and replacement removes repositories only after two membership scans agree.
+// library. Each hourly inventory upserts current stars and delays explicit
+// deletion until a repository is absent from two completed scheduled scans.
 
 import { Worker } from "@notionhq/workers"
 
@@ -36,7 +36,7 @@ const starredRepositories = worker.database("starredRepositories", {
 
 worker.sync("starredRepositoriesSync", {
   database: starredRepositories,
-  mode: "replace",
+  mode: "incremental",
   schedule: "1h",
   execute: (state: StarsSyncState | undefined) =>
     runStarsSyncPage(github, state),
