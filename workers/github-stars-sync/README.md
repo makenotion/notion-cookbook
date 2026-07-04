@@ -20,11 +20,12 @@ the changeable login name.
 From the repository root:
 
 ```sh
-npm install --global ntn
+npm install --global ntn@latest
 cd workers/github-stars-sync
 npm install
 ntn login
 ntn workers deploy --name github-stars-sync
+ntn workers sync pause starredRepositoriesSync
 ntn workers env set GITHUB_AUTH_MODE=pat
 ntn workers env set GITHUB_USER_ID=your-numeric-user-id
 ntn workers env set GITHUB_TOKEN=github_pat_your-token-here
@@ -34,14 +35,23 @@ Use `--name github-stars-sync` only for the first deployment. After
 `workers.json` identifies the deployed Worker, update it with
 `ntn workers deploy`.
 
-Preview the database without changing Notion, then start the first sync:
+The first deployment starts the schedule, so keep it paused while you validate
+the connection. Preview the database without changing Notion, then start the
+first sync manually:
 
 ```sh
 ntn workers sync trigger starredRepositoriesSync --preview
 ntn workers sync trigger starredRepositoriesSync
+ntn workers sync status starredRepositoriesSync
 ```
 
-After the first run completes, the Worker refreshes the database every hour.
+When the first run succeeds and the private database looks right, press Ctrl-C
+and start the hourly schedule:
+
+```sh
+ntn workers sync resume starredRepositoriesSync
+```
+
 Preview output can include private repository metadata, so treat it as
 sensitive.
 
