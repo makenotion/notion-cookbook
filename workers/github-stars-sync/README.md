@@ -80,22 +80,22 @@ The database contains one page per repository:
 | ------------------- | ------------------------ | ------------ |
 | Repository          | `repo.full_name`         | title        |
 | Description         | `repo.description`       | rich text    |
+| Owner               | `repo.owner.login`       | rich text    |
 | Starred at          | `starred_at`             | date         |
 | Last pushed         | `repo.pushed_at`         | date         |
-| Language            | `repo.language`          | select       |
 | Stars               | `repo.stargazers_count`  | number       |
 | Archived            | `repo.archived`          | checkbox     |
 | Topics              | `repo.topics`            | multi-select |
+| Language            | `repo.language`          | select       |
 | Repository link     | `repo.html_url`          | URL          |
-| Owner               | `repo.owner.login`       | rich text    |
-| Visibility          | `repo.visibility`        | select       |
 | Homepage            | `repo.homepage`          | URL          |
+| License             | `repo.license`           | rich text    |
+| Visibility          | `repo.visibility`        | select       |
 | Fork                | `repo.fork`              | checkbox     |
 | Forks               | `repo.forks_count`       | number       |
 | Open issues and PRs | `repo.open_issues_count` | number       |
-| License             | `repo.license`           | rich text    |
-| Default branch      | `repo.default_branch`    | rich text    |
 | Repository created  | `repo.created_at`        | date         |
+| Default branch      | `repo.default_branch`    | rich text    |
 | Repository ID       | `repo.id`                | rich text    |
 
 **Repository ID** is the primary key. Repository names and owners can change;
