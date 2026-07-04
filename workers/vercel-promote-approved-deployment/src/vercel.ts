@@ -1,39 +1,74 @@
 import type {
-  DeploymentCheckPolicy,
-  PromotionObservation,
-  TargetPolicy,
-  VercelCheckDefinition,
-  VercelCheckRun,
+  ProductionObservation,
+  TransitionAction,
   VercelClientLike,
   VercelDeployment,
-  VercelProject,
-  VercelProjectAlias,
 } from "./types.js"
-import {
-  isDefinitePromotionRejectionStatus,
-  HealthCheckFailure,
-  SafetyError,
-  VercelHttpError,
-} from "./types.js"
-import {
-  DEPLOYMENT_HOSTNAME,
-  DEPLOYMENT_ID,
-  GIT_SHA,
-  HOSTNAME,
-} from "./config.js"
+import { SafetyError, VercelHttpError } from "./types.js"
+import { DEPLOYMENT_ID, GIT_SHA, HOSTNAME } from "./config.js"
 
 const API_ORIGIN = "https://api.vercel.com"
-export const MAX_PROJECT_ALIAS_INVENTORY = 100
-const BODY_DISPOSAL_TIMEOUT_MS = 100
+const DEPLOYMENT_HOSTNAME =
+  /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:vercel\.app|now\.sh)$/
 
-interface ClientOptions {
+export const MAX_VERCEL_RESPONSE_BYTES = 1_048_576
+export const MAX_CHECK_DEFINITIONS = 100
+export const MAX_CHECK_RUNS = 100
+export const MAX_PROJECT_ALIAS_INVENTORY = 100
+export const MAX_PRODUCTION_HEALTH_DOMAINS = 5
+
+export interface VercelClientOptions {
   token: string
   protectionBypassSecret: string | null
-  requestTimeoutMs: number
-  healthTimeoutMs: number
+  requestTimeoutMs?: number
+  healthTimeoutMs?: number
   fetchImpl?: typeof fetch
   sleep?: (milliseconds: number) => Promise<void>
   now?: () => Date
+}
+
+export interface VercelProject {
+  id: string
+  accountId?: string
+  alias?: Array<{
+    domain?: string
+    target?: string
+    environment?: string
+    deployment?: { id?: string } | null
+  }>
+}
+
+export interface VercelCheckDefinition {
+  id?: string
+  projectId?: string
+  deletedAt?: number | null
+}
+
+export interface VercelCheckRun {
+  checkId?: string
+  deploymentId?: string
+  projectId?: string
+  status?: string
+  conclusion?: string
+  completedAt?: number
+}
+
+interface RawDeployment {
+  id?: string
+  projectId?: string
+  project?: { id?: string }
+  teamId?: string
+  url?: string
+  target?: string | null
+  readyState?: string
+  readySubstate?: string
+  checksState?: string
+  checksConclusion?: string
+  gitSource?: { sha?: string }
+}
+
+function fail(code: string, message: string): never {
+  throw new SafetyError(code, message)
 }
 
 function retryDelay(response: Response, now: Date): number {
@@ -46,21 +81,9 @@ function retryDelay(response: Response, now: Date): number {
       return Math.max(0, date.getTime() - now.getTime())
   }
   const reset = Number(response.headers.get("x-ratelimit-reset"))
-  if (Number.isFinite(reset) && reset > 0) {
+  if (Number.isFinite(reset) && reset > 0)
     return Math.max(0, reset * 1_000 - now.getTime())
-  }
   return 250
-}
-
-async function jsonBody(response: Response): Promise<unknown> {
-  try {
-    return await response.json()
-  } catch {
-    throw new VercelHttpError(
-      `Vercel returned invalid JSON for a successful HTTP ${response.status} response.`,
-      { status: response.status }
-    )
-  }
 }
 
 async function disposeBody(response: Response): Promise<void> {
@@ -70,7 +93,7 @@ async function disposeBody(response: Response): Promise<void> {
     await Promise.race([
       response.body.cancel().catch(() => undefined),
       new Promise<void>((resolve) => {
-        timer = setTimeout(resolve, BODY_DISPOSAL_TIMEOUT_MS)
+        timer = setTimeout(resolve, 100)
       }),
     ])
   } finally {
@@ -78,20 +101,61 @@ async function disposeBody(response: Response): Promise<void> {
   }
 }
 
+async function boundedJson(response: Response): Promise<unknown> {
+  const reader = response.body?.getReader()
+  if (!reader) {
+    throw new VercelHttpError("Vercel returned an empty successful response.", {
+      status: response.status,
+    })
+  }
+  const chunks: Uint8Array[] = []
+  let length = 0
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      length += value.byteLength
+      if (length > MAX_VERCEL_RESPONSE_BYTES) {
+        void reader.cancel().catch(() => undefined)
+        throw new VercelHttpError(
+          `Vercel returned a successful response larger than the ${MAX_VERCEL_RESPONSE_BYTES}-byte limit.`,
+          { status: response.status }
+        )
+      }
+      chunks.push(value)
+    }
+  } catch (error) {
+    if (error instanceof VercelHttpError) throw error
+    throw new VercelHttpError(
+      "A successful Vercel response could not be read.",
+      {
+        status: response.status,
+      }
+    )
+  } finally {
+    reader.releaseLock()
+  }
+  try {
+    const bytes = new Uint8Array(length)
+    let offset = 0
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset)
+      offset += chunk.byteLength
+    }
+    return JSON.parse(new TextDecoder().decode(bytes)) as unknown
+  } catch {
+    throw new VercelHttpError("Vercel returned invalid JSON.", {
+      status: response.status,
+    })
+  }
+}
+
 export class VercelClient implements VercelClientLike {
-  private readonly token: string
-  private readonly bypass: string | null
-  private readonly requestTimeoutMs: number
-  private readonly healthTimeoutMs: number
   private readonly fetchImpl: typeof fetch
   private readonly sleep: (milliseconds: number) => Promise<void>
   private readonly now: () => Date
 
-  constructor(options: ClientOptions) {
-    this.token = options.token
-    this.bypass = options.protectionBypassSecret
-    this.requestTimeoutMs = options.requestTimeoutMs
-    this.healthTimeoutMs = options.healthTimeoutMs
+  constructor(private readonly options: VercelClientOptions) {
     this.fetchImpl = options.fetchImpl ?? fetch
     this.sleep =
       options.sleep ??
@@ -107,651 +171,476 @@ export class VercelClient implements VercelClientLike {
         response = await this.fetchImpl(`${API_ORIGIN}${path}`, {
           redirect: "manual",
           headers: {
-            Authorization: `Bearer ${this.token}`,
+            Authorization: `Bearer ${this.options.token}`,
             Accept: "application/json",
           },
-          signal: AbortSignal.timeout(this.requestTimeoutMs),
+          signal: AbortSignal.timeout(this.options.requestTimeoutMs ?? 10_000),
         })
       } catch {
-        if (attempt < 2) {
+        if (attempt + 1 < 3) {
           await this.sleep(250 * (attempt + 1))
           continue
         }
         throw new VercelHttpError("A Vercel read request timed out or failed.")
       }
-      if (response.ok) return jsonBody(response)
-      if ((response.status === 429 || response.status >= 500) && attempt < 2) {
-        await this.sleep(Math.min(retryDelay(response, this.now()), 5_000))
+      if (response.ok) return boundedJson(response)
+      const retryAfterMs = retryDelay(response, this.now())
+      await disposeBody(response)
+      if (
+        (response.status === 429 || response.status >= 500) &&
+        attempt + 1 < 3 &&
+        retryAfterMs <= 5_000
+      ) {
+        await this.sleep(retryAfterMs)
         continue
       }
       throw new VercelHttpError(
         `Vercel read request failed with HTTP ${response.status}.`,
-        {
-          status: response.status,
-          retryAfterMs: retryDelay(response, this.now()),
-        }
+        { status: response.status, retryAfterMs }
       )
     }
     throw new VercelHttpError("Vercel read retry bound was exhausted.")
   }
 
-  async getProject(teamId: string, projectId: string): Promise<VercelProject> {
-    return (await this.read(
-      `/v9/projects/${encodeURIComponent(projectId)}?teamId=${encodeURIComponent(teamId)}`
-    )) as VercelProject
-  }
-
-  async getDeployment(
+  private async getRawDeployment(
     teamId: string,
     deploymentId: string
-  ): Promise<VercelDeployment> {
+  ): Promise<RawDeployment> {
     return (await this.read(
       `/v13/deployments/${encodeURIComponent(deploymentId)}?withGitRepoInfo=true&teamId=${encodeURIComponent(teamId)}`
-    )) as VercelDeployment
+    )) as RawDeployment
   }
 
-  async getCheckDefinitions(
-    teamId: string,
-    projectId: string
-  ): Promise<VercelCheckDefinition[]> {
-    const response = (await this.read(
-      `/v2/projects/${encodeURIComponent(projectId)}/checks?teamId=${encodeURIComponent(teamId)}`
-    )) as { checks?: unknown }
-    if (!Array.isArray(response.checks)) {
-      throw new VercelHttpError("Vercel returned no check definitions array.")
+  private async getCollection<T>(
+    path: string,
+    key: string,
+    limit: number
+  ): Promise<T[]> {
+    const body = (await this.read(path)) as Record<string, unknown>
+    const values = body[key]
+    if (!Array.isArray(values)) {
+      throw new VercelHttpError(`Vercel returned no ${key} array.`)
     }
-    return response.checks as VercelCheckDefinition[]
-  }
-
-  async getCheckRuns(
-    teamId: string,
-    deploymentId: string
-  ): Promise<VercelCheckRun[]> {
-    const response = (await this.read(
-      `/v2/deployments/${encodeURIComponent(deploymentId)}/check-runs?teamId=${encodeURIComponent(teamId)}`
-    )) as { runs?: unknown }
-    if (!Array.isArray(response.runs)) {
-      throw new VercelHttpError(
-        "Vercel returned no deployment check-runs array."
-      )
+    if (values.length > limit) {
+      throw new VercelHttpError(`Vercel returned more than ${limit} ${key}.`)
     }
-    return response.runs as VercelCheckRun[]
+    return values as T[]
   }
 
-  async requestPromotion(
+  async verifyDeployment(
     teamId: string,
     projectId: string,
-    deploymentId: string
-  ): Promise<{ status: number }> {
-    let response: Response
-    try {
-      response = await this.fetchImpl(
-        `${API_ORIGIN}/v10/projects/${encodeURIComponent(projectId)}/promote/${encodeURIComponent(deploymentId)}?teamId=${encodeURIComponent(teamId)}`,
-        {
-          method: "POST",
-          redirect: "manual",
-          headers: {
-            Authorization: `Bearer ${this.token}`,
-            Accept: "application/json",
-          },
-          signal: AbortSignal.timeout(this.requestTimeoutMs),
-        }
-      )
-    } catch {
-      throw new VercelHttpError(
-        "The promotion request outcome is unknown because the connection failed or timed out.",
-        { ambiguous: true }
+    deploymentId: string,
+    expectedGitSha: string,
+    expectedState: "staged" | "promoted"
+  ): Promise<VercelDeployment> {
+    const raw = await this.getRawDeployment(teamId, deploymentId)
+    const deployment = normalizeDeployment(raw, teamId, projectId, deploymentId)
+    if (
+      raw.target !== "production" ||
+      raw.readyState !== "READY" ||
+      raw.readySubstate !== expectedState.toUpperCase()
+    ) {
+      fail(
+        "DEPLOYMENT_STATE_MISMATCH",
+        `The deployment must be READY/${expectedState.toUpperCase()} with a production target.`
       )
     }
-    if (response.status === 201 || response.status === 202) {
-      // Do not parse or expose the provider response; reconciliation is authoritative.
-      await disposeBody(response)
-      return { status: response.status }
+    if (!GIT_SHA.test(expectedGitSha) || deployment.gitSha !== expectedGitSha) {
+      fail(
+        "GIT_IDENTITY_MISMATCH",
+        "The deployment Git SHA differs from the approved identity."
+      )
     }
-    await disposeBody(response)
-    throw new VercelHttpError(
-      `Vercel promotion returned HTTP ${response.status}; the Worker will reconcile before any future action.`,
-      {
-        status: response.status,
-        retryAfterMs: retryDelay(response, this.now()),
-        ambiguous: !isDefinitePromotionRejectionStatus(response.status),
-      }
+    return deployment
+  }
+
+  async verifyDeploymentChecks(
+    teamId: string,
+    projectId: string,
+    deploymentId: string,
+    requiredCheckIds: string[]
+  ): Promise<void> {
+    if (requiredCheckIds.length === 0) return
+    if (
+      requiredCheckIds.length > 20 ||
+      new Set(requiredCheckIds).size !== requiredCheckIds.length
+    ) {
+      fail(
+        "DEPLOYMENT_CHECKS_INVALID",
+        "Required Deployment Check IDs are duplicated or unbounded."
+      )
+    }
+    const [deployment, definitions, runs] = await Promise.all([
+      this.getRawDeployment(teamId, deploymentId),
+      this.getCollection<VercelCheckDefinition>(
+        `/v2/projects/${encodeURIComponent(projectId)}/checks?teamId=${encodeURIComponent(teamId)}`,
+        "checks",
+        MAX_CHECK_DEFINITIONS
+      ),
+      this.getCollection<VercelCheckRun>(
+        `/v2/deployments/${encodeURIComponent(deploymentId)}/check-runs?teamId=${encodeURIComponent(teamId)}`,
+        "runs",
+        MAX_CHECK_RUNS
+      ),
+    ])
+    normalizeDeployment(deployment, teamId, projectId, deploymentId)
+    if (
+      deployment.checksState !== "completed" ||
+      deployment.checksConclusion !== "succeeded"
+    ) {
+      fail(
+        "DEPLOYMENT_CHECKS_INCOMPLETE",
+        "The deployment aggregate check state is not completed/succeeded."
+      )
+    }
+    verifyCheckRuns(
+      definitions,
+      runs,
+      requiredCheckIds,
+      projectId,
+      deploymentId
     )
   }
 
-  async requestRollback(
+  async assertRollingReleasesDisabled(
+    teamId: string,
+    projectId: string
+  ): Promise<void> {
+    const [configuration, activeState] = await Promise.all([
+      this.read(
+        `/v1/projects/${encodeURIComponent(projectId)}/rolling-release/config?teamId=${encodeURIComponent(teamId)}`
+      ),
+      this.read(
+        `/v1/projects/${encodeURIComponent(projectId)}/rolling-release?teamId=${encodeURIComponent(teamId)}&state=ACTIVE`
+      ),
+    ])
+    assertRollingReleaseWrapper(configuration, "configured")
+    assertRollingReleaseWrapper(activeState, "active")
+  }
+
+  async observeProduction(
     teamId: string,
     projectId: string,
-    deploymentId: string
-  ): Promise<{ status: 201 }> {
-    const description = `Notion-approved incident rollback to ${deploymentId}`
-    const url =
-      `${API_ORIGIN}/v1/projects/${encodeURIComponent(projectId)}/rollback/${encodeURIComponent(deploymentId)}` +
-      `?teamId=${encodeURIComponent(teamId)}&description=${encodeURIComponent(description)}`
+    productionDomains: string[]
+  ): Promise<ProductionObservation> {
+    return observeProject(
+      (await this.read(
+        `/v9/projects/${encodeURIComponent(projectId)}?teamId=${encodeURIComponent(teamId)}`
+      )) as VercelProject,
+      teamId,
+      projectId,
+      productionDomains
+    )
+  }
+
+  async requestTransition(
+    action: TransitionAction,
+    teamId: string,
+    projectId: string,
+    targetDeploymentId: string
+  ): Promise<void> {
+    const description = `Notion-approved rollback to ${targetDeploymentId}`
+    const path =
+      action === "promote"
+        ? `/v10/projects/${encodeURIComponent(projectId)}/promote/${encodeURIComponent(targetDeploymentId)}?teamId=${encodeURIComponent(teamId)}`
+        : `/v1/projects/${encodeURIComponent(projectId)}/rollback/${encodeURIComponent(targetDeploymentId)}?teamId=${encodeURIComponent(teamId)}&description=${encodeURIComponent(description)}`
     let response: Response
     try {
-      response = await this.fetchImpl(url, {
+      response = await this.fetchImpl(`${API_ORIGIN}${path}`, {
         method: "POST",
         redirect: "manual",
         headers: {
-          Authorization: `Bearer ${this.token}`,
+          Authorization: `Bearer ${this.options.token}`,
           Accept: "application/json",
         },
-        signal: AbortSignal.timeout(this.requestTimeoutMs),
+        signal: AbortSignal.timeout(this.options.requestTimeoutMs ?? 10_000),
       })
     } catch {
       throw new VercelHttpError(
-        "The rollback request outcome is unknown because the connection failed or timed out.",
+        `The ${action} request outcome is unknown because the connection failed or timed out.`,
         { ambiguous: true }
       )
     }
+    const retryAfterMs = retryDelay(response, this.now())
     await disposeBody(response)
-    if (response.status === 201) return { status: 201 }
-    const definite = [400, 401, 402, 403, 422, 429].includes(response.status)
+    const accepted =
+      action === "promote"
+        ? response.status === 201 || response.status === 202
+        : response.status === 201
+    if (accepted) return
+    const definite =
+      action === "promote"
+        ? [400, 401, 403, 429]
+        : [400, 401, 402, 403, 422, 429]
     throw new VercelHttpError(
-      `Vercel rollback returned HTTP ${response.status}; this operation will only reconcile and will never repeat the POST.`,
+      `Vercel ${action} returned HTTP ${response.status}; reconcile before retrying.`,
       {
         status: response.status,
-        retryAfterMs: Math.min(retryDelay(response, this.now()), 300_000),
-        ambiguous: !definite,
+        retryAfterMs: Math.min(retryAfterMs, 300_000),
+        ambiguous: !definite.includes(response.status),
       }
     )
   }
 
-  async getRollingRelease(
-    teamId: string,
-    projectId: string
-  ): Promise<unknown | null> {
-    return this.read(
-      `/v1/projects/${encodeURIComponent(projectId)}/rolling-release?teamId=${encodeURIComponent(teamId)}&state=ACTIVE`
-    )
-  }
-
-  async checkHealth(deploymentUrl: string, paths: string[]): Promise<void> {
-    if (!DEPLOYMENT_HOSTNAME.test(deploymentUrl)) {
-      throw new SafetyError(
+  async checkDeploymentHealth(
+    hostname: string,
+    paths: string[]
+  ): Promise<void> {
+    if (!DEPLOYMENT_HOSTNAME.test(hostname)) {
+      fail(
         "DEPLOYMENT_URL_UNSAFE",
-        "Vercel returned a deployment URL outside the fixed vercel.app/now.sh host boundary."
+        "The deployment hostname is outside vercel.app/now.sh."
       )
     }
-    for (const path of paths) {
-      const url = `https://${deploymentUrl}${path}`
-      let response: Response
-      try {
-        response = await this.fetchImpl(url, {
-          method: "GET",
-          redirect: "manual",
-          headers: this.bypass
-            ? { "x-vercel-protection-bypass": this.bypass }
-            : undefined,
-          signal: AbortSignal.timeout(this.healthTimeoutMs),
+    await this.checkHosts([hostname], paths, true)
+  }
+
+  async checkProductionHealth(
+    domains: string[],
+    paths: string[]
+  ): Promise<void> {
+    assertDomains(domains)
+    await this.checkHosts(domains, paths, false)
+  }
+
+  private async checkHosts(
+    hosts: string[],
+    paths: string[],
+    useProtectionBypass: boolean
+  ): Promise<void> {
+    assertHealthPaths(paths)
+    await Promise.all(
+      hosts.flatMap((host) =>
+        paths.map(async (path) => {
+          let response: Response
+          try {
+            response = await this.fetchImpl(`https://${host}${path}`, {
+              method: "GET",
+              redirect: "manual",
+              headers:
+                useProtectionBypass && this.options.protectionBypassSecret
+                  ? {
+                      "x-vercel-protection-bypass":
+                        this.options.protectionBypassSecret,
+                    }
+                  : undefined,
+              signal: AbortSignal.timeout(
+                this.options.healthTimeoutMs ?? 5_000
+              ),
+            })
+          } catch {
+            fail(
+              "HEALTH_CHECK_FAILED",
+              `Health check ${JSON.stringify(host + path)} timed out or failed.`
+            )
+          }
+          await disposeBody(response)
+          if (response.status < 200 || response.status >= 300) {
+            fail(
+              "HEALTH_CHECK_FAILED",
+              `Health check ${JSON.stringify(host + path)} returned HTTP ${response.status}.`
+            )
+          }
         })
-      } catch {
-        throw new HealthCheckFailure({
-          path,
-          outcome: "transport_error",
-          status: null,
-        })
-      }
-      await disposeBody(response)
-      if (response.status < 200 || response.status >= 300) {
-        throw new HealthCheckFailure({
-          path,
-          outcome: "http_status",
-          status: response.status,
-        })
-      }
-    }
-  }
-}
-
-function deploymentProjectId(deployment: VercelDeployment): string | undefined {
-  return deployment.projectId ?? deployment.project?.id
-}
-
-interface ProductionAliasInventory {
-  productionDomains: string[]
-  domainDeploymentIds: Record<string, string | null>
-  exactPolicyMatch: boolean
-}
-
-export class ProjectAliasSetMismatchError extends SafetyError {
-  readonly productionDomains: string[]
-  readonly domainDeploymentIds: Record<string, string | null>
-
-  constructor(inventory: ProductionAliasInventory) {
-    super(
-      "PROJECT_ALIAS_SET_MISMATCH",
-      "Vercel's complete production alias set does not exactly equal the fixed production-domain policy."
-    )
-    this.name = "ProjectAliasSetMismatchError"
-    this.productionDomains = [...inventory.productionDomains]
-    this.domainDeploymentIds = { ...inventory.domainDeploymentIds }
-  }
-}
-
-function isProductionAlias(alias: VercelProjectAlias): boolean {
-  return (
-    alias.target?.toUpperCase() === "PRODUCTION" ||
-    alias.environment?.toLowerCase() === "production"
-  )
-}
-
-function aliasesForPolicy(
-  project: VercelProject,
-  policy: TargetPolicy
-): ProductionAliasInventory {
-  if (!Array.isArray(project.alias)) {
-    throw new SafetyError(
-      "PROJECT_ALIASES_MISSING",
-      "Vercel did not return the project's configured alias mappings."
-    )
-  }
-  if (project.alias.length > MAX_PROJECT_ALIAS_INVENTORY) {
-    throw new SafetyError(
-      "PROJECT_ALIAS_INVENTORY_TOO_LARGE",
-      `Vercel returned more than the supported ${MAX_PROJECT_ALIAS_INVENTORY} project aliases; no alias values were retained.`
-    )
-  }
-  const productionAliases = project.alias.filter(isProductionAlias)
-  for (const alias of productionAliases) {
-    if (
-      typeof alias.domain !== "string" ||
-      alias.domain !== alias.domain.toLowerCase() ||
-      !HOSTNAME.test(alias.domain)
-    ) {
-      throw new SafetyError(
-        "PROJECT_ALIAS_SET_MALFORMED",
-        "Vercel returned an invalid or unbounded production alias domain."
       )
-    }
-    const deployment = alias.deployment
-    if (
-      deployment !== undefined &&
-      (deployment === null ||
-        typeof deployment !== "object" ||
-        Array.isArray(deployment))
-    ) {
-      throw new SafetyError(
-        "PROJECT_ALIAS_SET_MALFORMED",
-        "Vercel returned an invalid production alias deployment mapping."
-      )
-    }
-    const deploymentId = deployment?.id
-    if (
-      deploymentId !== undefined &&
-      (typeof deploymentId !== "string" || !DEPLOYMENT_ID.test(deploymentId))
-    ) {
-      throw new SafetyError(
-        "PROJECT_ALIAS_SET_MALFORMED",
-        "Vercel returned an invalid or unbounded production alias deployment ID."
-      )
-    }
-  }
-
-  const observedDomains = productionAliases.map((alias) => alias.domain!)
-  const productionDomains = [
-    ...new Set([...policy.productionDomains, ...observedDomains]),
-  ].sort()
-  const domainDeploymentIds: Record<string, string | null> = {}
-  let noDuplicates = true
-  for (const domain of productionDomains) {
-    const matches = productionAliases.filter((alias) => alias.domain === domain)
-    if (matches.length !== 1) noDuplicates = false
-    domainDeploymentIds[domain] =
-      matches.length === 1 ? (matches[0].deployment?.id ?? null) : null
-  }
-
-  const configured = [...policy.productionDomains].sort()
-  const observed = [...new Set(observedDomains)].sort()
-  const exactPolicyMatch =
-    noDuplicates &&
-    configured.length === observed.length &&
-    configured.every((domain, index) => domain === observed[index])
-  return {
-    productionDomains,
-    domainDeploymentIds,
-    exactPolicyMatch,
-  }
-}
-
-function assertProjectIdentity(
-  project: VercelProject,
-  teamId: string,
-  projectId: string
-): void {
-  if (project.id !== projectId || project.accountId !== teamId) {
-    throw new SafetyError(
-      "PROJECT_IDENTITY_MISMATCH",
-      "Vercel returned a project outside the exact approved team/project identity."
     )
   }
 }
 
-function assertDeploymentIdentity(
-  deployment: VercelDeployment,
+function normalizeDeployment(
+  raw: RawDeployment,
   teamId: string,
   projectId: string,
   deploymentId: string
-): void {
+): VercelDeployment {
   if (
-    deployment.id !== deploymentId ||
-    deployment.teamId !== teamId ||
-    deploymentProjectId(deployment) !== projectId
+    raw.id !== deploymentId ||
+    raw.teamId !== teamId ||
+    (raw.projectId ?? raw.project?.id) !== projectId
   ) {
-    throw new SafetyError(
+    fail(
       "DEPLOYMENT_IDENTITY_MISMATCH",
-      "Vercel returned a deployment outside the exact approved team/project identity."
+      "Vercel returned a deployment outside the configured team/project identity."
     )
   }
-  if (deployment.url === undefined) {
-    throw new SafetyError(
-      "DEPLOYMENT_URL_MISSING",
-      "Vercel returned no canonical deployment URL for verification."
-    )
-  }
-  if (!DEPLOYMENT_HOSTNAME.test(deployment.url)) {
-    throw new SafetyError(
+  if (!raw.url || !DEPLOYMENT_HOSTNAME.test(raw.url)) {
+    fail(
       "DEPLOYMENT_URL_UNSAFE",
-      "Vercel returned a deployment URL outside the canonical vercel.app/now.sh hostname boundary."
+      "Vercel returned no safe canonical deployment hostname."
     )
   }
-}
-
-export function verifyStagedDeployment(options: {
-  project: VercelProject
-  deployment: VercelDeployment
-  policy: TargetPolicy
-  teamId: string
-  projectId: string
-  deploymentId: string
-  expectedGitSha: string
-  expectedGitBranch: string
-  expectedCurrentDeploymentId: string
-}): Record<string, string | null> {
-  const {
-    project,
-    deployment,
-    policy,
-    teamId,
-    projectId,
-    deploymentId,
-    expectedGitSha,
-    expectedGitBranch,
-    expectedCurrentDeploymentId,
-  } = options
-  assertProjectIdentity(project, teamId, projectId)
-  assertDeploymentIdentity(deployment, teamId, projectId, deploymentId)
-  if (deployment.target !== "production") {
-    throw new SafetyError(
-      "DEPLOYMENT_NOT_PRODUCTION",
-      "The exact deployment target must be production."
-    )
-  }
-  if (
-    deployment.readyState !== "READY" ||
-    deployment.readySubstate !== "STAGED"
-  ) {
-    throw new SafetyError(
-      "DEPLOYMENT_NOT_STAGED",
-      "The exact deployment must be READY with readySubstate STAGED."
-    )
-  }
-  if (
-    deployment.gitSource?.sha !== expectedGitSha ||
-    deployment.gitSource?.ref !== expectedGitBranch
-  ) {
-    throw new SafetyError(
+  if (!raw.gitSource?.sha || !GIT_SHA.test(raw.gitSource.sha)) {
+    fail(
       "GIT_IDENTITY_MISMATCH",
-      "The deployment Git SHA or branch differs from the approved identity."
+      "Vercel returned no valid deployment Git SHA."
     )
   }
-  const inventory = aliasesForPolicy(project, policy)
-  if (!inventory.exactPolicyMatch) {
-    throw new ProjectAliasSetMismatchError(inventory)
-  }
-  const mappings = inventory.domainDeploymentIds
-  if (
-    Object.values(mappings).some(
-      (current) => current !== expectedCurrentDeploymentId
-    )
-  ) {
-    throw new SafetyError(
-      "EXPECTED_CURRENT_MISMATCH",
-      "At least one production domain no longer points to the approved current deployment."
-    )
-  }
-  return mappings
-}
-
-export function verifyPromotedDeploymentIdentity(options: {
-  deployment: VercelDeployment
-  teamId: string
-  projectId: string
-  deploymentId: string
-  expectedGitSha: string
-  expectedGitBranch: string
-}): void {
-  const {
-    deployment,
-    teamId,
+  return {
+    id: deploymentId,
     projectId,
-    deploymentId,
-    expectedGitSha,
-    expectedGitBranch,
-  } = options
-  assertDeploymentIdentity(deployment, teamId, projectId, deploymentId)
-  if (
-    deployment.target !== "production" ||
-    deployment.readyState !== "READY" ||
-    deployment.readySubstate !== "PROMOTED"
-  ) {
-    throw new SafetyError(
-      "DEPLOYMENT_NOT_PROMOTED",
-      "The exact deployment must be a READY/PROMOTED production deployment."
-    )
-  }
-  if (
-    deployment.gitSource?.sha !== expectedGitSha ||
-    deployment.gitSource?.ref !== expectedGitBranch
-  ) {
-    throw new SafetyError(
-      "GIT_IDENTITY_MISMATCH",
-      "The promoted deployment Git SHA or branch differs from the approved identity."
-    )
-  }
-}
-
-export function verifyRollbackTarget(options: {
-  project: VercelProject
-  deployment: VercelDeployment
-  teamId: string
-  projectId: string
-  deploymentId: string
-  expectedGitSha: string
-  expectedGitBranch: string
-}): void {
-  const {
-    project,
-    deployment,
     teamId,
-    projectId,
-    deploymentId,
-    expectedGitSha,
-    expectedGitBranch,
-  } = options
-  assertProjectIdentity(project, teamId, projectId)
-  assertDeploymentIdentity(deployment, teamId, projectId, deploymentId)
-  if (deployment.target !== "production" || deployment.readyState !== "READY") {
-    throw new SafetyError(
-      "ROLLBACK_TARGET_INELIGIBLE",
-      "The exact rollback deployment must still be a READY production deployment."
-    )
-  }
-  if (
-    !GIT_SHA.test(expectedGitSha) ||
-    !expectedGitBranch ||
-    expectedGitBranch.length > 256 ||
-    expectedGitBranch.trim() !== expectedGitBranch ||
-    /[\u0000-\u001f\u007f]/.test(expectedGitBranch)
-  ) {
-    throw new SafetyError(
-      "ROLLBACK_GIT_IDENTITY_INVALID",
-      "The canonical rollback Git identity is absent or malformed."
-    )
-  }
-  if (
-    deployment.gitSource?.sha !== expectedGitSha ||
-    deployment.gitSource?.ref !== expectedGitBranch
-  ) {
-    throw new SafetyError(
-      "ROLLBACK_GIT_IDENTITY_MISMATCH",
-      "The rollback deployment Git identity differs from the canonical promotion incident."
-    )
+    url: raw.url,
+    readyState: raw.readyState ?? "UNKNOWN",
+    gitSha: raw.gitSource.sha,
   }
 }
 
-function findDefinition(
+function verifyCheckRuns(
   definitions: VercelCheckDefinition[],
-  check: DeploymentCheckPolicy,
-  projectId: string
-): VercelCheckDefinition {
-  const matches = definitions.filter(
-    (definition) =>
-      definition.id === check.id &&
-      definition.deletedAt == null &&
-      (definition.projectId === undefined || definition.projectId === projectId)
-  )
-  if (matches.length !== 1) {
-    throw new SafetyError(
-      "CHECK_DEFINITION_MISMATCH",
-      `Expected exactly one active Deployment Check definition for stable ID ${check.id}.`
+  runs: VercelCheckRun[],
+  requiredCheckIds: string[],
+  projectId: string,
+  deploymentId: string
+): void {
+  for (const checkId of requiredCheckIds) {
+    const matchingDefinitions = definitions.filter(
+      (definition) =>
+        definition.id === checkId &&
+        definition.deletedAt == null &&
+        (definition.projectId === undefined ||
+          definition.projectId === projectId)
     )
-  }
-  const definition = matches[0]
-  if (check.name !== null && definition.name !== check.name) {
-    throw new SafetyError(
-      "CHECK_DEFINITION_MISMATCH",
-      `Deployment Check ${check.id} was renamed from the configured name.`
-    )
-  }
-  return definition
-}
-
-export function verifyDeploymentChecks(options: {
-  definitions: VercelCheckDefinition[]
-  runs: VercelCheckRun[]
-  policy: TargetPolicy
-  deployment: VercelDeployment
-  projectId: string
-  now: Date
-  maxAgeMs: number
-}): void {
-  const { definitions, runs, policy, deployment, projectId, now, maxAgeMs } =
-    options
-  if (
-    deployment.checksState !== "completed" ||
-    deployment.checksConclusion !== "succeeded"
-  ) {
-    throw new SafetyError(
-      "DEPLOYMENT_CHECKS_INCOMPLETE",
-      "The deployment aggregate check state must be completed/succeeded."
-    )
-  }
-  const earliest = deployment.createdAt ?? deployment.readyAt
-  if (earliest === undefined) {
-    throw new SafetyError(
-      "DEPLOYMENT_CHECKS_INCOMPLETE",
-      "The deployment has no timestamp for check-run freshness validation."
-    )
-  }
-
-  for (const policyCheck of policy.deploymentChecks) {
-    const definition = findDefinition(definitions, policyCheck, projectId)
-    const candidates = runs
+    const latest = runs
       .filter(
         (run) =>
-          run.checkId === definition.id &&
-          run.deploymentId === deployment.id &&
+          run.checkId === checkId &&
+          run.deploymentId === deploymentId &&
           run.projectId === projectId
       )
-      .sort((left, right) => (right.completedAt ?? 0) - (left.completedAt ?? 0))
-    const run = candidates[0]
-    if (!run) {
-      throw new SafetyError(
-        "DEPLOYMENT_CHECK_MISSING",
-        `Deployment Check ${definition.id} has no run for this deployment.`
-      )
-    }
+      .sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0))[0]
     if (
-      run.name !== definition.name ||
-      run.status !== "completed" ||
-      run.conclusion !== "succeeded" ||
-      run.completedAt === undefined ||
-      run.completedAt < earliest ||
-      run.completedAt < now.getTime() - maxAgeMs ||
-      run.completedAt > now.getTime() + 300_000
+      matchingDefinitions.length !== 1 ||
+      typeof latest?.completedAt !== "number" ||
+      latest?.status !== "completed" ||
+      latest.conclusion !== "succeeded"
     ) {
-      throw new SafetyError(
+      fail(
         "DEPLOYMENT_CHECK_FAILED",
-        `Deployment Check ${definition.id} is not a fresh completed/succeeded run.`
+        `Required Deployment Check ${checkId} is missing or unsuccessful.`
       )
     }
   }
 }
 
-export async function observePromotion(
-  vercel: VercelClientLike,
-  policy: TargetPolicy,
-  expectedCurrentDeploymentId: string,
-  deploymentId: string
-): Promise<PromotionObservation> {
-  const [project, deployment] = await Promise.all([
-    vercel.getProject(policy.teamId, policy.projectId),
-    vercel.getDeployment(policy.teamId, deploymentId),
-  ])
-  assertProjectIdentity(project, policy.teamId, policy.projectId)
-  assertDeploymentIdentity(
-    deployment,
-    policy.teamId,
-    policy.projectId,
-    deploymentId
-  )
-  const inventory = aliasesForPolicy(project, policy)
-  const { domainDeploymentIds } = inventory
-  const ids = Object.values(domainDeploymentIds)
-  const unique = new Set(ids)
-  const allTarget = ids.every((id) => id === deploymentId)
-  const allExpected = ids.every((id) => id === expectedCurrentDeploymentId)
-  let classification: PromotionObservation["classification"]
-  if (!inventory.exactPolicyMatch) classification = "partial"
-  else if (allTarget) classification = "target_current"
-  else if (allExpected) classification = "expected_current"
-  else if (unique.size === 1 && ids[0] !== null)
-    classification = "other_current"
-  else classification = "partial"
-  return {
-    project,
-    deployment,
-    productionDomains: inventory.productionDomains,
-    domainDeploymentIds,
-    aliasSetExact: inventory.exactPolicyMatch,
-    currentDeploymentId: unique.size === 1 ? ids[0] : null,
-    classification,
+function assertRollingReleaseWrapper(value: unknown, state: string): void {
+  const wrapper = value as Record<string, unknown> | null
+  if (
+    !wrapper ||
+    Array.isArray(wrapper) ||
+    Object.keys(wrapper).length !== 1 ||
+    !Object.hasOwn(wrapper, "rollingRelease")
+  ) {
+    fail(
+      "ROLLING_RELEASE_RESPONSE_INVALID",
+      "Vercel returned an invalid rolling-release wrapper."
+    )
+  }
+  if (wrapper.rollingRelease !== null) {
+    fail(
+      state === "configured"
+        ? "ROLLING_RELEASE_CONFIGURED"
+        : "ROLLING_RELEASE_ACTIVE",
+      `A rolling release is ${state} for this project; the transition is disabled.`
+    )
   }
 }
 
-export function verifyPromotedObservation(
-  observation: PromotionObservation
-): void {
-  if (
-    observation.classification !== "target_current" ||
-    observation.deployment.readyState !== "READY" ||
-    observation.deployment.readySubstate !== "PROMOTED"
-  ) {
-    throw new SafetyError(
-      "PROMOTION_NOT_CONVERGED",
-      "Production aliases and the deployment did not converge to READY/PROMOTED."
+function observeProject(
+  project: VercelProject,
+  teamId: string,
+  projectId: string,
+  productionDomains: string[]
+): ProductionObservation {
+  if (project.id !== projectId || project.accountId !== teamId) {
+    fail(
+      "PROJECT_IDENTITY_MISMATCH",
+      "Vercel returned a project outside the configured team/project identity."
     )
+  }
+  if (!Array.isArray(project.alias)) {
+    fail("PROJECT_ALIASES_MISSING", "Vercel did not return project aliases.")
+  }
+  if (project.alias.length > MAX_PROJECT_ALIAS_INVENTORY) {
+    fail(
+      "PROJECT_ALIAS_INVENTORY_TOO_LARGE",
+      `Vercel returned more than ${MAX_PROJECT_ALIAS_INVENTORY} aliases.`
+    )
+  }
+  assertDomains(productionDomains)
+  const configured = [...productionDomains].sort()
+  const aliases = project.alias.filter(
+    (alias) =>
+      alias.target?.toUpperCase() === "PRODUCTION" ||
+      alias.environment?.toLowerCase() === "production"
+  )
+  const domainDeploymentIds: Record<string, string | null> = {}
+  for (const alias of aliases) {
+    const domain = alias.domain
+    const deploymentId = alias.deployment?.id
+    if (
+      typeof domain !== "string" ||
+      domain !== domain.toLowerCase() ||
+      !HOSTNAME.test(domain) ||
+      typeof deploymentId !== "string" ||
+      !DEPLOYMENT_ID.test(deploymentId)
+    ) {
+      fail(
+        "PROJECT_ALIAS_SET_MALFORMED",
+        "Vercel returned an invalid production alias mapping."
+      )
+    }
+    if (Object.hasOwn(domainDeploymentIds, domain)) {
+      fail("PROJECT_ALIAS_SET_MISMATCH", "Vercel returned duplicate aliases.")
+    }
+    domainDeploymentIds[domain] = deploymentId
+  }
+  const observed = Object.keys(domainDeploymentIds).sort()
+  if (
+    observed.length !== configured.length ||
+    configured.some((domain, index) => domain !== observed[index])
+  ) {
+    fail(
+      "PROJECT_ALIAS_SET_MISMATCH",
+      "Vercel production aliases do not exactly match configured domains."
+    )
+  }
+  const values = Object.values(domainDeploymentIds)
+  return {
+    domainDeploymentIds,
+    exactDomainSet: true,
+    currentDeploymentId: new Set(values).size === 1 ? values[0] : null,
+  }
+}
+
+function assertDomains(domains: string[]): void {
+  if (
+    domains.length < 1 ||
+    domains.length > MAX_PRODUCTION_HEALTH_DOMAINS ||
+    new Set(domains).size !== domains.length ||
+    domains.some(
+      (domain) => domain !== domain.toLowerCase() || !HOSTNAME.test(domain)
+    )
+  ) {
+    fail("PRODUCTION_DOMAINS_INVALID", "Production domains are invalid.")
+  }
+}
+
+function assertHealthPaths(paths: string[]): void {
+  if (
+    paths.length < 1 ||
+    paths.length > 3 ||
+    paths.some(
+      (path) =>
+        path.length > 256 ||
+        !path.startsWith("/") ||
+        path.startsWith("//") ||
+        path.includes("?") ||
+        path.includes("#") ||
+        path.includes("\\") ||
+        /[\u0000-\u001f]/.test(path)
+    )
+  ) {
+    fail("HEALTH_PATHS_INVALID", "Health paths are invalid or unbounded.")
   }
 }

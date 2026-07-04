@@ -482,14 +482,14 @@
     },
     {
       "id": "vercel-promote-approved-deployment",
-      "title": "Vercel approved promotion and incident rollback",
-      "summary": "Use promoteApprovedDeployment for one exact Notion-approved staged Vercel release, or rollbackApprovedDeployment to restore its exact prior deployment only from a canonical failed-health incident and separate fresh approval, with durable one-POST fencing and resumable receipts.",
+      "title": "Vercel release approvals",
+      "summary": "Promote or roll back one Vercel project from a Notion-approved deployment page.",
       "path": "workers/vercel-promote-approved-deployment",
       "kind": "worker-tool",
       "status": "ready",
       "language": "typescript",
       "runtime": "node",
-      "integrations": ["notion-workers", "vercel", "redis"],
+      "integrations": ["notion-workers", "vercel"],
       "entrypoints": ["src/index.ts"],
       "commands": {
         "install": "npm install",
