@@ -24,14 +24,17 @@ ntn workers deploy --name todoist-completed-work-sync
 ```
 
 The first completion sync imports the previous 365 days. To choose an earlier
-fixed boundary, set it before enabling scheduled reads with the token:
+fixed boundary, set it before enabling scheduled reads. `TODOIST_USER_ID` is
+the exact `id` returned by Todoist's `GET /api/v1/user` endpoint:
 
 ```sh
 ntn workers env set TODOIST_HISTORY_START=2024-01-01
+ntn workers env set TODOIST_USER_ID=your-user-id
 ntn workers env set TODOIST_API_TOKEN=your-token
 ```
 
-If the default 365-day boundary is right, set only `TODOIST_API_TOKEN`.
+If the default 365-day boundary is right, set only `TODOIST_USER_ID` and
+`TODOIST_API_TOKEN`.
 
 Preview the output, then populate Projects first so task relations resolve
 immediately:
@@ -85,16 +88,17 @@ content.
   inferring deletion from absence.
 - **Relations use stable IDs.** Completed rows relate to Projects by Todoist
   project ID and also retain the raw ID if a relation cannot resolve.
-- **Pagination is replay-safe.** The Worker reads fixed 30-day completion
-  windows, follows Todoist cursors, and advances its timestamp checkpoint only
-  after every page in every window succeeds. Each scheduled run overlaps the
-  previous day; deterministic keys make that replay idempotent.
-- **Initialized capabilities detect account changes.** Each capability pins the
-  authenticated Todoist user ID in its own state and rejects a later token for
-  another account. A new or reset capability has no prior binding, so never
-  repoint an existing deployment; use a separate deployment and databases.
+- **Pagination is defensive.** The Worker reads fixed completion-date windows,
+  restarts expired cursors, and replays each paginated window once before
+  advancing its timestamp checkpoint. A daily replay from the pinned history
+  boundary recovers late or backdated work.
+- **Every capability enforces one account.** `TODOIST_USER_ID` is checked before
+  source pages are read, including after state resets. Use a separate deployment
+  and databases for another account.
 - **Dates are explicit.** Completion times are normalized to UTC. Floating due
-  datetimes use the authenticated user's Todoist timezone.
+  datetimes use the authenticated user's Todoist timezone. Days to Complete is
+  empty for recurring tasks because Todoist's creation time describes the
+  recurring series, not an individual occurrence.
 
 The API client paces requests, honors Todoist retry timing, applies timeouts and
 response-size limits, and bounds cursor state. A bad or partial API response
@@ -117,11 +121,14 @@ ntn workers sync trigger completedWorkBackfill
 
 The Worker divides long ranges into 30-day windows automatically. Existing
 completion rows are refreshed without deleting user-added properties or notes.
+If Todoist rejects or repeats two consecutive cursors, the run stops without
+advancing its window; trigger the manual backfill again to resume that window.
 
 ### Credentials and privacy
 
 | Variable                | Required | Default      | Purpose                                                    |
 | ----------------------- | -------- | ------------ | ---------------------------------------------------------- |
+| `TODOIST_USER_ID`       | yes      | none         | Immutable account ID checked by every capability           |
 | `TODOIST_API_TOKEN`     | yes      | none         | Personal Todoist bearer token                              |
 | `TODOIST_HISTORY_START` | no       | 365 days ago | Earliest completion date or timezone-qualified ISO instant |
 
@@ -153,8 +160,9 @@ High-value extensions include:
    create another database and capability for current tasks rather than mixing
    two different retention models.
 
-Preserve the account binding, completion-occurrence primary key, pinned windows,
-timestamp checkpoint, and non-destructive history when adapting the data model.
+Preserve the account binding, completion-occurrence primary key, replayed
+windows, daily reconciliation, and non-destructive history when adapting the
+data model.
 
 ### Project structure
 

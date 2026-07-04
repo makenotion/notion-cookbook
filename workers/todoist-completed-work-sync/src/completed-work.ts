@@ -77,11 +77,22 @@ function normalizedCompletionTimestamp(task: TodoistCompletedTask): string {
   return new Date(completedAt).toISOString()
 }
 
+function completionIdentityTimestamp(task: TodoistCompletedTask): string {
+  const normalized = normalizedCompletionTimestamp(task)
+  const fraction = task.completedAt
+    ?.trim()
+    .match(/\.(\d+)(?:Z|[+-]\d{2}:\d{2})$/iu)?.[1]
+  const subMilliseconds = fraction?.slice(3).replace(/0+$/u, "") ?? ""
+  return subMilliseconds
+    ? normalized.replace(/Z$/u, `${subMilliseconds}Z`)
+    : normalized
+}
+
 /** Stable identity for one completion occurrence, including recurring work. */
 export function completionId(task: TodoistCompletedTask): string {
   const taskId = task.id.trim()
   if (!taskId) throw new Error("Todoist completed task has an empty task ID.")
-  return `todoist:${taskId}:completed:${normalizedCompletionTimestamp(task)}`
+  return `todoist:${taskId}:completed:${completionIdentityTimestamp(task)}`
 }
 
 export function completedTaskToChange(
@@ -101,7 +112,10 @@ export function completedTaskToChange(
   const labels = optionLabels("labels", task.labels)
   const priority = PRIORITY_LABELS[task.priority]
   const plannedMinutes = durationMinutes(task.duration)
-  const daysToComplete = elapsedDays(task.addedAt, completedAtUtc)
+  const recurring = task.due?.isRecurring ?? false
+  const daysToComplete = recurring
+    ? null
+    : elapsedDays(task.addedAt, completedAtUtc)
 
   return {
     type: "upsert",
@@ -130,7 +144,7 @@ export function completedTaskToChange(
       "Due Text": task.due?.string
         ? Builder.richText(boundedText(task.due.string) ?? "")
         : [],
-      Recurring: Builder.checkbox(task.due?.isRecurring ?? false),
+      Recurring: Builder.checkbox(recurring),
       Deadline: dateProperty(task.deadline, `task ${task.id} deadline`),
       "Planned Duration (min)":
         plannedMinutes !== null ? Builder.number(plannedMinutes) : [],

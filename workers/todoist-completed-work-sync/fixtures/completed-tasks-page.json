@@ -81,7 +81,7 @@
       "responsible_uid": "user-1",
       "labels": ["routine"],
       "deadline": null,
-      "duration": { "amount": 1, "unit": "hour" },
+      "duration": { "amount": 1, "unit": "day" },
       "is_collapsed": false,
       "checked": false,
       "is_deleted": false,

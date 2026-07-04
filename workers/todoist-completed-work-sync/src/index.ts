@@ -19,16 +19,27 @@ import {
   projectToChange,
 } from "./projects.js"
 import {
+  assertExpectedTodoistUserId,
+  CursorPaginationError,
   currentCompletedWindow,
   currentProjectsSyncState,
+  getExpectedTodoistUserId,
   getTodoistSyncConfig,
   nextCompletedSyncState,
   nextProjectsSyncState,
+  recoverCompletedCursor,
+  recoverProjectsCursor,
   type CompletedSyncState,
   type ProjectsSyncState,
   type TodoistSyncConfig,
 } from "./sync-state.js"
-import { createTodoistClient, type TodoistClient } from "./todoist.js"
+import {
+  createTodoistClient,
+  InvalidCursorError,
+  type TodoistClient,
+  type TodoistCompletedTasksPage,
+  type TodoistProjectsPage,
+} from "./todoist.js"
 
 const worker = new Worker()
 
@@ -41,31 +52,60 @@ const pacer = worker.pacer("todoist", {
 const todoist = createTodoistClient({ beforeRequest: () => pacer.wait() })
 
 type ConfigProvider = () => TodoistSyncConfig
+type ExpectedUserProvider = () => string
 
 export async function executeCompletedWork(
   previousState: CompletedSyncState | undefined,
   client: TodoistClient = todoist,
   readConfig: ConfigProvider = () => getTodoistSyncConfig(),
-  now: Date | string = new Date()
+  now: Date | string = new Date(),
+  readExpectedUserId: ExpectedUserProvider = () => getExpectedTodoistUserId()
 ) {
   const authenticatedUser = await client.fetchAuthenticatedUser()
+  assertExpectedTodoistUserId(authenticatedUser.id, readExpectedUserId())
   const state = currentCompletedWindow(
     previousState,
     readConfig(),
     authenticatedUser.id,
     now
   )
-  const page = await client.fetchCompletedTasksPage({
-    since: state.windowSince,
-    until: state.windowUntil,
-    cursor: state.cursor,
-  })
-  const changes = dedupeCompletedTasks(page.resources)
+  let page: TodoistCompletedTasksPage
+  try {
+    page = await client.fetchCompletedTasksPage({
+      since: state.windowSince,
+      until: state.windowUntil,
+      cursor: state.cursor,
+    })
+  } catch (error) {
+    if (error instanceof InvalidCursorError && state.cursor) {
+      const recovery = recoverCompletedCursor(state)
+      return {
+        changes: [],
+        hasMore: recovery.retryImmediately,
+        nextState: recovery.nextState,
+      }
+    }
+    throw error
+  }
+  const changes = dedupeCompletedTasks(
     // Todoist's endpoint does not promise deletion or reopen tombstones. Keep
     // the journal durable instead of translating a tombstone into data loss.
-    .filter((task) => !task.isDeleted)
-    .map((task) => completedTaskToChange(task, authenticatedUser.timeZone))
-  const nextState = nextCompletedSyncState(state, page.nextCursor)
+    page.resources.filter((task) => !task.isDeleted)
+  ).map((task) => completedTaskToChange(task, authenticatedUser.timeZone))
+  let nextState: CompletedSyncState
+  try {
+    nextState = nextCompletedSyncState(state, page.nextCursor)
+  } catch (error) {
+    if (error instanceof CursorPaginationError && state.cursor) {
+      const recovery = recoverCompletedCursor(state)
+      return {
+        changes: [],
+        hasMore: recovery.retryImmediately,
+        nextState: recovery.nextState,
+      }
+    }
+    throw error
+  }
 
   return nextState.phase === "window"
     ? { changes, hasMore: true as const, nextState }
@@ -74,15 +114,43 @@ export async function executeCompletedWork(
 
 export async function executeProjects(
   previousState: ProjectsSyncState | undefined,
-  client: TodoistClient = todoist
+  client: TodoistClient = todoist,
+  readExpectedUserId: ExpectedUserProvider = () => getExpectedTodoistUserId()
 ) {
   const authenticatedUser = await client.fetchAuthenticatedUser()
+  assertExpectedTodoistUserId(authenticatedUser.id, readExpectedUserId())
   const state = currentProjectsSyncState(previousState, authenticatedUser.id)
-  const page = await client.fetchProjectsPage(state.phase, state.cursor)
+  let page: TodoistProjectsPage
+  try {
+    page = await client.fetchProjectsPage(state.phase, state.cursor)
+  } catch (error) {
+    if (error instanceof InvalidCursorError && state.cursor) {
+      const recovery = recoverProjectsCursor(state)
+      return {
+        changes: [],
+        hasMore: recovery.retryImmediately,
+        nextState: recovery.nextState,
+      }
+    }
+    throw error
+  }
   const changes = page.resources
     .filter((project) => !project.isDeleted)
     .map((project) => projectToChange(project, state.phase))
-  const nextState = nextProjectsSyncState(state, page.nextCursor)
+  let nextState: ProjectsSyncState
+  try {
+    nextState = nextProjectsSyncState(state, page.nextCursor)
+  } catch (error) {
+    if (error instanceof CursorPaginationError && state.cursor) {
+      const recovery = recoverProjectsCursor(state)
+      return {
+        changes: [],
+        hasMore: recovery.retryImmediately,
+        nextState: recovery.nextState,
+      }
+    }
+    throw error
+  }
 
   return nextState.phase === "checkpoint"
     ? { changes, hasMore: false as const, nextState }

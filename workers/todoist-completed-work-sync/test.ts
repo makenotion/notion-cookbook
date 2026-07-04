@@ -23,10 +23,13 @@ import worker, { executeCompletedWork, executeProjects } from "./src/index.js"
 import { projectSchema, projectToChange } from "./src/projects.js"
 import {
   COMPLETED_OVERLAP_MS,
+  COMPLETED_RECONCILIATION_MS,
   COMPLETED_WINDOW_MS,
   CONSISTENCY_BUFFER_MS,
+  assertExpectedTodoistUserId,
   currentCompletedWindow,
   currentProjectsSyncState,
+  getExpectedTodoistUserId,
   getTodoistSyncConfig,
   MAX_CURSOR_PAGES,
   MAX_RECENT_CURSORS,
@@ -38,6 +41,7 @@ import {
 } from "./src/sync-state.js"
 import {
   createTodoistClient,
+  InvalidCursorError,
   MAX_CURSOR_CHARACTERS,
   MAX_ERROR_RESPONSE_BYTES,
   MAX_SUCCESS_RESPONSE_BYTES,
@@ -52,6 +56,7 @@ const AUTHENTICATED_USER = {
   id: "user-1",
   timeZone: "America/New_York",
 }
+const EXPECTED_USER = () => AUTHENTICATED_USER.id
 
 function fixture(name: string): unknown {
   return JSON.parse(readFileSync(resolve("fixtures", name), "utf8")) as unknown
@@ -192,9 +197,26 @@ test("history configuration is explicit, timezone-safe, and deterministic", () =
       ),
     /include Z or a UTC offset/
   )
+
+  assert.equal(
+    getExpectedTodoistUserId({ TODOIST_USER_ID: " user-1 " }),
+    AUTHENTICATED_USER.id
+  )
+  assert.throws(() => getExpectedTodoistUserId({}), /not set/)
+  assert.throws(
+    () => getExpectedTodoistUserId({ TODOIST_USER_ID: "x".repeat(257) }),
+    /oversized/
+  )
+  assert.doesNotThrow(() =>
+    assertExpectedTodoistUserId(AUTHENTICATED_USER.id, AUTHENTICATED_USER.id)
+  )
+  assert.throws(
+    () => assertExpectedTodoistUserId(AUTHENTICATED_USER.id, "other-user"),
+    /does not match/
+  )
 })
 
-test("completion windows stay bounded and checkpoint only after the final page", () => {
+test("completion windows replay paginated ranges before checkpointing", () => {
   const config = { historyStart: "2026-01-01T00:00:00Z" }
   const now = new Date("2026-04-15T00:00:00Z")
   let state: CompletedSyncState = currentCompletedWindow(
@@ -213,16 +235,26 @@ test("completion windows stay bounded and checkpoint only after the final page",
     Date.parse(state.windowUntil) - Date.parse(state.windowSince) <=
       COMPLETED_WINDOW_MS
   )
+  assert.equal(state.reconciliation, true)
+  assert.equal(state.historyStart, "2026-01-01T00:00:00.000Z")
 
+  const originalWindow = {
+    since: state.windowSince,
+    until: state.windowUntil,
+  }
   state = nextCompletedSyncState(state, "cursor.page-2")
   assert.equal(state.phase, "window")
   if (state.phase !== "window") return
   assert.equal(state.cursor, "cursor.page-2")
-  const cursorWindow = state
-  assert.throws(
-    () => nextCompletedSyncState(cursorWindow, "cursor.page-2"),
-    /repeated a cursor/
-  )
+  assert.equal(state.pass, "primary")
+
+  state = nextCompletedSyncState(state, undefined)
+  assert.equal(state.phase, "window")
+  if (state.phase !== "window") return
+  assert.equal(state.pass, "replay")
+  assert.equal(state.cursor, undefined)
+  assert.equal(state.windowSince, originalWindow.since)
+  assert.equal(state.windowUntil, originalWindow.until)
 
   state = nextCompletedSyncState(state, undefined)
   while (state.phase === "window") {
@@ -237,6 +269,10 @@ test("completion windows stay bounded and checkpoint only after the final page",
     Date.parse(state.since),
     now.getTime() - CONSISTENCY_BUFFER_MS - COMPLETED_OVERLAP_MS
   )
+  assert.equal(
+    state.lastReconciledAt,
+    new Date(now.getTime() - CONSISTENCY_BUFFER_MS).toISOString()
+  )
   const resumed = currentCompletedWindow(
     state,
     config,
@@ -244,6 +280,23 @@ test("completion windows stay bounded and checkpoint only after the final page",
     "2026-04-15T01:00:00Z"
   )
   assert.equal(resumed.windowSince, state.since)
+  assert.equal(resumed.reconciliation, false)
+
+  const reconciled = currentCompletedWindow(
+    state,
+    config,
+    AUTHENTICATED_USER.id,
+    new Date(
+      Date.parse(state.lastReconciledAt!) +
+        COMPLETED_RECONCILIATION_MS +
+        CONSISTENCY_BUFFER_MS
+    )
+  )
+  assert.equal(
+    reconciled.windowSince,
+    new Date(config.historyStart).toISOString()
+  )
+  assert.equal(reconciled.reconciliation, true)
   assert.throws(
     () =>
       currentCompletedWindow(
@@ -256,32 +309,68 @@ test("completion windows stay bounded and checkpoint only after the final page",
   )
 })
 
-test("sync state pins the Todoist account and bounds cursor history", () => {
+test("sync state pins history and bounds cursor pagination", () => {
   const config = { historyStart: "2026-07-01T00:00:00Z" }
-  let state = currentCompletedWindow(
+  const state = currentCompletedWindow(
     undefined,
     config,
     AUTHENTICATED_USER.id,
     "2026-07-03T00:00:00Z"
   )
+  const resumed = currentCompletedWindow(
+    {
+      ...state,
+      cursor: "expired-cursor",
+      recentCursors: ["expired-cursor"],
+      pageCount: 1,
+    },
+    config,
+    AUTHENTICATED_USER.id,
+    "2026-07-04T00:00:00Z"
+  )
+  assert.equal(resumed.cursor, "expired-cursor")
+  assert.equal(resumed.windowSince, state.windowSince)
+  assert.equal(resumed.windowUntil, state.windowUntil)
+  assert.equal(resumed.historyStart, "2026-07-01T00:00:00.000Z")
+
+  const legacyTail = currentCompletedWindow(
+    {
+      phase: "window",
+      userId: AUTHENTICATED_USER.id,
+      cycleSince: "2026-07-02T00:00:00Z",
+      cycleUntil: "2026-07-03T00:00:00Z",
+      windowSince: "2026-07-02T00:00:00Z",
+      windowUntil: "2026-07-03T00:00:00Z",
+    } as CompletedSyncState,
+    { historyStart: "2025-07-01T00:00:00Z" },
+    AUTHENTICATED_USER.id,
+    "2026-07-04T00:00:00Z"
+  )
+  assert.equal(legacyTail.historyStart, "2025-07-01T00:00:00.000Z")
+
+  let projectState = currentProjectsSyncState(undefined, AUTHENTICATED_USER.id)
   for (let index = 1; index <= MAX_RECENT_CURSORS + 2; index++) {
-    const next = nextCompletedSyncState(state, `cursor-${index}`)
-    assert.equal(next.phase, "window")
-    if (next.phase !== "window") return
-    state = next
+    const next = nextProjectsSyncState(projectState, `cursor-${index}`)
+    assert.notEqual(next.phase, "checkpoint")
+    if (next.phase === "checkpoint") return
+    projectState = next
   }
-  assert.equal(state.recentCursors?.length, MAX_RECENT_CURSORS)
-  assert.equal(state.pageCount, MAX_RECENT_CURSORS + 2)
+  assert.equal(projectState.recentCursors?.length, MAX_RECENT_CURSORS)
+  assert.equal(projectState.pageCount, MAX_RECENT_CURSORS + 2)
 
   assert.throws(
-    () => nextCompletedSyncState(state, "x".repeat(MAX_CURSOR_CHARACTERS + 1)),
+    () =>
+      nextProjectsSyncState(
+        projectState,
+        "x".repeat(MAX_CURSOR_CHARACTERS + 1)
+      ),
     /oversized cursor/
   )
   assert.throws(
     () =>
-      nextCompletedSyncState(
+      nextProjectsSyncState(
         {
-          ...state,
+          ...projectState,
           cursor: "cursor-last",
           recentCursors: ["cursor-last"],
           pageCount: MAX_CURSOR_PAGES - 1,
@@ -296,6 +385,7 @@ test("sync state pins the Todoist account and bounds cursor history", () => {
         {
           phase: "checkpoint",
           userId: AUTHENTICATED_USER.id,
+          historyStart: state.historyStart,
           since: state.cycleSince,
         },
         config,
@@ -310,6 +400,7 @@ test("sync state pins the Todoist account and bounds cursor history", () => {
         {
           phase: "checkpoint",
           userId: AUTHENTICATED_USER.id,
+          historyStart: state.historyStart,
           since: state.cycleSince,
           padding: "x".repeat(MAX_SYNC_STATE_BYTES),
         } as unknown as CompletedSyncState,
@@ -374,6 +465,7 @@ test("completed-task transform preserves occurrence identity and user-owned body
   assertPropertyContains(change.properties.Priority, "P1 · Urgent")
   assertPropertyContains(change.properties.Labels, "Launch， 2026")
   assertPropertyContains(change.properties["Planned Duration (min)"], "90")
+  assertPropertyContains(change.properties["Days to Complete"], "2.15")
   assertPropertyContains(change.properties.Project, deduped[0]!.projectId)
   assertPropertyContains(
     change.properties["Responsible User ID"],
@@ -387,6 +479,8 @@ test("completed-task transform preserves occurrence identity and user-owned body
 
   const recurring = completedTaskToChange(deduped[1]!)
   assertPropertyContains(recurring.properties.Recurring, "Yes")
+  assertPropertyContains(recurring.properties["Planned Duration (min)"], "1440")
+  assert.deepEqual(recurring.properties["Days to Complete"], [])
   assertPropertyContains(recurring.properties["Completion Count"], "42")
   assertPropertyContains(recurring.properties["Is Subtask"], "Yes")
   assert.equal(recurring.key, completionId(deduped[1]!))
@@ -406,6 +500,40 @@ test("completed-task transform preserves occurrence identity and user-owned body
       { ...deduped[1]!, completedAt: "2026-07-02T16:00:00-04:00" },
     ]).length,
     1
+  )
+
+  const preciseOccurrence = {
+    ...deduped[1]!,
+    completedAt: "2026-07-02T20:00:00.123456Z",
+  }
+  const differentMicroseconds = {
+    ...preciseOccurrence,
+    completedAt: "2026-07-02T20:00:00.123789Z",
+  }
+  assert.notEqual(
+    completionId(preciseOccurrence),
+    completionId(differentMicroseconds)
+  )
+  assert.equal(
+    dedupeCompletedTasks([preciseOccurrence, differentMicroseconds]).length,
+    2
+  )
+  assert.equal(
+    completionId(preciseOccurrence),
+    completionId({
+      ...preciseOccurrence,
+      completedAt: "2026-07-02T16:00:00.123456-04:00",
+    })
+  )
+  assert.equal(
+    completionId({
+      ...preciseOccurrence,
+      completedAt: "2026-07-02T20:00:00.123000Z",
+    }),
+    completionId({
+      ...preciseOccurrence,
+      completedAt: "2026-07-02T20:00:00.123Z",
+    })
   )
 
   const floatingDue = completedTaskToChange(
@@ -500,6 +628,45 @@ test("Todoist client validates authenticated user identity and timezone", async 
   assert.equal(requestUrl?.pathname, "/api/v1/user")
 })
 
+test("Todoist client normalizes nullable labels and project flags", async () => {
+  const completedResponse = clone(fixture("completed-tasks-page.json")) as {
+    items: Array<Record<string, unknown>>
+  }
+  completedResponse.items[0]!.labels = null
+  const completedClient = createTodoistClient({
+    beforeRequest: async () => {},
+    getApiToken: () => "test-token",
+    fetch: async () => Response.json(completedResponse),
+  })
+  const completedPage = await completedClient.fetchCompletedTasksPage({
+    since: "2026-07-01T00:00:00Z",
+    until: "2026-07-03T00:00:00Z",
+  })
+  assert.deepEqual(completedPage.resources[0]!.labels, [])
+
+  delete completedResponse.items[0]!.labels
+  await assert.rejects(
+    () =>
+      completedClient.fetchCompletedTasksPage({
+        since: "2026-07-01T00:00:00Z",
+        until: "2026-07-03T00:00:00Z",
+      }),
+    /invalid completed task 0.labels/
+  )
+
+  const projectResponse = clone(fixture("projects-active.json")) as {
+    results: Array<Record<string, unknown>>
+  }
+  projectResponse.results[0]!.inbox_project = null
+  const projectClient = createTodoistClient({
+    beforeRequest: async () => {},
+    getApiToken: () => "test-token",
+    fetch: async () => Response.json(projectResponse),
+  })
+  const projectPage = await projectClient.fetchProjectsPage("active")
+  assert.equal(projectPage.resources[0]!.inboxProject, false)
+})
+
 test("projects traverse active then archived and retain last-known rows", async () => {
   const active = await parsedProject("projects-active.json")
   const archived = await parsedProject("projects-archived.json")
@@ -540,7 +707,7 @@ test("projects traverse active then archived and retain last-known rows", async 
   })
 })
 
-test("execute functions keep cursors in-cycle and only publish durable checkpoints at completion", async () => {
+test("completed execution replays paginated windows before checkpointing", async () => {
   const tasks = await parsedCompletedTasks()
   const calls: Array<{ since: string; until: string; cursor?: string }> = []
   const client: TodoistClient = {
@@ -549,10 +716,13 @@ test("execute functions keep cursors in-cycle and only publish durable checkpoin
     },
     async fetchCompletedTasksPage(options) {
       calls.push(clone(options))
-      return {
-        resources: options.cursor ? [] : tasks,
-        nextCursor: options.cursor ? undefined : "next.page",
+      if (calls.length === 1) {
+        return { resources: tasks, nextCursor: "primary.page-2" }
       }
+      if (calls.length === 3) {
+        return { resources: tasks, nextCursor: "replay.page-2" }
+      }
+      return { resources: [], nextCursor: undefined }
     },
     async fetchProjectsPage() {
       return { resources: [], nextCursor: undefined }
@@ -563,7 +733,8 @@ test("execute functions keep cursors in-cycle and only publish durable checkpoin
     undefined,
     client,
     config,
-    "2026-07-03T00:00:00Z"
+    "2026-07-03T00:00:00Z",
+    EXPECTED_USER
   )
   assert.equal(first.hasMore, true)
   assert.equal(first.changes.length, 2)
@@ -573,21 +744,128 @@ test("execute functions keep cursors in-cycle and only publish durable checkpoin
     first.nextState,
     client,
     config,
-    "2026-07-04T00:00:00Z"
+    "2026-07-04T00:00:00Z",
+    EXPECTED_USER
   )
-  assert.equal(second.hasMore, false)
-  assert.equal(second.nextState.phase, "checkpoint")
-  assert.deepEqual(calls[0], {
-    since: calls[0]!.since,
-    until: calls[0]!.until,
-    cursor: undefined,
-  })
+  assert.equal(second.hasMore, true)
+  assert.equal(second.nextState.phase, "window")
+  if (second.nextState.phase !== "window") return
+  assert.equal(second.nextState.pass, "replay")
+
+  const third = await executeCompletedWork(
+    second.nextState,
+    client,
+    config,
+    "2026-07-04T00:00:00Z",
+    EXPECTED_USER
+  )
+  assert.equal(third.hasMore, true)
+  assert.equal(third.nextState.phase, "window")
+
+  const fourth = await executeCompletedWork(
+    third.nextState,
+    client,
+    config,
+    "2026-07-04T00:00:00Z",
+    EXPECTED_USER
+  )
+  assert.equal(fourth.hasMore, false)
+  assert.equal(fourth.nextState.phase, "checkpoint")
+  assert.deepEqual(
+    calls.map((call) => call.cursor),
+    [undefined, "primary.page-2", undefined, "replay.page-2"]
+  )
   assert.equal(calls[1]?.since, calls[0]?.since)
   assert.equal(calls[1]?.until, calls[0]?.until)
-  assert.equal(calls[1]?.cursor, "next.page")
+  assert.equal(calls[2]?.since, calls[0]?.since)
+  assert.equal(calls[2]?.until, calls[0]?.until)
 })
 
-test("execute functions reject account changes before reading source pages", async () => {
+test("completed execution bounds invalid-cursor recovery without advancing", async () => {
+  const config = () => ({ historyStart: "2026-07-01T00:00:00Z" })
+  const initial = currentCompletedWindow(
+    undefined,
+    config(),
+    AUTHENTICATED_USER.id,
+    "2026-07-03T00:00:00Z"
+  )
+  const persisted = nextCompletedSyncState(initial, "expired-cursor")
+  if (persisted.phase !== "window") return
+  const bounds = {
+    since: persisted.windowSince,
+    until: persisted.windowUntil,
+  }
+  const calls: Array<{ since: string; until: string; cursor?: string }> = []
+  let stable = false
+  const client: TodoistClient = {
+    async fetchAuthenticatedUser() {
+      return AUTHENTICATED_USER
+    },
+    async fetchCompletedTasksPage(options) {
+      calls.push(clone(options))
+      if (options.cursor) throw new InvalidCursorError()
+      return {
+        resources: [],
+        nextCursor: stable ? undefined : "replacement-cursor",
+      }
+    },
+    async fetchProjectsPage() {
+      return { resources: [], nextCursor: undefined }
+    },
+  }
+
+  const recovered = await executeCompletedWork(
+    persisted,
+    client,
+    config,
+    "2026-07-04T00:00:00Z",
+    EXPECTED_USER
+  )
+  assert.equal(recovered.hasMore, true)
+  assert.equal(recovered.nextState.phase, "window")
+  if (recovered.nextState.phase !== "window") return
+  assert.equal(recovered.nextState.cursor, undefined)
+  assert.equal(recovered.nextState.cursorRecoveryCount, 1)
+
+  const retried = await executeCompletedWork(
+    recovered.nextState,
+    client,
+    config,
+    "2026-07-04T00:00:00Z",
+    EXPECTED_USER
+  )
+  const deferred = await executeCompletedWork(
+    retried.nextState,
+    client,
+    config,
+    "2026-07-04T00:00:00Z",
+    EXPECTED_USER
+  )
+  assert.equal(deferred.hasMore, false)
+  assert.equal(deferred.nextState.phase, "window")
+  if (deferred.nextState.phase !== "window") return
+  assert.equal(deferred.nextState.cursor, undefined)
+  assert.equal(deferred.nextState.cursorRecoveryCount, undefined)
+  assert.equal(deferred.nextState.windowSince, bounds.since)
+  assert.equal(deferred.nextState.windowUntil, bounds.until)
+  assert.deepEqual(
+    calls.map((call) => call.cursor),
+    ["expired-cursor", undefined, "replacement-cursor"]
+  )
+
+  stable = true
+  const resumed = await executeCompletedWork(
+    deferred.nextState,
+    client,
+    config,
+    "2026-07-04T00:00:00Z",
+    EXPECTED_USER
+  )
+  assert.equal(resumed.hasMore, false)
+  assert.equal(resumed.nextState.phase, "checkpoint")
+})
+
+test("all capabilities enforce the deployment account before source reads", async () => {
   let sourceRequests = 0
   const client: TodoistClient = {
     async fetchAuthenticatedUser() {
@@ -606,24 +884,17 @@ test("execute functions reject account changes before reading source pages", asy
   await assert.rejects(
     () =>
       executeCompletedWork(
-        {
-          phase: "checkpoint",
-          userId: AUTHENTICATED_USER.id,
-          since: "2026-07-01T00:00:00Z",
-        },
+        undefined,
         client,
         () => ({ historyStart: "2026-07-01T00:00:00Z" }),
-        "2026-07-03T00:00:00Z"
+        "2026-07-03T00:00:00Z",
+        EXPECTED_USER
       ),
-    /account changed/
+    /does not match TODOIST_USER_ID/
   )
   await assert.rejects(
-    () =>
-      executeProjects(
-        { phase: "checkpoint", userId: AUTHENTICATED_USER.id },
-        client
-      ),
-    /account changed/
+    () => executeProjects(undefined, client, EXPECTED_USER),
+    /does not match TODOIST_USER_ID/
   )
   assert.equal(sourceRequests, 0)
 })
@@ -646,13 +917,73 @@ test("projects execution does not emit delete changes for unavailable history", 
     },
   }
 
-  const first = await executeProjects(undefined, client)
+  const first = await executeProjects(undefined, client, EXPECTED_USER)
   assert.equal(first.hasMore, true)
   assert.ok(first.changes.every((change) => change.type === "upsert"))
-  const second = await executeProjects(first.nextState, client)
+  const second = await executeProjects(first.nextState, client, EXPECTED_USER)
   assert.equal(second.hasMore, false)
   assert.equal(second.nextState.phase, "checkpoint")
   assert.ok(second.changes.every((change) => change.type === "upsert"))
+})
+
+test("projects bound invalid and repeated cursor recovery", async () => {
+  const calls: Array<{ collection: string; cursor?: string }> = []
+  const client: TodoistClient = {
+    async fetchAuthenticatedUser() {
+      return AUTHENTICATED_USER
+    },
+    async fetchCompletedTasksPage() {
+      return { resources: [], nextCursor: undefined }
+    },
+    async fetchProjectsPage(collection, cursor) {
+      calls.push({ collection, cursor })
+      if (cursor === "expired-cursor") throw new InvalidCursorError()
+      if (cursor) return { resources: [], nextCursor: cursor }
+      return { resources: [], nextCursor: "replacement-cursor" }
+    },
+  }
+  const recovered = await executeProjects(
+    {
+      phase: "active",
+      userId: AUTHENTICATED_USER.id,
+      cursor: "expired-cursor",
+      recentCursors: ["expired-cursor"],
+      pageCount: 1,
+    },
+    client,
+    EXPECTED_USER
+  )
+  assert.equal(recovered.hasMore, true)
+  assert.deepEqual(recovered.changes, [])
+  assert.deepEqual(recovered.nextState, {
+    phase: "active",
+    userId: AUTHENTICATED_USER.id,
+    cursorRecoveryCount: 1,
+  })
+
+  const retried = await executeProjects(
+    recovered.nextState,
+    client,
+    EXPECTED_USER
+  )
+  assert.equal(retried.hasMore, true)
+  assert.equal(retried.nextState.phase, "active")
+
+  const deferred = await executeProjects(
+    retried.nextState,
+    client,
+    EXPECTED_USER
+  )
+  assert.equal(deferred.hasMore, false)
+  assert.deepEqual(deferred.nextState, {
+    phase: "active",
+    userId: AUTHENTICATED_USER.id,
+  })
+  assert.deepEqual(calls, [
+    { collection: "active", cursor: "expired-cursor" },
+    { collection: "active", cursor: undefined },
+    { collection: "active", cursor: "replacement-cursor" },
+  ])
 })
 
 test("HTTP failures are bounded, rate-aware, and never expose the API token", async () => {
@@ -678,6 +1009,24 @@ test("HTTP failures are bounded, rate-aware, and never expose the API token", as
     }
   )
 
+  const temporarilyUnavailable = createTodoistClient({
+    beforeRequest: async () => {},
+    getApiToken: () => "test-token",
+    fetch: async () =>
+      Response.json(
+        { error: "Try later", error_extra: { retry_after: 11 } },
+        { status: 503, headers: { "Retry-After": "7" } }
+      ),
+  })
+  await assert.rejects(
+    () => temporarilyUnavailable.fetchProjectsPage("active"),
+    (error: unknown) => {
+      assert.ok(error instanceof RateLimitError)
+      assert.equal(error.retryAfter, 11)
+      return true
+    }
+  )
+
   const failed = createTodoistClient({
     beforeRequest: async () => {},
     getApiToken: () => "secret-test-token",
@@ -686,18 +1035,39 @@ test("HTTP failures are bounded, rate-aware, and never expose the API token", as
         {
           error: "Bad token secret-test-token and private provider detail",
           error_code: "AUTH_INVALID",
+          error_extra: { retry_after: 5 },
         },
-        { status: 401 }
+        { status: 401, headers: { "Retry-After": "7" } }
       ),
   })
   await assert.rejects(
     () => failed.fetchProjectsPage("active"),
     (error: unknown) => {
+      assert.equal(error instanceof RateLimitError, false)
       assert.match(String(error), /error_code=AUTH_INVALID/)
       assert.doesNotMatch(String(error), /secret-test-token/)
       assert.doesNotMatch(String(error), /private provider detail/)
       return true
     }
+  )
+
+  const invalidCursor = createTodoistClient({
+    beforeRequest: async () => {},
+    getApiToken: () => "test-token",
+    fetch: async () =>
+      Response.json(
+        {
+          error: "Invalid argument value",
+          error_code: 20,
+          error_tag: "INVALID_ARGUMENT_VALUE",
+          error_extra: { argument: "cursor" },
+        },
+        { status: 400 }
+      ),
+  })
+  await assert.rejects(
+    () => invalidCursor.fetchProjectsPage("active", "expired-cursor"),
+    InvalidCursorError
   )
 
   const oversizedSuccess = createTodoistClient({
@@ -731,6 +1101,27 @@ test("HTTP failures are bounded, rate-aware, and never expose the API token", as
     (error: unknown) => {
       assert.match(String(error), /exceeded the safe size limit/)
       assert.doesNotMatch(String(error), /private upstream response/)
+      return true
+    }
+  )
+
+  const oversizedRetryableFailure = createTodoistClient({
+    beforeRequest: async () => {},
+    getApiToken: () => "test-token",
+    fetch: async () =>
+      new Response("private upstream response", {
+        status: 503,
+        headers: {
+          "Content-Length": String(MAX_ERROR_RESPONSE_BYTES + 1),
+          "Retry-After": "7",
+        },
+      }),
+  })
+  await assert.rejects(
+    () => oversizedRetryableFailure.fetchProjectsPage("active"),
+    (error: unknown) => {
+      assert.ok(error instanceof RateLimitError)
+      assert.equal(error.retryAfter, 7)
       return true
     }
   )

@@ -25,6 +25,13 @@ export type TodoistDuration = {
   unit: string
 }
 
+export class InvalidCursorError extends Error {
+  constructor() {
+    super("Todoist rejected an expired or invalid pagination cursor.")
+    this.name = "InvalidCursorError"
+  }
+}
+
 export type TodoistCompletedTask = {
   id: string
   projectId: string
@@ -143,10 +150,11 @@ function optionalString(value: unknown, context: string): string | null {
 }
 
 function optionalBoolean(value: unknown, context: string): boolean {
-  return value === undefined ? false : boolean(value, context)
+  return value === undefined || value === null ? false : boolean(value, context)
 }
 
 function stringArray(value: unknown, context: string): string[] {
+  if (value === null) return []
   if (!Array.isArray(value)) {
     throw new Error(`Todoist API returned invalid ${context}.`)
   }
@@ -348,6 +356,23 @@ function bodyRetryAfter(value: unknown): number | undefined {
     : undefined
 }
 
+function isInvalidCursorResponse(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false
+  const body = value as JsonObject
+  const extra = body.error_extra
+  return (
+    body.error_tag === "INVALID_ARGUMENT_VALUE" &&
+    !!extra &&
+    typeof extra === "object" &&
+    !Array.isArray(extra) &&
+    (extra as JsonObject).argument === "cursor"
+  )
+}
+
+function isRetryableStatus(status: number): boolean {
+  return status === 408 || status >= 500
+}
+
 function safeErrorIdentifier(value: unknown): string | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return undefined
@@ -482,14 +507,42 @@ export function createTodoistClient(
       })
     }
     if (!response.ok) {
-      const retryAfter = bodyRetryAfter(parsed)
+      const headerRetryAfter = parseRetryAfterSeconds(
+        response.headers.get("retry-after")
+      )
+      if (body.exceeded) {
+        if (
+          isRetryableStatus(response.status) &&
+          headerRetryAfter !== undefined
+        ) {
+          throw new RateLimitError({
+            retryAfter: headerRetryAfter || DEFAULT_RATE_LIMIT_DELAY_SECONDS,
+          })
+        }
+        throw new Error(
+          `Todoist API error (${response.status}). Response body exceeded the safe size limit.`
+        )
+      }
+      if (
+        response.status === 400 &&
+        url.searchParams.has("cursor") &&
+        isInvalidCursorResponse(parsed)
+      ) {
+        throw new InvalidCursorError()
+      }
+      const errorRetryAfter = bodyRetryAfter(parsed)
+      const retryAfter = Math.max(headerRetryAfter ?? 0, errorRetryAfter ?? 0)
+      if (
+        isRetryableStatus(response.status) &&
+        (headerRetryAfter !== undefined || errorRetryAfter !== undefined)
+      ) {
+        throw new RateLimitError({
+          retryAfter: retryAfter || DEFAULT_RATE_LIMIT_DELAY_SECONDS,
+        })
+      }
       const retryHint = retryAfter ? ` Retry after ${retryAfter} seconds.` : ""
       const identifier = safeErrorIdentifier(parsed)
-      const detail = body.exceeded
-        ? " Response body exceeded the safe size limit."
-        : identifier
-          ? ` ${identifier}.`
-          : ""
+      const detail = identifier ? ` ${identifier}.` : ""
       throw new Error(
         `Todoist API error (${response.status}).${detail}${retryHint}`
       )
