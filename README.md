@@ -24,7 +24,9 @@ directory.
   [Salesforce](workers/salesforce-sync/), [Sentry](workers/sentry-sync/),
   [Todoist](workers/todoist-sync/), [Zendesk](workers/zendesk-sync/) and more.
 - **Give a Notion Agent a reliable new capability:** execute a repeatable API
-  workflow in one tool call, or connect to [Airflow](workers/airflow/), [Vega-lite charts](workers/chart-generator/),
+  workflow in one tool call, such as turning an
+  [Intercom conversation into a routed Notion ticket](workers/intercom-escalate-customer-issue/),
+  or connect to [Airflow](workers/airflow/), [Vega-lite charts](workers/chart-generator/),
   [CloudWatch Logs](workers/cloudwatch-logs/),
   [Postgres](workers/postgres-query/), [Snowflake query](workers/snowflake-query/), [PowerPoint creator](workers/powerpoint-creator/), [Vercel](workers/vercel-production-deployment-tools/), and more.
 - **React to external events:** receive and verify
@@ -141,6 +143,7 @@ find and inspect an issue in Sentry, then declare an incident in PagerDuty.
 | Browse log groups, streams, and events              | [CloudWatch Logs](workers/cloudwatch-logs/)                                       | AWS CloudWatch Logs |
 | Learn the database-query pattern with seeded data   | [DuckDB query](workers/duckdb-query/)                                             | DuckDB              |
 | Review and publish an existing draft release        | [GitHub draft release tools](workers/github-draft-release-tools/)                 | GitHub              |
+| Create a reviewed ticket and route the conversation | [Intercom customer escalation](workers/intercom-escalate-customer-issue/)         | Intercom, Notion    |
 | Query a database with read-only SQL                 | [Postgres query](workers/postgres-query/)                                         | PostgreSQL          |
 | Turn a Notion page into PowerPoint slides (`.pptx`) | [PowerPoint creator](workers/powerpoint-creator/)                                 | Notion, PowerPoint  |
 | Find Sentry issues and declare PagerDuty incidents  | [Sentry to PagerDuty incident tools](workers/sentry-pagerduty-incident-tools/)    | Sentry, PagerDuty   |
