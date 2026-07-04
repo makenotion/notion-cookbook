@@ -4,11 +4,6 @@
 
 import { RateLimitError } from "@notionhq/workers"
 
-import {
-  credentialFingerprintForToken,
-  isCredentialFingerprint,
-} from "./credential.js"
-
 export const READER_PAGE_SIZE = 100
 export const REQUEST_TIMEOUT_MS = 30_000
 export const MAX_RESPONSE_BYTES = 16 * 1024 * 1024
@@ -26,7 +21,6 @@ export type ReaderDocument = {
   location: string | null
   tags: Record<string, { name: string }>
   site_name: string | null
-  word_count: number | null
   reading_time: string | null
   updated_at: string | null
   published_date: string | null
@@ -46,15 +40,10 @@ export type ReadwiseHighlight = {
   id: string
   is_deleted: boolean
   text: string | null
-  location: number | null
-  location_type: string | null
   note: string | null
   color: string | null
   highlighted_at: string | null
-  created_at: string | null
   updated_at: string | null
-  external_id: string | null
-  url: string | null
   tags: ReadwiseTag[]
   is_favorite: boolean
   is_discard: boolean
@@ -81,18 +70,15 @@ export type ReadwiseSource = {
 
 export type ReaderDocumentPage = {
   documents: ReaderDocument[]
-  count: number
   nextPageCursor: string | undefined
 }
 
 export type ReadwiseExportPage = {
   sources: ReadwiseSource[]
-  count: number
   nextPageCursor: string | undefined
 }
 
 export type ReadwiseClient = {
-  credentialFingerprint(): string
   listReaderDocuments(options: {
     updatedAfter?: string
     pageCursor?: string
@@ -120,23 +106,6 @@ function requiredToken(): string {
   const token = process.env.READWISE_ACCESS_TOKEN?.trim()
   if (!token) throw new Error("READWISE_ACCESS_TOKEN is not set.")
   return token
-}
-
-function boundCredential(): { token: string; fingerprint: string } {
-  const token = requiredToken()
-  const fingerprint = credentialFingerprintForToken(token)
-  const configured = process.env.READWISE_CREDENTIAL_FINGERPRINT?.trim()
-  if (!isCredentialFingerprint(configured)) {
-    throw new Error(
-      "READWISE_CREDENTIAL_FINGERPRINT is not set to a valid 64-character fingerprint."
-    )
-  }
-  if (configured !== fingerprint) {
-    throw new Error(
-      "READWISE_ACCESS_TOKEN does not match READWISE_CREDENTIAL_FINGERPRINT."
-    )
-  }
-  return { token, fingerprint }
 }
 
 function record(value: unknown, label: string): Record<string, unknown> {
@@ -168,6 +137,10 @@ function nullableString(value: unknown, label: string): string | null {
   return value
 }
 
+function optionalNullableString(value: unknown, label: string): string | null {
+  return value === undefined ? null : nullableString(value, label)
+}
+
 function nullableNumber(value: unknown, label: string): number | null {
   if (value === null) return null
   if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -182,17 +155,6 @@ function nullableDate(value: unknown, label: string): string | null {
     throw new Error(`Readwise ${label} must be a valid date or null.`)
   }
   return date
-}
-
-function nullableNonNegativeInteger(
-  value: unknown,
-  label: string
-): number | null {
-  const number = nullableNumber(value, label)
-  if (number !== null && (!Number.isSafeInteger(number) || number < 0)) {
-    throw new Error(`Readwise ${label} must be a non-negative integer or null.`)
-  }
-  return number
 }
 
 function nullableProgress(value: unknown, label: string): number | null {
@@ -240,13 +202,6 @@ function nullableStringIdentifier(
   return id
 }
 
-function nonNegativeInteger(value: unknown, label: string): number {
-  if (!Number.isSafeInteger(value) || Number(value) < 0) {
-    throw new Error(`Readwise ${label} must be a non-negative integer.`)
-  }
-  return Number(value)
-}
-
 function tags(value: unknown, label: string): ReadwiseTag[] {
   return array(value, label).map((candidate) => {
     const item = record(candidate, `${label} item`)
@@ -269,22 +224,59 @@ function readerTags(
   )
 }
 
+function ignoredReaderDocument(
+  id: string,
+  parentId: string | null,
+  location: string | null
+): ReaderDocument {
+  return {
+    id,
+    url: null,
+    source_url: null,
+    title: null,
+    author: null,
+    category: null,
+    location,
+    tags: {},
+    site_name: null,
+    reading_time: null,
+    updated_at: null,
+    published_date: null,
+    notes: null,
+    summary: null,
+    parent_id: parentId,
+    reading_progress: null,
+    last_opened_at: null,
+    saved_at: null,
+  }
+}
+
 function parseReaderDocument(value: unknown): ReaderDocument {
   const item = record(value, "Reader document")
+  const id = stringIdentifier(item.id, "Reader document")
+  const parentId = nullableStringIdentifier(item.parent_id, "Reader parent_id")
+
+  // Reader returns nested annotations through the same endpoint. parent_id is
+  // enough to exclude them, so unrelated metadata cannot strand the archive.
+  if (parentId !== null) return ignoredReaderDocument(id, parentId, null)
+
+  const location = nullableString(item.location, "Reader document location")
+  // Feed items are high-volume and intentionally excluded. Validate only their
+  // scope fields for the same reason.
+  if (location?.trim().toLowerCase() === "feed") {
+    return ignoredReaderDocument(id, null, location)
+  }
+
   return {
-    id: stringIdentifier(item.id, "Reader document"),
+    id,
     url: nullableString(item.url, "Reader document url"),
     source_url: nullableString(item.source_url, "Reader document source_url"),
     title: nullableString(item.title, "Reader document title"),
     author: nullableString(item.author, "Reader document author"),
     category: nullableString(item.category, "Reader document category"),
-    location: nullableString(item.location, "Reader document location"),
+    location,
     tags: readerTags(item.tags, "Reader document tags"),
     site_name: nullableString(item.site_name, "Reader document site_name"),
-    word_count: nullableNonNegativeInteger(
-      item.word_count,
-      "Reader document word_count"
-    ),
     reading_time: nullableString(
       item.reading_time,
       "Reader document reading_time"
@@ -296,7 +288,7 @@ function parseReaderDocument(value: unknown): ReaderDocument {
     ),
     notes: nullableString(item.notes, "Reader document notes"),
     summary: nullableString(item.summary, "Reader document summary"),
-    parent_id: nullableStringIdentifier(item.parent_id, "Reader parent_id"),
+    parent_id: parentId,
     reading_progress: nullableProgress(
       item.reading_progress,
       "Reader document reading_progress"
@@ -309,27 +301,43 @@ function parseReaderDocument(value: unknown): ReaderDocument {
   }
 }
 
-function parseHighlight(value: unknown): ReadwiseHighlight {
+function parseHighlight(
+  value: unknown,
+  parentDeleted = false
+): ReadwiseHighlight {
   const item = record(value, "highlight")
+  const id = numericIdentifier(item.id, "highlight")
+  const isDeleted =
+    parentDeleted && item.is_deleted === undefined
+      ? false
+      : requiredBoolean(item.is_deleted, "highlight is_deleted")
+  if (parentDeleted || isDeleted) {
+    return {
+      id,
+      is_deleted: isDeleted,
+      text: optionalNullableString(item.text, "highlight text"),
+      note: null,
+      color: null,
+      highlighted_at: null,
+      updated_at: null,
+      tags: [],
+      is_favorite: false,
+      is_discard: false,
+      readwise_url: null,
+    }
+  }
+
   return {
-    id: numericIdentifier(item.id, "highlight"),
-    is_deleted: requiredBoolean(item.is_deleted, "highlight is_deleted"),
+    id,
+    is_deleted: false,
     text: nullableString(item.text, "highlight text"),
-    location: nullableNonNegativeInteger(item.location, "highlight location"),
-    location_type: nullableString(
-      item.location_type,
-      "highlight location_type"
-    ),
     note: nullableString(item.note, "highlight note"),
     color: nullableString(item.color, "highlight color"),
     highlighted_at: nullableDate(
       item.highlighted_at,
       "highlight highlighted_at"
     ),
-    created_at: nullableDate(item.created_at, "highlight created_at"),
     updated_at: nullableDate(item.updated_at, "highlight updated_at"),
-    external_id: nullableString(item.external_id, "highlight external_id"),
-    url: nullableString(item.url, "highlight url"),
     tags: tags(item.tags, "highlight tags"),
     is_favorite: requiredBoolean(item.is_favorite, "highlight is_favorite"),
     is_discard: requiredBoolean(item.is_discard, "highlight is_discard"),
@@ -339,16 +347,49 @@ function parseHighlight(value: unknown): ReadwiseHighlight {
 
 function parseSource(value: unknown): ReadwiseSource {
   const item = record(value, "source")
+  const userBookId = numericIdentifier(item.user_book_id, "source")
+  const isDeleted = requiredBoolean(item.is_deleted, "source is_deleted")
+  const source = requiredString(item.source, "source source")
+  const externalId = nullableString(item.external_id, "source external_id")
+  if (isDeleted) {
+    const sourceHighlights =
+      item.highlights === undefined
+        ? []
+        : array(item.highlights, "source highlights").map((highlight) =>
+            parseHighlight(highlight, true)
+          )
+    return {
+      user_book_id: userBookId,
+      is_deleted: true,
+      title: optionalNullableString(item.title, "source title"),
+      readable_title: optionalNullableString(
+        item.readable_title,
+        "source readable_title"
+      ),
+      author: null,
+      source,
+      unique_url: null,
+      book_tags: [],
+      category: null,
+      document_note: null,
+      summary: null,
+      readwise_url: null,
+      source_url: null,
+      external_id: externalId,
+      highlights: sourceHighlights,
+    }
+  }
+
   return {
-    user_book_id: numericIdentifier(item.user_book_id, "source"),
-    is_deleted: requiredBoolean(item.is_deleted, "source is_deleted"),
+    user_book_id: userBookId,
+    is_deleted: false,
     title: nullableString(item.title, "source title"),
     readable_title: nullableString(
       item.readable_title,
       "source readable_title"
     ),
     author: nullableString(item.author, "source author"),
-    source: requiredString(item.source, "source source"),
+    source,
     unique_url: nullableString(item.unique_url, "source unique_url"),
     book_tags: tags(item.book_tags, "source tags"),
     category: nullableString(item.category, "source category"),
@@ -356,8 +397,10 @@ function parseSource(value: unknown): ReadwiseSource {
     summary: nullableString(item.summary, "source summary"),
     readwise_url: nullableString(item.readwise_url, "source readwise_url"),
     source_url: nullableString(item.source_url, "source source_url"),
-    external_id: nullableString(item.external_id, "source external_id"),
-    highlights: array(item.highlights, "source highlights").map(parseHighlight),
+    external_id: externalId,
+    highlights: array(item.highlights, "source highlights").map((highlight) =>
+      parseHighlight(highlight)
+    ),
   }
 }
 
@@ -452,7 +495,7 @@ export function createReadwiseClient(
   fetchImpl: Fetch = fetch
 ): ReadwiseClient {
   async function fetchObject(url: URL, label: string) {
-    const { token } = boundCredential()
+    const token = requiredToken()
     await beforeRequest()
     const response = await fetchImpl(url, {
       method: "GET",
@@ -480,10 +523,6 @@ export function createReadwiseClient(
   }
 
   return {
-    credentialFingerprint() {
-      return boundCredential().fingerprint
-    },
-
     async listReaderDocuments({ updatedAfter, pageCursor }) {
       const url = new URL("https://readwise.io/api/v3/list/")
       url.searchParams.set("limit", String(READER_PAGE_SIZE))
@@ -495,7 +534,6 @@ export function createReadwiseClient(
         documents: array(body.results, "Reader document results").map(
           parseReaderDocument
         ),
-        count: nonNegativeInteger(body.count, "Reader document count"),
         nextPageCursor: parseCursor(
           body.nextPageCursor,
           "Reader document page"
@@ -514,7 +552,6 @@ export function createReadwiseClient(
         sources: array(body.results, "highlight export results").map(
           parseSource
         ),
-        count: nonNegativeInteger(body.count, "highlight export count"),
         nextPageCursor: parseCursor(
           body.nextPageCursor,
           "highlight export page"

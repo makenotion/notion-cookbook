@@ -4,6 +4,6 @@
     "noEmit": true,
     "rootDir": "."
   },
-  "include": ["src/**/*", "credential-fingerprint.ts", "test.ts"],
+  "include": ["src/**/*", "test.ts"],
   "exclude": ["node_modules", "dist"]
 }

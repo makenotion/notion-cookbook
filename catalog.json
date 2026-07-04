@@ -407,7 +407,7 @@
     {
       "id": "readwise-sync",
       "title": "Readwise and Reader sync",
-      "summary": "Turn a Reader library and Readwise highlights into a connected Notion knowledge base for reading, research, and notes.",
+      "summary": "Archive a Reader library and Readwise highlights in related Notion databases without deleting pages when items disappear upstream.",
       "path": "workers/readwise-sync",
       "kind": "worker-sync",
       "status": "ready",

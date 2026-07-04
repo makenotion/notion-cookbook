@@ -1,4 +1,4 @@
-import { notionIcon } from "@notionhq/workers"
+import { notionIcon, type SyncChangeUpsert } from "@notionhq/workers"
 import * as Builder from "@notionhq/workers/builder"
 import * as Schema from "@notionhq/workers/schema"
 
@@ -9,8 +9,6 @@ import {
   dateValue,
   displayLabel,
   displayTitle,
-  finiteNumber,
-  sourceName,
   trimmed,
   uniqueSelectNames,
   validDate,
@@ -32,25 +30,27 @@ export const highlightSchema = {
     Tags: Schema.multiSelect([]),
     Highlighted: Schema.date(),
     Favorite: Schema.checkbox(),
-    Discarded: Schema.checkbox(),
     "Open in Readwise": Schema.url(),
-    "Source Author": Schema.richText(),
     Quote: Schema.richText(),
-    Origin: Schema.select([]),
     Color: Schema.select([]),
-    "Source URL": Schema.url(),
-    Location: Schema.number(),
-    "Location Type": Schema.select([]),
-    Created: Schema.date(),
-    Updated: Schema.date(),
-    "Source Title": Schema.richText(),
-    "Quote Truncated": Schema.checkbox(),
-    "Note Truncated": Schema.checkbox(),
-    "External ID": Schema.richText(),
-    "Readwise Source ID": Schema.richText(),
+    "Removed upstream": Schema.checkbox(),
     "Highlight Key": Schema.richText(),
   },
 } satisfies Schema.Schema<typeof HIGHLIGHTS_PRIMARY_KEY>
+
+type HighlightChange = SyncChangeUpsert<
+  typeof HIGHLIGHTS_PRIMARY_KEY,
+  typeof highlightSchema.properties
+>
+
+// Sync upserts apply only the supplied properties; omitted properties keep
+// their existing values. The 0.4 SDK type models a complete schema, so keep
+// this temporary type narrowing isolated to intentional property patches.
+function highlightPropertyPatch(
+  properties: Partial<HighlightChange["properties"]>
+): HighlightChange["properties"] {
+  return properties as HighlightChange["properties"]
+}
 
 export function highlightKey(highlightId: string): string {
   const id = highlightId.trim()
@@ -61,10 +61,28 @@ export function highlightKey(highlightId: string): string {
 export function highlightToChange(
   source: ReadwiseSource,
   highlight: ReadwiseHighlight
-) {
+): HighlightChange {
   const key = highlightKey(highlight.id)
   if (source.is_deleted || highlight.is_deleted) {
-    return { type: "delete" as const, key }
+    const title = trimmed(highlight.text)
+    // A partial upsert marks the retained row without clearing its last useful
+    // quote or the user's Notion context.
+    return {
+      type: "upsert" as const,
+      key,
+      properties: highlightPropertyPatch({
+        ...(title
+          ? {
+              Highlight: Builder.title(
+                displayTitle(title, `Removed highlight ${highlight.id}`)
+              ),
+            }
+          : {}),
+        Source: [Builder.relation(exportSourceKey(source))],
+        "Removed upstream": Builder.checkbox(true),
+        "Highlight Key": Builder.richText(key),
+      }),
+    }
   }
 
   const quote = boundedText(highlight.text)
@@ -74,16 +92,8 @@ export function highlightToChange(
     `Untitled highlight ${highlight.id}`
   )
   const updatedAt = validDate(highlight.updated_at)
-  const location = finiteNumber(highlight.location)
-  const sourceTitle = trimmed(source.readable_title) ?? trimmed(source.title)
-  const sourceAuthor = trimmed(source.author)
   const color = displayLabel(highlight.color)
-  const locationType = displayLabel(highlight.location_type)
   const readwiseUrl = validUrl(highlight.readwise_url)
-  const sourceUrl =
-    validUrl(highlight.url) ??
-    validUrl(source.source_url) ??
-    validUrl(source.unique_url)
 
   return {
     type: "upsert" as const,
@@ -92,30 +102,16 @@ export function highlightToChange(
     properties: {
       Highlight: Builder.title(title),
       Source: [Builder.relation(exportSourceKey(source))],
-      Note: note.text ? Builder.richText(note.text) : [],
+      Note: note ? Builder.richText(note) : [],
       Tags: Builder.multiSelect(
         ...uniqueSelectNames(highlight.tags.map((tag) => tag.name))
       ),
       Highlighted: dateValue(highlight.highlighted_at),
       Favorite: Builder.checkbox(highlight.is_favorite),
-      Discarded: Builder.checkbox(highlight.is_discard),
       "Open in Readwise": readwiseUrl ? Builder.url(readwiseUrl) : [],
-      "Source Author": sourceAuthor ? Builder.richText(sourceAuthor) : [],
-      Quote: quote.text ? Builder.richText(quote.text) : [],
-      Origin: Builder.select(sourceName(source.source)),
+      Quote: quote ? Builder.richText(quote) : [],
       Color: color ? Builder.select(color) : [],
-      "Source URL": sourceUrl ? Builder.url(sourceUrl) : [],
-      Location: location !== undefined ? Builder.number(location) : [],
-      "Location Type": locationType ? Builder.select(locationType) : [],
-      Created: dateValue(highlight.created_at),
-      Updated: dateValue(highlight.updated_at),
-      "Source Title": sourceTitle ? Builder.richText(sourceTitle) : [],
-      "Quote Truncated": Builder.checkbox(quote.truncated),
-      "Note Truncated": Builder.checkbox(note.truncated),
-      "External ID": trimmed(highlight.external_id)
-        ? Builder.richText(highlight.external_id!.trim())
-        : [],
-      "Readwise Source ID": Builder.richText(source.user_book_id),
+      "Removed upstream": Builder.checkbox(highlight.is_discard),
       "Highlight Key": Builder.richText(key),
     },
   }

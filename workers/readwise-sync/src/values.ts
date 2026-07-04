@@ -13,15 +13,12 @@ export function trimmed(value: string | null | undefined): string | undefined {
 export function boundedText(
   value: string | null | undefined,
   maximum = MAX_TEXT_PROPERTY_CHARACTERS
-): { text: string | undefined; truncated: boolean } {
+): string | undefined {
   const text = trimmed(value)
-  if (!text) return { text: undefined, truncated: false }
+  if (!text) return undefined
   const characters = [...text]
-  if (characters.length <= maximum) return { text, truncated: false }
-  return {
-    text: `${characters.slice(0, Math.max(0, maximum - 1)).join("")}…`,
-    truncated: true,
-  }
+  if (characters.length <= maximum) return text
+  return `${characters.slice(0, Math.max(0, maximum - 1)).join("")}…`
 }
 
 export function displayTitle(
@@ -29,13 +26,13 @@ export function displayTitle(
   fallback: string
 ): string {
   const normalized = (trimmed(value) ?? fallback).replace(/\s+/g, " ")
-  return boundedText(normalized, MAX_TITLE_CHARACTERS).text ?? fallback
+  return boundedText(normalized, MAX_TITLE_CHARACTERS) ?? fallback
 }
 
 export function selectName(
   value: string | null | undefined
 ): string | undefined {
-  return boundedText(value, MAX_SELECT_NAME_CHARACTERS).text
+  return boundedText(value, MAX_SELECT_NAME_CHARACTERS)
 }
 
 export function uniqueSelectNames(values: Array<string | null | undefined>) {
@@ -66,31 +63,10 @@ export function uniqueSelectNames(values: Array<string | null | undefined>) {
   return unique
 }
 
-export function readerTagNames(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return uniqueSelectNames(
-      value.map((item) => {
-        if (typeof item === "string") return item
-        if (item && typeof item === "object" && !Array.isArray(item)) {
-          const name = (item as Record<string, unknown>).name
-          return typeof name === "string" ? name : undefined
-        }
-        return undefined
-      })
-    )
-  }
-  if (!value || typeof value !== "object") return []
-
-  return uniqueSelectNames(
-    Object.entries(value as Record<string, unknown>).map(([key, item]) => {
-      if (typeof item === "string") return item
-      if (item && typeof item === "object" && !Array.isArray(item)) {
-        const name = (item as Record<string, unknown>).name
-        if (typeof name === "string") return name
-      }
-      return key
-    })
-  )
+export function readerTagNames(
+  value: Record<string, { name: string }>
+): string[] {
+  return uniqueSelectNames(Object.values(value).map((tag) => tag.name))
 }
 
 export function validUrl(value: string | null | undefined): string | undefined {
@@ -120,10 +96,6 @@ export function dateValue(value: string | null | undefined) {
   return /^\d{4}-\d{2}-\d{2}$/.test(candidate)
     ? Builder.date(candidate)
     : Builder.dateTime(new Date(candidate).toISOString())
-}
-
-export function finiteNumber(value: number | null | undefined) {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined
 }
 
 export function normalizedCategory(

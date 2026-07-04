@@ -3,7 +3,7 @@
 // sources use the Reader document id, so highlights can relate to the richer
 // Reader row without relying on titles or URLs as identity.
 
-import { notionIcon } from "@notionhq/workers"
+import { notionIcon, type SyncChangeUpsert } from "@notionhq/workers"
 import * as Builder from "@notionhq/workers/builder"
 import * as Schema from "@notionhq/workers/schema"
 
@@ -13,7 +13,6 @@ import {
   dateValue,
   displayLabel,
   displayTitle,
-  finiteNumber,
   normalizedCategory,
   readerTagNames,
   sourceName,
@@ -35,33 +34,39 @@ export const sourceSchema = {
       { name: "Later", color: "yellow" },
       { name: "Shortlist", color: "green" },
       { name: "Archive", color: "gray" },
-      { name: "Feed", color: "purple" },
     ]),
     "Reading Progress": Schema.number("percent"),
-    Category: Schema.select([]),
-    Author: Schema.richText(),
-    Site: Schema.richText(),
-    Tags: Schema.multiSelect([]),
-    "Open in Reader": Schema.url(),
     Saved: Schema.date(),
+    Author: Schema.richText(),
+    Category: Schema.select([]),
+    Tags: Schema.multiSelect([]),
     "Last Opened": Schema.date(),
+    "Open in Readwise": Schema.url(),
     Summary: Schema.richText(),
     Note: Schema.richText(),
+    Site: Schema.richText(),
     Origin: Schema.select([]),
-    Archived: Schema.checkbox(),
     "Reading Time": Schema.richText(),
-    "Word Count": Schema.number(),
     Published: Schema.date(),
-    Updated: Schema.date(),
     "Original URL": Schema.url(),
-    "Readwise Review": Schema.url(),
-    "Summary Truncated": Schema.checkbox(),
-    "Note Truncated": Schema.checkbox(),
-    "Reader Document ID": Schema.richText(),
-    "Readwise Source ID": Schema.richText(),
+    "Removed upstream": Schema.checkbox(),
     "Source Key": Schema.richText(),
   },
 } satisfies Schema.Schema<typeof SOURCES_PRIMARY_KEY>
+
+type SourceChange = SyncChangeUpsert<
+  typeof SOURCES_PRIMARY_KEY,
+  typeof sourceSchema.properties
+>
+
+// Sync upserts apply only the supplied properties; omitted properties keep
+// their existing values. The 0.4 SDK type models a complete schema, so keep
+// this temporary type narrowing isolated to intentional property patches.
+function sourcePropertyPatch(
+  properties: Partial<SourceChange["properties"]>
+): SourceChange["properties"] {
+  return properties as SourceChange["properties"]
+}
 
 export function readerSourceKey(documentId: string): string {
   const id = documentId.trim()
@@ -70,7 +75,7 @@ export function readerSourceKey(documentId: string): string {
 }
 
 function isReaderSource(source: ReadwiseSource): boolean {
-  return source.source?.trim().toLowerCase() === "reader"
+  return source.source.trim().toLowerCase() === "reader"
 }
 
 export function readerExternalId(source: ReadwiseSource): string | undefined {
@@ -93,7 +98,6 @@ const READER_LOCATION_LABELS: Record<string, string> = {
   later: "Later",
   shortlist: "Shortlist",
   archive: "Archive",
-  feed: "Feed",
 }
 
 function readerLocationLabel(value: string | undefined): string | undefined {
@@ -107,22 +111,25 @@ function categoryLabel(value: string | undefined): string | undefined {
 }
 
 export function readerDocumentToChange(
-  document: ReaderDocument,
-  options: { exportPresent?: boolean } = {}
-) {
+  document: ReaderDocument
+): SourceChange | undefined {
   // Reader also models its highlights and notes as documents. parent_id is the
   // documented discriminator; those records come from Readwise Export instead.
   if (document.parent_id !== null) return undefined
+
+  const rawLocation = trimmed(document.location)?.toLowerCase()
+  // Feed items are a high-volume inbox, not a deliberate reading queue. They
+  // still appear when Readwise Export contains highlights for them.
+  if (rawLocation === "feed") return undefined
 
   const key = readerSourceKey(document.id)
   const summary = boundedText(document.summary)
   const note = boundedText(document.notes)
   const category = categoryLabel(normalizedCategory(document.category))
-  const rawLocation = trimmed(document.location)?.toLowerCase()
   const location = readerLocationLabel(rawLocation)
-  const progress = finiteNumber(document.reading_progress)
-  const wordCount = finiteNumber(document.word_count)
   const updatedAt = validDate(document.updated_at)
+  const readerUrl = validUrl(document.url)
+  const originalUrl = validUrl(document.source_url)
 
   return {
     type: "upsert" as const,
@@ -134,8 +141,8 @@ export function readerDocumentToChange(
       ),
       Location: location ? Builder.select(location) : [],
       "Reading Progress":
-        progress !== undefined && progress >= 0 && progress <= 1
-          ? Builder.number(progress)
+        document.reading_progress !== null
+          ? Builder.number(document.reading_progress)
           : [],
       Category: category ? Builder.select(category) : [],
       Author: trimmed(document.author)
@@ -145,50 +152,40 @@ export function readerDocumentToChange(
         ? Builder.richText(document.site_name!.trim())
         : [],
       Tags: Builder.multiSelect(...readerTagNames(document.tags)),
-      "Open in Reader": validUrl(document.url)
-        ? Builder.url(validUrl(document.url)!)
-        : [],
-      Saved: dateValue(document.saved_at),
-      "Last Opened": dateValue(document.last_opened_at),
-      Summary: summary.text ? Builder.richText(summary.text) : [],
-      Note: note.text ? Builder.richText(note.text) : [],
+      Summary: summary ? Builder.richText(summary) : [],
+      Note: note ? Builder.richText(note) : [],
       Origin: Builder.select("Reader"),
-      Archived: Builder.checkbox(rawLocation === "archive"),
       "Reading Time": trimmed(document.reading_time)
         ? Builder.richText(document.reading_time!.trim())
         : [],
-      "Word Count":
-        wordCount !== undefined && wordCount >= 0
-          ? Builder.number(wordCount)
-          : [],
+      Saved: dateValue(document.saved_at),
+      "Last Opened": dateValue(document.last_opened_at),
       Published: dateValue(document.published_date),
-      Updated: dateValue(document.updated_at),
-      "Original URL": validUrl(document.source_url)
-        ? Builder.url(validUrl(document.source_url)!)
-        : [],
-      ...(options.exportPresent === false
-        ? {
-            "Readwise Review": [],
-          }
-        : {}),
-      "Summary Truncated": Builder.checkbox(summary.truncated),
-      "Note Truncated": Builder.checkbox(note.truncated),
-      "Reader Document ID": Builder.richText(document.id),
-      ...(options.exportPresent === false
-        ? {
-            "Readwise Source ID": [],
-          }
-        : {}),
+      "Open in Readwise": readerUrl ? Builder.url(readerUrl) : [],
+      "Original URL": originalUrl ? Builder.url(originalUrl) : [],
+      "Removed upstream": Builder.checkbox(false),
       "Source Key": Builder.richText(key),
     },
   }
 }
 
-function exportOwnedProperties(source: ReadwiseSource) {
-  const reviewUrl = validUrl(source.readwise_url)
+function retainedSourcePatch(key: string, removed: boolean) {
   return {
-    "Readwise Review": reviewUrl ? Builder.url(reviewUrl) : [],
-    "Readwise Source ID": Builder.richText(source.user_book_id),
+    "Removed upstream": Builder.checkbox(removed),
+    "Source Key": Builder.richText(key),
+  }
+}
+
+function readerExportPatch(source: ReadwiseSource, key: string) {
+  const title = trimmed(source.readable_title) ?? trimmed(source.title)
+  return {
+    // A newly highlighted Feed item may not have a Reader-created row. Always
+    // include a title so the Highlight relation has a useful target, while
+    // leaving Reader-owned queue fields untouched.
+    Source: Builder.title(
+      displayTitle(title, `Untitled Readwise source ${source.user_book_id}`)
+    ),
+    ...retainedSourcePatch(key, false),
   }
 }
 
@@ -197,10 +194,9 @@ function fullExportProperties(source: ReadwiseSource) {
   const summary = boundedText(source.summary)
   const note = boundedText(source.document_note)
   const category = categoryLabel(normalizedCategory(source.category))
-  const readerId = readerExternalId(source)
   const title = trimmed(source.readable_title) ?? trimmed(source.title)
   const originalUrl = validUrl(source.source_url) ?? validUrl(source.unique_url)
-  const exportOwned = exportOwnedProperties(source)
+  const readwiseUrl = validUrl(source.readwise_url)
 
   return {
     Source: Builder.title(
@@ -214,23 +210,16 @@ function fullExportProperties(source: ReadwiseSource) {
       : [],
     Site: [],
     Tags: Builder.multiSelect(...readwiseTagNames(source)),
-    "Open in Reader": [],
+    Summary: summary ? Builder.richText(summary) : [],
+    Note: note ? Builder.richText(note) : [],
+    Origin: Builder.select(sourceName(source.source)),
+    "Reading Time": [],
     Saved: [],
     "Last Opened": [],
-    Summary: summary.text ? Builder.richText(summary.text) : [],
-    Note: note.text ? Builder.richText(note.text) : [],
-    Origin: Builder.select(sourceName(source.source)),
-    Archived: Builder.checkbox(false),
-    "Reading Time": [],
-    "Word Count": [],
     Published: [],
-    Updated: [],
+    "Open in Readwise": readwiseUrl ? Builder.url(readwiseUrl) : [],
     "Original URL": originalUrl ? Builder.url(originalUrl) : [],
-    "Readwise Review": exportOwned["Readwise Review"],
-    "Summary Truncated": Builder.checkbox(summary.truncated),
-    "Note Truncated": Builder.checkbox(note.truncated),
-    "Reader Document ID": readerId ? Builder.richText(readerId) : [],
-    "Readwise Source ID": exportOwned["Readwise Source ID"],
+    "Removed upstream": Builder.checkbox(false),
     "Source Key": Builder.richText(key),
   }
 }
@@ -238,13 +227,35 @@ function fullExportProperties(source: ReadwiseSource) {
 export function exportSourceToChange(
   source: ReadwiseSource,
   options: { initialBackfill?: boolean } = {}
-) {
+): SourceChange | undefined {
   const key = exportSourceKey(source)
   const readerId = readerExternalId(source)
-  // Reader LIST owns unified reader:<id> rows. An Export tombstone cannot prove
-  // that the Reader document disappeared, so the replacement sync resolves it.
   if (source.is_deleted) {
-    return readerId ? undefined : { type: "delete" as const, key }
+    // Removing the Export representation does not remove the unified Reader
+    // document. Reader LIST has no matching deletion tombstone, so preserve
+    // that Source as active rather than inferring its state from one API.
+    if (readerId) return undefined
+
+    const title = trimmed(source.readable_title) ?? trimmed(source.title)
+    // A partial upsert marks the retained row without clearing its last useful
+    // metadata or the user's Notion context.
+    return {
+      type: "upsert" as const,
+      key,
+      properties: sourcePropertyPatch({
+        ...(title
+          ? {
+              Source: Builder.title(
+                displayTitle(
+                  title,
+                  `Removed Readwise source ${source.user_book_id}`
+                )
+              ),
+            }
+          : {}),
+        ...retainedSourcePatch(key, true),
+      }),
+    }
   }
 
   // On the initial full-history cycle, Reader's own full-history phase follows
@@ -254,43 +265,10 @@ export function exportSourceToChange(
     return {
       type: "upsert" as const,
       key,
-      properties: {
-        ...exportOwnedProperties(source),
-        "Reader Document ID": Builder.richText(readerId),
-        "Source Key": Builder.richText(key),
-      },
+      properties: sourcePropertyPatch(readerExportPatch(source, key)),
     }
   }
 
-  return {
-    type: "upsert" as const,
-    key,
-    properties: fullExportProperties(source),
-  }
-}
-
-export function exportSourceToReconciliationChange(
-  source: ReadwiseSource,
-  readerPresent: boolean
-) {
-  if (source.is_deleted) {
-    throw new Error(
-      "Readwise reconciliation unexpectedly returned a deleted source."
-    )
-  }
-  const key = exportSourceKey(source)
-  const readerId = readerExternalId(source)
-  if (readerId && readerPresent) {
-    return {
-      type: "upsert" as const,
-      key,
-      properties: {
-        ...exportOwnedProperties(source),
-        "Reader Document ID": Builder.richText(readerId),
-        "Source Key": Builder.richText(key),
-      },
-    }
-  }
   return {
     type: "upsert" as const,
     key,
