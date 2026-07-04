@@ -21,7 +21,7 @@ export const INITIAL_TITLE = "Todoist Completed Work"
 export const PRIMARY_KEY = "Completion ID"
 
 export const completedWorkSchema = {
-  databaseIcon: notionIcon("checkmark-square", "green"),
+  databaseIcon: notionIcon("checkmark-square", "red"),
   properties: {
     Task: Schema.title(),
     Completed: Schema.date(),
@@ -122,7 +122,7 @@ export function completedTaskToChange(
     key: occurrenceId,
     upstreamUpdatedAt:
       latestTimestamp(task.updatedAt, completedAtUtc) ?? completedAtUtc,
-    icon: Builder.notionIcon("checkmark", "green"),
+    icon: Builder.notionIcon("checkmark", "red"),
     // Intentionally no pageContentMarkdown: users can own the page body and
     // add properties without a later provider upsert overwriting either.
     properties: {

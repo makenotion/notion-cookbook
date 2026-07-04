@@ -297,17 +297,26 @@ function nextCursor(value: unknown, context: string): string | undefined {
 
 function parseCompletedTasksPage(value: unknown): TodoistCompletedTasksPage {
   const response = object(value, "completed tasks response")
-  if (!("items" in response) || !("next_cursor" in response)) {
-    throw new Error(
-      "Todoist API completed tasks response is missing items or next_cursor."
-    )
+  if (!("items" in response)) {
+    throw new Error("Todoist API completed tasks response is missing items.")
   }
   if (!Array.isArray(response.items)) {
     throw new Error("Todoist API returned invalid completed tasks items.")
   }
+  if (!("next_cursor" in response) && response.items.length > 0) {
+    throw new Error(
+      "Todoist API completed tasks response is missing next_cursor."
+    )
+  }
   return {
     resources: response.items.map(parseCompletedTask),
-    nextCursor: nextCursor(response.next_cursor, "completed tasks response"),
+    // Todoist omits next_cursor on an empty terminal page instead of returning
+    // the documented null value. A non-empty page still requires the cursor
+    // field so a malformed response cannot silently advance the checkpoint.
+    nextCursor:
+      "next_cursor" in response
+        ? nextCursor(response.next_cursor, "completed tasks response")
+        : undefined,
   }
 }
 

@@ -19,7 +19,7 @@ export const INITIAL_TITLE = "Todoist Projects"
 export const PRIMARY_KEY = "Todoist Project ID"
 
 export const projectSchema = {
-  databaseIcon: notionIcon("folder"),
+  databaseIcon: notionIcon("folder", "red"),
   properties: {
     Project: Schema.title(),
     State: Schema.select([
@@ -67,7 +67,7 @@ export function projectToChange(
     icon:
       state === "Archived"
         ? Builder.notionIcon("archive", "gray")
-        : Builder.notionIcon("folder"),
+        : Builder.notionIcon("folder", "red"),
     properties: {
       Project: Builder.title(name),
       State: Builder.select(state),

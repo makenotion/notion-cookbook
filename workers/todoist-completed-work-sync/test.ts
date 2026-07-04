@@ -108,6 +108,7 @@ test("worker manifest registers durable incremental syncs and shared pacing", ()
       key: database.key,
       title: database.config.initialTitle,
       primaryKey: database.config.primaryKeyProperty,
+      icon: database.config.schema.databaseIcon,
       firstSix: Object.keys(database.config.schema.properties).slice(0, 6),
     })),
     [
@@ -115,6 +116,7 @@ test("worker manifest registers durable incremental syncs and shared pacing", ()
         key: "projects",
         title: "Todoist Projects",
         primaryKey: "Todoist Project ID",
+        icon: { type: "notion", icon: "folder", color: "red" },
         firstSix: [
           "Project",
           "State",
@@ -128,6 +130,7 @@ test("worker manifest registers durable incremental syncs and shared pacing", ()
         key: "completedWork",
         title: "Todoist Completed Work",
         primaryKey: "Completion ID",
+        icon: { type: "notion", icon: "checkmark-square", color: "red" },
         firstSix: [
           "Task",
           "Completed",
@@ -520,6 +523,11 @@ test("completed-task transform preserves occurrence identity and user-owned body
 
   const change = completedTaskToChange(deduped[0]!, AUTHENTICATED_USER.timeZone)
   assert.equal(change.key, completionId(deduped[0]!))
+  assert.deepEqual(change.icon, {
+    type: "notion",
+    icon: "checkmark",
+    color: "red",
+  })
   assert.equal("pageContentMarkdown" in change, false)
   assert.deepEqual(
     Object.keys(change.properties),
@@ -736,6 +744,16 @@ test("projects traverse active then archived and retain last-known rows", async 
   const archived = await parsedProject("projects-archived.json")
   const activeChange = projectToChange(active, "active")
   const archivedChange = projectToChange(archived, "archived")
+  assert.deepEqual(activeChange.icon, {
+    type: "notion",
+    icon: "folder",
+    color: "red",
+  })
+  assert.deepEqual(archivedChange.icon, {
+    type: "notion",
+    icon: "archive",
+    color: "gray",
+  })
   assert.deepEqual(
     Object.keys(activeChange.properties),
     Object.keys(projectSchema.properties)
@@ -1193,7 +1211,7 @@ test("HTTP failures are bounded, rate-aware, and never expose the API token", as
   const malformed = createTodoistClient({
     beforeRequest: async () => {},
     getApiToken: () => "test-token",
-    fetch: async () => Response.json({ items: [] }),
+    fetch: async () => Response.json({ next_cursor: null }),
   })
   await assert.rejects(
     () =>
@@ -1201,7 +1219,38 @@ test("HTTP failures are bounded, rate-aware, and never expose the API token", as
         since: "2026-07-01T00:00:00Z",
         until: "2026-07-03T00:00:00Z",
       }),
-    /missing items or next_cursor/
+    /missing items/
+  )
+
+  const terminalWithoutCursor = createTodoistClient({
+    beforeRequest: async () => {},
+    getApiToken: () => "test-token",
+    fetch: async () => Response.json({ items: [] }),
+  })
+  assert.deepEqual(
+    await terminalWithoutCursor.fetchCompletedTasksPage({
+      since: "2026-07-01T00:00:00Z",
+      until: "2026-07-03T00:00:00Z",
+    }),
+    { resources: [], nextCursor: undefined }
+  )
+
+  const nonterminalWithoutCursor = createTodoistClient({
+    beforeRequest: async () => {},
+    getApiToken: () => "test-token",
+    fetch: async () =>
+      Response.json({
+        items: (fixture("completed-tasks-page.json") as { items: unknown[] })
+          .items,
+      }),
+  })
+  await assert.rejects(
+    () =>
+      nonterminalWithoutCursor.fetchCompletedTasksPage({
+        since: "2026-07-01T00:00:00Z",
+        until: "2026-07-03T00:00:00Z",
+      }),
+    /missing next_cursor/
   )
 
   const oversizedCursor = createTodoistClient({
