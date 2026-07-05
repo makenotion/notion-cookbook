@@ -54,6 +54,7 @@ const bookmark: RaindropBookmark = {
   collection: { $id: 7 },
   important: true,
   broken: false,
+  reminderAt: "2026-06-10T15:00:00.000Z",
   created: "2026-06-01T10:00:00.000Z",
   lastUpdate: "2026-06-02T11:00:00.000Z",
   highlights: [{ _id: "highlight-1" }],
@@ -106,6 +107,7 @@ function bookmarkPayload(overrides: Record<string, unknown> = {}) {
     collection: bookmark.collection,
     important: bookmark.important,
     broken: bookmark.broken,
+    reminder: bookmark.reminderAt ? { data: bookmark.reminderAt } : undefined,
     created: bookmark.created,
     lastUpdate: bookmark.lastUpdate,
     highlights: bookmark.highlights,
@@ -186,7 +188,7 @@ test("schemas lead with the fields used to review and connect research", () => {
   assert.deepEqual(Object.keys(collectionSchema.properties).slice(0, 6), [
     "Name",
     "Parent",
-    "Bookmarks",
+    "Bookmark count",
     "Updated",
     "Last Seen",
     "Public",
@@ -195,9 +197,9 @@ test("schemas lead with the fields used to review and connect research", () => {
     "Title",
     "URL",
     "Collection",
+    "Reminder",
+    "Created",
     "Tags",
-    "Favorite",
-    "Updated",
   ])
   assert.deepEqual(Object.keys(highlightSchema.properties).slice(0, 6), [
     "Highlight",
@@ -207,6 +209,14 @@ test("schemas lead with the fields used to review and connect research", () => {
     "Tags",
     "Created",
   ])
+  assert.equal(
+    propertyIncludes(bookmarkSchema.properties.Collection, "Bookmarks"),
+    true
+  )
+  assert.equal(
+    propertyIncludes(highlightSchema.properties.Bookmark, "Highlights"),
+    true
+  )
 })
 
 test("worker manifest uses non-destructive hourly scans behind one shared pacer", () => {
@@ -278,7 +288,8 @@ test("bookmark transform scopes keys and relations while preserving raw IDs", ()
   )
   assert.ok(propertyIncludes(change.properties.Tags, "typescript"))
   assert.ok(propertyIncludes(change.properties.Type, "Article"))
-  assert.ok(propertyIncludes(change.properties.Highlights, "1"))
+  assert.ok(propertyIncludes(change.properties["Highlight count"], "1"))
+  assert.ok(propertyIncludes(change.properties.Reminder, "2026-06-10"))
   assert.ok(propertyIncludes(change.properties.Created, "UTC"))
   assert.ok(propertyIncludes(change.properties.Updated, "UTC"))
   assert.ok(propertyIncludes(change.properties["Last Seen"], "2026-07-03"))
@@ -322,6 +333,7 @@ test("bookmark transform clears optional values without owning page content", ()
       excerpt: "",
       note: "",
       tags: [],
+      reminderAt: undefined,
     },
     false,
     observedAt
@@ -331,6 +343,7 @@ test("bookmark transform clears optional values without owning page content", ()
   assert.deepEqual(change.properties.Excerpt, [])
   assert.deepEqual(change.properties.Note, [])
   assert.deepEqual(change.properties.Tags, [])
+  assert.deepEqual(change.properties.Reminder, [])
   assert.equal("pageContentMarkdown" in change, false)
 })
 
@@ -375,6 +388,7 @@ test("collection transform scopes parent relations and exposes raw identity", ()
   )
   assert.deepEqual(root.properties.Parent, [])
   assert.ok(propertyIncludes(child.properties["Collection ID"], "7"))
+  assert.ok(propertyIncludes(child.properties["Bookmark count"], "12"))
   assert.ok(propertyIncludes(child.properties.Created, "UTC"))
   assert.ok(propertyIncludes(child.properties.Updated, "UTC"))
   assert.ok(propertyIncludes(child.properties["Last Seen"], "2026-07-03"))
@@ -704,6 +718,7 @@ test("client sends bounded GET requests and sorts active bookmarks ascending", a
   const page = await session.fetchBookmarksPage("active", 2)
 
   assert.equal(page.items[0]._id, 42)
+  assert.equal(page.items[0].reminderAt, "2026-06-10T15:00:00.000Z")
   assert.equal(paced, 2)
   assert.equal(requests[0].authorization, "Bearer test-token")
   const requestUrl = new URL(requests[0].url)
@@ -722,7 +737,12 @@ test("client normalizes provider timestamp offsets to UTC", async () => {
     fetchImpl: withAuthenticatedUser(async () =>
       jsonResponse({
         result: true,
-        items: [bookmarkPayload({ created: "2026-06-01T15:30:00+05:30" })],
+        items: [
+          bookmarkPayload({
+            created: "2026-06-01T15:30:00+05:30",
+            reminder: { data: "2026-06-10T15:30:00+05:30" },
+          }),
+        ],
       })
     ),
     getAccessToken: () => "test-token",
@@ -731,6 +751,31 @@ test("client normalizes provider timestamp offsets to UTC", async () => {
   const session = await client.authenticate()
   const page = await session.fetchBookmarksPage("active", 0)
   assert.equal(page.items[0].created, "2026-06-01T10:00:00.000Z")
+  assert.equal(page.items[0].reminderAt, "2026-06-10T10:00:00.000Z")
+})
+
+test("client treats absent or null reminders as unscheduled", async () => {
+  const client = createRaindropClient({
+    beforeRequest: async () => undefined,
+    fetchImpl: withAuthenticatedUser(async () =>
+      jsonResponse({
+        result: true,
+        items: [
+          bookmarkPayload({ _id: 42, reminder: undefined }),
+          bookmarkPayload({ _id: 43, reminder: null }),
+        ],
+      })
+    ),
+    getAccessToken: () => "test-token",
+  })
+
+  const page = await (
+    await client.authenticate()
+  ).fetchBookmarksPage("active", 0)
+  assert.deepEqual(
+    page.items.map((item) => item.reminderAt),
+    [undefined, undefined]
+  )
 })
 
 test("client preserves 2,000-character URLs and omits longer links", async () => {
@@ -972,6 +1017,24 @@ test("client rejects duplicate IDs and malformed provider values", async () => {
   await assert.rejects(
     malformedSession.fetchBookmarksPage("active", 0),
     /must use HTTP or HTTPS/
+  )
+
+  const malformedReminderClient = createRaindropClient({
+    beforeRequest: async () => undefined,
+    fetchImpl: withAuthenticatedUser(async () =>
+      jsonResponse({
+        result: true,
+        items: [bookmarkPayload({ reminder: {} })],
+      })
+    ),
+    getAccessToken: () => "test-token",
+  })
+  await assert.rejects(
+    (await malformedReminderClient.authenticate()).fetchBookmarksPage(
+      "active",
+      0
+    ),
+    /reminder.data must be a string/
   )
 })
 

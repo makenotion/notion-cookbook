@@ -22,7 +22,7 @@ export const highlightSchema = {
 
     Bookmark: Schema.relation("bookmarks", {
       twoWay: true,
-      relatedPropertyName: "Synced Highlights",
+      relatedPropertyName: "Highlights",
     }),
 
     Text: Schema.richText(),

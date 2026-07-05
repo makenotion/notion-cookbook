@@ -23,18 +23,24 @@ export const bookmarkSchema = {
 
     Collection: Schema.relation("collections", {
       twoWay: true,
-      relatedPropertyName: "Synced Bookmarks",
+      relatedPropertyName: "Bookmarks",
     }),
+
+    Reminder: Schema.date(),
+
+    Created: Schema.date(),
 
     Tags: Schema.multiSelect([]),
 
     Favorite: Schema.checkbox(),
 
-    Updated: Schema.date(),
-
     Note: Schema.richText(),
 
     Excerpt: Schema.richText(),
+
+    "Highlight count": Schema.number(),
+
+    Updated: Schema.date(),
 
     "In Trash": Schema.checkbox(),
 
@@ -52,10 +58,6 @@ export const bookmarkSchema = {
     ]),
 
     Domain: Schema.richText(),
-
-    Highlights: Schema.number(),
-
-    Created: Schema.date(),
 
     Truncated: Schema.checkbox(),
 
@@ -92,6 +94,9 @@ export function bookmarkToChange(
       Collection: [
         Builder.relation(collectionKey(accountId, bookmark.collection.$id)),
       ],
+      Reminder: bookmark.reminderAt
+        ? Builder.dateTime(bookmark.reminderAt, "UTC")
+        : [],
       Tags: tags.length > 0 ? Builder.multiSelect(...tags) : [],
       Type: Builder.select(displayLabel(bookmark.type)),
       Domain: bookmark.domain ? Builder.richText(bookmark.domain) : [],
@@ -107,7 +112,7 @@ export function bookmarkToChange(
           textWasTruncated(bookmark.note) ||
           textWasTruncated(bookmark.excerpt)
       ),
-      Highlights: Builder.number(bookmark.highlights.length),
+      "Highlight count": Builder.number(bookmark.highlights.length),
       Created: Builder.dateTime(bookmark.created, "UTC"),
       Updated: Builder.dateTime(bookmark.lastUpdate, "UTC"),
       "Last Seen": Builder.dateTime(observedAt, "UTC"),

@@ -19,7 +19,7 @@ export const collectionSchema = {
       relatedPropertyName: "Subcollections",
     }),
 
-    Bookmarks: Schema.number(),
+    "Bookmark count": Schema.number(),
 
     Updated: Schema.date(),
 
@@ -55,7 +55,7 @@ export function collectionToChange(
         collection.parentId === undefined
           ? []
           : [Builder.relation(collectionKey(accountId, collection.parentId))],
-      Bookmarks:
+      "Bookmark count":
         collection.count === undefined ? [] : Builder.number(collection.count),
       Public: Builder.checkbox(collection.public),
       Created: collection.created

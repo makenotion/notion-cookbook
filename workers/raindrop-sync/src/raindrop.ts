@@ -37,6 +37,7 @@ export type RaindropBookmark = {
   collection: { $id: number }
   important: boolean
   broken: boolean
+  reminderAt?: string
   created: string
   lastUpdate: string
   highlights: unknown[]
@@ -435,6 +436,15 @@ function optionalBoolean(value: unknown, label: string): boolean {
   return booleanValue(value, label)
 }
 
+function optionalReminderDate(
+  value: unknown,
+  label: string
+): string | undefined {
+  if (value === undefined || value === null) return undefined
+  const reminder = objectValue(value, label)
+  return dateTimeValue(reminder.data, `${label}.data`)
+}
+
 function dateTimeValue(value: unknown, label: string): string {
   const dateTime = stringValue(value, label)
   if (!dateTime || !Number.isFinite(Date.parse(dateTime))) {
@@ -540,6 +550,7 @@ function parseBookmark(value: unknown, label: string): RaindropBookmark {
     },
     important: optionalBoolean(item.important, `${label}.important`),
     broken: optionalBoolean(item.broken, `${label}.broken`),
+    reminderAt: optionalReminderDate(item.reminder, `${label}.reminder`),
     created: dateTimeValue(item.created, `${label}.created`),
     lastUpdate: dateTimeValue(item.lastUpdate, `${label}.lastUpdate`),
     highlights,

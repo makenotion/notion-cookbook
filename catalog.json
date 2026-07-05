@@ -406,8 +406,8 @@
     },
     {
       "id": "raindrop-sync",
-      "title": "Raindrop.io reading library sync",
-      "summary": "Maintain a non-destructive, connected archive of Raindrop.io collections, bookmarks, Trash, and highlights in Notion.",
+      "title": "Raindrop.io research library sync",
+      "summary": "Sync Raindrop.io sources and exact passages into a connected research library for project evidence and downstream work.",
       "path": "workers/raindrop-sync",
       "kind": "worker-sync",
       "status": "ready",

@@ -1,13 +1,13 @@
-# Worker sync: Raindrop.io reading library
+# Worker sync: Raindrop.io research library
 
-Turn your Raindrop.io bookmarks and highlights into a connected Notion
-research library. Use it to review what you save, connect sources and evidence
-to projects, and preserve the notes you develop in Notion.
+Turn your Raindrop.io bookmarks and highlights into evidence you can connect to
+projects, claims, decisions, and finished work in Notion. Follow every passage
+back to its source while Raindrop.io remains the place to capture and organize.
 
 One deploy creates three related managed databases and refreshes them every
 hour. The Worker is read-only and never deletes a Notion page. Raindrop.io
-remains the place to collect and organize; Notion becomes the project and
-knowledge layer.
+remains the source of truth; Notion connects what you save to the work it
+informs.
 
 ## Quickstart
 
@@ -82,48 +82,60 @@ Worker and databases for a different account.
 
 ## What you can answer
 
-| Managed database            | Questions it helps answer                                                                                    |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| **Raindrop.io Collections** | How is my library organized? Which collections contain the most saved links?                                 |
-| **Raindrop.io Bookmarks**   | What deserves review? What have I favorited, tagged, broken, or moved to Trash?                              |
-| **Raindrop.io Highlights**  | Which quotes and annotations support this project? Which bookmark and collection supplied the original idea? |
+| Question                                                                                  | Start here                 | How to answer it                                                                                                                                                                                             |
+| ----------------------------------------------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Which sources and exact passages support this project, claim, or decision?                | **Raindrop.io Highlights** | Add and filter by a `Project`, `Claim`, or `Decision` relation. **Text** and **Note** hold the evidence; **Bookmark** identifies its source.                                                                 |
+| Which new or scheduled sources still need processing?                                     | **Raindrop.io Bookmarks**  | Add `Review Status`. Filter **In Trash** unchecked, status empty, and either **Created** recently or **Reminder** due.                                                                                       |
+| Which captured insights have not yet become a brief, decision, document, or other output? | **Raindrop.io Highlights** | Add `Synthesis Status` and optionally `Used in`. Exclude `Used` and `Archived`; when `Used in` exists, filter it to empty.                                                                                   |
+| Where did this idea originate?                                                            | **Raindrop.io Highlights** | Follow **Bookmark** to **URL**, **Collection**, **Domain**, **Excerpt**, and **Note**. To show Collection in Highlights, add a rollup using **Bookmark** as the relation and **Collection** as the property. |
 
-Bookmarks relate to Collections, and Highlights relate to Bookmarks. The
-Worker preserves properties you add in Notion and each page's body content.
+Each Highlight links to a **Bookmark**, and each Bookmark links to a
+**Collection**. The reciprocal **Highlights** and **Bookmarks** relations let
+you traverse the source trail in either direction. Project and output databases
+are specific to each workspace, so you add those relations in Notion. The
+Worker preserves them and each page's body content.
 
 ## Views you can build
 
-- **Inbox to review:** Add a `Review Status` select to **Raindrop.io
-  Bookmarks**. Filter for an empty status with **In Trash** unchecked, then sort
-  **Updated** newest first. Mark links `Reviewed` as you process them.
-- **Library cleanup:** In **Raindrop.io Bookmarks**, filter where **Broken** or
-  **In Trash** is checked. Add older **Last Seen** records when you want to
-  review links that may no longer be visible upstream.
-- **Project evidence:** Add a `Project` relation to **Raindrop.io Highlights**
-  and place a linked view on each project. Add the relation to Bookmarks too if
-  you also want a project reading list.
+1. **Project evidence and provenance:** Add a `Project` relation from Highlights
+   to your Projects database, filter it to the current project, and show
+   **Text**, **Note**, **Tags**, and **Bookmark**. Add the Collection rollup
+   above, then place the linked view in your project template.
+2. **Insights awaiting an output:** Add a `Synthesis Status` select with
+   `To synthesize`, `Drafting`, `Used`, and `Archived`; optionally add a
+   `Used in` relation. Exclude `Used` and `Archived`, require `Used in` to be
+   empty when present, and group by **Tags** or `Project`.
+3. **Processing queue:** Add a `Review Status` select to **Raindrop.io
+   Bookmarks**. Filter **In Trash** to unchecked and `Review Status` to empty,
+   then include recently **Created** bookmarks or those with **Reminder** on or
+   before today. Sort **Reminder** ascending, then **Created** newest first.
 
 ## Reference
 
 ### Databases
 
-| Database                    | One page per                       | Relation          | Primary key      | Schedule |
-| --------------------------- | ---------------------------------- | ----------------- | ---------------- | -------- |
-| **Raindrop.io Collections** | Root, child, or system collection  | Parent collection | `Collection Key` | Hourly   |
-| **Raindrop.io Bookmarks**   | Active or trashed bookmark         | Collection        | `Bookmark Key`   | Hourly   |
-| **Raindrop.io Highlights**  | Highlight returned for the account | Bookmark          | `Highlight Key`  | Hourly   |
+| Database                    | One page per                       | Connected by           | Primary key      | Schedule |
+| --------------------------- | ---------------------------------- | ---------------------- | ---------------- | -------- |
+| **Raindrop.io Collections** | Root, child, or system collection  | Parent, Bookmarks      | `Collection Key` | Hourly   |
+| **Raindrop.io Bookmarks**   | Active or trashed bookmark         | Collection, Highlights | `Bookmark Key`   | Hourly   |
+| **Raindrop.io Highlights**  | Highlight returned for the account | Bookmark               | `Highlight Key`  | Hourly   |
 
 ### Included data
 
-| Source      | Included                                                               | Limit                           |
-| ----------- | ---------------------------------------------------------------------- | ------------------------------- |
-| Collections | Root and child collections, plus synthetic Unsorted and Trash targets  | 10,000 collections              |
-| Bookmarks   | All active bookmarks followed by Trash                                 | 10,000 per active or Trash scan |
-| Highlights  | Highlights, notes, colors, tags, bookmark references, and source links | 10,000 highlights               |
+| Source      | Included                                                                   | Limit                           |
+| ----------- | -------------------------------------------------------------------------- | ------------------------------- |
+| Collections | Root and child collections, plus synthetic Unsorted and Trash targets      | 10,000 collections              |
+| Bookmarks   | Active bookmarks and Trash, including metadata, notes, tags, and reminders | 10,000 per active or Trash scan |
+| Highlights  | Highlights, notes, colors, tags, bookmark references, and source links     | 10,000 highlights               |
 
 The collection-list responses do not include counts for Unsorted and Trash, so
-their synthetic rows leave **Bookmarks** empty. This Worker does not call the
-separate account-statistics endpoint.
+their synthetic rows leave **Bookmark count** empty. Their **Bookmarks**
+relations still contain the bookmarks observed in each system collection. This
+Worker does not call the separate account-statistics endpoint.
+
+The Worker does not copy full article text, cached page contents, or uploaded
+file and media bodies. It syncs the metadata, excerpts, notes, and highlights
+needed for these workflows while Raindrop.io retains the complete source.
 
 ### Update behavior
 
@@ -164,6 +176,7 @@ npm run build
 
 - [Raindrop.io API overview][raindrop-overview]
 - [Paginated bookmark reads][raindrop-bookmarks]
+- [Reminders][raindrop-reminders]
 - [Highlights][raindrop-highlights]
 - [Notion Workers sync guide](https://developers.notion.com/workers/guides/syncs)
 - [Contributing guide](../../CONTRIBUTING.md)
@@ -172,3 +185,4 @@ npm run build
 [raindrop-bookmarks]: https://developer.raindrop.io/v1/raindrops/multiple
 [raindrop-highlights]: https://developer.raindrop.io/v1/highlights
 [raindrop-overview]: https://developer.raindrop.io/
+[raindrop-reminders]: https://help.raindrop.io/reminders
