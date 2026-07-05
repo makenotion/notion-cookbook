@@ -21,6 +21,7 @@ type ReleaseJson = {
   body: string | null
   draft: boolean
   prerelease: boolean
+  created_at: string
   published_at: string | null
 }
 
@@ -43,6 +44,8 @@ type FixtureOptions = {
   missingTag?: boolean
   hasMoreAssets?: boolean
   releasePage?: number
+  releasePages?: ReleaseJson[][]
+  hasMoreReleasePages?: boolean
   latestBefore?: number | null
   latestAfter?: number | null
   failLatestAfterPatch?: boolean
@@ -70,6 +73,24 @@ function requestUrl(input: string | URL | Request): string {
   return input instanceof Request ? input.url : String(input)
 }
 
+function listedRelease(
+  id: number,
+  overrides: Partial<ReleaseJson> = {}
+): ReleaseJson {
+  return {
+    id,
+    html_url: `https://github.com/${REPOSITORY}/releases/tag/v${id}`,
+    tag_name: `v${id}`,
+    name: `Version ${id}`,
+    body: `Notes ${id}`,
+    draft: true,
+    prerelease: false,
+    created_at: `2026-07-${String((id % 28) + 1).padStart(2, "0")}T12:00:00Z`,
+    published_at: null,
+    ...overrides,
+  }
+}
+
 function releaseFixture(options: FixtureOptions = {}) {
   let release: ReleaseJson = {
     id: RELEASE_ID,
@@ -79,6 +100,7 @@ function releaseFixture(options: FixtureOptions = {}) {
     body: "Highlights",
     draft: true,
     prerelease: false,
+    created_at: "2026-07-04T12:00:00Z",
     published_at: null,
     ...options.release,
   }
@@ -121,6 +143,20 @@ function releaseFixture(options: FixtureOptions = {}) {
     }
     if (url.pathname === `/repos/${REPOSITORY}/releases` && method === "GET") {
       const page = Number(url.searchParams.get("page") ?? "1")
+      if (options.releasePages) {
+        const pageReleases = options.releasePages[page - 1] ?? []
+        const hasNext =
+          page < options.releasePages.length ||
+          (page === options.releasePages.length &&
+            options.hasMoreReleasePages === true)
+        return json(pageReleases, 200, {
+          ...(hasNext
+            ? {
+                Link: `<https://api.github.test/repos/${REPOSITORY}/releases?per_page=100&page=${page + 1}>; rel="next"`,
+              }
+            : {}),
+        })
+      }
       const releasePage = options.releasePage ?? 1
       return json(page === releasePage ? [release] : [], 200, {
         ...(page < releasePage
@@ -305,6 +341,90 @@ test("inspection versions exact release content independent of asset order", asy
   assert.equal(first.version, reordered.version)
   assert.notEqual(first.version, relabeled.version)
   assert.notEqual(first.version, redigested.version)
+})
+
+test("draft discovery is bounded and honest about incomplete results", async (t) => {
+  await t.test(
+    "filters published releases and returns lightweight drafts",
+    async () => {
+      const firstDraft = listedRelease(101)
+      const secondDraft = listedRelease(103, {
+        name: null,
+        prerelease: true,
+      })
+      const fixture = releaseFixture({
+        releasePages: [
+          [
+            firstDraft,
+            listedRelease(102, {
+              draft: false,
+              published_at: "2026-07-05T12:00:00Z",
+            }),
+            secondDraft,
+          ],
+        ],
+      })
+
+      const result = await client(fixture.fetch).listDraftReleases()
+
+      assert.equal(result.repository, REPOSITORY)
+      assert.equal(result.hasMore, false)
+      assert.deepEqual(result.drafts, [
+        {
+          releaseId: firstDraft.id,
+          tag: firstDraft.tag_name,
+          name: firstDraft.name,
+          htmlUrl: firstDraft.html_url,
+          prerelease: false,
+          createdAt: firstDraft.created_at,
+        },
+        {
+          releaseId: secondDraft.id,
+          tag: secondDraft.tag_name,
+          name: "",
+          htmlUrl: secondDraft.html_url,
+          prerelease: true,
+          createdAt: secondDraft.created_at,
+        },
+      ])
+    }
+  )
+
+  await t.test("returns at most 20 drafts", async () => {
+    const fixture = releaseFixture({
+      releasePages: [
+        Array.from({ length: 21 }, (_, index) => listedRelease(200 + index)),
+      ],
+    })
+
+    const result = await client(fixture.fetch).listDraftReleases()
+
+    assert.equal(result.drafts.length, 20)
+    assert.equal(result.hasMore, true)
+  })
+
+  await t.test("marks a bounded scan as potentially incomplete", async () => {
+    const fixture = releaseFixture({
+      releasePages: Array.from({ length: 10 }, (_, index) => [
+        listedRelease(300 + index, {
+          draft: index === 0,
+          published_at: index === 0 ? null : "2026-07-05T12:00:00Z",
+        }),
+      ]),
+      hasMoreReleasePages: true,
+    })
+
+    const result = await client(fixture.fetch).listDraftReleases()
+
+    assert.equal(result.drafts.length, 1)
+    assert.equal(result.hasMore, true)
+    assert.equal(
+      fixture.calls.filter(
+        (call) => new URL(call.url).pathname === `/repos/${REPOSITORY}/releases`
+      ).length,
+      10
+    )
+  })
 })
 
 test("draft lookup uses the documented bounded releases list", async (t) => {

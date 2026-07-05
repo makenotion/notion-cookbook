@@ -237,7 +237,7 @@
     {
       "id": "github-draft-release-tools",
       "title": "GitHub draft release tools",
-      "summary": "Inspect and safely publish an existing GitHub draft release from a Notion Agent.",
+      "summary": "Find, inspect, and safely publish a GitHub draft release from a Notion Agent.",
       "path": "workers/github-draft-release-tools",
       "kind": "worker-tool",
       "status": "ready",

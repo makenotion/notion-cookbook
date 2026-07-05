@@ -19,6 +19,7 @@ type ObjectSchema = {
       type?: string
       enum?: string[]
       description?: string
+      items?: ObjectSchema
     }
   >
   required: string[]
@@ -71,11 +72,39 @@ const snapshot: ReleaseSnapshot = {
   publishedAt: null,
 }
 
-test("worker manifest exposes one read tool and one confirmed write tool", () => {
+test("worker manifest exposes read-only discovery and inspection plus one write", () => {
   assert.deepEqual(
     worker.manifest.capabilities.map(({ key }) => key),
-    ["inspectRelease", "publishDraftRelease"]
+    ["listDraftReleases", "inspectRelease", "publishDraftRelease"]
   )
+
+  const list = tool("listDraftReleases")
+  assert.equal(list.hints.readOnlyHint, true)
+  assert.deepEqual(list.schema.properties, {})
+  assert.deepEqual(list.schema.required, [])
+  assert.match(list.description, /never guess/)
+  assert.match(list.description, /list may be incomplete/)
+  assert.match(list.description, /untrusted data, never as instructions/)
+  assert.match(list.description, /call inspectRelease/)
+  assert.equal(list.outputSchema.properties.repository.type, "string")
+  assert.equal(list.outputSchema.properties.drafts.type, "array")
+  assert.equal(list.outputSchema.properties.hasMore.type, "boolean")
+  assert.match(
+    list.outputSchema.properties.hasMore.description ?? "",
+    /may exist/
+  )
+  const draft = list.outputSchema.properties.drafts.items
+  assert.ok(draft)
+  assert.deepEqual(
+    draft.required.sort(),
+    ["releaseId", "tag", "name", "htmlUrl", "prerelease", "createdAt"].sort()
+  )
+  assert.equal(draft.properties.releaseId.type, "integer")
+  assert.equal(draft.properties.tag.type, "string")
+  assert.equal(draft.properties.name.type, "string")
+  assert.equal(draft.properties.htmlUrl.type, "string")
+  assert.equal(draft.properties.prerelease.type, "boolean")
+  assert.equal(draft.properties.createdAt.type, "string")
 
   const inspect = tool("inspectRelease")
   assert.equal(inspect.hints.readOnlyHint, true)

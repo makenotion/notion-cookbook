@@ -9,13 +9,13 @@ database or Redis.
 
 ## Try asking
 
-- “Inspect release 987654, summarize the notes preview, and flag anything omitted.”
-- “Check the tag, commit, notes, and assets for release 987654.”
+- “Show me the draft releases for this repository.”
+- “Inspect the v1.2.3 draft, summarize the notes preview, and flag anything omitted.”
 - “Publish the release you just inspected and make it the latest release.”
 - “Publish this draft, but keep the current latest release unchanged.”
 
-The inspect-first flow lets the agent show you the live GitHub release, ask for
-confirmation, and then publish that same version.
+The Agent helps you choose a draft, shows you its live GitHub details, asks for
+confirmation, and then publishes that same version.
 
 ## Quickstart
 
@@ -38,14 +38,11 @@ you want to publish from, generate a private key, and grant it:
 Webhooks are not required. Copy the Client ID from the App settings. After
 installing the App, open its **Configure** page and copy the trailing number
 from the URL (`.../installations/12345678`) as the installation ID. These
-commands show the repository ID, a single-line copy of the private key, and
-available draft release IDs:
+commands show the repository ID and a single-line copy of the private key:
 
 ```zsh
 gh api repos/example-org/example-repo --jq .id
 base64 < github-app.private-key.pem | tr -d '\n'
-gh api --paginate repos/example-org/example-repo/releases \
-  --jq '.[] | select(.draft) | [.id, .tag_name, .name] | @tsv'
 ```
 
 Deploy the Worker and set the values you found above:
@@ -74,12 +71,17 @@ keep confirmation enabled for the publish tool.
 
 ## How it works
 
-The Worker exposes two tools:
+The Worker exposes three tools:
 
 | Tool                  | What it does                                                                                |
 | --------------------- | ------------------------------------------------------------------------------------------- |
+| `listDraftReleases`   | Lists up to 20 drafts in the configured repository so the user can choose one.              |
 | `inspectRelease`      | Reads a release by numeric ID and returns its current details plus an opaque `version`.     |
 | `publishDraftRelease` | Re-reads that release, requires the inspected version, publishes it, and checks the result. |
+
+Users can choose a draft by its tag and title; the Agent carries its numeric ID
+from `listDraftReleases` into `inspectRelease`. Results are bounded, and
+`hasMore: true` means other drafts may exist beyond the returned list.
 
 `inspectRelease` is read-only. Its `version` is a SHA-256 fingerprint of the
 release content. It is a stale-state guard, not an approval token or security
@@ -143,12 +145,13 @@ Copy `.env.example` to `.env`, add sandbox credentials, and use a disposable
 draft release:
 
 ```zsh
+ntn workers exec listDraftReleases --local -d '{}'
 ntn workers exec inspectRelease --local -d '{"releaseId": 987654}'
 ntn workers exec publishDraftRelease --local -d \
   '{"releaseId":987654,"expectedVersion":"version_from_inspect","latestBehavior":"make_latest"}'
 ```
 
-The second command publishes a real GitHub release. Inspect its input carefully
+The third command publishes a real GitHub release. Inspect its input carefully
 and use a sandbox repository for local testing.
 
 Run the offline checks without GitHub credentials:
@@ -161,9 +164,9 @@ npm run build
 
 ## Extend it
 
-Useful next steps include a read-only release browser, a managed release sync
-for discovery, or a tool that dispatches an existing GitHub Actions release
-workflow. None is required for these two tools to work.
+Useful next steps include a managed release sync for a richer browsing
+experience or a tool that dispatches an existing GitHub Actions release
+workflow. Neither is required for these tools to work.
 
 ## Project map
 

@@ -3,6 +3,8 @@ import { createHash } from "node:crypto"
 import type { GetAccessToken } from "./auth.js"
 import { normalizeRepository } from "./config.js"
 import type {
+  DraftReleaseSummary,
+  ListDraftReleasesResult,
   PublishReleaseInput,
   PublishReleaseResult,
   ReleaseAsset,
@@ -12,6 +14,7 @@ import type {
 const API_VERSION = "2026-03-10"
 const DEFAULT_API_URL = "https://api.github.com"
 const MAX_GITHUB_CALLS = 30
+const MAX_DRAFT_RELEASES = 20
 const MAX_RELEASE_ASSETS = 100
 const MAX_RELEASE_PAGES = 10
 
@@ -99,6 +102,7 @@ type ReleaseResponse = {
   body: string | null
   draft: boolean
   prerelease: boolean
+  created_at: string
   published_at: string | null
 }
 
@@ -248,6 +252,46 @@ export class GitHubClient {
 
   get callCount(): number {
     return this.calls
+  }
+
+  async listDraftReleases(): Promise<ListDraftReleasesResult> {
+    await this.verifyRepository()
+
+    const drafts: DraftReleaseSummary[] = []
+    for (let page = 1; page <= MAX_RELEASE_PAGES; page++) {
+      const response = await this.getWithHeaders<ReleaseResponse[]>(
+        `/repos/${this.repository}/releases?per_page=100&page=${page}`
+      )
+      for (const release of response.data) {
+        if (!release.draft) continue
+        drafts.push({
+          releaseId: release.id,
+          tag: release.tag_name,
+          name: release.name ?? "",
+          htmlUrl: release.html_url,
+          prerelease: release.prerelease,
+          createdAt: release.created_at,
+        })
+        if (drafts.length > MAX_DRAFT_RELEASES) {
+          return {
+            repository: this.repository,
+            drafts: drafts.slice(0, MAX_DRAFT_RELEASES),
+            hasMore: true,
+          }
+        }
+      }
+
+      const hasNext = hasNextPage(response.headers.get("Link"))
+      if (!hasNext) {
+        return { repository: this.repository, drafts, hasMore: false }
+      }
+    }
+
+    return {
+      repository: this.repository,
+      drafts,
+      hasMore: true,
+    }
   }
 
   async inspectRelease(releaseId: number): Promise<ReleaseSnapshot> {

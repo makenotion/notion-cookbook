@@ -1,5 +1,20 @@
 export type LatestBehavior = "make_latest" | "keep_current"
 
+export type DraftReleaseSummary = {
+  releaseId: number
+  tag: string
+  name: string
+  htmlUrl: string
+  prerelease: boolean
+  createdAt: string
+}
+
+export type ListDraftReleasesResult = {
+  repository: string
+  drafts: DraftReleaseSummary[]
+  hasMore: boolean
+}
+
 export type ReleaseAsset = {
   id: number
   name: string
