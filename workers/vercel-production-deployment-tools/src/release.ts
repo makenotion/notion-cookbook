@@ -13,6 +13,7 @@ import type {
 } from "./types.js"
 import { SafetyError, VercelHttpError } from "./types.js"
 
+// Production release inspection, safety checks, mutations, and reconciliation.
 const RECONCILIATION_ATTEMPTS = 6
 const RECONCILIATION_DELAY_MS = 1_000
 const ROLLBACK_WARNING =

@@ -130,11 +130,11 @@ to custom Production domains.
 
 ```text
 src/
-  index.ts       — registers the inspection, promotion, and rollback tools
-  transition.ts  — shared live preflight, one-shot mutation, and reconciliation
-  vercel.ts      — bounded Vercel REST client and optional health checks
-  config.ts      — fixed project and optional health configuration
-  types.ts       — shared tool and provider contracts
+  index.ts    — defines the agent tools and their input and output schemas
+  release.ts  — checks, performs, and verifies Production changes
+  vercel.ts   — calls Vercel and validates its responses
+  config.ts   — reads configuration and safety limits
+  types.ts    — shared data contracts and errors
 ```
 
 ## Run locally

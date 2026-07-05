@@ -1,9 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import {
-  executeTransition,
-  inspectProductionChange,
-} from "../src/transition.js"
+import { executeTransition, inspectProductionChange } from "../src/release.js"
 import type {
   ProductionObservation,
   RollingReleaseState,
@@ -370,7 +367,7 @@ test("write tools reject stale current and Git assertions before POST", async ()
   assert.deepEqual(staleSha.requests, [])
 })
 
-test("write tools recheck state, send one request, and reconcile", async () => {
+test("release tools recheck state, send one request, and reconcile", async () => {
   for (const action of ["promote", "rollback"] as const) {
     const vercel = new FakeVercel()
     const target = deployment({

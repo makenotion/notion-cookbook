@@ -1,7 +1,7 @@
 import { Worker } from "@notionhq/workers"
 import { j } from "@notionhq/workers/schema-builder"
 import { loadConfig } from "./config.js"
-import { executeTransition, inspectProductionChange } from "./transition.js"
+import { executeTransition, inspectProductionChange } from "./release.js"
 import type {
   InspectInput,
   TransitionAction,
