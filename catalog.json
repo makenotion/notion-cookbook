@@ -331,14 +331,14 @@
     },
     {
       "id": "jira-publish-implementation-plan",
-      "title": "Publish an approved Jira implementation plan",
-      "summary": "Publish an approved Notion work breakdown as one replay-safe Jira hierarchy with dependencies, backlinks, and a canonical receipt.",
+      "title": "Publish a Notion implementation plan to Jira",
+      "summary": "Prepare, publish, and inspect a bounded Notion implementation plan in one configured Jira project.",
       "path": "workers/jira-publish-implementation-plan",
       "kind": "worker-tool",
       "status": "ready",
       "language": "typescript",
       "runtime": "node",
-      "integrations": ["notion-workers", "jira-cloud", "redis"],
+      "integrations": ["notion-workers", "jira-cloud"],
       "entrypoints": ["src/index.ts"],
       "commands": {
         "install": "npm install",

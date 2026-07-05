@@ -6,7 +6,6 @@
   "scripts": {
     "build": "tsc --project tsconfig.json",
     "check": "tsc --project tsconfig.test.json",
-    "fingerprint": "tsx src/fingerprint-cli.ts",
     "format": "prettier --write \"**/*.{md,json,ts}\"",
     "format:check": "prettier --check \"**/*.{md,json,ts}\"",
     "test": "node --import tsx --test test/*.test.ts"
@@ -20,7 +19,6 @@
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
-    "ajv": "^8.17.1",
     "prettier": "3.6.2",
     "tsx": "^4.20.6",
     "typescript": "^5.8.0"

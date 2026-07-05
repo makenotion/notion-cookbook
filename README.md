@@ -139,7 +139,7 @@ and a **webhook** handles events from another service. See the complete
 | Browse log groups, streams, and events              | [CloudWatch Logs](workers/cloudwatch-logs/)                                       | AWS CloudWatch Logs |
 | Learn the database-query pattern with seeded data   | [DuckDB query](workers/duckdb-query/)                                             | DuckDB              |
 | Review and publish an existing draft release        | [GitHub draft release tools](workers/github-draft-release-tools/)                 | GitHub              |
-| Preview, publish, and inspect a Jira plan            | [Jira plan publisher](workers/jira-publish-implementation-plan/)                  | Jira Cloud          |
+| Preview, publish, and inspect a Jira plan           | [Jira plan publisher](workers/jira-publish-implementation-plan/)                  | Jira Cloud          |
 | Query a database with read-only SQL                 | [Postgres query](workers/postgres-query/)                                         | PostgreSQL          |
 | Turn a Notion page into PowerPoint slides (`.pptx`) | [PowerPoint creator](workers/powerpoint-creator/)                                 | Notion, PowerPoint  |
 | Query a warehouse with read-only SQL                | [Snowflake query](workers/snowflake-query/)                                       | Snowflake           |

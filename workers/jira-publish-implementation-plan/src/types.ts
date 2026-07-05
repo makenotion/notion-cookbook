@@ -1,152 +1,193 @@
-export type PlanNode = {
-  nodeKey: string
-  issueTypeId: string
-  parentNodeKey: string | null
+export type DraftNode = {
+  clientKey: string
   summary: string
   description: string
+  acceptanceCriteria: string
+  issueTypeName: string
+  issueTypeId: string | null
+  assigneeName: string | null
   assigneeAccountId: string | null
   labels: string[]
-  estimatePoints: number | null
-  sprintId: number | null
+  estimate: number | null
+  fixVersionName: string | null
   fixVersionId: string | null
 }
 
 export type PlanDependency = {
-  blockerNodeKey: string
-  blockedNodeKey: string
+  blockerClientKey: string
+  blockedClientKey: string
 }
 
-export type PublishImplementationPlanInput = {
-  approvalPageId: string
-  approvalRevision: string
-  planHash: string
-  projectKey: string
-  nodes: PlanNode[]
+export type DraftPlan = {
+  sourcePageId: string
+  epic: DraftNode
+  children: DraftNode[]
   dependencies: PlanDependency[]
 }
 
-export type ReceiptStatus =
-  | "completed"
-  | "no_op"
-  | "blocked"
-  | "conflict"
-  | "partial_failure"
-  | "ambiguous"
-
-export type NodeAction = "created" | "existing" | "failed" | "unknown"
-
-export type NodeRecord = {
-  nodeKey: string
-  issueId: string | null
-  issueKey: string | null
-  url: string | null
-  action: NodeAction
+export type PageSnapshot = {
+  pageId: string
+  url: string
+  lastEditedTime: string
 }
 
-export type DependencyRecord = {
-  blockerNodeKey: string
-  blockedNodeKey: string
-  action: "created" | "existing" | "failed" | "unknown"
+export type JiraNamedRef = {
+  id: string
+  name: string
 }
 
-export type ReceiptStep = {
-  name:
-    | "approval"
-    | "claim"
-    | "metadata"
-    | "nodes"
-    | "dependencies"
-    | "notion_receipt"
-  status: "completed" | "skipped" | "failed" | "unknown"
+export type JiraProjectRef = JiraNamedRef & {
+  key: string
+  url: string
+}
+
+export type JiraLinkTypeRef = JiraNamedRef & {
+  outward: string
+  inward: string
+}
+
+export type PreparedNode = {
+  clientKey: string
+  summary: string
+  description: string
+  acceptanceCriteria: string
+  issueType: JiraNamedRef
+  assignee: JiraNamedRef | null
+  labels: string[]
+  estimate: number | null
+  fixVersion: JiraNamedRef | null
+}
+
+export type PreparedPlanData = {
+  source: PageSnapshot
+  project: JiraProjectRef
+  blocksLinkType: JiraLinkTypeRef
+  estimateFieldId: string | null
+  epic: PreparedNode
+  children: PreparedNode[]
+  dependencies: PlanDependency[]
+}
+
+export type PreparedPlan = PreparedPlanData & {
+  planVersion: string
+}
+
+export type ResolutionCandidate = {
+  id: string
+  label: string
   detail: string
 }
 
-export type PublishReceipt = {
+export type ResolutionChoice = {
+  field: string
+  query: string
+  candidates: ResolutionCandidate[]
+  hasMore: boolean
+}
+
+export type JiraIssueView = {
+  clientKey: string
+  id: string
+  key: string
+  url: string
+  summary: string
+  issueType: string
+  assignee: string | null
+  parentKey: string | null
+}
+
+export type JiraDependencyView = PlanDependency & {
+  state: "existing" | "missing"
+}
+
+export type InspectStatus =
+  | "complete"
+  | "partial"
+  | "not_observed"
+  | "conflict"
+  | "blocked"
+
+export type InspectResult = {
   ok: boolean
-  status: ReceiptStatus
-  operationId: string
-  idempotencyKey: string
-  changed: boolean
-  replay: boolean
-  projectKey: string
-  planHash: string
-  approvalPageId: string
-  approvalRevision: string
-  providerPolicyFingerprint: string
-  startedAt: string
-  completedAt: string | null
-  nodes: NodeRecord[]
-  dependencies: DependencyRecord[]
-  notionReceiptWritten: boolean
-  steps: ReceiptStep[]
+  status: InspectStatus
+  source: PageSnapshot | null
+  project: JiraProjectRef | null
+  planVersion: string | null
+  issues: JiraIssueView[]
+  dependencies: JiraDependencyView[]
+  missingClientKeys: string[]
+  hasMore: boolean
   warnings: string[]
-  retryable: boolean
-  retryAfterSeconds: number | null
-  repair: string | null
+  message: string
+  nextAction: "none" | "inspect_again" | "prepare_again" | "manual_review"
 }
 
-export type RequestDisposition =
-  | "not_sent"
-  | "fenced"
-  | "outcome_unknown"
-  | "accepted"
-  | "definitely_rejected"
+export type PrepareStatus =
+  | "ready"
+  | "needs_choice"
+  | "already_published"
+  | "partial"
+  | "conflict"
+  | "blocked"
 
-export type DurableNode = {
-  nodeKey: string
-  issueId: string | null
-  issueKey: string | null
+export type PrepareResult = {
+  ok: boolean
+  status: PrepareStatus
+  preparedPlan: PreparedPlan | null
+  choices: ResolutionChoice[]
+  observedIssues: JiraIssueView[]
+  warnings: string[]
+  message: string
+  nextAction:
+    | "ask_user"
+    | "confirm_publish"
+    | "no_action"
+    | "inspect_again"
+    | "manual_review"
+}
+
+export type IssueOutcome = {
+  clientKey: string
+  state: "created" | "existing" | "rejected" | "not_attempted" | "unknown"
+  id: string | null
+  key: string | null
   url: string | null
-  marker: string
-  status: "pending" | "unknown" | "created" | "existing"
-  attempt: number
-  requestDisposition: RequestDisposition
 }
 
-export type DurableDependency = {
-  blockerNodeKey: string
-  blockedNodeKey: string
-  status: "pending" | "unknown" | "created" | "existing"
-  attempt: number
-  requestDisposition: RequestDisposition
+export type DependencyOutcome = PlanDependency & {
+  state: "created" | "existing" | "rejected" | "not_attempted" | "unknown"
 }
 
-export type OperationStage =
-  | "claimed"
-  | "publishing_nodes"
-  | "publishing_dependencies"
-  | "writing_receipt"
+export type PublishStatus =
   | "completed"
+  | "no_op"
+  | "partial"
+  | "ambiguous"
+  | "conflict"
+  | "blocked"
 
-export type OperationState = {
-  version: 2
-  operationId: string
-  idempotencyKey: string
-  planHash: string
-  sourcePageId: string
-  approvalRevision: string
-  projectKey: string
-  providerPolicyFingerprint: string
-  stage: OperationStage
-  nodes: DurableNode[]
-  dependencies: DurableDependency[]
-  receipt: PublishReceipt | null
-  receiptJson: string | null
-  startedAt: string
-  updatedAt: string
+export type PublishResult = {
+  ok: boolean
+  status: PublishStatus
+  changed: boolean | null
+  source: PageSnapshot
+  project: JiraProjectRef
+  planVersion: string
+  issues: IssueOutcome[]
+  dependencies: DependencyOutcome[]
+  warnings: string[]
+  message: string
+  nextAction: "none" | "inspect_again" | "prepare_again" | "manual_review"
+  retryAfterSeconds: number | null
+  requestId: string | null
 }
 
-export type ProjectPolicy = {
-  projectKey: string
-  projectId: string
-  issueTypeIds: Set<string>
-  parentTypePairs: Set<string>
-  assigneeAccountIds: Set<string>
-  labels: Set<string>
-  fixVersionIds: Set<string>
-  sprintIds: Set<number>
-  fieldIds: {
-    estimate: string | null
-    sprint: string | null
-  }
+export type JiraPlanMarker = {
+  version: 1
+  sourcePageId: string
+  sourceLastEditedTime: string
+  planVersion: string
+  clientKey: string
+  expectedClientKeys: string[]
+  dependencies: PlanDependency[]
 }
