@@ -1,14 +1,15 @@
 # Worker sync: Raindrop.io research library
 
-Turn your Raindrop.io bookmarks and highlights into evidence you can connect to
-projects, claims, decisions, and finished work in Notion. Trace each synced
-passage to its bookmark and collection, plus the Raindrop contributor when the
-API provides one.
+Turn your Raindrop.io bookmarks and highlights into source material for
+projects, decisions, briefs, and documents in Notion. Each highlight stays
+connected to its original bookmark and collection, and shared items show who
+saved them when that information is available.
 
-One deploy creates three related managed databases and schedules each sync
-hourly. The Worker only reads from Raindrop.io, upserts Notion properties, and
-never emits a page delete. Raindrop.io remains the source of truth for captured
-content; Notion connects it to the work it informs.
+Deploy once to create three related managed databases for collections,
+bookmarks, and highlights, with each sync scheduled hourly. The Worker only
+reads from Raindrop.io and updates Notion; it never changes your Raindrop.io
+library or deletes Notion pages. Raindrop.io remains your capture library,
+while Notion is where saved material connects to active work.
 
 ## Quickstart
 
