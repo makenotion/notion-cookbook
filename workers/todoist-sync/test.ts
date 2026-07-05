@@ -30,6 +30,7 @@ import {
   currentTaskSyncState,
   nextProjectSummaryState,
   nextTaskSyncState,
+  RESTART_BACKOFF_MS,
   restartProjectSummaryState,
   restartTaskSyncState,
   type ProjectSummaryState,
@@ -82,6 +83,20 @@ function client(overrides: Partial<TodoistClient> = {}): TodoistClient {
     fetchProjectsPage: async () => ({ resources: [], nextCursor: undefined }),
     ...overrides,
   }
+}
+
+function emptyProjectPublishState(
+  initial: ProjectSummaryState,
+  projectIds: string[],
+  aggregates?: ProjectAggregateMap
+): ProjectSummaryState {
+  const tasks = nextProjectSummaryState(initial, undefined, { aggregates })!
+  const completionDiscovery = nextProjectSummaryState(tasks, undefined)!
+  const completions = nextProjectSummaryState(completionDiscovery, undefined)!
+  const projectDiscovery = nextProjectSummaryState(completions, undefined)!
+  return nextProjectSummaryState(projectDiscovery, undefined, {
+    seenProjectIds: projectIds,
+  })!
 }
 
 async function parsedTasks(): Promise<TodoistTask[]> {
@@ -247,6 +262,16 @@ test("due classification is pinned, timezone-aware, and boundary exact", () => {
   assert.equal(classify("2026-07-04T13:00:00").status, "Today")
   assert.equal(classify("2026-07-08").dueNextSevenDays, true)
   assert.equal(classify("2026-07-03").dueNextSevenDays, false)
+  assert.equal(classify("2024-02-29").status, "Overdue")
+  for (const invalid of [
+    "2026-02-29",
+    "2026-02-30T10:00:00",
+    "2026-04-31T10:00:00Z",
+    "2026-07-03T24:00:00",
+    "2026-07-03 19:00:00Z",
+  ]) {
+    assert.throws(() => classify(invalid), /due (date|timestamp) is invalid/)
+  }
   assert.throws(() => classify("tomorrow"), /due timestamp is invalid/)
 })
 
@@ -353,7 +378,9 @@ test("project aggregation combines open work and bounded recent completions", as
     COMPLETION_UNTIL
   )
   assert.deepEqual(deleted.aggregates, {})
-  assert.deepEqual(deleted.seenCompletionIds, [])
+  assert.deepEqual(deleted.seenCompletionIds, [
+    "completed-brief:2026-07-03T19:00:00Z",
+  ])
 
   assert.throws(
     () =>
@@ -491,7 +518,7 @@ test("helper normalization is bounded and Todoist-specific", () => {
   )
 })
 
-test("task state pins observation time and bounds cursor restart", () => {
+test("task state pins observation time and recovers after bounded restarts", () => {
   const initial = currentTaskSyncState(
     undefined,
     AUTHENTICATED_USER.id,
@@ -515,13 +542,20 @@ test("task state pins observation time and bounds cursor restart", () => {
     () => nextTaskSyncState(page, "tasks.page-2", ["task-1", "task-2"]),
     CursorPaginationError
   )
-  const restarted = restartTaskSyncState(page)
+  const restarted = restartTaskSyncState(page, NOW)
   assert.equal(restarted.phase, "discovery")
   assert.equal(restarted.restartCount, 1)
   assert.equal(restarted.cursor, undefined)
   assert.deepEqual(restarted.seenTaskIds, [])
   assert.deepEqual(restarted.expectedTaskIds, [])
-  assert.throws(() => restartTaskSyncState(restarted), /failed again/)
+  assert.throws(() => restartTaskSyncState(restarted, NOW), RateLimitError)
+  const resumed = restartTaskSyncState(
+    restarted,
+    new Date(Date.parse(NOW) + RESTART_BACKOFF_MS)
+  )
+  assert.equal(resumed.restartCount, undefined)
+  assert.equal(resumed.lastRestartAt, undefined)
+  assert.equal(resumed.phase, "discovery")
   const publish = nextTaskSyncState(initial, undefined, ["task-1"])!
   assert.equal(publish.phase, "publish")
   assert.deepEqual(publish.expectedTaskIds, ["task-1"])
@@ -530,6 +564,34 @@ test("task state pins observation time and bounds cursor restart", () => {
   assert.throws(
     () => nextTaskSyncState(publish, undefined, []),
     /identities changed/
+  )
+  assert.throws(
+    () =>
+      currentTaskSyncState(
+        {
+          ...publish,
+          version: 1,
+          seenTaskIds: ["legacy-emitted-task"],
+        } as unknown as Parameters<typeof currentTaskSyncState>[0],
+        AUTHENTICATED_USER.id,
+        AUTHENTICATED_USER.timeZone,
+        NOW
+      ),
+    /state reset tasksSync/
+  )
+  assert.throws(
+    () =>
+      currentTaskSyncState(
+        {
+          ...initial,
+          version: 1,
+          restartCount: 1,
+        } as unknown as Parameters<typeof currentTaskSyncState>[0],
+        AUTHENTICATED_USER.id,
+        AUTHENTICATED_USER.timeZone,
+        NOW
+      ),
+    /state reset tasksSync/
   )
 })
 
@@ -554,11 +616,18 @@ test("project state pins one seven-day aggregation before publishing", () => {
   })!
   assert.equal(taskPublish.phase, "tasks")
   assert.deepEqual(taskPublish.expectedTaskIds, ["task-1"])
-  const completions = nextProjectSummaryState(taskPublish, undefined, {
+  const completionDiscovery = nextProjectSummaryState(taskPublish, undefined, {
     seenTaskIds: ["task-1"],
   })!
+  assert.equal(completionDiscovery.phase, "completionDiscovery")
+  const completions = nextProjectSummaryState(completionDiscovery, undefined, {
+    seenCompletionIds: ["completion-1"],
+  })!
   assert.equal(completions.phase, "completions")
-  const projectDiscovery = nextProjectSummaryState(completions, undefined)!
+  assert.deepEqual(completions.expectedCompletionIds, ["completion-1"])
+  const projectDiscovery = nextProjectSummaryState(completions, undefined, {
+    seenCompletionIds: ["completion-1"],
+  })!
   assert.equal(projectDiscovery.phase, "projectDiscovery")
   const projects = nextProjectSummaryState(projectDiscovery, undefined, {
     seenProjectIds: ["project-1"],
@@ -586,11 +655,20 @@ test("project state pins one seven-day aggregation before publishing", () => {
   const paged = nextProjectSummaryState(initial, "tasks.page-2")!
   assert.equal(paged.phase, "taskDiscovery")
   assert.equal(paged.cursor, "tasks.page-2")
-  const restarted = restartProjectSummaryState(paged)
+  const restarted = restartProjectSummaryState(paged, NOW)
   assert.equal(restarted.phase, "taskDiscovery")
   assert.equal(restarted.restartCount, 1)
   assert.deepEqual(restarted.aggregates, {})
-  assert.throws(() => restartProjectSummaryState(restarted), /failed again/)
+  assert.throws(
+    () => restartProjectSummaryState(restarted, NOW),
+    RateLimitError
+  )
+  const resumed = restartProjectSummaryState(
+    restarted,
+    new Date(Date.parse(NOW) + RESTART_BACKOFF_MS)
+  )
+  assert.equal(resumed.restartCount, undefined)
+  assert.equal(resumed.phase, "taskDiscovery")
 
   const migrated = currentProjectSummaryState(
     {
@@ -602,6 +680,34 @@ test("project state pins one seven-day aggregation before publishing", () => {
     NOW
   )
   assert.equal(migrated.phase, "taskDiscovery")
+  assert.throws(
+    () =>
+      currentProjectSummaryState(
+        {
+          ...projects,
+          version: 1,
+          seenProjectIds: ["legacy-emitted-project"],
+        } as unknown as ProjectSummaryState,
+        AUTHENTICATED_USER.id,
+        AUTHENTICATED_USER.timeZone,
+        NOW
+      ),
+    /state reset projectsSync/
+  )
+  assert.throws(
+    () =>
+      currentProjectSummaryState(
+        {
+          ...initial,
+          version: 1,
+          restartCount: 1,
+        } as unknown as ProjectSummaryState,
+        AUTHENTICATED_USER.id,
+        AUTHENTICATED_USER.timeZone,
+        NOW
+      ),
+    /state reset projectsSync/
+  )
   assertExpectedTodoistUserId(AUTHENTICATED_USER.id, AUTHENTICATED_USER.id)
   assert.throws(
     () => assertExpectedTodoistUserId("another-user", AUTHENTICATED_USER.id),
@@ -645,6 +751,56 @@ test("tasks replacement discovers and publishes the same complete identity set",
   ])
 })
 
+test("task replacement does not restart after emitting an inconsistent page", async () => {
+  const [firstTask, secondTask] = await parsedTasks()
+  assert.ok(firstTask && secondTask)
+  const initial = currentTaskSyncState(
+    undefined,
+    AUTHENTICATED_USER.id,
+    AUTHENTICATED_USER.timeZone,
+    NOW
+  )
+  const publish = nextTaskSyncState(initial, undefined, [
+    firstTask.id,
+    secondTask.id,
+  ])!
+  const first = await executeTasks(
+    publish,
+    client({
+      fetchTasksPage: async () => ({
+        resources: [firstTask],
+        nextCursor: "tasks.page-2",
+      }),
+    }),
+    EXPECTED_USER,
+    NOW
+  )
+  assert.deepEqual(
+    first.changes.map((change) => change.key),
+    [firstTask.id]
+  )
+  await assert.rejects(
+    () => executeTasks(first.nextState, client(), EXPECTED_USER, NOW),
+    /state reset tasksSync/
+  )
+  const stabilized = await executeTasks(
+    first.nextState,
+    client({
+      fetchTasksPage: async () => ({
+        resources: [secondTask],
+        nextCursor: undefined,
+      }),
+    }),
+    EXPECTED_USER,
+    NOW
+  )
+  assert.equal(stabilized.hasMore, false)
+  assert.deepEqual(
+    stabilized.changes.map((change) => change.key),
+    [secondTask.id]
+  )
+})
+
 test("tasks replacement fails closed on duplicates and enforces account first", async () => {
   const tasks = await parsedTasks()
   const duplicate = client({
@@ -664,8 +820,39 @@ test("tasks replacement fails closed on duplicates and enforces account first", 
   await assert.rejects(
     () =>
       executeTasks(duplicateRestart.nextState, duplicate, EXPECTED_USER, NOW),
-    /failed again/
+    RateLimitError
   )
+  const stabilizedRetry = await executeTasks(
+    duplicateRestart.nextState,
+    client(),
+    EXPECTED_USER,
+    new Date(Date.parse(NOW) + RESTART_BACKOFF_MS)
+  )
+  assert.ok(stabilizedRetry.nextState)
+  assert.equal(stabilizedRetry.nextState.phase, "publish")
+  assert.equal(stabilizedRetry.nextState.restartCount, 1)
+  const recoveredRetry = await executeTasks(
+    duplicateRestart.nextState,
+    duplicate,
+    EXPECTED_USER,
+    new Date(Date.parse(NOW) + RESTART_BACKOFF_MS)
+  )
+  assert.equal(recoveredRetry.hasMore, true)
+  assert.equal(recoveredRetry.nextState.restartCount, undefined)
+  assert.equal(recoveredRetry.nextState.lastRestartAt, undefined)
+  const stableDiscovery = await executeTasks(
+    recoveredRetry.nextState,
+    client(),
+    EXPECTED_USER,
+    new Date(Date.parse(NOW) + RESTART_BACKOFF_MS)
+  )
+  const stablePublish = await executeTasks(
+    stableDiscovery.nextState,
+    client(),
+    EXPECTED_USER,
+    new Date(Date.parse(NOW) + RESTART_BACKOFF_MS)
+  )
+  assert.equal(stablePublish.hasMore, false)
 
   const discovery = await executeTasks(
     undefined,
@@ -800,10 +987,33 @@ test("project replacement aggregates sources before emitting rows", async () => 
   )
   assert.equal(taskPublishDone.hasMore, true)
   assert.deepEqual(taskPublishDone.changes, [])
-  assert.equal(taskPublishDone.nextState.phase, "completions")
+  assert.equal(taskPublishDone.nextState.phase, "completionDiscovery")
+
+  const firstCompletionDiscoveryPage = await executeProjects(
+    taskPublishDone.nextState,
+    source,
+    EXPECTED_USER,
+    NOW
+  )
+  assert.equal(firstCompletionDiscoveryPage.hasMore, true)
+  assert.deepEqual(firstCompletionDiscoveryPage.changes, [])
+  assert.equal(
+    firstCompletionDiscoveryPage.nextState.phase,
+    "completionDiscovery"
+  )
+
+  const completionDiscoveryDone = await executeProjects(
+    firstCompletionDiscoveryPage.nextState,
+    source,
+    EXPECTED_USER,
+    NOW
+  )
+  assert.equal(completionDiscoveryDone.hasMore, true)
+  assert.deepEqual(completionDiscoveryDone.changes, [])
+  assert.equal(completionDiscoveryDone.nextState.phase, "completions")
 
   const firstCompletionPage = await executeProjects(
-    taskPublishDone.nextState,
+    completionDiscoveryDone.nextState,
     source,
     EXPECTED_USER,
     NOW
@@ -847,12 +1057,135 @@ test("project replacement aggregates sources before emitting rows", async () => 
   assert.ok(launch && launch.type === "upsert")
   assertPropertyContains(launch.properties.Overdue, "1")
   assertPropertyContains(launch.properties["Completed Last 7 Days"], "2")
-  assert.equal(completionOptions.length, 2)
+  assert.equal(completionOptions.length, 4)
+  assert.ok(
+    completionOptions.every(
+      (options) =>
+        options.since === completionOptions[0]!.since &&
+        options.until === completionOptions[0]!.until
+    )
+  )
   assert.equal(
     Date.parse(completionOptions[0]!.until) -
       Date.parse(completionOptions[0]!.since),
     COMPLETION_LOOKBACK_MS
   )
+})
+
+test("completion history requires the same occurrence set on both passes", async () => {
+  const [completion, unexpectedCompletion] = await parsedCompletions()
+  assert.ok(completion && unexpectedCompletion)
+  const initial = currentProjectSummaryState(
+    undefined,
+    AUTHENTICATED_USER.id,
+    AUTHENTICATED_USER.timeZone,
+    NOW
+  )
+  const tasks = nextProjectSummaryState(initial, undefined)!
+  const discovery = nextProjectSummaryState(tasks, undefined)!
+  assert.equal(discovery.phase, "completionDiscovery")
+
+  const discovered = await executeProjects(
+    discovery,
+    client({
+      fetchCompletedTasksPage: async () => ({
+        resources: [completion],
+        nextCursor: undefined,
+      }),
+    }),
+    EXPECTED_USER,
+    NOW
+  )
+  assert.ok(discovered.nextState)
+  assert.equal(discovered.nextState.phase, "completions")
+  assert.deepEqual(discovered.nextState.aggregates, {})
+
+  const skipped = await executeProjects(
+    discovered.nextState,
+    client(),
+    EXPECTED_USER,
+    NOW
+  )
+  assert.equal(skipped.hasMore, true)
+  assert.deepEqual(skipped.changes, [])
+  assert.equal(skipped.nextState.phase, "taskDiscovery")
+  assert.equal(skipped.nextState.restartCount, 1)
+  assert.deepEqual(skipped.nextState.aggregates, {})
+
+  const tombstone = await executeProjects(
+    discovered.nextState,
+    client({
+      fetchCompletedTasksPage: async () => ({
+        resources: [{ ...completion, isDeleted: true }],
+        nextCursor: undefined,
+      }),
+    }),
+    EXPECTED_USER,
+    NOW
+  )
+  assert.ok(tombstone.nextState)
+  assert.equal(tombstone.nextState.phase, "projectDiscovery")
+  assert.deepEqual(tombstone.nextState.aggregates, {})
+
+  const duplicate = await executeProjects(
+    discovery,
+    client({
+      fetchCompletedTasksPage: async () => ({
+        resources: [completion, completion],
+        nextCursor: undefined,
+      }),
+    }),
+    EXPECTED_USER,
+    NOW
+  )
+  assert.ok(duplicate.nextState)
+  assert.equal(duplicate.nextState.phase, "taskDiscovery")
+  assert.equal(duplicate.nextState.restartCount, 1)
+
+  const firstAggregationPage = await executeProjects(
+    discovered.nextState,
+    client({
+      fetchCompletedTasksPage: async () => ({
+        resources: [completion],
+        nextCursor: "completions.page-2",
+      }),
+    }),
+    EXPECTED_USER,
+    NOW
+  )
+  const aggregationDuplicate = await executeProjects(
+    firstAggregationPage.nextState,
+    client({
+      fetchCompletedTasksPage: async () => ({
+        resources: [completion],
+        nextCursor: undefined,
+      }),
+    }),
+    EXPECTED_USER,
+    NOW
+  )
+  assert.ok(aggregationDuplicate.nextState)
+  assert.equal(aggregationDuplicate.nextState.phase, "taskDiscovery")
+
+  for (const resources of [
+    [completion, unexpectedCompletion],
+    [completion, { ...completion, isDeleted: true }],
+  ]) {
+    const restarted = await executeProjects(
+      discovered.nextState,
+      client({
+        fetchCompletedTasksPage: async () => ({
+          resources,
+          nextCursor: undefined,
+        }),
+      }),
+      EXPECTED_USER,
+      NOW
+    )
+    assert.ok(restarted.nextState)
+    assert.equal(restarted.nextState.phase, "taskDiscovery")
+    assert.equal(restarted.nextState.restartCount, 1)
+  }
 })
 
 test("project aggregation restarts from scratch after an expired cursor", async () => {
@@ -874,8 +1207,22 @@ test("project aggregation restarts from scratch after an expired cursor", async 
     EXPECTED_USER,
     NOW
   )
-  const partialCompletions = await executeProjects(
+  const completionDiscovery = await executeProjects(
     taskPhase.nextState,
+    client({
+      fetchCompletedTasksPage: async () => ({
+        resources: [completions[0]!],
+        nextCursor: undefined,
+      }),
+    }),
+    EXPECTED_USER,
+    NOW
+  )
+  assert.ok(completionDiscovery.nextState)
+  assert.equal(completionDiscovery.nextState.phase, "completions")
+
+  const partialCompletions = await executeProjects(
+    completionDiscovery.nextState,
     client({
       fetchCompletedTasksPage: async () => ({
         resources: [completions[0]!],
@@ -934,14 +1281,11 @@ test("project replacement prunes aggregates while paginating inventory", async (
     AUTHENTICATED_USER.timeZone,
     NOW
   )
-  const taskPublish = nextProjectSummaryState(initial, undefined, {
-    aggregates: aggregate,
-  })!
-  const completions = nextProjectSummaryState(taskPublish, undefined)!
-  const projectDiscovery = nextProjectSummaryState(completions, undefined)!
-  const projectState = nextProjectSummaryState(projectDiscovery, undefined, {
-    seenProjectIds: ["project-launch"],
-  })!
+  const projectState = emptyProjectPublishState(
+    initial,
+    ["project-launch"],
+    aggregate
+  )
   const projects = await parsedProjects()
   const first = await executeProjects(
     projectState,
@@ -967,20 +1311,21 @@ test("project replacement prunes aggregates while paginating inventory", async (
   assert.equal(completed.hasMore, false)
   assert.deepEqual(completed.changes, [])
 
-  const duplicateRestart = await executeProjects(
-    first.nextState,
-    client({
-      fetchProjectsPage: async () => ({
-        resources: [projects[0]!],
-        nextCursor: undefined,
-      }),
-    }),
-    EXPECTED_USER,
-    NOW
+  await assert.rejects(
+    () =>
+      executeProjects(
+        first.nextState,
+        client({
+          fetchProjectsPage: async () => ({
+            resources: [projects[0]!],
+            nextCursor: undefined,
+          }),
+        }),
+        EXPECTED_USER,
+        NOW
+      ),
+    /state reset projectsSync/
   )
-  assert.equal(duplicateRestart.hasMore, true)
-  assert.equal(duplicateRestart.nextState.phase, "taskDiscovery")
-  assert.equal(duplicateRestart.nextState.restartCount, 1)
 
   const missingProject: ProjectAggregateMap = {
     "project-missing": {
@@ -988,18 +1333,7 @@ test("project replacement prunes aggregates while paginating inventory", async (
       projectId: "project-missing",
     },
   }
-  const missingTaskPublish = nextProjectSummaryState(initial, undefined, {
-    aggregates: missingProject,
-  })!
-  const missingCompletions = nextProjectSummaryState(
-    missingTaskPublish,
-    undefined
-  )!
-  const missingDiscovery = nextProjectSummaryState(
-    missingCompletions,
-    undefined
-  )!
-  const missingInventory = nextProjectSummaryState(missingDiscovery, undefined)!
+  const missingInventory = emptyProjectPublishState(initial, [], missingProject)
   const missingRestart = await executeProjects(
     missingInventory,
     client(),
@@ -1009,6 +1343,57 @@ test("project replacement prunes aggregates while paginating inventory", async (
   assert.equal(missingRestart.hasMore, true)
   assert.equal(missingRestart.nextState.phase, "taskDiscovery")
   assert.equal(missingRestart.nextState.restartCount, 1)
+})
+
+test("project replacement does not restart after emitting an inconsistent page", async () => {
+  const [firstProject, secondProject] = await parsedProjects()
+  assert.ok(firstProject && secondProject)
+  const initial = currentProjectSummaryState(
+    undefined,
+    AUTHENTICATED_USER.id,
+    AUTHENTICATED_USER.timeZone,
+    NOW
+  )
+  const publish = emptyProjectPublishState(initial, [
+    firstProject.id,
+    secondProject.id,
+  ])
+
+  const first = await executeProjects(
+    publish,
+    client({
+      fetchProjectsPage: async () => ({
+        resources: [firstProject],
+        nextCursor: "projects.page-2",
+      }),
+    }),
+    EXPECTED_USER,
+    NOW
+  )
+  assert.deepEqual(
+    first.changes.map((change) => change.key),
+    [firstProject.id]
+  )
+  await assert.rejects(
+    () => executeProjects(first.nextState, client(), EXPECTED_USER, NOW),
+    /state reset projectsSync/
+  )
+  const stabilized = await executeProjects(
+    first.nextState,
+    client({
+      fetchProjectsPage: async () => ({
+        resources: [secondProject],
+        nextCursor: undefined,
+      }),
+    }),
+    EXPECTED_USER,
+    NOW
+  )
+  assert.equal(stabilized.hasMore, false)
+  assert.deepEqual(
+    stabilized.changes.map((change) => change.key),
+    [secondProject.id]
+  )
 })
 
 test("Todoist client pins endpoints, pagination, bearer auth, and pacing", async () => {
@@ -1137,31 +1522,62 @@ test("Todoist client accepts only safe terminal and nullable response shapes", a
   assert.deepEqual(tasks[2]!.labels, [])
   assert.equal(tasks[2]!.updatedAt, null)
 
-  const invalidTimestamp = createTodoistClient({
-    beforeRequest: async () => {},
-    getApiToken: () => "test-token",
-    fetch: async () =>
-      Response.json({
-        items: [
-          {
-            id: "task-1",
-            project_id: "project-1",
-            content: "Invalid completion",
-            completed_at: "yesterday",
-            is_deleted: false,
-          },
-        ],
-        next_cursor: null,
-      }),
-  })
-  await assert.rejects(
-    () =>
-      invalidTimestamp.fetchCompletedTasksPage({
-        since: COMPLETION_SINCE,
-        until: COMPLETION_UNTIL,
-      }),
-    /invalid completed task 0.completed_at/
-  )
+  for (const completedAt of [
+    "yesterday",
+    "2026-07-03Z",
+    "2026-07-03 19:00:00Z",
+    "2026-07-03T24:00:00Z",
+  ]) {
+    const invalidTimestamp = createTodoistClient({
+      beforeRequest: async () => {},
+      getApiToken: () => "test-token",
+      fetch: async () =>
+        Response.json({
+          items: [
+            {
+              id: "task-1",
+              project_id: "project-1",
+              content: "Invalid completion",
+              completed_at: completedAt,
+              is_deleted: false,
+            },
+          ],
+          next_cursor: null,
+        }),
+    })
+    await assert.rejects(
+      () =>
+        invalidTimestamp.fetchCompletedTasksPage({
+          since: COMPLETION_SINCE,
+          until: COMPLETION_UNTIL,
+        }),
+      /invalid completed task 0.completed_at/
+    )
+  }
+
+  for (const dueDate of ["2026-02-30T10:00:00Z", "2026-07-03T24:00:00"]) {
+    const invalidCalendarTask = structuredClone(
+      (
+        fixture("tasks-page.json") as {
+          results: Array<Record<string, unknown>>
+        }
+      ).results[0]!
+    )
+    invalidCalendarTask.due = {
+      date: dueDate,
+      is_recurring: false,
+    }
+    const invalidCalendar = createTodoistClient({
+      beforeRequest: async () => {},
+      getApiToken: () => "test-token",
+      fetch: async () =>
+        Response.json({ results: [invalidCalendarTask], next_cursor: null }),
+    })
+    await assert.rejects(
+      () => invalidCalendar.fetchTasksPage(),
+      /invalid task 0.due.date/
+    )
+  }
 })
 
 test("HTTP failures are rate-aware, bounded, and never expose credentials", async () => {

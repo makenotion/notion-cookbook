@@ -102,6 +102,15 @@ type LocalParts = {
   dateTime: string
 }
 
+function validCalendarDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(value)) return false
+  const parsed = new Date(`${value}T00:00:00Z`)
+  return (
+    Number.isFinite(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === value
+  )
+}
+
 function localParts(value: Date, timeZone: string): LocalParts {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: validTimeZone(timeZone),
@@ -129,20 +138,32 @@ function localParts(value: Date, timeZone: string): LocalParts {
 }
 
 function addCalendarDays(date: string, days: number): string {
-  const milliseconds = Date.parse(`${date}T00:00:00Z`)
-  if (!Number.isFinite(milliseconds)) {
+  if (!validCalendarDate(date)) {
     throw new Error("Todoist local date is invalid.")
   }
+  const milliseconds = Date.parse(`${date}T00:00:00Z`)
   return new Date(milliseconds + days * 86_400_000).toISOString().slice(0, 10)
 }
 
 function normalizedLocalDateTime(value: string): string | null {
   const match = value.match(
-    /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?$/u
+    /^(\d{4}-\d{2}-\d{2})T([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d)(?:\.\d+)?)?$/u
   )
   if (!match) return null
   const normalized = `${match[1]}T${match[2]}:${match[3]}:${match[4] ?? "00"}`
-  return Number.isFinite(Date.parse(`${normalized}Z`)) ? normalized : null
+  return validCalendarDate(match[1]!) &&
+    Number.isFinite(Date.parse(`${normalized}Z`))
+    ? normalized
+    : null
+}
+
+function absoluteDateTime(value: string): Date | null {
+  const match = value.match(
+    /^(\d{4}-\d{2}-\d{2})T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/iu
+  )
+  if (!match || !validCalendarDate(match[1]!)) return null
+  const parsed = new Date(value)
+  return Number.isFinite(parsed.getTime()) ? parsed : null
 }
 
 /** Classify a Todoist due value against one pinned user-local observation. */
@@ -154,6 +175,13 @@ export function classifyDue(
   const raw = due?.date?.trim()
   if (!raw) {
     return { status: "No due date", dueNextSevenDays: false }
+  }
+  if (!validCalendarDate(raw.slice(0, 10))) {
+    throw new Error(
+      /^\d{4}-\d{2}-\d{2}$/u.test(raw)
+        ? "Todoist task due date is invalid."
+        : "Todoist task due timestamp is invalid."
+    )
   }
 
   const observed =
@@ -169,15 +197,15 @@ export function classifyDue(
   let overdue: boolean
 
   if (/^\d{4}-\d{2}-\d{2}$/u.test(raw)) {
-    if (!Number.isFinite(Date.parse(`${raw}T00:00:00Z`))) {
+    if (!validCalendarDate(raw)) {
       throw new Error("Todoist task due date is invalid.")
     }
     dueDate = raw
     sortKey = `${raw}T23:59:59`
     overdue = dueDate < localNow.date
   } else if (/(?:Z|[+-]\d{2}:\d{2})$/iu.test(raw)) {
-    const dueInstant = new Date(raw)
-    if (!Number.isFinite(dueInstant.getTime())) {
+    const dueInstant = absoluteDateTime(raw)
+    if (!dueInstant) {
       throw new Error("Todoist task due timestamp is invalid.")
     }
     const localDue = localParts(dueInstant, userTimeZone)
@@ -213,23 +241,21 @@ export function dateProperty(
   if (!date) return []
 
   if (/^\d{4}-\d{2}-\d{2}$/u.test(date)) {
-    if (!Number.isFinite(Date.parse(`${date}T00:00:00Z`))) {
+    if (!validCalendarDate(date)) {
       throw new Error(`Todoist ${field} is not a valid date.`)
     }
     return Builder.date(date)
   }
 
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/u.test(date)) {
-    throw new Error(`Todoist ${field} is not a valid ISO 8601 timestamp.`)
-  }
-
   const isAbsolute = /(?:Z|[+-]\d{2}:\d{2})$/iu.test(date)
-  const milliseconds = Date.parse(isAbsolute ? date : `${date}Z`)
-  if (!Number.isFinite(milliseconds)) {
+  const absolute = isAbsolute ? absoluteDateTime(date) : null
+  const local = isAbsolute ? null : normalizedLocalDateTime(date)
+  if ((!isAbsolute && !local) || (isAbsolute && !absolute)) {
     throw new Error(`Todoist ${field} is not a valid ISO 8601 timestamp.`)
   }
 
   if (isAbsolute) {
+    const milliseconds = absolute!.getTime()
     const zone = timeZone?.trim()
     if (zone) {
       const local = localParts(new Date(milliseconds), zone)
@@ -239,7 +265,7 @@ export function dateProperty(
   }
 
   const zone = timeZone?.trim()
-  return Builder.dateTime(date, zone || undefined)
+  return Builder.dateTime(local!, zone || undefined)
 }
 
 export function durationMinutes(

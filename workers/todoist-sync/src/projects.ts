@@ -180,7 +180,7 @@ export function aggregateTasks(
   return { aggregates, seenTaskIds }
 }
 
-function completionOccurrenceId(task: TodoistCompletedTask): string {
+export function completionOccurrenceId(task: TodoistCompletedTask): string {
   return `${task.id}:${task.completedAt}`
 }
 
@@ -201,15 +201,14 @@ export function aggregateCompletions(
     throw new Error("Todoist completion aggregation has invalid bounds.")
   }
   const aggregates = structuredClone(prior)
-  const visibleTasks = tasks.filter((task) => !task.isDeleted)
-  const occurrenceIds = visibleTasks.map(completionOccurrenceId)
+  const occurrenceIds = tasks.map(completionOccurrenceId)
   const seenCompletionIds = distinctIds(
     priorOccurrenceIds,
     occurrenceIds,
     "completion occurrences"
   )
 
-  for (const task of visibleTasks) {
+  for (const task of tasks) {
     const completedAtMs = Date.parse(task.completedAt)
     if (
       !Number.isFinite(completedAtMs) ||
@@ -220,6 +219,7 @@ export function aggregateCompletions(
         `Todoist completion ${task.id} falls outside the requested window.`
       )
     }
+    if (task.isDeleted) continue
     const aggregate = aggregateFor(aggregates, task.projectId)
     const occurrenceId = completionOccurrenceId(task)
     aggregate.completedLastSevenDays += 1

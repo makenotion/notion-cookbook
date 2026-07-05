@@ -123,12 +123,28 @@ function identifier(value: unknown, context: string): string {
   return id
 }
 
+function validCalendarDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(value)) return false
+  const parsed = new Date(`${value}T00:00:00Z`)
+  return (
+    Number.isFinite(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === value
+  )
+}
+
+function validDateTime(value: string, requireOffset: boolean): boolean {
+  const match = value.match(
+    /^(\d{4}-\d{2}-\d{2})T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)?$/iu
+  )
+  if (!match || !validCalendarDate(match[1]!)) return false
+  const offset = match[2]
+  if (requireOffset && !offset) return false
+  return Number.isFinite(Date.parse(offset ? value : `${value}Z`))
+}
+
 function absoluteTimestamp(value: unknown, context: string): string {
   const timestamp = string(value, context)
-  if (
-    !/(?:Z|[+-]\d{2}:\d{2})$/iu.test(timestamp) ||
-    !Number.isFinite(Date.parse(timestamp))
-  ) {
+  if (!validDateTime(timestamp, true)) {
     throw new Error(`Todoist API returned invalid ${context}.`)
   }
   return timestamp
@@ -186,8 +202,12 @@ function stringArray(value: unknown, context: string): string[] {
 function parseDue(value: unknown, context: string): TodoistDue | null {
   if (value === undefined || value === null) return null
   const due = object(value, context)
+  const date = string(due.date, `${context}.date`)
+  if (!validCalendarDate(date) && !validDateTime(date, false)) {
+    throw new Error(`Todoist API returned invalid ${context}.date.`)
+  }
   return {
-    date: string(due.date, `${context}.date`),
+    date,
     isRecurring: boolean(due.is_recurring, `${context}.is_recurring`),
   }
 }
@@ -195,7 +215,11 @@ function parseDue(value: unknown, context: string): TodoistDue | null {
 function parseDeadline(value: unknown, context: string): string | null {
   if (value === undefined || value === null) return null
   const deadline = object(value, context)
-  return string(deadline.date, `${context}.date`)
+  const date = string(deadline.date, `${context}.date`)
+  if (!validCalendarDate(date)) {
+    throw new Error(`Todoist API returned invalid ${context}.date.`)
+  }
+  return date
 }
 
 function parseDuration(

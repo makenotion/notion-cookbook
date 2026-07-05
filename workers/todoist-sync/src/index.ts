@@ -1,6 +1,6 @@
 // Todoist remains the task system of record. Mutable inventories are first
-// discovered, then published only when a second traversal reproduces the same
-// identities. Two replacement syncs publish:
+// discovered, then published in a second traversal whose final identity check
+// authorizes replacement deletion. Two replacement syncs publish:
 //   1. Tasks    — every active task, classified for daily triage
 //   2. Projects — active project metadata plus open/recent work summaries
 
@@ -9,6 +9,7 @@ import { Worker } from "@notionhq/workers"
 import {
   aggregateCompletions,
   aggregateTasks,
+  completionOccurrenceId,
   INITIAL_TITLE as PROJECTS_TITLE,
   MAX_AGGREGATED_ITEMS,
   PRIMARY_KEY as PROJECTS_PK,
@@ -105,7 +106,7 @@ export async function executeTasks(
       return {
         changes: [],
         hasMore: true as const,
-        nextState: restartTaskSyncState(state),
+        nextState: restartTaskSyncState(state, now),
       }
     }
     throw error
@@ -125,7 +126,7 @@ export async function executeTasks(
       return {
         changes: [],
         hasMore: true as const,
-        nextState: restartTaskSyncState(state),
+        nextState: restartTaskSyncState(state, now),
       }
     }
     throw error
@@ -142,11 +143,11 @@ export async function executeTasks(
     : { changes, hasMore: false as const }
 }
 
-function restartProjectResult(state: ProjectSummaryState) {
+function restartProjectResult(state: ProjectSummaryState, now: Date | string) {
   return {
     changes: [],
     hasMore: true as const,
-    nextState: restartProjectSummaryState(state),
+    nextState: restartProjectSummaryState(state, now),
   }
 }
 
@@ -171,7 +172,7 @@ export async function executeProjects(
       page = await client.fetchTasksPage(state.cursor)
     } catch (error) {
       if (error instanceof InvalidCursorError && state.cursor) {
-        return restartProjectResult(state)
+        return restartProjectResult(state, now)
       }
       throw error
     }
@@ -213,13 +214,13 @@ export async function executeProjects(
       return { changes: [], hasMore: true as const, nextState }
     } catch (error) {
       if (error instanceof CursorPaginationError) {
-        return restartProjectResult(state)
+        return restartProjectResult(state, now)
       }
       throw error
     }
   }
 
-  if (state.phase === "completions") {
+  if (state.phase === "completionDiscovery" || state.phase === "completions") {
     let page
     try {
       page = await client.fetchCompletedTasksPage({
@@ -229,21 +230,44 @@ export async function executeProjects(
       })
     } catch (error) {
       if (error instanceof InvalidCursorError && state.cursor) {
-        return restartProjectResult(state)
+        return restartProjectResult(state, now)
       }
       throw error
     }
-    const aggregated = aggregateCompletions(
-      state.aggregates,
-      state.seenCompletionIds,
-      page.resources,
-      state.completionSince,
-      state.completionUntil
-    )
     try {
+      const pageIds = page.resources.map(completionOccurrenceId)
+      const seenCompletionIds = appendIds(
+        state.seenCompletionIds,
+        pageIds,
+        `${state.phase} completion occurrence`
+      )
+      if (state.phase === "completionDiscovery") {
+        const nextState = nextProjectSummaryState(state, page.nextCursor, {
+          seenCompletionIds,
+        })
+        if (!nextState) {
+          throw new Error(
+            "Todoist project summary ended during completion discovery."
+          )
+        }
+        return { changes: [], hasMore: true as const, nextState }
+      }
+
+      assertExpectedIds(
+        state.expectedCompletionIds,
+        pageIds,
+        "completion occurrence"
+      )
+      const aggregated = aggregateCompletions(
+        state.aggregates,
+        state.seenCompletionIds,
+        page.resources,
+        state.completionSince,
+        state.completionUntil
+      )
       const nextState = nextProjectSummaryState(state, page.nextCursor, {
         aggregates: aggregated.aggregates,
-        seenCompletionIds: aggregated.seenCompletionIds,
+        seenCompletionIds,
       })
       if (!nextState) {
         throw new Error("Todoist project summary ended before projects.")
@@ -251,7 +275,7 @@ export async function executeProjects(
       return { changes: [], hasMore: true as const, nextState }
     } catch (error) {
       if (error instanceof CursorPaginationError) {
-        return restartProjectResult(state)
+        return restartProjectResult(state, now)
       }
       throw error
     }
@@ -262,7 +286,7 @@ export async function executeProjects(
     page = await client.fetchProjectsPage(state.cursor)
   } catch (error) {
     if (error instanceof InvalidCursorError && state.cursor) {
-      return restartProjectResult(state)
+      return restartProjectResult(state, now)
     }
     throw error
   }
@@ -284,7 +308,7 @@ export async function executeProjects(
       return { changes: [], hasMore: true as const, nextState }
     } catch (error) {
       if (error instanceof CursorPaginationError) {
-        return restartProjectResult(state)
+        return restartProjectResult(state, now)
       }
       throw error
     }
@@ -296,7 +320,7 @@ export async function executeProjects(
     seenProjectIds = appendIds(state.seenProjectIds, pageIds, "project publish")
   } catch (error) {
     if (error instanceof CursorPaginationError) {
-      return restartProjectResult(state)
+      return restartProjectResult(state, now)
     }
     throw error
   }
@@ -330,7 +354,7 @@ export async function executeProjects(
     })
   } catch (error) {
     if (error instanceof CursorPaginationError) {
-      return restartProjectResult(state)
+      return restartProjectResult(state, now)
     }
     throw error
   }

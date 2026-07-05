@@ -1,7 +1,9 @@
-// Replacement-safe cursor and aggregation state. Every cycle pins its user,
-// timezone, and observation window until the final page succeeds.
+// Replacement-safe cursor and aggregation state. Every snapshot attempt pins
+// its user, timezone, and observation window until it succeeds or backs off.
 
 import { createHash } from "node:crypto"
+
+import { RateLimitError } from "@notionhq/workers"
 
 import {
   MAX_AGGREGATED_ITEMS,
@@ -16,8 +18,9 @@ export const COMPLETION_LOOKBACK_MS = 7 * DAY_MS
 export const CONSISTENCY_BUFFER_MS = 60_000
 export const MAX_CURSOR_PAGES = 1_000
 export const MAX_SYNC_STATE_BYTES = 200 * 1_024
+export const RESTART_BACKOFF_MS = 60_000
 const MAX_ID_CHARACTERS = 256
-const STATE_VERSION = 1
+const STATE_VERSION = 2
 
 type CursorState = {
   cursor?: string
@@ -31,6 +34,7 @@ type SnapshotState = CursorState & {
   timeZone: string
   observedAt: string
   restartCount?: number
+  lastRestartAt?: string
 }
 
 export type TaskSyncState = SnapshotState & {
@@ -42,6 +46,7 @@ export type TaskSyncState = SnapshotState & {
 export type ProjectSummaryPhase =
   | "taskDiscovery"
   | "tasks"
+  | "completionDiscovery"
   | "completions"
   | "projectDiscovery"
   | "projects"
@@ -53,6 +58,7 @@ export type ProjectSummaryState = SnapshotState & {
   aggregates: ProjectAggregateMap
   expectedTaskIds: string[]
   seenTaskIds: string[]
+  expectedCompletionIds: string[]
   seenCompletionIds: string[]
   expectedProjectIds: string[]
   seenProjectIds: string[]
@@ -229,6 +235,12 @@ function assertSnapshotState(state: SnapshotState, resource: string): void {
   timestamp(state.observedAt, `${resource} observation time`)
   assertRestartCount(state.restartCount, resource)
   assertCursorState(state, resource)
+  if (state.lastRestartAt !== undefined) {
+    timestamp(state.lastRestartAt, `${resource} restart time`)
+  }
+  if ((state.restartCount === 1) !== (state.lastRestartAt !== undefined)) {
+    throw new Error(`Todoist ${resource} sync state has invalid recovery.`)
+  }
 }
 
 function nonnegativeInteger(value: unknown, context: string): number {
@@ -337,9 +349,12 @@ function initialTaskState(
   userId: string,
   timeZone: string,
   observedAt: Date | string,
-  restartCount?: number
+  options: {
+    restartCount?: number
+    lastRestartAt?: string
+  } = {}
 ): TaskSyncState {
-  return {
+  const state: TaskSyncState = {
     version: STATE_VERSION,
     phase: "discovery",
     userId: validatedUserId(userId, "tasks"),
@@ -347,8 +362,11 @@ function initialTaskState(
     observedAt: iso(timestamp(observedAt, "tasks observation time")),
     expectedTaskIds: [],
     seenTaskIds: [],
-    ...(restartCount ? { restartCount } : {}),
+    ...(options.restartCount ? { restartCount: options.restartCount } : {}),
+    ...(options.lastRestartAt ? { lastRestartAt: options.lastRestartAt } : {}),
   }
+  assertStateSize(state, "tasks")
+  return state
 }
 
 export function currentTaskSyncState(
@@ -357,7 +375,27 @@ export function currentTaskSyncState(
   timeZone: string,
   now: Date | string = new Date()
 ): TaskSyncState {
-  if (!previousState || previousState.version === undefined) {
+  const version = (previousState as { version?: unknown } | undefined)?.version
+  if (!previousState || version === undefined) {
+    return initialTaskState(authenticatedUserId, timeZone, now)
+  }
+  if (version === 1) {
+    const legacy = previousState as unknown as Record<string, unknown>
+    assertSameUser(String(legacy.userId ?? ""), authenticatedUserId, "tasks")
+    assertRestartCount(legacy.restartCount, "legacy tasks")
+    if (!["discovery", "publish"].includes(String(legacy.phase))) {
+      throw new Error("Todoist tasks sync state has an invalid legacy phase.")
+    }
+    const seenTaskIds = legacy.seenTaskIds
+    assertStringList(seenTaskIds, "legacy tasks", MAX_AGGREGATED_ITEMS)
+    if (
+      legacy.restartCount === 1 ||
+      (legacy.phase === "publish" && seenTaskIds.length > 0)
+    ) {
+      throw new Error(
+        "Todoist tasks state predates this Worker after replacement rows were emitted; run `ntn workers sync state reset tasksSync` once before retrying."
+      )
+    }
     return initialTaskState(authenticatedUserId, timeZone, now)
   }
   assertSnapshotState(previousState, "tasks")
@@ -379,11 +417,14 @@ function initialProjectState(
   userId: string,
   timeZone: string,
   observedAt: Date | string,
-  restartCount?: number
+  options: {
+    restartCount?: number
+    lastRestartAt?: string
+  } = {}
 ): ProjectSummaryState {
   const observationMs = timestamp(observedAt, "project observation time")
   const completionUntilMs = observationMs - CONSISTENCY_BUFFER_MS
-  return {
+  const state: ProjectSummaryState = {
     version: STATE_VERSION,
     phase: "taskDiscovery",
     userId: validatedUserId(userId, "projects"),
@@ -394,11 +435,15 @@ function initialProjectState(
     aggregates: {},
     expectedTaskIds: [],
     seenTaskIds: [],
+    expectedCompletionIds: [],
     seenCompletionIds: [],
     expectedProjectIds: [],
     seenProjectIds: [],
-    ...(restartCount ? { restartCount } : {}),
+    ...(options.restartCount ? { restartCount: options.restartCount } : {}),
+    ...(options.lastRestartAt ? { lastRestartAt: options.lastRestartAt } : {}),
   }
+  assertProjectState(state)
+  return state
 }
 
 function assertProjectState(state: ProjectSummaryState): void {
@@ -407,6 +452,7 @@ function assertProjectState(state: ProjectSummaryState): void {
     ![
       "taskDiscovery",
       "tasks",
+      "completionDiscovery",
       "completions",
       "projectDiscovery",
       "projects",
@@ -433,6 +479,11 @@ function assertProjectState(state: ProjectSummaryState): void {
   )
   assertStringList(state.seenTaskIds, "project task IDs", MAX_AGGREGATED_ITEMS)
   assertStringList(
+    state.expectedCompletionIds,
+    "expected project completion IDs",
+    MAX_AGGREGATED_ITEMS
+  )
+  assertStringList(
     state.seenCompletionIds,
     "project completion IDs",
     MAX_AGGREGATED_ITEMS
@@ -456,9 +507,40 @@ export function currentProjectSummaryState(
   timeZone: string,
   now: Date | string = new Date()
 ): ProjectSummaryState {
-  // Migrate the old incremental-project continuation by starting a fresh
-  // replacement snapshot. New-version malformed state still fails closed.
-  if (!previousState || previousState.version === undefined) {
+  // Migrate older pre-publish continuations by starting a fresh snapshot.
+  // Once a replace run emitted rows, only a platform state reset can safely
+  // discard its accumulator.
+  const version = (previousState as { version?: unknown } | undefined)?.version
+  if (!previousState || version === undefined) {
+    return initialProjectState(authenticatedUserId, timeZone, now)
+  }
+  if (version === 1) {
+    const legacy = previousState as unknown as Record<string, unknown>
+    assertSameUser(String(legacy.userId ?? ""), authenticatedUserId, "projects")
+    assertRestartCount(legacy.restartCount, "legacy projects")
+    if (
+      ![
+        "taskDiscovery",
+        "tasks",
+        "completions",
+        "projectDiscovery",
+        "projects",
+      ].includes(String(legacy.phase))
+    ) {
+      throw new Error(
+        "Todoist projects sync state has an invalid legacy phase."
+      )
+    }
+    const seenProjectIds = legacy.seenProjectIds
+    assertStringList(seenProjectIds, "legacy projects", MAX_AGGREGATED_ITEMS)
+    if (
+      legacy.restartCount === 1 ||
+      (legacy.phase === "projects" && seenProjectIds.length > 0)
+    ) {
+      throw new Error(
+        "Todoist projects state predates this Worker after replacement rows were emitted; run `ntn workers sync state reset projectsSync` once before retrying."
+      )
+    }
     return initialProjectState(authenticatedUserId, timeZone, now)
   }
   assertProjectState(previousState)
@@ -583,7 +665,7 @@ export function nextProjectSummaryState(
       )
       nextState = {
         ...base,
-        phase: "completions",
+        phase: "completionDiscovery",
         expectedTaskIds: [],
         seenTaskIds: [],
         cursor: undefined,
@@ -591,10 +673,27 @@ export function nextProjectSummaryState(
         pageCount: undefined,
       }
       break
+    case "completionDiscovery":
+      nextState = {
+        ...base,
+        phase: "completions",
+        expectedCompletionIds: [...base.seenCompletionIds].sort(),
+        seenCompletionIds: [],
+        cursor: undefined,
+        cursorFingerprints: undefined,
+        pageCount: undefined,
+      }
+      break
     case "completions":
+      assertSameIdentities(
+        state.expectedCompletionIds,
+        base.seenCompletionIds,
+        "completion occurrence"
+      )
       nextState = {
         ...base,
         phase: "projectDiscovery",
+        expectedCompletionIds: [],
         seenCompletionIds: [],
         cursor: undefined,
         cursorFingerprints: undefined,
@@ -626,24 +725,62 @@ export function nextProjectSummaryState(
   return nextState
 }
 
-export function restartTaskSyncState(state: TaskSyncState): TaskSyncState {
+export function restartTaskSyncState(
+  state: TaskSyncState,
+  now: Date | string = new Date()
+): TaskSyncState {
   currentTaskSyncState(state, state.userId, state.timeZone, state.observedAt)
-  if ((state.restartCount ?? 0) >= 1) {
+  if (state.phase === "publish" && state.seenTaskIds.length > 0) {
     throw new CursorPaginationError(
-      "Todoist tasks pagination failed again after one bounded restart."
+      "Todoist tasks changed after replacement rows were emitted; retry this continuation, or run `ntn workers sync state reset tasksSync` to abandon it."
     )
   }
-  return initialTaskState(state.userId, state.timeZone, state.observedAt, 1)
+  if ((state.restartCount ?? 0) < 1) {
+    return initialTaskState(state.userId, state.timeZone, state.observedAt, {
+      restartCount: 1,
+      lastRestartAt: iso(timestamp(now, "tasks restart time")),
+    })
+  }
+  const elapsed =
+    timestamp(now, "tasks recovery time") -
+    timestamp(state.lastRestartAt!, "tasks restart time")
+  if (elapsed < RESTART_BACKOFF_MS) {
+    throw new RateLimitError({
+      retryAfter: Math.max(
+        1,
+        Math.ceil((RESTART_BACKOFF_MS - elapsed) / 1_000)
+      ),
+    })
+  }
+  return initialTaskState(state.userId, state.timeZone, now)
 }
 
 export function restartProjectSummaryState(
-  state: ProjectSummaryState
+  state: ProjectSummaryState,
+  now: Date | string = new Date()
 ): ProjectSummaryState {
   assertProjectState(state)
-  if ((state.restartCount ?? 0) >= 1) {
+  if (state.phase === "projects" && state.seenProjectIds.length > 0) {
     throw new CursorPaginationError(
-      "Todoist project-summary pagination failed again after one bounded restart."
+      "Todoist projects changed after replacement rows were emitted; retry this continuation, or run `ntn workers sync state reset projectsSync` to abandon it."
     )
   }
-  return initialProjectState(state.userId, state.timeZone, state.observedAt, 1)
+  if ((state.restartCount ?? 0) < 1) {
+    return initialProjectState(state.userId, state.timeZone, state.observedAt, {
+      restartCount: 1,
+      lastRestartAt: iso(timestamp(now, "project restart time")),
+    })
+  }
+  const elapsed =
+    timestamp(now, "project recovery time") -
+    timestamp(state.lastRestartAt!, "project restart time")
+  if (elapsed < RESTART_BACKOFF_MS) {
+    throw new RateLimitError({
+      retryAfter: Math.max(
+        1,
+        Math.ceil((RESTART_BACKOFF_MS - elapsed) / 1_000)
+      ),
+    })
+  }
+  return initialProjectState(state.userId, state.timeZone, now)
 }

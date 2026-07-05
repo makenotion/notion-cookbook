@@ -37,12 +37,19 @@ request only the documented read scope.
 From the repository root:
 
 ```sh
-npm install --global ntn
+npm install --global ntn@latest
 cd workers/todoist-sync
 npm install
 ntn login
 ntn workers deploy --name todoist-sync
+ntn workers sync pause projectsSync
+ntn workers sync pause tasksSync
 ```
+
+Use `--name todoist-sync` only for the first deployment. The CLI records that
+Worker in the gitignored `workers.json`. Keep that file and run
+`ntn workers deploy` for later updates; using another name creates separate
+managed databases.
 
 Store the account binding and token in the deployed Worker environment:
 
@@ -51,20 +58,38 @@ ntn workers env set TODOIST_USER_ID=your-user-id
 ntn workers env set TODOIST_API_TOKEN=your-token
 ```
 
-Preview both capabilities, then populate Projects before Tasks so relations
-resolve on the first task write:
+Preview both capabilities while they remain paused:
 
 ```sh
 ntn workers sync trigger projectsSync --preview
 ntn workers sync trigger tasksSync --preview
-
-ntn workers sync trigger projectsSync
-ntn workers sync trigger tasksSync
 ```
 
-Tasks refresh every 15 minutes and project summaries refresh hourly. The
-Workers platform supplies Notion authentication; do not add a
-`NOTION_API_TOKEN`.
+Populate Projects first so task relations resolve on their first write:
+
+```sh
+ntn workers sync trigger projectsSync
+ntn workers sync status projectsSync
+```
+
+Watch until Projects succeeds, then press Ctrl-C and run Tasks:
+
+```sh
+ntn workers sync trigger tasksSync
+ntn workers sync status tasksSync
+```
+
+Watch until Tasks succeeds, then press Ctrl-C and start both schedules:
+
+```sh
+ntn workers sync resume projectsSync
+ntn workers sync resume tasksSync
+```
+
+The first deployment starts both schedules. Keep them paused until credentials,
+previews, and the ordered initial runs succeed. Tasks then refresh every 15
+minutes and project summaries refresh hourly. The Workers platform supplies
+Notion authentication; do not add a `NOTION_API_TOKEN`.
 
 ## Expected result
 
@@ -138,27 +163,36 @@ The Projects database works well sorted by **Overdue** and then
 
 ## Sync and safety model
 
-- **Replacement is complete-snapshot only.** Todoist cursor pages contribute
-  to one Worker cycle. Notion removes unseen rows only after the final page
-  succeeds.
-- **Mutable inventories use two passes.** Active tasks and active projects are
-  discovered first, then published only when a second full traversal reproduces
-  the same immutable ID set. This catches records skipped by Todoist when data
-  changes during cursor pagination.
-- **Project rows publish after aggregation.** The project capability reads all
-  active-task pages twice, confirms membership, and reads the bounded completion
-  window before emitting any project summary rows.
+- **Replacement deletion requires a verified snapshot.** Publish traversals
+  emit upserts page by page, but Notion removes unseen rows only after the final
+  identity set exactly matches discovery and the cycle returns `hasMore: false`.
+- **Mutable inputs use two passes.** Active tasks, recent completion
+  occurrences, and active projects are discovered first and then traversed
+  again. Exact immutable-ID equality catches duplicates and records skipped
+  when Todoist data changes during cursor pagination.
+- **Project rows publish after aggregation.** The project capability verifies
+  active tasks and recent completions before discovering and publishing any
+  project summary rows.
+- **Inconsistent attempts recover without authorizing deletion.** The first
+  expired cursor, duplicate, or membership change restarts immediately while
+  no replacement rows have been emitted. A repeated inconsistency retries after
+  at least one minute; if it persists, the Worker starts a fresh snapshot.
+  After a publish page emits rows, an inconsistency errors without starting a
+  new snapshot; a later retry can finish the same attempt if the source
+  stabilizes. Reset that capability's platform state only to abandon a
+  persistently stuck attempt. This avoids mixing two attempts in one
+  replacement accumulator.
 - **Pagination fails closed.** Missing, malformed, oversized, or repeated
-  cursors never finish a partial replacement. One bounded restart is allowed;
-  a second failure stops the cycle.
+  cursors never finish a partial replacement.
 - **Counts reject duplicates.** Task IDs and completion-occurrence IDs are
   retained in bounded continuation state so repeated records cannot inflate
   project summaries.
 - **Every capability enforces one account.** `TODOIST_USER_ID` is checked
   before source pages are read, including every resumed cursor page.
-- **Dates are explicit.** Due classification uses the authenticated user's
-  IANA timezone. Fixed-offset timestamps retain their instant; floating Todoist
-  datetimes are interpreted as user-local values.
+- **Dates are explicit.** Calendar dates are validated without rollover. Due
+  classification uses the authenticated user's IANA timezone. Fixed-offset
+  timestamps retain their instant; floating Todoist datetimes are interpreted
+  as user-local values.
 - **Provider access is bounded.** Requests share a conservative pacer, honor
   Todoist retry timing, time out, bound response bodies, and reject malformed
   success payloads.
