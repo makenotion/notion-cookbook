@@ -93,7 +93,6 @@ export function installationTokenRequest(repositoryId: number) {
     repositoryIds: [repositoryId],
     permissions: {
       contents: "write" as const,
-      checks: "read" as const,
       metadata: "read" as const,
     },
   }

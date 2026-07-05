@@ -7,31 +7,54 @@ import {
   GitHubPreconditionError,
   GitHubPublishedPostconditionError,
 } from "../src/github.js"
-import { sha256 } from "../src/policy.js"
-import {
-  BODY,
-  COMMIT,
-  makeInput,
-  NAME,
-  RELEASE_ID,
-  REPOSITORY,
-  REPOSITORY_ID,
-  makeReleaseRecord,
-} from "./fixtures.js"
 
-type PatchMode =
-  | "success"
-  | "409-publish"
-  | "timeout-publish"
-  | "hanging-body-publish"
-  | "success-drift"
-  | "success-still-draft"
-  | "403"
+const REPOSITORY = "acme/widget"
+const REPOSITORY_ID = 42
+const RELEASE_ID = 7
+const TAG_COMMIT = "a".repeat(40)
+
+type ReleaseJson = {
+  id: number
+  html_url: string
+  tag_name: string
+  name: string | null
+  body: string | null
+  draft: boolean
+  prerelease: boolean
+  published_at: string | null
+}
+
+type AssetJson = {
+  id: number
+  name: string
+  label: string | null
+  state: string
+  size: number
+  digest: string | null
+}
+
+type Call = { method: string; url: string; body: unknown }
+
+type FixtureOptions = {
+  repositoryId?: number
+  release?: Partial<ReleaseJson>
+  assets?: AssetJson[]
+  annotatedTag?: boolean
+  missingTag?: boolean
+  hasMoreAssets?: boolean
+  patchMode?:
+    | "success"
+    | "409-published"
+    | "409-draft"
+    | "timeout-published"
+    | "success-drift"
+    | "success-readback-failure"
+}
 
 function json(
   value: unknown,
   status = 200,
-  headers: HeadersInit = {}
+  headers: Record<string, string> = {}
 ): Response {
   return new Response(JSON.stringify(value), {
     status,
@@ -39,623 +62,411 @@ function json(
   })
 }
 
-function hangingJson(signal: AbortSignal | null | undefined): Response {
-  const encoder = new TextEncoder()
-  return new Response(
-    new ReadableStream({
-      start(controller) {
-        controller.enqueue(encoder.encode("{"))
-        signal?.addEventListener(
-          "abort",
-          () => controller.error(signal.reason),
-          { once: true }
-        )
-      },
-    }),
-    { status: 200, headers: { "Content-Type": "application/json" } }
-  )
+function requestUrl(input: string | URL | Request): string {
+  return input instanceof Request ? input.url : String(input)
 }
 
-function harness(
-  options: {
-    repositoryId?: number
-    fullName?: string
-    name?: string
-    body?: string
-    checkAppId?: number
-    patchMode?: PatchMode
-    latestReleaseId?: number
-    repositoryFailures?: number[]
-    repositoryFailureHeaders?: HeadersInit
-    repositoryFailureMessage?: string
-    rateLimitWithoutHeader?: boolean
-    throwRepositoryReads?: number
-    assetPages?: unknown[][]
-    checkPages?: unknown[][]
-    initialPublished?: boolean
-    targetCommitish?: string
-    publishedBody?: string
-    hangRepositoryBodies?: boolean
-    now?: number
-  } = {}
-) {
-  let published = options.initialPublished ?? false
-  let repositoryThrows = options.throwRepositoryReads ?? 0
-  const repositoryFailures = [...(options.repositoryFailures ?? [])]
-  const requests: { method: string; url: URL; init: RequestInit }[] = []
-  const authRepositoryIds: number[] = []
-  const assetPages = options.assetPages ?? [
-    [
-      {
-        id: 1,
-        name: "app.tar.gz",
-        size: 512,
-        digest: `sha256:${"b".repeat(64)}`,
-      },
-    ],
+function releaseFixture(options: FixtureOptions = {}) {
+  let release: ReleaseJson = {
+    id: RELEASE_ID,
+    html_url: `https://github.com/${REPOSITORY}/releases/tag/v1.0.0`,
+    tag_name: "v1.0.0",
+    name: "Version 1.0.0",
+    body: "Highlights",
+    draft: true,
+    prerelease: false,
+    published_at: null,
+    ...options.release,
+  }
+  const assets = options.assets ?? [
+    {
+      id: 1,
+      name: "widget.tgz",
+      label: "Node package",
+      state: "uploaded",
+      size: 128,
+      digest: `sha256:${"b".repeat(64)}`,
+    },
   ]
-  const checkPages = options.checkPages ?? [
-    [
-      {
-        id: 2,
-        name: "build",
-        status: "completed",
-        conclusion: "success",
-        app: { id: options.checkAppId ?? 15368 },
-      },
-    ],
-  ]
+  const calls: Call[] = []
+  let afterPatch = false
 
-  const fetch: typeof globalThis.fetch = async (input, init = {}) => {
-    const url = new URL(String(input))
+  const fetch = (async (
+    input: string | URL | Request,
+    init: RequestInit = {}
+  ): Promise<Response> => {
+    const url = new URL(requestUrl(input))
     const method = init.method ?? "GET"
-    requests.push({ method, url, init })
-    const repoPath = `/repos/${REPOSITORY}`
+    const body =
+      typeof init.body === "string" ? JSON.parse(init.body) : undefined
+    calls.push({ method, url: url.toString(), body })
 
-    if (url.pathname === repoPath && method === "GET") {
-      if (options.hangRepositoryBodies) return hangingJson(init.signal)
-      if (repositoryThrows > 0) {
-        repositoryThrows--
-        const error = new Error("request aborted")
-        error.name = "AbortError"
-        throw error
-      }
-      const failure = repositoryFailures.shift()
-      if (failure !== undefined) {
-        return json(
-          {
-            message:
-              options.repositoryFailureMessage ??
-              "SECRET provider-controlled error body",
-          },
-          failure,
-          options.repositoryFailureHeaders ??
-            (failure === 429 && !options.rateLimitWithoutHeader
-              ? { "Retry-After": "0" }
-              : failure === 403
-                ? { "X-RateLimit-Remaining": "1" }
-                : {})
-        )
-      }
+    if (url.pathname === `/repos/${REPOSITORY}` && method === "GET") {
       return json({
         id: options.repositoryId ?? REPOSITORY_ID,
-        full_name: options.fullName ?? REPOSITORY,
+        full_name: REPOSITORY,
         archived: false,
         disabled: false,
       })
     }
-
     if (
-      url.pathname === `${repoPath}/releases/${RELEASE_ID}` &&
-      method === "PATCH"
+      url.pathname === `/repos/${REPOSITORY}/releases/${RELEASE_ID}` &&
+      method === "GET"
     ) {
-      const mode = options.patchMode ?? "success"
-      if (mode === "403") {
-        return json({ message: "SECRET token ghp_example" }, 403, {
-          "X-GitHub-Request-Id": "safe-request-id",
+      if (afterPatch && options.patchMode === "success-readback-failure") {
+        return json({ message: "provider detail must stay private" }, 503, {
+          "X-GitHub-Request-Id": "readback-request",
         })
       }
-      published = mode !== "success-still-draft"
-      if (mode === "409-publish") return json({ message: "conflict" }, 409)
-      if (mode === "timeout-publish") {
-        const error = new Error("request aborted")
-        error.name = "AbortError"
-        throw error
-      }
-      if (mode === "hanging-body-publish") return hangingJson(init.signal)
-      return json(releaseResponse(true))
+      return json(release)
     }
-
-    if (url.pathname === `${repoPath}/releases/latest`) {
-      return json({
-        ...releaseResponse(true),
-        id: options.latestReleaseId ?? RELEASE_ID,
-      })
-    }
-    if (url.pathname === `${repoPath}/releases/${RELEASE_ID}`) {
-      return json(releaseResponse(published))
-    }
-    if (url.pathname === `${repoPath}/releases/${RELEASE_ID}/assets`) {
-      const page = Number(url.searchParams.get("page") ?? "1")
-      const values = assetPages[page - 1] ?? []
-      const headers: Record<string, string> =
-        page < assetPages.length
-          ? {
-              Link: `<https://api.github.test${url.pathname}?page=${page + 1}>; rel="next"`,
-            }
-          : {}
-      return json(values, 200, headers)
-    }
-    if (url.pathname === `${repoPath}/git/ref/tags/v1.2.3`) {
-      return json({
-        ref: "refs/tags/v1.2.3",
-        object: { type: "commit", sha: COMMIT },
-      })
-    }
-    if (url.pathname === `${repoPath}/commits/${COMMIT}`) {
-      return json({ sha: COMMIT })
-    }
-    if (url.pathname === `${repoPath}/commits/${COMMIT}/check-runs`) {
-      const page = Number(url.searchParams.get("page") ?? "1")
-      const values = checkPages[page - 1] ?? []
-      const headers: Record<string, string> =
-        page < checkPages.length
-          ? {
-              Link: `<https://api.github.test${url.pathname}?page=${page + 1}>; rel="next"`,
-            }
-          : {}
+    if (
+      url.pathname === `/repos/${REPOSITORY}/releases/${RELEASE_ID}/assets` &&
+      method === "GET"
+    ) {
       return json(
-        { total_count: values.length, check_runs: values },
+        assets,
         200,
-        headers
+        options.hasMoreAssets
+          ? {
+              Link: `<https://api.github.test/repos/${REPOSITORY}/releases/${RELEASE_ID}/assets?page=2>; rel="next"`,
+            }
+          : {}
       )
     }
-    throw new Error(`unhandled ${method} ${url}`)
-  }
-
-  function releaseResponse(isPublished: boolean) {
-    return {
-      id: RELEASE_ID,
-      html_url: `https://github.com/${REPOSITORY}/releases/tag/v1.2.3`,
-      tag_name: "v1.2.3",
-      target_commitish: options.targetCommitish ?? COMMIT,
-      name: options.name ?? NAME,
-      body:
-        isPublished && options.publishedBody !== undefined
-          ? options.publishedBody
-          : (options.body ?? BODY),
-      draft: !isPublished,
-      prerelease: false,
-      published_at: isPublished ? "2026-07-03T12:00:00Z" : null,
+    if (
+      url.pathname === `/repos/${REPOSITORY}/git/ref/tags/v1.0.0` &&
+      method === "GET"
+    ) {
+      if (options.missingTag) return json({ message: "missing" }, 404)
+      return json({
+        ref: "refs/tags/v1.0.0",
+        object: options.annotatedTag
+          ? { type: "tag", sha: "tag-object" }
+          : { type: "commit", sha: TAG_COMMIT },
+      })
     }
-  }
+    if (
+      url.pathname === `/repos/${REPOSITORY}/git/tags/tag-object` &&
+      method === "GET"
+    ) {
+      return json({ object: { type: "commit", sha: TAG_COMMIT } })
+    }
+    if (
+      url.pathname === `/repos/${REPOSITORY}/releases/${RELEASE_ID}` &&
+      method === "PATCH"
+    ) {
+      afterPatch = true
+      const mode = options.patchMode ?? "success"
+      if (mode !== "409-draft") {
+        release = {
+          ...release,
+          draft: false,
+          published_at: "2026-07-05T12:00:00Z",
+          ...(mode === "success-drift"
+            ? { body: "Changed during publication" }
+            : {}),
+        }
+      }
+      if (mode === "timeout-published") {
+        throw new DOMException("timed out", "AbortError")
+      }
+      if (mode === "409-published" || mode === "409-draft") {
+        return json({ message: "conflict" }, 409, {
+          "X-GitHub-Request-Id": "patch-conflict",
+        })
+      }
+      return json(release, 200, {
+        "X-GitHub-Request-Id": "patch-success",
+      })
+    }
 
-  const client = new GitHubClient({
-    apiBaseUrl: "https://api.github.test",
+    throw new Error(`Unexpected GitHub request: ${method} ${url.pathname}`)
+  }) as typeof globalThis.fetch
+
+  return {
     fetch,
-    sleep: async () => {},
-    now: () => options.now ?? Date.now(),
-    requestTimeoutMs: 50,
-    getAccessToken: async (repositoryId) => {
-      authRepositoryIds.push(repositoryId)
-      return "test-token"
+    calls,
+    setRelease(update: Partial<ReleaseJson>) {
+      release = { ...release, ...update }
     },
-  })
-  return { client, requests, authRepositoryIds, isPublished: () => published }
+  }
 }
 
-test("verifies exact state, publishes once, and verifies observable latest release", async () => {
-  const h = harness()
-  const input = makeInput()
-  assert.equal(
-    (await h.client.verifyPreparedRelease(input, REPOSITORY_ID)).state,
-    "draft"
-  )
-  const result = await h.client.publishAndReconcile(input, REPOSITORY_ID)
-  assert.equal(result.release.state, "published")
-  assert.equal(result.reconciledAfterAmbiguousResponse, false)
-  assert.equal(
-    h.requests.filter((request) => request.method === "PATCH").length,
-    1
-  )
-  const patch = h.requests.find((request) => request.method === "PATCH")
-  assert.equal(
-    patch?.init.body,
-    JSON.stringify({ draft: false, make_latest: "true" })
-  )
-  assert.equal(
-    new Headers(patch?.init.headers).get("X-GitHub-Api-Version"),
-    "2026-03-10"
-  )
-  assert.ok(h.authRepositoryIds.every((id) => id === REPOSITORY_ID))
-  assert.ok(
-    h.requests.some((request) =>
-      request.url.pathname.endsWith("/releases/latest")
-    )
-  )
-})
-
-test("numeric repository mismatch stops after the identity read with zero writes", async () => {
-  const h = harness({ repositoryId: REPOSITORY_ID + 1 })
-  await assert.rejects(
-    h.client.verifyPreparedRelease(makeInput(), REPOSITORY_ID),
-    GitHubPreconditionError
-  )
-  assert.equal(h.requests.length, 1)
-  assert.equal(
-    h.requests.filter((request) => request.method === "PATCH").length,
-    0
-  )
-})
-
-test("changed body and wrong check App identity fail before publication", async () => {
-  const changedBody = harness({ body: "injected instructions" })
-  await assert.rejects(
-    changedBody.client.verifyPreparedRelease(makeInput(), REPOSITORY_ID),
-    /body hash/
-  )
-  assert.equal(
-    changedBody.requests.some((request) => request.method === "PATCH"),
-    false
-  )
-
-  const wrongApp = harness({ checkAppId: 999 })
-  await assert.rejects(
-    wrongApp.client.verifyPreparedRelease(makeInput(), REPOSITORY_ID),
-    /Required check-run/
-  )
-  assert.equal(
-    wrongApp.requests.some((request) => request.method === "PATCH"),
-    false
-  )
-})
-
-for (const patchMode of [
-  "409-publish",
-  "timeout-publish",
-  "hanging-body-publish",
-] as const) {
-  test(`${patchMode} is reconciled by exact published release ID without a second PATCH`, async () => {
-    const h = harness({ patchMode })
-    const result = await h.client.publishAndReconcile(
-      makeInput(),
-      REPOSITORY_ID
-    )
-    assert.equal(result.release.state, "published")
-    assert.equal(result.reconciledAfterAmbiguousResponse, true)
-    assert.equal(
-      h.requests.filter((request) => request.method === "PATCH").length,
-      1
-    )
+function client(fetch: typeof globalThis.fetch): GitHubClient {
+  return new GitHubClient({
+    repository: REPOSITORY,
+    repositoryId: REPOSITORY_ID,
+    getAccessToken: async () => "token",
+    fetch,
+    apiBaseUrl: "https://api.github.test",
+    sleep: async () => undefined,
   })
 }
 
-test("published checkpoint resume ignores advanced branches, latest changes, and stale gates", async () => {
-  const h = harness({
-    initialPublished: true,
-    targetCommitish: "main",
-    latestReleaseId: RELEASE_ID + 1,
-    checkAppId: 999,
-  })
-  const release = await h.client.verifyPreparedRelease(
-    makeInput(),
-    REPOSITORY_ID,
-    {
-      verifyGates: false,
-      verifyLatest: false,
-      expectedPublishedRecord: makeReleaseRecord(),
-    }
-  )
+function patchCalls(calls: Call[]): Call[] {
+  return calls.filter((call) => call.method === "PATCH")
+}
 
-  assert.equal(release.state, "published")
-  assert.equal(
-    h.requests.some((request) =>
-      request.url.pathname.endsWith("/commits/main")
-    ),
-    false
-  )
-  assert.equal(
-    h.requests.some((request) =>
-      request.url.pathname.endsWith("/releases/latest")
-    ),
-    false
-  )
-  assert.equal(
-    h.requests.some((request) => request.url.pathname.endsWith("/check-runs")),
-    false
-  )
-})
-
-test("uncheckpointed already-published adoption still enforces App-bound gates", async () => {
-  const h = harness({ initialPublished: true, checkAppId: 999 })
-  await assert.rejects(
-    h.client.verifyPreparedRelease(makeInput(), REPOSITORY_ID),
-    (error: unknown) => {
-      assert.ok(error instanceof GitHubPublishedPostconditionError)
-      assert.match(error.message, /Required check-run/)
-      return true
-    }
-  )
-  assert.equal(
-    h.requests.some((request) => request.url.pathname.endsWith("/check-runs")),
-    true
-  )
-  assert.equal(
-    h.requests.some((request) => request.method === "PATCH"),
-    false
-  )
-})
-
-test("post-PATCH checkpoint drift is reported as published, not as a precondition conflict", async () => {
-  const h = harness({
-    patchMode: "success-drift",
-    publishedBody: "body changed after publication",
-  })
-  await assert.rejects(
-    h.client.publishAndReconcile(makeInput(), REPOSITORY_ID),
-    (error: unknown) => {
-      assert.ok(error instanceof GitHubPublishedPostconditionError)
-      assert.equal(error.record.releaseId, RELEASE_ID)
-      assert.equal(error.record.publishedAt, "2026-07-03T12:00:00Z")
-      return true
-    }
-  )
-  assert.equal(
-    h.requests.filter((request) => request.method === "PATCH").length,
-    1
-  )
-})
-
-test("a later retry still reports an already-published drift as published", async () => {
-  const h = harness({
-    initialPublished: true,
-    publishedBody: "body changed after the earlier publication",
-  })
-  await assert.rejects(
-    h.client.verifyPreparedRelease(makeInput(), REPOSITORY_ID),
-    (error: unknown) => {
-      assert.ok(error instanceof GitHubPublishedPostconditionError)
-      assert.equal(error.record.releaseId, RELEASE_ID)
-      return true
-    }
-  )
-  assert.equal(
-    h.requests.filter((request) => request.method === "PATCH").length,
-    0
-  )
-})
-
-test("successful PATCH whose exact release still reads draft remains ambiguous", async () => {
-  const h = harness({ patchMode: "success-still-draft" })
-  await assert.rejects(
-    h.client.publishAndReconcile(makeInput(), REPOSITORY_ID),
-    (error: unknown) =>
-      error instanceof GitHubApiError && error.ambiguousMutation
-  )
-  assert.equal(h.isPublished(), false)
-  assert.equal(
-    h.requests.filter((request) => request.method === "PATCH").length,
-    1
-  )
-})
-
-test("403 mutation error is redacted and not retried", async () => {
-  const h = harness({ patchMode: "403" })
-  await assert.rejects(
-    h.client.publishAndReconcile(makeInput(), REPOSITORY_ID),
-    (error: unknown) => {
-      assert.ok(error instanceof GitHubApiError)
-      assert.equal(error.status, 403)
-      assert.equal(error.message.includes("SECRET"), false)
-      assert.equal(error.message.includes("ghp_"), false)
-      return true
-    }
-  )
-  assert.equal(
-    h.requests.filter((request) => request.method === "PATCH").length,
-    1
-  )
-})
-
-test("credential failure before PATCH is blocked, not reported as an ambiguous write", async () => {
-  let fetchCalls = 0
-  const client = new GitHubClient({
-    getAccessToken: async () => {
-      throw new Error("expired secret credential detail")
-    },
-    fetch: async () => {
-      fetchCalls++
-      return json({})
-    },
-    sleep: async () => {},
-  })
-  await assert.rejects(
-    client.publishAndReconcile(makeInput(), REPOSITORY_ID),
-    (error: unknown) =>
-      error instanceof GitHubApiError &&
-      !error.ambiguousMutation &&
-      !error.message.includes("secret")
-  )
-  assert.equal(fetchCalls, 0)
-})
-
-test("safe reads retry bounded 429 and 5xx, but not 404", async () => {
-  for (const failure of [429, 500]) {
-    const h = harness({ repositoryFailures: [failure] })
-    assert.equal(
-      (await h.client.verifyPreparedRelease(makeInput(), REPOSITORY_ID)).state,
-      "draft"
-    )
-    assert.equal(
-      h.requests.filter(
-        (request) => request.url.pathname === `/repos/${REPOSITORY}`
-      ).length,
-      2
-    )
+test("inspection versions exact release content independent of asset order", async () => {
+  const firstAsset: AssetJson = {
+    id: 1,
+    name: "a.zip",
+    label: "macOS",
+    state: "uploaded",
+    size: 10,
+    digest: `sha256:${"1".repeat(64)}`,
   }
-
-  const missing = harness({ repositoryFailures: [404] })
-  await assert.rejects(
-    missing.client.verifyPreparedRelease(makeInput(), REPOSITORY_ID),
-    (error: unknown) => error instanceof GitHubApiError && error.status === 404
-  )
-  assert.equal(missing.requests.length, 1)
-
-  const noHeader = harness({
-    repositoryFailures: [429],
-    rateLimitWithoutHeader: true,
-  })
-  await assert.rejects(
-    noHeader.client.verifyPreparedRelease(makeInput(), REPOSITORY_ID),
-    (error: unknown) =>
-      error instanceof GitHubApiError &&
-      error.retryAfterSeconds === 60 &&
-      error.retryable
-  )
-  assert.equal(noHeader.requests.length, 1)
-})
-
-test("primary rate-limit reset and headerless secondary limits return actionable delays", async () => {
-  const now = 1_720_000_000_000
-  const primary = harness({
-    repositoryFailures: [403],
-    repositoryFailureHeaders: {
-      "X-RateLimit-Remaining": "0",
-      "X-RateLimit-Reset": String(now / 1_000 + 120),
-    },
-    now,
-  })
-  await assert.rejects(
-    primary.client.verifyPreparedRelease(makeInput(), REPOSITORY_ID),
-    (error: unknown) => {
-      assert.ok(error instanceof GitHubApiError)
-      assert.equal(error.retryable, true)
-      assert.equal(error.retryAfterSeconds, 120)
-      assert.match(error.message, /retry after 120 seconds/)
-      return true
-    }
-  )
-  assert.equal(primary.requests.length, 1)
-
-  const capped = harness({
-    repositoryFailures: [403],
-    repositoryFailureHeaders: {
-      "X-RateLimit-Remaining": "0",
-      "X-RateLimit-Reset": String(now / 1_000 + 900_000),
-    },
-    now,
-  })
-  await assert.rejects(
-    capped.client.verifyPreparedRelease(makeInput(), REPOSITORY_ID),
-    (error: unknown) =>
-      error instanceof GitHubApiError && error.retryAfterSeconds === 86_400
-  )
-
-  const secondary = harness({
-    repositoryFailures: [403],
-    repositoryFailureHeaders: {},
-    repositoryFailureMessage:
-      "You have exceeded a secondary rate limit. Please wait.",
-    now,
-  })
-  await assert.rejects(
-    secondary.client.verifyPreparedRelease(makeInput(), REPOSITORY_ID),
-    (error: unknown) => {
-      assert.ok(error instanceof GitHubApiError)
-      assert.equal(error.retryable, true)
-      assert.equal(error.retryAfterSeconds, 60)
-      assert.match(error.message, /retry after 60 seconds/)
-      assert.equal(error.message.includes("Please wait"), false)
-      return true
-    }
-  )
-  assert.equal(secondary.requests.length, 1)
-})
-
-test("read timeout exhausts before mutation and remains retryable", async () => {
-  const h = harness({ throwRepositoryReads: 2 })
-  await assert.rejects(
-    h.client.verifyPreparedRelease(makeInput(), REPOSITORY_ID),
-    (error: unknown) => error instanceof GitHubApiError && error.retryable
-  )
-  assert.equal(
-    h.requests.filter((request) => request.method === "PATCH").length,
-    0
-  )
-})
-
-test("safe-read timeout covers a response body that never finishes", async () => {
-  const h = harness({ hangRepositoryBodies: true })
-  await assert.rejects(
-    h.client.verifyPreparedRelease(makeInput(), REPOSITORY_ID),
-    (error: unknown) => error instanceof GitHubApiError && error.retryable
-  )
-  assert.equal(
-    h.requests.filter(
-      (request) => request.url.pathname === `/repos/${REPOSITORY}`
-    ).length,
-    2
-  )
-  assert.equal(
-    h.requests.filter((request) => request.method === "PATCH").length,
-    0
-  )
-})
-
-test("latest-release mismatch prevents a false completed claim", async () => {
-  const h = harness({
-    patchMode: "409-publish",
-    latestReleaseId: RELEASE_ID + 1,
-  })
-  await assert.rejects(
-    h.client.publishAndReconcile(makeInput(), REPOSITORY_ID),
-    /observable latest release/
-  )
-})
-
-test("asset and check pagination are bounded", async () => {
-  const dummyChecks = Array.from({ length: 100 }, (_, index) => ({
-    id: index,
-    name: `dummy-${index}`,
-    status: "completed",
-    conclusion: "success",
-    app: { id: 15368 },
-  }))
-  const desired = {
-    id: 101,
-    name: "build",
-    status: "completed",
-    conclusion: "success",
-    app: { id: 15368 },
+  const secondAsset: AssetJson = {
+    id: 2,
+    name: "b.zip",
+    label: null,
+    state: "uploaded",
+    size: 20,
+    digest: null,
   }
-  const pagedChecks = harness({ checkPages: [dummyChecks, [desired]] })
-  assert.equal(
-    (await pagedChecks.client.verifyPreparedRelease(makeInput(), REPOSITORY_ID))
-      .state,
-    "draft"
-  )
-
-  const hundredAssets = Array.from({ length: 100 }, (_, index) => ({
-    id: index,
-    name: index === 0 ? "app.tar.gz" : `asset-${index}.zip`,
-    size: index === 0 ? 512 : index,
-    digest: `sha256:${index === 0 ? "b".repeat(64) : sha256(String(index))}`,
-  }))
-  const tooManyAssets = harness({
-    assetPages: [
-      hundredAssets,
-      [
-        {
-          id: 101,
-          name: "overflow.zip",
-          size: 1,
-          digest: `sha256:${"c".repeat(64)}`,
-        },
+  const first = await client(
+    releaseFixture({ assets: [secondAsset, firstAsset] }).fetch
+  ).inspectRelease(RELEASE_ID)
+  const reordered = await client(
+    releaseFixture({ assets: [firstAsset, secondAsset] }).fetch
+  ).inspectRelease(RELEASE_ID)
+  const relabeled = await client(
+    releaseFixture({
+      assets: [{ ...firstAsset, label: "Universal" }, secondAsset],
+    }).fetch
+  ).inspectRelease(RELEASE_ID)
+  const redigested = await client(
+    releaseFixture({
+      assets: [
+        { ...firstAsset, digest: `sha256:${"2".repeat(64)}` },
+        secondAsset,
       ],
-    ],
-  })
-  await assert.rejects(
-    tooManyAssets.client.verifyPreparedRelease(makeInput(), REPOSITORY_ID),
-    /more than the supported 100/
+    }).fetch
+  ).inspectRelease(RELEASE_ID)
+
+  assert.deepEqual(
+    first.assets.map((asset) => asset.name),
+    ["a.zip", "b.zip"]
   )
+  assert.equal(first.version, reordered.version)
+  assert.notEqual(first.version, relabeled.version)
+  assert.notEqual(first.version, redigested.version)
+})
+
+test("inspection resolves annotated tags", async () => {
+  const fixture = releaseFixture({ annotatedTag: true })
+  const snapshot = await client(fixture.fetch).inspectRelease(RELEASE_ID)
+
+  assert.equal(snapshot.tagCommit, TAG_COMMIT)
+  assert.ok(
+    fixture.calls.some((call) => call.url.endsWith("/git/tags/tag-object"))
+  )
+})
+
+test("inspection fails closed on repository or tag identity", async (t) => {
+  await t.test("repository ID mismatch", async () => {
+    const fixture = releaseFixture({ repositoryId: 99 })
+    await assert.rejects(
+      client(fixture.fetch).inspectRelease(RELEASE_ID),
+      /repository identity does not match/
+    )
+  })
+
+  await t.test("missing tag", async () => {
+    const fixture = releaseFixture({ missingTag: true })
+    await assert.rejects(
+      client(fixture.fetch).inspectRelease(RELEASE_ID),
+      /tag must exist/
+    )
+  })
+})
+
+test("publication sends one minimal PATCH and stale versions send none", async (t) => {
+  await t.test("matching version", async () => {
+    const fixture = releaseFixture()
+    const github = client(fixture.fetch)
+    const inspected = await github.inspectRelease(RELEASE_ID)
+    const result = await github.publishRelease({
+      releaseId: RELEASE_ID,
+      expectedVersion: inspected.version,
+      makeLatest: "legacy",
+    })
+
+    assert.equal(result.changed, true)
+    assert.equal(result.snapshot.state, "published")
+    assert.deepEqual(
+      patchCalls(fixture.calls).map((call) => call.body),
+      [{ draft: false, make_latest: "legacy" }]
+    )
+  })
+
+  await t.test("stale version", async () => {
+    const fixture = releaseFixture()
+    const github = client(fixture.fetch)
+    const inspected = await github.inspectRelease(RELEASE_ID)
+    fixture.setRelease({ body: "Updated notes" })
+
+    await assert.rejects(
+      github.publishRelease({
+        releaseId: RELEASE_ID,
+        expectedVersion: inspected.version,
+        makeLatest: "false",
+      }),
+      /changed after it was inspected/
+    )
+    assert.equal(patchCalls(fixture.calls).length, 0)
+  })
+})
+
+test("published retries are no-ops and prereleases cannot become latest", async (t) => {
+  await t.test("already published", async () => {
+    const fixture = releaseFixture()
+    const github = client(fixture.fetch)
+    const inspected = await github.inspectRelease(RELEASE_ID)
+    fixture.setRelease({
+      draft: false,
+      published_at: "2026-07-05T12:00:00Z",
+    })
+
+    const result = await github.publishRelease({
+      releaseId: RELEASE_ID,
+      expectedVersion: inspected.version,
+      makeLatest: "false",
+    })
+    assert.equal(result.changed, false)
+    assert.equal(result.snapshot.version, inspected.version)
+    assert.equal(patchCalls(fixture.calls).length, 0)
+  })
+
+  await t.test("prerelease latest conflict", async () => {
+    const fixture = releaseFixture({ release: { prerelease: true } })
+    const github = client(fixture.fetch)
+    const inspected = await github.inspectRelease(RELEASE_ID)
+
+    await assert.rejects(
+      github.publishRelease({
+        releaseId: RELEASE_ID,
+        expectedVersion: inspected.version,
+        makeLatest: "true",
+      }),
+      /prerelease cannot be published as the latest/
+    )
+    assert.equal(patchCalls(fixture.calls).length, 0)
+  })
+})
+
+test("ambiguous PATCH responses reconcile without retrying the write", async (t) => {
+  for (const patchMode of ["409-published", "timeout-published"] as const) {
+    await t.test(patchMode, async () => {
+      const fixture = releaseFixture({ patchMode })
+      const github = client(fixture.fetch)
+      const inspected = await github.inspectRelease(RELEASE_ID)
+
+      const result = await github.publishRelease({
+        releaseId: RELEASE_ID,
+        expectedVersion: inspected.version,
+        makeLatest: "false",
+      })
+      assert.equal(result.snapshot.state, "published")
+      assert.equal(result.reconciledAfterAmbiguousResponse, true)
+      assert.equal(patchCalls(fixture.calls).length, 1)
+    })
+  }
+})
+
+test("publication reports a public release whose content drifted", async () => {
+  const fixture = releaseFixture({ patchMode: "success-drift" })
+  const github = client(fixture.fetch)
+  const inspected = await github.inspectRelease(RELEASE_ID)
+
+  await assert.rejects(
+    github.publishRelease({
+      releaseId: RELEASE_ID,
+      expectedVersion: inspected.version,
+      makeLatest: "false",
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof GitHubPublishedPostconditionError)
+      assert.equal(error.snapshot.state, "published")
+      assert.equal(error.snapshot.body, "Changed during publication")
+      return true
+    }
+  )
+  assert.equal(patchCalls(fixture.calls).length, 1)
+})
+
+test("publication remains ambiguous when read-back cannot prove success", async (t) => {
+  for (const patchMode of ["409-draft", "success-readback-failure"] as const) {
+    await t.test(patchMode, async () => {
+      const fixture = releaseFixture({ patchMode })
+      const github = client(fixture.fetch)
+      const inspected = await github.inspectRelease(RELEASE_ID)
+
+      await assert.rejects(
+        github.publishRelease({
+          releaseId: RELEASE_ID,
+          expectedVersion: inspected.version,
+          makeLatest: "false",
+        }),
+        (error: unknown) => {
+          assert.ok(error instanceof GitHubApiError)
+          assert.equal(error.ambiguousMutation, true)
+          return true
+        }
+      )
+      assert.equal(patchCalls(fixture.calls).length, 1)
+    })
+  }
+})
+
+test("inspection rejects releases with more than 100 assets", async () => {
+  const fixture = releaseFixture({ hasMoreAssets: true })
+  await assert.rejects(
+    client(fixture.fetch).inspectRelease(RELEASE_ID),
+    /more than 100 assets/
+  )
+})
+
+test("provider failures are redacted and GET retries stay bounded", async (t) => {
+  await t.test("rate limit metadata", async () => {
+    let calls = 0
+    const fetch = (async () => {
+      calls++
+      return json({ message: "secret provider detail" }, 429, {
+        "Retry-After": "9",
+        "X-GitHub-Request-Id": "rate-request",
+      })
+    }) as typeof globalThis.fetch
+
+    await assert.rejects(
+      client(fetch).inspectRelease(RELEASE_ID),
+      (error: unknown) => {
+        assert.ok(error instanceof GitHubApiError)
+        assert.equal(error.retryAfterSeconds, 9)
+        assert.equal(error.requestId, "rate-request")
+        assert.doesNotMatch(error.message, /secret provider detail/)
+        return true
+      }
+    )
+    assert.equal(calls, 1)
+  })
+
+  await t.test("two GET attempts", async () => {
+    let calls = 0
+    const fetch = (async () => {
+      calls++
+      return json({ message: "another secret" }, 503)
+    }) as typeof globalThis.fetch
+
+    await assert.rejects(
+      client(fetch).inspectRelease(RELEASE_ID),
+      (error: unknown) => {
+        assert.ok(error instanceof GitHubApiError)
+        assert.doesNotMatch(error.message, /another secret/)
+        return true
+      }
+    )
+    assert.equal(calls, 2)
+  })
 })

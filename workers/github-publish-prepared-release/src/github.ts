@@ -1,26 +1,26 @@
+import { createHash } from "node:crypto"
+
 import type { GetAccessToken } from "./auth.js"
-import {
-  boundedRetryAfterSeconds,
-  normalizeRepository,
-  sha256,
-} from "./policy.js"
+import { normalizeRepository } from "./config.js"
 import type {
-  PublishPreparedReleaseInput,
-  ReleaseRecord,
-  RequiredCheck,
+  PublishReleaseInput,
+  PublishReleaseResult,
+  ReleaseAsset,
+  ReleaseSnapshot,
 } from "./types.js"
 
 const API_VERSION = "2026-03-10"
 const DEFAULT_API_URL = "https://api.github.com"
-const MAX_GITHUB_CALLS = 50
-const MAX_ASSET_PAGES = 2
-const MAX_GATE_PAGES = 3
+const MAX_GITHUB_CALLS = 30
+const MAX_RELEASE_ASSETS = 100
 
 type Fetch = typeof globalThis.fetch
 type Sleep = (ms: number) => Promise<void>
 type Now = () => number
 
 export type GitHubClientOptions = {
+  repository: string
+  repositoryId: number
   getAccessToken: GetAccessToken
   fetch?: Fetch
   sleep?: Sleep
@@ -66,9 +66,8 @@ export class GitHubPreconditionError extends Error {
 export class GitHubPublishedPostconditionError extends Error {
   constructor(
     message: string,
-    readonly record: ReleaseRecord,
-    readonly retryable: boolean,
-    readonly retryAfterSeconds: number | null = null
+    readonly snapshot: ReleaseSnapshot,
+    readonly requestId: string | null
   ) {
     super(message)
     this.name = "GitHubPublishedPostconditionError"
@@ -86,7 +85,6 @@ type ReleaseResponse = {
   id: number
   html_url: string
   tag_name: string
-  target_commitish: string
   name: string | null
   body: string | null
   draft: boolean
@@ -97,41 +95,31 @@ type ReleaseResponse = {
 type AssetResponse = {
   id: number
   name: string
+  label: string | null
+  state: string
   size: number
   digest: string | null
 }
 
-type CheckRunResponse = {
-  id: number
-  name: string
-  status: string
-  conclusion: string | null
-  app: { id: number } | null
+type GitObject = { type: string; sha: string }
+type GitReferenceResponse = { ref: string; object: GitObject }
+type GitTagResponse = { object: GitObject }
+
+type ApiResponse<T> = {
+  data: T
+  headers: Headers
+  requestId: string | null
 }
 
-type CheckRunsResponse = {
-  check_runs: CheckRunResponse[]
+function positiveInteger(value: number, name: string): number {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new GitHubPreconditionError(`${name} must be a positive integer`)
+  }
+  return value
 }
 
-type GitReferenceResponse = {
-  ref: string
-  object: { type: string; sha: string }
-}
-
-type GitTagResponse = {
-  object: { type: string; sha: string }
-}
-
-type CommitResponse = { sha: string }
-
-export type VerifiedRelease = {
-  state: "draft" | "published"
-  record: ReleaseRecord
-}
-
-export type PublishResult = {
-  release: VerifiedRelease
-  reconciledAfterAmbiguousResponse: boolean
+function boundedRetryAfterSeconds(value: number): number {
+  return Math.max(0, Math.min(3_600, Math.ceil(value)))
 }
 
 function retryAfterSeconds(response: Response, now: number): number | null {
@@ -162,10 +150,11 @@ function rateLimitMessage(status: number, delay: number | null): string {
 }
 
 function hasNextPage(link: string | null): boolean {
-  if (!link) return false
-  return link
-    .split(",")
-    .some((part) => /;\s*rel="[^"]*\bnext\b[^"]*"/.test(part))
+  return (
+    link
+      ?.split(",")
+      .some((part) => /;\s*rel="[^"]*\bnext\b[^"]*"/.test(part)) ?? false
+  )
 }
 
 function encodePath(value: string): string {
@@ -179,22 +168,49 @@ function isAbort(error: unknown): boolean {
   )
 }
 
-function sameReleaseRecord(left: ReleaseRecord, right: ReleaseRecord): boolean {
-  return (
-    left.releaseId === right.releaseId &&
-    left.repositoryId === right.repositoryId &&
-    left.repository === right.repository &&
-    left.tag === right.tag &&
-    left.targetCommit === right.targetCommit &&
-    left.url === right.url &&
-    left.nameSha256 === right.nameSha256 &&
-    left.bodySha256 === right.bodySha256 &&
-    left.prerelease === right.prerelease &&
-    left.publishedAt === right.publishedAt
-  )
+function compareAssets(left: ReleaseAsset, right: ReleaseAsset): number {
+  if (left.name !== right.name) return left.name < right.name ? -1 : 1
+  return left.id - right.id
+}
+
+function releaseVersion(input: {
+  repository: string
+  repositoryId: number
+  releaseId: number
+  tag: string
+  tagCommit: string
+  name: string
+  body: string
+  prerelease: boolean
+  assets: ReleaseAsset[]
+}): string {
+  // The fixed-order array is the canonical serialization. Publication state
+  // and publishedAt are intentionally absent so a retry can observe the same
+  // content as published and return a no-op.
+  const canonical = JSON.stringify([
+    1,
+    input.repository,
+    input.repositoryId,
+    input.releaseId,
+    input.tag,
+    input.tagCommit,
+    input.name,
+    input.body,
+    input.prerelease,
+    input.assets.map((asset) => [
+      asset.id,
+      asset.name,
+      asset.label,
+      asset.sizeBytes,
+      asset.digest,
+    ]),
+  ])
+  return `sha256:${createHash("sha256").update(canonical).digest("hex")}`
 }
 
 export class GitHubClient {
+  private readonly repository: string
+  private readonly repositoryId: number
   private readonly fetch: Fetch
   private readonly sleep: Sleep
   private readonly timeoutMs: number
@@ -203,6 +219,8 @@ export class GitHubClient {
   private calls = 0
 
   constructor(private readonly options: GitHubClientOptions) {
+    this.repository = normalizeRepository(options.repository)
+    this.repositoryId = positiveInteger(options.repositoryId, "repositoryId")
     this.fetch = options.fetch ?? globalThis.fetch
     this.sleep =
       options.sleep ??
@@ -216,482 +234,265 @@ export class GitHubClient {
     return this.calls
   }
 
-  async verifyPreparedRelease(
-    input: PublishPreparedReleaseInput,
-    expectedRepositoryId: number,
-    options: {
-      verifyGates: boolean
-      verifyLatest?: boolean
-      expectedPublishedRecord?: ReleaseRecord | null
-    } = { verifyGates: true }
-  ): Promise<VerifiedRelease> {
-    const repository = normalizeRepository(input.repository)
-    // Immutable repository identity is deliberately the first provider read.
-    const repo = await this.get<RepositoryResponse>(
-      `/repos/${repository}`,
-      expectedRepositoryId
+  async inspectRelease(releaseId: number): Promise<ReleaseSnapshot> {
+    positiveInteger(releaseId, "releaseId")
+
+    // Checking both the configured name and immutable ID prevents a renamed
+    // or transferred repository from silently changing the target.
+    const repository = await this.get<RepositoryResponse>(
+      `/repos/${this.repository}`
     )
     if (
-      repo.id !== expectedRepositoryId ||
-      normalizeRepository(repo.full_name) !== repository
+      repository.id !== this.repositoryId ||
+      normalizeRepository(repository.full_name) !== this.repository
     ) {
       throw new GitHubPreconditionError(
-        "GitHub repository identity does not match the configured numeric allowlist"
+        "GitHub repository identity does not match GITHUB_REPOSITORY_ID"
       )
     }
-    if (repo.archived || repo.disabled) {
+    if (repository.archived || repository.disabled) {
       throw new GitHubPreconditionError(
         "GitHub repository is archived or disabled"
       )
     }
 
     const release = await this.get<ReleaseResponse>(
-      `/repos/${repository}/releases/${input.releaseId}`,
-      expectedRepositoryId
+      `/repos/${this.repository}/releases/${releaseId}`
     )
-    if (release.id !== input.releaseId) {
+    if (release.id !== releaseId) {
+      throw new GitHubPreconditionError("GitHub returned a different release")
+    }
+    if (!release.draft && !release.published_at) {
       throw new GitHubPreconditionError(
-        "GitHub returned a different release ID"
+        "GitHub release is neither a draft nor observably published"
       )
     }
-    const published =
-      release.draft === false &&
-      typeof release.published_at === "string" &&
-      release.published_at.length > 0
-    if (!release.draft && !published) {
-      throw new GitHubPreconditionError(
-        "Release is neither a draft nor observably published"
-      )
-    }
-    const observedRecord: ReleaseRecord = {
-      releaseId: release.id,
-      repositoryId: repo.id,
-      repository,
-      tag: release.tag_name,
-      targetCommit: input.targetCommit,
+
+    const assets = await this.listAssets(releaseId)
+    const tagCommit = await this.resolveTagCommit(release)
+    const snapshotWithoutVersion = {
+      state: release.draft ? ("draft" as const) : ("published" as const),
+      repository: this.repository,
+      repositoryId: this.repositoryId,
+      releaseId,
       url: release.html_url,
-      nameSha256: sha256(release.name ?? ""),
-      bodySha256: sha256(release.body ?? ""),
+      tag: release.tag_name,
+      tagCommit,
+      name: release.name ?? "",
+      body: release.body ?? "",
       prerelease: release.prerelease,
-      publishedAt: release.published_at ?? "",
+      assets,
+      publishedAt: release.published_at,
     }
-    try {
-      if (release.tag_name !== input.tag) {
-        throw new GitHubPreconditionError(
-          "Draft release tag no longer matches approval"
-        )
-      }
-      if (release.prerelease !== input.prerelease) {
-        throw new GitHubPreconditionError(
-          "Draft release prerelease setting no longer matches approval"
-        )
-      }
-      if (sha256(release.name ?? "") !== input.nameSha256) {
-        throw new GitHubPreconditionError(
-          "Draft release name hash no longer matches approval"
-        )
-      }
-      if (sha256(release.body ?? "") !== input.bodySha256) {
-        throw new GitHubPreconditionError(
-          "Draft release body hash no longer matches approval"
-        )
-      }
-
-      const assets = await this.listAssets(
-        repository,
-        input.releaseId,
-        expectedRepositoryId
-      )
-      this.verifyAssets(assets, input)
-
-      const tagCommit = await this.resolveTagCommit(
-        repository,
-        input.tag,
-        expectedRepositoryId
-      )
-      if (tagCommit !== input.targetCommit) {
-        throw new GitHubPreconditionError(
-          "Tag ref no longer resolves to the approved commit"
-        )
-      }
-
-      // target_commitish is a pre-publication branch/ref gate. Once GitHub has
-      // published the exact release, that branch may advance and is no longer a
-      // stable receipt-resume checkpoint.
-      if (!published) {
-        const target = await this.get<CommitResponse>(
-          `/repos/${repository}/commits/${encodePath(release.target_commitish)}`,
-          expectedRepositoryId
-        )
-        if (target.sha !== input.targetCommit) {
-          throw new GitHubPreconditionError(
-            "Release target_commitish no longer resolves to the approved commit"
-          )
-        }
-      }
-      const commit = await this.get<CommitResponse>(
-        `/repos/${repository}/commits/${input.targetCommit}`,
-        expectedRepositoryId
-      )
-      if (commit.sha !== input.targetCommit) {
-        throw new GitHubPreconditionError(
-          "Approved target commit is not canonical"
-        )
-      }
-
-      if (options.verifyGates) {
-        await this.verifyChecks(
-          repository,
-          input.targetCommit,
-          input.requiredChecks,
-          expectedRepositoryId
-        )
-      }
-
-      const verified: VerifiedRelease = {
-        state: published ? "published" : "draft",
-        record: observedRecord,
-      }
-      if (options.expectedPublishedRecord) {
-        if (
-          !published ||
-          !sameReleaseRecord(verified.record, options.expectedPublishedRecord)
-        ) {
-          throw new GitHubPreconditionError(
-            "Published release no longer matches the durable checkpoint"
-          )
-        }
-      }
-      if (
-        published &&
-        input.makeLatest === "true" &&
-        options.verifyLatest !== false
-      ) {
-        let latest: ReleaseResponse
-        try {
-          latest = await this.get<ReleaseResponse>(
-            `/repos/${repository}/releases/latest`,
-            expectedRepositoryId
-          )
-        } catch (error) {
-          throw new GitHubPublishedPostconditionError(
-            "Release is published, but the observable latest-release read is unavailable",
-            verified.record,
-            error instanceof GitHubApiError && error.retryable,
-            error instanceof GitHubApiError ? error.retryAfterSeconds : null
-          )
-        }
-        if (latest.id !== input.releaseId) {
-          throw new GitHubPublishedPostconditionError(
-            "Release is published but is not the repository's observable latest release",
-            verified.record,
-            true
-          )
-        }
-      }
-      return verified
-    } catch (error) {
-      if (published && !(error instanceof GitHubPublishedPostconditionError)) {
-        throw new GitHubPublishedPostconditionError(
-          `The exact release is published, but its approved checkpoint could not be verified: ${
-            error instanceof GitHubPreconditionError
-              ? error.message
-              : "a required provider read was unavailable"
-          }`,
-          observedRecord,
-          error instanceof GitHubApiError && error.retryable,
-          error instanceof GitHubApiError ? error.retryAfterSeconds : null
-        )
-      }
-      throw error
+    return {
+      ...snapshotWithoutVersion,
+      version: releaseVersion(snapshotWithoutVersion),
     }
   }
 
-  async publishAndReconcile(
-    input: PublishPreparedReleaseInput,
-    expectedRepositoryId: number
-  ): Promise<PublishResult> {
-    const repository = normalizeRepository(input.repository)
-    let ambiguous = false
-    try {
-      await this.request<ReleaseResponse>(
-        "PATCH",
-        `/repos/${repository}/releases/${input.releaseId}`,
-        { draft: false, make_latest: input.makeLatest },
-        false,
-        expectedRepositoryId
+  async publishRelease(
+    input: PublishReleaseInput
+  ): Promise<PublishReleaseResult> {
+    positiveInteger(input.releaseId, "releaseId")
+    if (!/^sha256:[a-f0-9]{64}$/.test(input.expectedVersion)) {
+      throw new GitHubPreconditionError(
+        "expectedVersion must be the version returned by inspectRelease"
       )
+    }
+    if (!(["true", "false", "legacy"] as const).includes(input.makeLatest)) {
+      throw new GitHubPreconditionError(
+        'makeLatest must be "true", "false", or "legacy"'
+      )
+    }
+
+    // This is intentionally the final work before the write. GitHub does not
+    // expose a conditional release-update API, so read-back below also checks
+    // for the residual race between this GET and PATCH.
+    const before = await this.inspectRelease(input.releaseId)
+    if (before.version !== input.expectedVersion) {
+      throw new GitHubPreconditionError(
+        "GitHub release changed after it was inspected"
+      )
+    }
+    if (before.prerelease && input.makeLatest === "true") {
+      throw new GitHubPreconditionError(
+        "A prerelease cannot be published as the latest release"
+      )
+    }
+    if (before.state === "published") {
+      return {
+        snapshot: before,
+        changed: false,
+        reconciledAfterAmbiguousResponse: false,
+        requestId: null,
+      }
+    }
+
+    let ambiguous = false
+    let requestId: string | null = null
+    try {
+      const response = await this.request<ReleaseResponse>(
+        "PATCH",
+        `/repos/${this.repository}/releases/${input.releaseId}`,
+        { draft: false, make_latest: input.makeLatest },
+        false
+      )
+      requestId = response.requestId
     } catch (error) {
       if (
         error instanceof GitHubApiError &&
         (error.ambiguousMutation || error.status === 409)
       ) {
         ambiguous = true
+        requestId = error.requestId
       } else {
         throw error
       }
     }
 
-    // A success response, timeout, retryable 5xx, and 409 are all reconciled by
-    // exact release ID. PATCH is never retried.
-    let release: VerifiedRelease
+    let after: ReleaseSnapshot
     try {
-      release = await this.verifyPreparedRelease(input, expectedRepositoryId, {
-        verifyGates: false,
-        verifyLatest: true,
-      })
+      after = await this.inspectRelease(input.releaseId)
     } catch (error) {
-      if (error instanceof GitHubPublishedPostconditionError) throw error
-      if (error instanceof GitHubApiError) {
-        throw new GitHubApiError(
-          "GitHub publication was attempted but terminal read-back was unavailable",
-          {
-            status: error.status,
-            retryable: true,
-            retryAfterSeconds: error.retryAfterSeconds,
-            ambiguousMutation: true,
-            requestId: error.requestId,
-          }
-        )
-      }
-      // PATCH has already been sent. A content/tag/asset checkpoint failure is
-      // not a pre-write conflict: minimally observe the exact release ID so the
-      // caller is never told that a possibly public release is still private.
-      try {
-        const observed = await this.observeExactRelease(
-          input,
-          expectedRepositoryId
-        )
-        if (observed.state === "published") {
-          throw new GitHubPublishedPostconditionError(
-            "The exact release is published, but its post-publication checkpoint drifted",
-            observed.record,
-            false
-          )
+      throw new GitHubApiError(
+        "GitHub publication was attempted but exact release read-back failed",
+        {
+          status: error instanceof GitHubApiError ? error.status : null,
+          retryable: true,
+          retryAfterSeconds:
+            error instanceof GitHubApiError ? error.retryAfterSeconds : null,
+          ambiguousMutation: true,
+          requestId:
+            requestId ??
+            (error instanceof GitHubApiError ? error.requestId : null),
         }
-      } catch (observationError) {
-        if (observationError instanceof GitHubPublishedPostconditionError) {
-          throw observationError
-        }
+      )
+    }
+
+    if (after.version !== input.expectedVersion) {
+      if (after.state === "published") {
+        throw new GitHubPublishedPostconditionError(
+          "The release is published, but its content changed during publication",
+          after,
+          requestId
+        )
       }
       throw new GitHubApiError(
-        "GitHub publication was attempted but exact-release reconciliation remained inconclusive",
-        { retryable: true, ambiguousMutation: true }
+        "GitHub publication was attempted, but release read-back changed and remained a draft",
+        { retryable: true, ambiguousMutation: true, requestId }
       )
     }
-    if (release.state !== "published") {
+    if (after.state !== "published") {
       throw new GitHubApiError(
-        ambiguous
-          ? "GitHub publication response was ambiguous and read-back still shows a draft"
-          : "GitHub acknowledged publication but immediate read-back still shows a draft",
-        { retryable: true, ambiguousMutation: true }
+        "GitHub publication was attempted, but immediate read-back still shows a draft",
+        { retryable: true, ambiguousMutation: true, requestId }
       )
     }
-    return { release, reconciledAfterAmbiguousResponse: ambiguous }
+
+    return {
+      snapshot: after,
+      changed: true,
+      reconciledAfterAmbiguousResponse: ambiguous,
+      requestId,
+    }
   }
 
-  private async listAssets(
-    repository: string,
-    releaseId: number,
-    repositoryId: number
-  ): Promise<AssetResponse[]> {
-    const assets: AssetResponse[] = []
-    for (let page = 1; page <= MAX_ASSET_PAGES; page++) {
-      const response = await this.getWithHeaders<AssetResponse[]>(
-        `/repos/${repository}/releases/${releaseId}/assets?per_page=100&page=${page}`,
-        repositoryId
+  private async listAssets(releaseId: number): Promise<ReleaseAsset[]> {
+    const response = await this.getWithHeaders<AssetResponse[]>(
+      `/repos/${this.repository}/releases/${releaseId}/assets?per_page=${MAX_RELEASE_ASSETS}&page=1`
+    )
+    if (
+      response.data.length > MAX_RELEASE_ASSETS ||
+      hasNextPage(response.headers.get("Link"))
+    ) {
+      throw new GitHubPreconditionError(
+        `Release has more than ${MAX_RELEASE_ASSETS} assets`
       )
-      assets.push(...response.data)
-      if (assets.length > 100) {
+    }
+    if (response.data.some((asset) => asset.state !== "uploaded")) {
+      throw new GitHubPreconditionError(
+        "Release has an asset that has not finished uploading"
+      )
+    }
+
+    const assets = response.data.map((asset) => ({
+      id: asset.id,
+      name: asset.name,
+      label: asset.label ?? null,
+      sizeBytes: asset.size,
+      digest: asset.digest ?? null,
+    }))
+    assets.sort(compareAssets)
+    return assets
+  }
+
+  private async resolveTagCommit(release: ReleaseResponse): Promise<string> {
+    let object: GitObject
+    try {
+      const ref = await this.get<GitReferenceResponse>(
+        `/repos/${this.repository}/git/ref/tags/${encodePath(release.tag_name)}`
+      )
+      if (ref.ref !== `refs/tags/${release.tag_name}`) {
         throw new GitHubPreconditionError(
-          "Release has more than the supported 100 assets"
+          "GitHub returned a different tag reference"
         )
       }
-      if (!hasNextPage(response.headers.get("Link"))) return assets
-    }
-    throw new GitHubPreconditionError(
-      "Release asset pagination exceeded its limit"
-    )
-  }
-
-  private verifyAssets(
-    assets: AssetResponse[],
-    input: PublishPreparedReleaseInput
-  ): void {
-    if (assets.length !== input.requiredAssets.length) {
-      throw new GitHubPreconditionError(
-        "Release asset manifest count no longer matches approval"
-      )
-    }
-    const observed = new Map(assets.map((asset) => [asset.name, asset]))
-    if (observed.size !== assets.length) {
-      throw new GitHubPreconditionError(
-        "Release contains duplicate asset names"
-      )
-    }
-    for (const expected of input.requiredAssets) {
-      const asset = observed.get(expected.name)
-      if (
-        !asset ||
-        asset.size !== expected.sizeBytes ||
-        asset.digest !== `sha256:${expected.sha256}`
-      ) {
+      object = ref.object
+    } catch (error) {
+      if (error instanceof GitHubApiError && error.status === 404) {
         throw new GitHubPreconditionError(
-          `Release asset manifest mismatch for ${expected.name}`
+          "Release tag must exist before publication"
         )
       }
+      throw error
     }
-  }
 
-  private async resolveTagCommit(
-    repository: string,
-    tag: string,
-    repositoryId: number
-  ): Promise<string> {
-    const ref = await this.get<GitReferenceResponse>(
-      `/repos/${repository}/git/ref/tags/${encodePath(tag)}`,
-      repositoryId
-    )
-    if (ref.ref !== `refs/tags/${tag}`) {
-      throw new GitHubPreconditionError("GitHub returned a different tag ref")
-    }
-    let object = ref.object
     for (let depth = 0; depth <= 3; depth++) {
       if (object.type === "commit") return object.sha
       if (object.type !== "tag" || depth === 3) {
         throw new GitHubPreconditionError(
-          "Tag does not resolve to a commit within three annotated-tag dereferences"
+          "Release tag does not resolve to a commit"
         )
       }
       const annotated = await this.get<GitTagResponse>(
-        `/repos/${repository}/git/tags/${object.sha}`,
-        repositoryId
+        `/repos/${this.repository}/git/tags/${object.sha}`
       )
       object = annotated.object
     }
-    throw new GitHubPreconditionError("Tag did not resolve to a commit")
-  }
-
-  private async verifyChecks(
-    repository: string,
-    sha: string,
-    required: RequiredCheck[],
-    repositoryId: number
-  ): Promise<void> {
-    const runs = await this.listCheckRuns(repository, sha, repositoryId)
-
-    for (const gate of required) {
-      const matches = runs.filter(
-        (run) => run.name === gate.name && run.app?.id === gate.appId
-      )
-      if (
-        matches.length < 1 ||
-        matches.some(
-          (run) => run.status !== "completed" || run.conclusion !== "success"
-        )
-      ) {
-        throw new GitHubPreconditionError(
-          `Required check-run is not successful: ${gate.name}`
-        )
-      }
-    }
-  }
-
-  private async listCheckRuns(
-    repository: string,
-    sha: string,
-    repositoryId: number
-  ): Promise<CheckRunResponse[]> {
-    const all: CheckRunResponse[] = []
-    for (let page = 1; page <= MAX_GATE_PAGES; page++) {
-      const response = await this.getWithHeaders<CheckRunsResponse>(
-        `/repos/${repository}/commits/${sha}/check-runs?filter=latest&per_page=100&page=${page}`,
-        repositoryId
-      )
-      all.push(...response.data.check_runs)
-      if (!hasNextPage(response.headers.get("Link"))) return all
-    }
     throw new GitHubPreconditionError(
-      "Check-run pagination exceeded 300 records"
+      "Release tag does not resolve to a commit"
     )
   }
 
-  private async observeExactRelease(
-    input: PublishPreparedReleaseInput,
-    expectedRepositoryId: number
-  ): Promise<VerifiedRelease> {
-    const repository = normalizeRepository(input.repository)
-    const repo = await this.get<RepositoryResponse>(
-      `/repos/${repository}`,
-      expectedRepositoryId
-    )
-    if (
-      repo.id !== expectedRepositoryId ||
-      normalizeRepository(repo.full_name) !== repository
-    ) {
-      throw new GitHubPreconditionError(
-        "GitHub repository identity does not match the configured numeric allowlist"
-      )
-    }
-    const release = await this.get<ReleaseResponse>(
-      `/repos/${repository}/releases/${input.releaseId}`,
-      expectedRepositoryId
-    )
-    if (release.id !== input.releaseId) {
-      throw new GitHubPreconditionError(
-        "GitHub returned a different release ID"
-      )
-    }
-    const published = release.draft === false && release.published_at !== null
-    return {
-      state: published ? "published" : "draft",
-      record: {
-        releaseId: release.id,
-        repositoryId: repo.id,
-        repository,
-        tag: release.tag_name,
-        targetCommit: input.targetCommit,
-        url: release.html_url,
-        nameSha256: sha256(release.name ?? ""),
-        bodySha256: sha256(release.body ?? ""),
-        prerelease: release.prerelease,
-        publishedAt: release.published_at ?? "",
-      },
-    }
+  private async get<T>(path: string): Promise<T> {
+    return (await this.getWithHeaders<T>(path)).data
   }
 
-  private async get<T>(path: string, repositoryId: number): Promise<T> {
-    return (await this.getWithHeaders<T>(path, repositoryId)).data
-  }
-
-  private getWithHeaders<T>(
-    path: string,
-    repositoryId: number
-  ): Promise<{ data: T; headers: Headers }> {
-    return this.request<T>("GET", path, undefined, true, repositoryId)
+  private getWithHeaders<T>(path: string): Promise<ApiResponse<T>> {
+    return this.request<T>("GET", path, undefined, true)
   }
 
   private async request<T>(
     method: "GET" | "PATCH",
     path: string,
     body: unknown,
-    safeToRetry: boolean,
-    repositoryId: number
-  ): Promise<{ data: T; headers: Headers }> {
+    safeToRetry: boolean
+  ): Promise<ApiResponse<T>> {
     const attempts = safeToRetry ? 2 : 1
     for (let attempt = 1; attempt <= attempts; attempt++) {
       this.calls++
       if (this.calls > MAX_GITHUB_CALLS) {
         throw new GitHubPreconditionError(
-          "GitHub call budget exceeded 50 requests"
+          `GitHub call budget exceeded ${MAX_GITHUB_CALLS} requests`
         )
       }
+
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), this.timeoutMs)
       try {
         let token: string
         try {
-          token = await this.options.getAccessToken(repositoryId)
+          token = await this.options.getAccessToken(this.repositoryId)
         } catch {
           if (safeToRetry && attempt < attempts) {
             await this.sleep(100)
@@ -699,7 +500,7 @@ export class GitHubClient {
           }
           throw new GitHubApiError(
             "GitHub authentication failed before the API request",
-            { retryable: true, ambiguousMutation: false }
+            { retryable: safeToRetry }
           )
         }
 
@@ -711,9 +512,11 @@ export class GitHubClient {
             headers: {
               Authorization: `Bearer ${token}`,
               Accept: "application/vnd.github+json",
-              "Content-Type": "application/json",
+              ...(body === undefined
+                ? {}
+                : { "Content-Type": "application/json" }),
               "X-GitHub-Api-Version": API_VERSION,
-              "User-Agent": "notion-cookbook-github-publish-prepared-release",
+              "User-Agent": "notion-cookbook-github-release-tools",
             },
             ...(body === undefined ? {} : { body: JSON.stringify(body) }),
           })
@@ -735,11 +538,14 @@ export class GitHubClient {
 
         const requestId = response.headers.get("X-GitHub-Request-Id")
         if (response.ok) {
-          let data: T
           try {
-            data = (await response.json()) as T
+            return {
+              data: (await response.json()) as T,
+              headers: response.headers,
+              requestId,
+            }
           } catch (error) {
-            if (safeToRetry && isAbort(error) && attempt < attempts) {
+            if (safeToRetry && attempt < attempts) {
               await this.sleep(100)
               continue
             }
@@ -755,13 +561,10 @@ export class GitHubClient {
               }
             )
           }
-          return { data, headers: response.headers }
         }
 
-        // Inspect only for GitHub's documented secondary-limit marker. Never
-        // surface provider response text; it can contain secrets,
-        // attacker-controlled content, or confusing instructions. The same
-        // timer remains active until this body has been consumed.
+        // Provider text is inspected only for GitHub's secondary-rate-limit
+        // marker and is never included in an error or tool result.
         let responseText: string
         try {
           responseText = await response.text()
@@ -794,8 +597,9 @@ export class GitHubClient {
           retryAfterSeconds(response, now) ??
           rateLimitResetSeconds(response, now) ??
           (isRateLimit ? 60 : null)
-        const retryableStatus = isRateLimit || response.status >= 500
-        if (safeToRetry && retryableStatus && attempt < attempts) {
+        const retryable = isRateLimit || response.status >= 500
+
+        if (safeToRetry && retryable && attempt < attempts) {
           if (retryAfter !== null && retryAfter > 2) {
             throw new GitHubApiError(
               rateLimitMessage(response.status, retryAfter),
@@ -817,7 +621,7 @@ export class GitHubClient {
             : `GitHub rejected the request (HTTP ${response.status})`,
           {
             status: response.status,
-            retryable: retryableStatus,
+            retryable,
             retryAfterSeconds: retryAfter,
             ambiguousMutation:
               method === "PATCH" &&
@@ -829,6 +633,7 @@ export class GitHubClient {
         clearTimeout(timer)
       }
     }
+
     throw new GitHubApiError("GitHub request exhausted its retry budget", {
       retryable: true,
     })

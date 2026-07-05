@@ -1,102 +1,42 @@
-export type CheckKind = "check_run"
 export type MakeLatest = "true" | "false" | "legacy"
 
-export type RequiredCheck = {
-  kind: CheckKind
+export type ReleaseAsset = {
+  id: number
   name: string
-  appId: number
-}
-
-export type RequiredAsset = {
-  name: string
+  label: string | null
   sizeBytes: number
-  sha256: string
+  digest: string | null
 }
 
-export type PublishPreparedReleaseInput = {
-  approvalPageId: string
-  approvalRevision: string
-  approvalFingerprint: string
+export type ReleaseSnapshot = {
+  state: "draft" | "published"
+  /**
+   * A stable hash of the release content. Publication state and publishedAt
+   * are deliberately excluded so an identical retry can be a safe no-op.
+   */
+  version: string
   repository: string
-  releaseId: number
-  tag: string
-  targetCommit: string
-  nameSha256: string
-  bodySha256: string
-  prerelease: boolean
-  makeLatest: MakeLatest
-  requiredChecks: RequiredCheck[]
-  requiredAssets: RequiredAsset[]
-}
-
-export type ReceiptStatus =
-  | "completed"
-  | "no_op"
-  | "blocked"
-  | "conflict"
-  | "partial_failure"
-  | "ambiguous"
-
-export type StepStatus = "completed" | "skipped" | "failed" | "unknown"
-
-export type ReceiptStep = {
-  name: string
-  status: StepStatus
-  detail: string
-}
-
-export type ReceiptRecord = {
-  system: "github" | "notion"
-  kind: "release" | "release_packet"
-  id: string
-  url: string
-  action: "published" | "observed" | "receipt_written"
-}
-
-export type PublishReceipt = {
-  ok: boolean
-  status: ReceiptStatus
-  operationId: string
-  idempotencyKey: string
-  changed: boolean
-  replay: boolean
-  published: boolean
-  records: ReceiptRecord[]
-  steps: ReceiptStep[]
-  warnings: string[]
-  retryable: boolean
-  retryAfterSeconds: number | null
-  resumeToken: string | null
-  repair: string | null
-}
-
-export type ReleaseRecord = {
-  releaseId: number
   repositoryId: number
-  repository: string
-  tag: string
-  targetCommit: string
+  releaseId: number
   url: string
-  nameSha256: string
-  bodySha256: string
+  tag: string
+  tagCommit: string
+  name: string
+  body: string
   prerelease: boolean
-  publishedAt: string
+  assets: ReleaseAsset[]
+  publishedAt: string | null
 }
 
-export type OperationStage =
-  | "claimed"
-  | "mutation_unknown"
-  | "published"
-  | "completed"
+export type PublishReleaseInput = {
+  releaseId: number
+  expectedVersion: string
+  makeLatest: MakeLatest
+}
 
-export type OperationState = {
-  version: 1
-  operationId: string
-  idempotencyKey: string
-  inputFingerprint: string
-  stage: OperationStage
-  release: ReleaseRecord | null
-  receipt: PublishReceipt | null
-  receiptJson: string | null
-  updatedAt: string
+export type PublishReleaseResult = {
+  snapshot: ReleaseSnapshot
+  changed: boolean
+  reconciledAfterAmbiguousResponse: boolean
+  requestId: string | null
 }

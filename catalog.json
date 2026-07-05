@@ -236,14 +236,14 @@
     },
     {
       "id": "github-publish-prepared-release",
-      "title": "GitHub prepared-release publisher agent tool",
-      "summary": "Publish one exact approved GitHub draft release, reconcile its terminal state, and write the authoritative receipt to its Notion release packet.",
+      "title": "GitHub draft release tools",
+      "summary": "Inspect and safely publish an existing GitHub draft release from a Notion Agent.",
       "path": "workers/github-publish-prepared-release",
       "kind": "worker-tool",
       "status": "ready",
       "language": "typescript",
       "runtime": "node",
-      "integrations": ["notion-workers", "github", "redis"],
+      "integrations": ["notion-workers", "github"],
       "entrypoints": ["src/index.ts"],
       "commands": {
         "install": "npm install",
