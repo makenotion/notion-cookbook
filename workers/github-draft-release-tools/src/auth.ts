@@ -73,7 +73,7 @@ const defaultInstallationTokenFactory: InstallationTokenFactory = (options) => {
     request: request.defaults({
       headers: {
         "X-GitHub-Api-Version": "2026-03-10",
-        "User-Agent": "notion-cookbook-github-publish-prepared-release",
+        "User-Agent": "notion-cookbook-github-draft-release-tools",
       },
       request: { fetch: createTimeoutFetch(globalThis.fetch) },
     }),

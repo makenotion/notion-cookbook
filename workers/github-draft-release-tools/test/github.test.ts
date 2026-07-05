@@ -42,6 +42,10 @@ type FixtureOptions = {
   annotatedTag?: boolean
   missingTag?: boolean
   hasMoreAssets?: boolean
+  releasePage?: number
+  latestBefore?: number | null
+  latestAfter?: number | null
+  failLatestAfterPatch?: boolean
   patchMode?:
     | "success"
     | "409-published"
@@ -90,6 +94,12 @@ function releaseFixture(options: FixtureOptions = {}) {
   ]
   const calls: Call[] = []
   let afterPatch = false
+  let latestReleaseId: number | null = options.latestBefore ?? 6
+  if (options.latestBefore === null) latestReleaseId = null
+  const hasLatestAfter = Object.prototype.hasOwnProperty.call(
+    options,
+    "latestAfter"
+  )
 
   const fetch = (async (
     input: string | URL | Request,
@@ -108,6 +118,34 @@ function releaseFixture(options: FixtureOptions = {}) {
         archived: false,
         disabled: false,
       })
+    }
+    if (url.pathname === `/repos/${REPOSITORY}/releases` && method === "GET") {
+      const page = Number(url.searchParams.get("page") ?? "1")
+      const releasePage = options.releasePage ?? 1
+      return json(page === releasePage ? [release] : [], 200, {
+        ...(page < releasePage
+          ? {
+              Link: `<https://api.github.test/repos/${REPOSITORY}/releases?per_page=100&page=${page + 1}>; rel="next"`,
+            }
+          : {}),
+      })
+    }
+    if (
+      url.pathname === `/repos/${REPOSITORY}/releases/latest` &&
+      method === "GET"
+    ) {
+      if (afterPatch && options.failLatestAfterPatch) {
+        return json({ message: "latest unavailable" }, 503, {
+          "X-GitHub-Request-Id": "latest-failure",
+        })
+      }
+      return latestReleaseId === null
+        ? json({ message: "no releases" }, 404, {
+            "X-GitHub-Request-Id": "latest-missing",
+          })
+        : json({ id: latestReleaseId }, 200, {
+            "X-GitHub-Request-Id": "latest-request",
+          })
     }
     if (
       url.pathname === `/repos/${REPOSITORY}/releases/${RELEASE_ID}` &&
@@ -159,6 +197,18 @@ function releaseFixture(options: FixtureOptions = {}) {
       afterPatch = true
       const mode = options.patchMode ?? "success"
       if (mode !== "409-draft") {
+        if (hasLatestAfter) {
+          latestReleaseId = options.latestAfter ?? null
+        } else if (
+          typeof body === "object" &&
+          body !== null &&
+          "make_latest" in body &&
+          body.make_latest === "true"
+        ) {
+          latestReleaseId = RELEASE_ID
+        }
+      }
+      if (mode !== "409-draft") {
         release = {
           ...release,
           draft: false,
@@ -193,11 +243,14 @@ function releaseFixture(options: FixtureOptions = {}) {
   }
 }
 
-function client(fetch: typeof globalThis.fetch): GitHubClient {
+function client(
+  fetch: typeof globalThis.fetch,
+  getAccessToken = async () => "token"
+): GitHubClient {
   return new GitHubClient({
     repository: REPOSITORY,
     repositoryId: REPOSITORY_ID,
-    getAccessToken: async () => "token",
+    getAccessToken,
     fetch,
     apiBaseUrl: "https://api.github.test",
     sleep: async () => undefined,
@@ -254,6 +307,69 @@ test("inspection versions exact release content independent of asset order", asy
   assert.notEqual(first.version, redigested.version)
 })
 
+test("draft lookup uses the documented bounded releases list", async (t) => {
+  await t.test("finds a paginated draft without an exact-ID GET", async () => {
+    const fixture = releaseFixture({ releasePage: 2 })
+    const snapshot = await client(fixture.fetch).inspectRelease(RELEASE_ID)
+
+    assert.equal(snapshot.state, "draft")
+    assert.equal(
+      fixture.calls.filter(
+        (call) =>
+          call.method === "GET" &&
+          new URL(call.url).pathname === `/repos/${REPOSITORY}/releases`
+      ).length,
+      2
+    )
+    assert.equal(
+      fixture.calls.filter(
+        (call) =>
+          call.method === "GET" &&
+          new URL(call.url).pathname ===
+            `/repos/${REPOSITORY}/releases/${RELEASE_ID}`
+      ).length,
+      0
+    )
+  })
+
+  await t.test("fails closed after 1,000 releases", async () => {
+    const fixture = releaseFixture({ releasePage: 11 })
+    await assert.rejects(
+      client(fixture.fetch).inspectRelease(RELEASE_ID),
+      /most recent 1000 releases/
+    )
+    assert.equal(
+      fixture.calls.filter(
+        (call) => new URL(call.url).pathname === `/repos/${REPOSITORY}/releases`
+      ).length,
+      10
+    )
+  })
+
+  await t.test(
+    "uses an exact-ID GET after observing a public release",
+    async () => {
+      const fixture = releaseFixture({
+        release: {
+          draft: false,
+          published_at: "2026-07-05T12:00:00Z",
+        },
+      })
+      const snapshot = await client(fixture.fetch).inspectRelease(RELEASE_ID)
+
+      assert.equal(snapshot.state, "published")
+      assert.ok(
+        fixture.calls.some(
+          (call) =>
+            call.method === "GET" &&
+            new URL(call.url).pathname ===
+              `/repos/${REPOSITORY}/releases/${RELEASE_ID}`
+        )
+      )
+    }
+  )
+})
+
 test("inspection resolves annotated tags", async () => {
   const fixture = releaseFixture({ annotatedTag: true })
   const snapshot = await client(fixture.fetch).inspectRelease(RELEASE_ID)
@@ -290,14 +406,31 @@ test("publication sends one minimal PATCH and stale versions send none", async (
     const result = await github.publishRelease({
       releaseId: RELEASE_ID,
       expectedVersion: inspected.version,
-      makeLatest: "legacy",
+      latestBehavior: "make_latest",
     })
 
     assert.equal(result.changed, true)
     assert.equal(result.snapshot.state, "published")
     assert.deepEqual(
       patchCalls(fixture.calls).map((call) => call.body),
-      [{ draft: false, make_latest: "legacy" }]
+      [{ draft: false, make_latest: "true" }]
+    )
+    assert.equal(
+      fixture.calls.filter(
+        (call) =>
+          call.method === "GET" &&
+          new URL(call.url).pathname === `/repos/${REPOSITORY}/releases`
+      ).length,
+      2
+    )
+    assert.equal(
+      fixture.calls.filter(
+        (call) =>
+          call.method === "GET" &&
+          new URL(call.url).pathname ===
+            `/repos/${REPOSITORY}/releases/${RELEASE_ID}`
+      ).length,
+      1
     )
   })
 
@@ -311,12 +444,93 @@ test("publication sends one minimal PATCH and stale versions send none", async (
       github.publishRelease({
         releaseId: RELEASE_ID,
         expectedVersion: inspected.version,
-        makeLatest: "false",
+        latestBehavior: "keep_current",
       }),
       /changed after it was inspected/
     )
     assert.equal(patchCalls(fixture.calls).length, 0)
   })
+})
+
+test("publication verifies the requested latest-release behavior", async (t) => {
+  await t.test(
+    "keep_current preserves the previous latest release",
+    async () => {
+      const fixture = releaseFixture({ latestBefore: 99 })
+      const github = client(fixture.fetch)
+      const inspected = await github.inspectRelease(RELEASE_ID)
+
+      const result = await github.publishRelease({
+        releaseId: RELEASE_ID,
+        expectedVersion: inspected.version,
+        latestBehavior: "keep_current",
+      })
+
+      assert.equal(result.changed, true)
+      assert.deepEqual(
+        patchCalls(fixture.calls).map((call) => call.body),
+        [{ draft: false, make_latest: "false" }]
+      )
+      assert.equal(
+        fixture.calls.filter(
+          (call) =>
+            new URL(call.url).pathname ===
+            `/repos/${REPOSITORY}/releases/latest`
+        ).length,
+        2
+      )
+    }
+  )
+
+  await t.test("reports a public release when latest changed", async () => {
+    const fixture = releaseFixture({ latestBefore: 99, latestAfter: 100 })
+    const github = client(fixture.fetch)
+    const inspected = await github.inspectRelease(RELEASE_ID)
+
+    await assert.rejects(
+      github.publishRelease({
+        releaseId: RELEASE_ID,
+        expectedVersion: inspected.version,
+        latestBehavior: "keep_current",
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof GitHubPublishedPostconditionError)
+        assert.equal(error.snapshot.state, "published")
+        assert.equal(error.retryable, false)
+        assert.match(error.message, /latest release changed/)
+        return true
+      }
+    )
+  })
+
+  for (const [latestBehavior, retryable] of [
+    ["make_latest", true],
+    ["keep_current", false],
+  ] as const) {
+    await t.test(
+      `preserves public state when ${latestBehavior} verification fails`,
+      async () => {
+        const fixture = releaseFixture({ failLatestAfterPatch: true })
+        const github = client(fixture.fetch)
+        const inspected = await github.inspectRelease(RELEASE_ID)
+
+        await assert.rejects(
+          github.publishRelease({
+            releaseId: RELEASE_ID,
+            expectedVersion: inspected.version,
+            latestBehavior,
+          }),
+          (error: unknown) => {
+            assert.ok(error instanceof GitHubPublishedPostconditionError)
+            assert.equal(error.snapshot.state, "published")
+            assert.equal(error.retryable, retryable)
+            assert.equal(error.requestId, "latest-failure")
+            return true
+          }
+        )
+      }
+    )
+  }
 })
 
 test("published retries are no-ops and prereleases cannot become latest", async (t) => {
@@ -332,11 +546,46 @@ test("published retries are no-ops and prereleases cannot become latest", async 
     const result = await github.publishRelease({
       releaseId: RELEASE_ID,
       expectedVersion: inspected.version,
-      makeLatest: "false",
+      latestBehavior: "keep_current",
     })
     assert.equal(result.changed, false)
     assert.equal(result.snapshot.version, inspected.version)
     assert.equal(patchCalls(fixture.calls).length, 0)
+  })
+
+  await t.test("already published must be latest when requested", async () => {
+    const published = {
+      draft: false,
+      published_at: "2026-07-05T12:00:00Z",
+    }
+    const matchingFixture = releaseFixture({
+      release: published,
+      latestBefore: RELEASE_ID,
+    })
+    const matchingClient = client(matchingFixture.fetch)
+    const matching = await matchingClient.inspectRelease(RELEASE_ID)
+    const result = await matchingClient.publishRelease({
+      releaseId: RELEASE_ID,
+      expectedVersion: matching.version,
+      latestBehavior: "make_latest",
+    })
+    assert.equal(result.changed, false)
+
+    const mismatchFixture = releaseFixture({
+      release: published,
+      latestBefore: 99,
+    })
+    const mismatchClient = client(mismatchFixture.fetch)
+    const mismatch = await mismatchClient.inspectRelease(RELEASE_ID)
+    await assert.rejects(
+      mismatchClient.publishRelease({
+        releaseId: RELEASE_ID,
+        expectedVersion: mismatch.version,
+        latestBehavior: "make_latest",
+      }),
+      /not GitHub's latest release/
+    )
+    assert.equal(patchCalls(mismatchFixture.calls).length, 0)
   })
 
   await t.test("prerelease latest conflict", async () => {
@@ -348,7 +597,7 @@ test("published retries are no-ops and prereleases cannot become latest", async 
       github.publishRelease({
         releaseId: RELEASE_ID,
         expectedVersion: inspected.version,
-        makeLatest: "true",
+        latestBehavior: "make_latest",
       }),
       /prerelease cannot be published as the latest/
     )
@@ -366,10 +615,10 @@ test("ambiguous PATCH responses reconcile without retrying the write", async (t)
       const result = await github.publishRelease({
         releaseId: RELEASE_ID,
         expectedVersion: inspected.version,
-        makeLatest: "false",
+        latestBehavior: "keep_current",
       })
       assert.equal(result.snapshot.state, "published")
-      assert.equal(result.reconciledAfterAmbiguousResponse, true)
+      assert.equal(result.changed, null)
       assert.equal(patchCalls(fixture.calls).length, 1)
     })
   }
@@ -384,7 +633,7 @@ test("publication reports a public release whose content drifted", async () => {
     github.publishRelease({
       releaseId: RELEASE_ID,
       expectedVersion: inspected.version,
-      makeLatest: "false",
+      latestBehavior: "keep_current",
     }),
     (error: unknown) => {
       assert.ok(error instanceof GitHubPublishedPostconditionError)
@@ -407,7 +656,7 @@ test("publication remains ambiguous when read-back cannot prove success", async 
         github.publishRelease({
           releaseId: RELEASE_ID,
           expectedVersion: inspected.version,
-          makeLatest: "false",
+          latestBehavior: "keep_current",
         }),
         (error: unknown) => {
           assert.ok(error instanceof GitHubApiError)
@@ -426,6 +675,66 @@ test("inspection rejects releases with more than 100 assets", async () => {
     client(fixture.fetch).inspectRelease(RELEASE_ID),
     /more than 100 assets/
   )
+})
+
+test("publication retries authentication before sending its single PATCH", async () => {
+  const fixture = releaseFixture()
+  const inspected = await client(fixture.fetch).inspectRelease(RELEASE_ID)
+  fixture.calls.length = 0
+
+  let injectedFailure = false
+  let tokenAttempts = 0
+  const github = client(fixture.fetch, async () => {
+    tokenAttempts++
+    const lastPath = fixture.calls.at(-1)
+      ? new URL(fixture.calls.at(-1)!.url).pathname
+      : null
+    if (!injectedFailure && lastPath?.includes("/git/ref/tags/")) {
+      injectedFailure = true
+      throw new Error("temporary auth failure")
+    }
+    return "token"
+  })
+
+  const result = await github.publishRelease({
+    releaseId: RELEASE_ID,
+    expectedVersion: inspected.version,
+    latestBehavior: "make_latest",
+  })
+
+  assert.equal(result.changed, true)
+  assert.equal(injectedFailure, true)
+  assert.ok(tokenAttempts > fixture.calls.length)
+  assert.equal(patchCalls(fixture.calls).length, 1)
+})
+
+test("failed pre-PATCH authentication is retryable and not ambiguous", async () => {
+  const fixture = releaseFixture()
+  const inspected = await client(fixture.fetch).inspectRelease(RELEASE_ID)
+  fixture.calls.length = 0
+
+  const github = client(fixture.fetch, async () => {
+    const lastCall = fixture.calls.at(-1)
+    if (lastCall && new URL(lastCall.url).pathname.includes("/git/ref/tags/")) {
+      throw new Error("auth unavailable")
+    }
+    return "token"
+  })
+
+  await assert.rejects(
+    github.publishRelease({
+      releaseId: RELEASE_ID,
+      expectedVersion: inspected.version,
+      latestBehavior: "make_latest",
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof GitHubApiError)
+      assert.equal(error.retryable, true)
+      assert.equal(error.ambiguousMutation, false)
+      return true
+    }
+  )
+  assert.equal(patchCalls(fixture.calls).length, 0)
 })
 
 test("provider failures are redacted and GET retries stay bounded", async (t) => {

@@ -9,30 +9,52 @@ database or Redis.
 
 ## Try asking
 
-- “Inspect draft release 987654 and summarize what will be published.”
+- “Inspect release 987654, summarize the notes preview, and flag anything omitted.”
 - “Check the tag, commit, notes, and assets for release 987654.”
 - “Publish the release you just inspected and make it the latest release.”
 - “Publish this draft, but keep the current latest release unchanged.”
 
-The inspect-first flow keeps the conversation useful: the agent can show you
-the live GitHub release, ask for confirmation, and then publish that same
-version.
+The inspect-first flow lets the agent show you the live GitHub release, ask for
+confirmation, and then publish that same version.
 
 ## Quickstart
 
-Create a GitHub App, install it on the repository you want to use, and grant it:
+You need Node.js 22+, npm 10.9.2+, the [GitHub CLI](https://cli.github.com/),
+access to deploy Notion Workers, and permission to create and install a GitHub
+App. Install the Workers CLI and sign in to GitHub:
+
+```zsh
+npm install --global ntn
+gh auth login
+```
+
+Create the GitHub App under the organization that owns the repository so the
+Worker uses a team-owned service identity. Install it only on the repository
+you want to publish from, generate a private key, and grant it:
 
 - **Contents: Read and write**
 - **Metadata: Read-only**
 
-Then deploy the Worker from the repository root:
+Webhooks are not required. Copy the Client ID from the App settings. After
+installing the App, open its **Configure** page and copy the trailing number
+from the URL (`.../installations/12345678`) as the installation ID. These
+commands show the repository ID, a single-line copy of the private key, and
+available draft release IDs:
 
 ```zsh
-npm install --global ntn
-cd workers/github-publish-prepared-release
+gh api repos/example-org/example-repo --jq .id
+base64 < github-app.private-key.pem | tr -d '\n'
+gh api --paginate repos/example-org/example-repo/releases \
+  --jq '.[] | select(.draft) | [.id, .tag_name, .name] | @tsv'
+```
+
+Deploy the Worker and set the values you found above:
+
+```zsh
+cd workers/github-draft-release-tools
 npm install
 ntn login
-ntn workers deploy --name github-publish-prepared-release
+ntn workers deploy --name github-draft-release-tools
 
 ntn workers env set GITHUB_REPOSITORY=example-org/example-repo
 ntn workers env set GITHUB_REPOSITORY_ID=123456789
@@ -42,46 +64,49 @@ ntn workers env set GITHUB_APP_INSTALLATION_ID=12345678
 ntn workers env set GITHUB_APP_PRIVATE_KEY_BASE64=your_base64_encoded_private_key
 ```
 
-`GITHUB_REPOSITORY_ID` is the numeric ID shown by GitHub's repository API. It
-keeps the Worker tied to the same repository even if an owner or repository is
-renamed.
+The numeric repository ID prevents an owner/name from silently pointing the
+Worker at a different repository. After an intentional rename or transfer,
+confirm that the ID is unchanged and update `GITHUB_REPOSITORY`.
 
 In Notion, add the deployed Worker to a custom agent under **Tools and access >
-Add connection**.
+Add connection**. Limit access to people who may publish this repository, and
+keep confirmation enabled for the publish tool.
 
 ## How it works
 
 The Worker exposes two tools:
 
-| Tool                  | What it does                                                                                  |
-| --------------------- | --------------------------------------------------------------------------------------------- |
-| `inspectDraftRelease` | Reads a draft by numeric release ID and returns its current details plus an opaque `version`. |
-| `publishDraftRelease` | Re-reads that release, requires the inspected version, publishes it, and checks the result.   |
+| Tool                  | What it does                                                                                |
+| --------------------- | ------------------------------------------------------------------------------------------- |
+| `inspectRelease`      | Reads a release by numeric ID and returns its current details plus an opaque `version`.     |
+| `publishDraftRelease` | Re-reads that release, requires the inspected version, publishes it, and checks the result. |
 
-`inspectDraftRelease` is read-only. Its `version` is a SHA-256 fingerprint of
-the observed release state. It is a stale-state guard, not an approval token or
-security credential.
+`inspectRelease` is read-only. Its `version` is a SHA-256 fingerprint of the
+release content. It is a stale-state guard, not an approval token or security
+credential.
 
-`publishDraftRelease` accepts:
+Release notes are bounded to a 4,000-character preview. When `bodyTruncated` is
+true, the agent should say so and ask the user to review the complete notes at
+the returned GitHub URL before publication.
 
-- `releaseId`: the same positive numeric ID used for inspection;
-- `expectedVersion`: the opaque `version` returned by inspection; and
-- `makeLatest`: GitHub's `"true"`, `"false"`, or `"legacy"` policy.
+`publishDraftRelease` accepts the release ID, the exact `expectedVersion` from
+inspection, and one explicit `latestBehavior`:
 
-Before publishing, the tool fetches the release again and rejects the request
-if anything represented by `expectedVersion` changed. It sends one GitHub
-update that changes the draft to a published release, then reads the release
-again to report the observed result. A matching release that is already
+- `make_latest` makes the published release the repository's latest release.
+- `keep_current` publishes without changing the current latest release.
+
+Before publishing, the tool fetches the release again and stops if anything in
+the inspected version changed. It sends one GitHub update, then reads the
+release again to report the observed result. A matching release that is already
 published returns as a no-op.
-
-The publish tool is marked as a write operation, so a Notion Agent normally
-asks for confirmation before calling it. The GitHub credential and configured
-repository remain the real access boundary.
 
 ## Authentication
 
 A GitHub App installation is recommended because it provides short-lived
 tokens and can be installed on only the intended repository.
+
+Everyone using the agent publishes through this same GitHub identity. This
+recipe does not use each caller's personal GitHub permissions.
 
 For a smaller personal setup, use a fine-grained personal access token limited
 to the same repository with **Contents: Read and write**:
@@ -118,9 +143,9 @@ Copy `.env.example` to `.env`, add sandbox credentials, and use a disposable
 draft release:
 
 ```zsh
-ntn workers exec inspectDraftRelease --local -d '{"releaseId": 987654}'
+ntn workers exec inspectRelease --local -d '{"releaseId": 987654}'
 ntn workers exec publishDraftRelease --local -d \
-  '{"releaseId": 987654, "expectedVersion": "version_from_inspect", "makeLatest": "false"}'
+  '{"releaseId":987654,"expectedVersion":"version_from_inspect","latestBehavior":"make_latest"}'
 ```
 
 The second command publishes a real GitHub release. Inspect its input carefully
@@ -136,10 +161,9 @@ npm run build
 
 ## Extend it
 
-This example intentionally keeps publication small and direct. Useful next
-steps include a read-only release browser, a managed release sync for discovery,
-or a tool that dispatches an existing GitHub Actions release workflow. None is
-required for these two tools to work.
+Useful next steps include a read-only release browser, a managed release sync
+for discovery, or a tool that dispatches an existing GitHub Actions release
+workflow. None is required for these two tools to work.
 
 ## Project map
 

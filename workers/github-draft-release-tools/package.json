@@ -1,5 +1,5 @@
 {
-  "name": "@notion-cookbook/github-publish-prepared-release",
+  "name": "@notion-cookbook/github-draft-release-tools",
   "version": "0.0.0",
   "private": true,
   "scripts": {

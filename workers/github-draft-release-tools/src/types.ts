@@ -1,4 +1,4 @@
-export type MakeLatest = "true" | "false" | "legacy"
+export type LatestBehavior = "make_latest" | "keep_current"
 
 export type ReleaseAsset = {
   id: number
@@ -31,12 +31,11 @@ export type ReleaseSnapshot = {
 export type PublishReleaseInput = {
   releaseId: number
   expectedVersion: string
-  makeLatest: MakeLatest
+  latestBehavior: LatestBehavior
 }
 
 export type PublishReleaseResult = {
   snapshot: ReleaseSnapshot
-  changed: boolean
-  reconciledAfterAmbiguousResponse: boolean
+  changed: boolean | null
   requestId: string | null
 }

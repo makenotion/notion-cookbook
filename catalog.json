@@ -235,10 +235,10 @@
       }
     },
     {
-      "id": "github-publish-prepared-release",
+      "id": "github-draft-release-tools",
       "title": "GitHub draft release tools",
       "summary": "Inspect and safely publish an existing GitHub draft release from a Notion Agent.",
-      "path": "workers/github-publish-prepared-release",
+      "path": "workers/github-draft-release-tools",
       "kind": "worker-tool",
       "status": "ready",
       "language": "typescript",
@@ -250,7 +250,7 @@
         "check": "npm run check",
         "test": "npm test",
         "build": "npm run build",
-        "deploy": "ntn workers deploy --name github-publish-prepared-release"
+        "deploy": "ntn workers deploy --name github-draft-release-tools"
       }
     },
     {
