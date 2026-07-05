@@ -1,4 +1,4 @@
-# Worker tool: Vercel Production deployments
+# Worker tool: Vercel production deployment tools
 
 Inspect a Vercel release from a Notion Agent, then promote a staged Production
 deployment or run Instant Rollback. The worker reads the target, current
@@ -20,10 +20,10 @@ From the repository root:
 
 ```sh
 npm install --global ntn vercel
-cd workers/vercel-production-deployments
+cd workers/vercel-production-deployment-tools
 npm install
 ntn login
-ntn workers deploy --name vercel-production-deployments
+ntn workers deploy --name vercel-production-deployment-tools
 ntn workers env set VERCEL_ACCESS_TOKEN=your-vercel-token
 ntn workers env set VERCEL_TEAM_ID=team_your_team
 ntn workers env set VERCEL_PROJECT_ID=prj_your_project

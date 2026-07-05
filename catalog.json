@@ -481,10 +481,10 @@
       }
     },
     {
-      "id": "vercel-production-deployments",
-      "title": "Vercel Production deployments",
+      "id": "vercel-production-deployment-tools",
+      "title": "Vercel production deployment tools",
       "summary": "Inspect, promote, or roll back one Vercel project with live release checks.",
-      "path": "workers/vercel-production-deployments",
+      "path": "workers/vercel-production-deployment-tools",
       "kind": "worker-tool",
       "status": "ready",
       "language": "typescript",
@@ -496,7 +496,7 @@
         "check": "npm run check",
         "test": "npm test",
         "build": "npm run build",
-        "deploy": "ntn workers deploy --name vercel-production-deployments"
+        "deploy": "ntn workers deploy --name vercel-production-deployment-tools"
       }
     },
     {
