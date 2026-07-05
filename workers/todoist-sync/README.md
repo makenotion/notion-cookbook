@@ -1,38 +1,17 @@
-# Worker sync: Todoist tasks and project summaries
+# Worker sync: Todoist
 
-Sync every open Todoist task into a native Notion database and summarize open
-and recently completed work by project. Use the result for daily task triage,
-project review, and weekly status preparation without managing tasks twice.
+Bring active Todoist tasks and projects into two related Notion databases. Use
+the task database for daily triage and the project database to review open work,
+deadlines, and recent completions.
 
-Todoist remains the system of record. This Worker makes read-only Todoist API
-requests and never creates, edits, completes, reopens, or deletes a Todoist
-task.
+Todoist remains the system of record. The worker only reads from Todoist and
+links each managed page back to its source record.
 
-## When to use it
+## Quickstart
 
-Use this recipe when tasks are executed in Todoist but project notes, plans, or
-status updates live in Notion. It creates two related managed databases:
-
-| Database             | What it helps answer                                                                                  |
-| -------------------- | ----------------------------------------------------------------------------------------------------- |
-| **Todoist Tasks**    | What is overdue, due today, coming up, high priority, or still unscheduled?                           |
-| **Todoist Projects** | How much open work does each project have, what is due soon, and what was completed in the last week? |
-
-It is intentionally not a two-way task manager, employee-performance report,
-time tracker, or permanent archive of completed tasks.
-
-## Prerequisites
-
-- Node.js 22 or newer
-- npm 10.9.2 or newer
-- Access to Notion Workers
-- A Todoist personal API token from **Settings > Integrations > Developer**
-- The immutable Todoist user ID returned by `GET /api/v1/user`
-
-For a multi-user product, replace the personal token with Todoist OAuth and
-request only the documented read scope.
-
-## Setup
+You need Node.js 22+, npm 10.9.2+, Notion Workers access, and a Todoist personal
+API token from **Settings > Integrations > Developer**. You also need the
+account's stable `id` from `GET https://api.todoist.com/api/v1/user`.
 
 From the repository root:
 
@@ -44,230 +23,155 @@ ntn login
 ntn workers deploy --name todoist-sync
 ntn workers sync pause projectsSync
 ntn workers sync pause tasksSync
-```
-
-Use `--name todoist-sync` only for the first deployment. The CLI records that
-Worker in the gitignored `workers.json`. Keep that file and run
-`ntn workers deploy` for later updates; using another name creates separate
-managed databases.
-
-Store the account binding and token in the deployed Worker environment:
-
-```sh
 ntn workers env set TODOIST_USER_ID=your-user-id
 ntn workers env set TODOIST_API_TOKEN=your-token
 ```
 
-Preview both capabilities while they remain paused:
+Use `--name todoist-sync` only for the first deployment. Later updates use
+`ntn workers deploy`; the gitignored `workers.json` identifies the existing
+Worker and its managed databases.
+
+Keep both schedules paused while you validate credentials and the first
+discovery page. A single preview invokes one callback and may return no changes:
 
 ```sh
 ntn workers sync trigger projectsSync --preview
 ntn workers sync trigger tasksSync --preview
 ```
 
-Populate Projects first so task relations resolve on their first write:
+Use the returned `nextContext` with `--context` to continue an optional preview.
+Then run each trigger and status pair in order, waiting for success and pressing
+Ctrl-C before continuing. Populate Projects before Tasks so relations resolve on
+their first write:
 
 ```sh
 ntn workers sync trigger projectsSync
 ntn workers sync status projectsSync
-```
-
-Watch until Projects succeeds, then press Ctrl-C and run Tasks:
-
-```sh
 ntn workers sync trigger tasksSync
 ntn workers sync status tasksSync
-```
-
-Watch until Tasks succeeds, then press Ctrl-C and start both schedules:
-
-```sh
 ntn workers sync resume projectsSync
 ntn workers sync resume tasksSync
 ```
 
-The first deployment starts both schedules. Keep them paused until credentials,
-previews, and the ordered initial runs succeed. Tasks then refresh every 15
-minutes and project summaries refresh hourly. The Workers platform supplies
-Notion authentication; do not add a `NOTION_API_TOKEN`.
+Preview output can contain task titles, descriptions, labels, and project names.
+Treat it as sensitive. No `NOTION_API_TOKEN` is required; the Workers platform
+supplies Notion access.
 
-## Expected result
+## What you can answer
 
-### Todoist Tasks
+| Managed database     | Questions it helps answer                                                                                    |
+| -------------------- | ------------------------------------------------------------------------------------------------------------ |
+| **Todoist Tasks**    | What is overdue, due today, coming up, high priority, or unscheduled? What project does each task belong to? |
+| **Todoist Projects** | Which projects have the most open, overdue, urgent, or unscheduled work? What is due or completed recently?  |
 
-The primary columns are ordered for daily triage:
+The task properties lead with **Task**, **Due Status**, **Due**, **Project**,
+**Priority**, and **Labels**. Project properties lead with **Project**, **Open
+Tasks**, **Overdue**, **Due Next 7 Days**, **Completed Last 7 Days**, and
+**Recent Completions**. Completed tasks contribute only to project summaries;
+the worker does not create a completed-task archive.
 
-1. **Task**
-2. **Due Status**
-3. **Due**
-4. **Project**
-5. **Priority**
-6. **Labels**
+## Reference
 
-**Due Status** is recalculated from one pinned observation time in the
-authenticated user's Todoist timezone:
+### Synced databases and schedules
 
-- **Overdue** — a dated task is already past due
-- **Today** — due today and not yet overdue
-- **Next 7 days** — due after today through seven calendar days from today
-- **Later** — due beyond that window
-- **No due date** — unscheduled
+| Database             | Sync           | Mode    | Schedule     | Scope                                  |
+| -------------------- | -------------- | ------- | ------------ | -------------------------------------- |
+| **Todoist Projects** | `projectsSync` | replace | Every hour   | Active projects visible to the account |
+| **Todoist Tasks**    | `tasksSync`    | replace | Every 15 min | Active tasks visible to the account    |
 
-Remaining fields retain the hard deadline, planned duration, Todoist link,
-description, recurrence and subtask flags, source timestamps, and immutable
-Todoist task ID.
+The databases are related by stable Todoist project IDs. The worker declares
+these properties in order:
 
-The database contains all active Todoist tasks, including future and
-unscheduled work. A completed or deleted task disappears only after a complete,
-successful replacement scan. Open the **Open in Todoist** link to change it.
+- **Todoist Tasks:** Task, Due Status, Due, Project, Priority, Labels, Deadline,
+  Planned Duration (min), Open in Todoist, Description, Recurring, Is Subtask,
+  Created, Updated, Todoist Task ID.
+- **Todoist Projects:** Project, Open Tasks, Overdue, Due Next 7 Days, Completed
+  Last 7 Days, Recent Completions, Next Deadline, Next Due, Unscheduled, P1
+  Tasks, Planned Minutes Next 7 Days, Last Completed, Description, Open in
+  Todoist, Updated, Todoist Project ID.
 
-### Todoist Projects
+Notion also adds a reciprocal **Tasks** relation to Todoist Projects.
 
-The first six columns support project review and status preparation:
+**Due Status** is derived in the account's Todoist timezone from one observation
+time pinned for the run. Its values are **Overdue**, **Today**, **Next 7 days**,
+**Later**, and **No due date**.
 
-1. **Project**
-2. **Open Tasks**
-3. **Overdue**
-4. **Due Next 7 Days**
-5. **Completed Last 7 Days**
-6. **Recent Completions**
+Project metrics use active tasks plus a pinned rolling seven-day completion
+window. Tasks due today count toward **Due Next 7 Days** and **Planned Minutes
+Next 7 Days**. **Recent Completions** lists up to five titles; **Last
+Completed** is the latest completion inside that same window. **Next Deadline**
+is the earliest active task deadline, including an overdue one, while **Next
+Due** is the earliest non-overdue due value.
 
-Each active project also includes its next hard deadline, next non-overdue due
-date, unscheduled and P1 task counts, planned minutes due in the next seven
-days, last completion, description, source link, update time, and immutable ID.
+### How it works
 
-**Completed Last 7 Days** counts completion occurrences in one pinned rolling
-seven-day window. **Recent Completions** lists the five most recent task titles
-and adds `+N more` when the count is larger. Completed tasks are useful summary
-input; they are not copied into a third archive database.
+1. Every page request verifies the authenticated user against `TODOIST_USER_ID`
+   and uses that account's timezone.
+2. Tasks and projects are discovered, traversed again, and published only from
+   the verified traversal.
+3. Project rows aggregate verified active tasks and a separately verified recent
+   completion window.
+4. Replace-mode removal happens only after the final identity set is verified.
+   An incomplete run does not remove unseen pages, although earlier upserts may
+   already be visible.
 
-Add your own Notion project properties or relations for status, goals,
-customers, meeting notes, or specifications. The Worker owns only its declared
-properties. Keep durable notes in separate Notion documents or a user-owned
-projects database: managed task rows disappear when work is completed, and
-managed project rows disappear when a Todoist project is no longer active.
+The worker rejects duplicate identities, identity-set changes, and invalid or
+repeated inventory cursors. A stuck publish traversal can be abandoned with
+`ntn workers sync state reset projectsSync` or
+`ntn workers sync state reset tasksSync`. Each inventory is bounded to 5,000
+tasks, projects, or completion occurrences, 250 referenced project aggregates,
+and a 200 KiB continuation state.
 
-## Recommended views
+A record absent from Todoist's active inventory is removed from Notion after a
+successful replacement. Completing a recurring task normally advances the same
+task ID to its next occurrence, so its existing page is updated instead. Any
+notes or custom property values on a removed page are removed with it; keep
+durable project context elsewhere.
 
-The Worker creates databases and properties, not opinionated views. In Notion,
-use the synced properties to create:
+### Configuration reference
 
-- **Overdue** — `Due Status` is `Overdue`
-- **Today** — `Due Status` is `Today`
-- **Upcoming** — `Due Status` is `Next 7 days`
-- **Unscheduled** — `Due Status` is `No due date`
-- **High priority** — `Priority` is `P1 · Urgent` or `P2 · High`
+| Variable            | Required | Secret | Description                                    |
+| ------------------- | -------- | ------ | ---------------------------------------------- |
+| `TODOIST_USER_ID`   | Yes      | No     | Stable account ID checked on every source page |
+| `TODOIST_API_TOKEN` | Yes      | Yes    | Personal token for the same Todoist account    |
 
-The Projects database works well sorted by **Overdue** and then
-**Due Next 7 Days**, both descending, with **Next Deadline** ascending.
+One deployment represents one Todoist account. Deploy a separate Worker and
+managed databases for another account.
 
-## Sync and safety model
+## Development
 
-- **Replacement deletion requires a verified snapshot.** Publish traversals
-  emit upserts page by page, but Notion removes unseen rows only after the final
-  identity set exactly matches discovery and the cycle returns `hasMore: false`.
-- **Mutable inputs use two passes.** Active tasks, recent completion
-  occurrences, and active projects are discovered first and then traversed
-  again. Exact immutable-ID equality catches duplicates and records skipped
-  when Todoist data changes during cursor pagination.
-- **Project rows publish after aggregation.** The project capability verifies
-  active tasks and recent completions before discovering and publishing any
-  project summary rows.
-- **Inconsistent attempts recover without authorizing deletion.** The first
-  expired cursor, duplicate, or membership change restarts immediately while
-  no replacement rows have been emitted. A repeated inconsistency retries after
-  at least one minute; if it persists, the Worker starts a fresh snapshot.
-  After a publish page emits rows, an inconsistency errors without starting a
-  new snapshot; a later retry can finish the same attempt if the source
-  stabilizes. Reset that capability's platform state only to abandon a
-  persistently stuck attempt. This avoids mixing two attempts in one
-  replacement accumulator.
-- **Pagination fails closed.** Missing, malformed, oversized, or repeated
-  cursors never finish a partial replacement.
-- **Counts reject duplicates.** Task IDs and completion-occurrence IDs are
-  retained in bounded continuation state so repeated records cannot inflate
-  project summaries.
-- **Every capability enforces one account.** `TODOIST_USER_ID` is checked
-  before source pages are read, including every resumed cursor page.
-- **Dates are explicit.** Calendar dates are validated without rollover. Due
-  classification uses the authenticated user's IANA timezone. Fixed-offset
-  timestamps retain their instant; floating Todoist datetimes are interpreted
-  as user-local values.
-- **Provider access is bounded.** Requests share a conservative pacer, honor
-  Todoist retry timing, time out, bound response bodies, and reject malformed
-  success payloads.
+`src/index.ts` registers both databases and schedules; `src/todoist.ts` owns the
+bounded API client; `src/sync-state.ts` owns snapshot and recovery state;
+`src/tasks.ts` and `src/projects.ts` contain the schemas and transforms; and
+`src/helpers.ts` contains shared value normalization.
 
-The configured ceilings are 5,000 active tasks for the Tasks sync and, per
-project-summary cycle, 250 referenced project aggregates, 5,000 active projects,
-5,000 active tasks, and 5,000 completion occurrences. Both syncs are also
-subject to a 200 KiB continuation-state ceiling. A larger account stops before
-authorizing replacement deletion; narrow or adapt the limits for that
-deployment.
+To add a field, validate it in `src/todoist.ts`, update the relevant schema and
+transform, and test both populated and missing values. Keep Todoist IDs as sync
+keys.
 
-## Configuration and privacy
-
-| Variable            | Required | Purpose                                          |
-| ------------------- | -------- | ------------------------------------------------ |
-| `TODOIST_USER_ID`   | yes      | Immutable account ID checked by every capability |
-| `TODOIST_API_TOKEN` | yes      | Personal Todoist bearer token                    |
-
-Store deployed values with `ntn workers env set`, never in source control. For
-local execution, copy `.env.example` to the gitignored `.env` file.
-
-Task titles, descriptions, project names, and labels may contain sensitive
-work context. Review the managed databases' Notion sharing settings before
-inviting other people.
-
-## Adapt the recipe
-
-Useful, bounded extensions include:
-
-1. Add a configurable Todoist filter when one deployment should expose only a
-   subset of active tasks.
-2. Resolve assignee IDs through a separate People database before adding team
-   workload views; do not expose raw IDs as a people experience.
-3. Relate Todoist Projects to an existing Notion projects database through a
-   user-owned relation.
-
-Keep active-task replacement and completion-occurrence aggregation separate.
-Combining them into one historical task table makes recurring tasks and reopen
-behavior ambiguous.
-
-## Project structure
-
-```text
-src/
-├── index.ts      — databases, schedules, and capability entry points
-├── todoist.ts    — bounded Todoist API client and response validation
-├── sync-state.ts — account-bound cursors and project aggregation phases
-├── tasks.ts      — active-task schema, due classification, and transform
-├── projects.ts   — project schema, aggregation, and transform
-└── helpers.ts    — bounded text, options, dates, durations, and URLs
-fixtures/         — offline Todoist response fixtures
-test.ts           — schemas, transforms, state, pagination, and API failures
-```
-
-## Verify locally
-
-The checks are deterministic and do not contact Todoist or Notion:
+Run deterministic checks without Todoist or Notion credentials:
 
 ```sh
-cd workers/todoist-sync
-npm install
 npm run check
 npm test
 npm run build
 ```
 
-To execute against credentials in a gitignored `.env` file:
+For a local credential check, copy the safe template, add your Todoist values,
+and invoke the first discovery callback without writing to Notion:
 
 ```sh
-ntn workers exec projectsSync --local
-ntn workers exec tasksSync --local
+cd workers/todoist-sync
+cp .env.example .env
+ntn workers sync trigger projectsSync --local --preview
+ntn workers sync trigger tasksSync --local --preview
 ```
+
+Never commit `.env`, credentials, preview output, or generated Worker state.
 
 ## Learn more
 
+- [Notion Workers overview](https://developers.notion.com/workers/get-started/overview)
 - [Notion sync guide](https://developers.notion.com/workers/guides/syncs)
 - [Todoist API v1](https://developer.todoist.com/api/v1/)
 - [Contributing guide](../../CONTRIBUTING.md)
