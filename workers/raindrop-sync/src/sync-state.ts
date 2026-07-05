@@ -1,14 +1,29 @@
-import { PAGE_SIZE } from "./raindrop.js"
+import { createHash } from "node:crypto"
 
-export const MAX_SYNC_RECORDS = 10_000
+import {
+  MAX_PAGINATED_RECORDS,
+  PAGE_SIZE,
+  PAGES_PER_SYNC_EXECUTION,
+} from "./raindrop.js"
+
+export const MAX_SYNC_RECORDS = MAX_PAGINATED_RECORDS
 const MAX_DATA_PAGES = MAX_SYNC_RECORDS / PAGE_SIZE
+const ID_FINGERPRINT_LENGTH = 32
+const PAGE_DIGEST_LENGTH = 64
 
 export type AccountSyncState = {
   accountId: number
 }
 
+export type PaginationGuardState = {
+  firstPageDigest?: string
+  previousPageFingerprints?: string[]
+  restartUsed?: boolean
+}
+
 export type PageSyncState = AccountSyncState & {
   page: number
+  guard?: PaginationGuardState
 }
 
 export type BookmarkPhase = "active" | "trash"
@@ -21,6 +36,13 @@ type SyncPageResult<T, State> = {
   changes: T[]
   hasMore: boolean
   nextState: State
+}
+
+type EvaluatedPageBatch = {
+  complete: boolean
+  nextPage: number
+  guard: PaginationGuardState
+  restart: boolean
 }
 
 function assertAccountId(accountId: number, resourceName: string): void {
@@ -48,6 +70,49 @@ function validateAccountState(
   }
 }
 
+function validateGuard(
+  guard: PaginationGuardState | undefined,
+  resourceName: string
+): void {
+  if (!guard) return
+  if (typeof guard !== "object" || Array.isArray(guard)) {
+    throw new Error(
+      `Raindrop.io ${resourceName} sync state has an invalid pagination guard.`
+    )
+  }
+  if (
+    guard.firstPageDigest !== undefined &&
+    !new RegExp(`^[a-f0-9]{${PAGE_DIGEST_LENGTH}}$`).test(guard.firstPageDigest)
+  ) {
+    throw new Error(
+      `Raindrop.io ${resourceName} sync state has an invalid first-page digest.`
+    )
+  }
+  if (guard.previousPageFingerprints !== undefined) {
+    if (
+      !Array.isArray(guard.previousPageFingerprints) ||
+      guard.previousPageFingerprints.length > PAGE_SIZE ||
+      guard.previousPageFingerprints.some(
+        (fingerprint) =>
+          typeof fingerprint !== "string" ||
+          !new RegExp(`^[a-f0-9]{${ID_FINGERPRINT_LENGTH}}$`).test(fingerprint)
+      )
+    ) {
+      throw new Error(
+        `Raindrop.io ${resourceName} sync state has invalid page fingerprints.`
+      )
+    }
+  }
+  if (
+    guard.restartUsed !== undefined &&
+    typeof guard.restartUsed !== "boolean"
+  ) {
+    throw new Error(
+      `Raindrop.io ${resourceName} sync state has an invalid restart flag.`
+    )
+  }
+}
+
 function validatePageState(
   state: PageSyncState,
   accountId: number,
@@ -63,6 +128,7 @@ function validatePageState(
       `Raindrop.io ${resourceName} sync state has an invalid page.`
     )
   }
+  validateGuard(state.guard, resourceName)
 }
 
 export function accountState(
@@ -118,28 +184,160 @@ function validatePage(
   }
 }
 
+function fingerprintId(id: string): string {
+  return createHash("sha256")
+    .update(id)
+    .digest("hex")
+    .slice(0, ID_FINGERPRINT_LENGTH)
+}
+
+function pageFingerprints(ids: string[], resourceName: string): string[] {
+  if (new Set(ids).size !== ids.length) {
+    throw new Error(`Raindrop.io returned a duplicate ${resourceName} ID.`)
+  }
+  return ids.map(fingerprintId)
+}
+
+function membershipDigest(fingerprints: string[]): string {
+  return createHash("sha256")
+    .update([...fingerprints].sort().join(""))
+    .digest("hex")
+}
+
+function hasOverlap(left: string[], right: string[]): boolean {
+  const leftSet = new Set(left)
+  return right.some((fingerprint) => leftSet.has(fingerprint))
+}
+
+function validatePageBatch(
+  startPage: number,
+  pageIds: string[][],
+  changeCount: number,
+  resourceName: string
+): void {
+  if (pageIds.length === 0 || pageIds.length > PAGES_PER_SYNC_EXECUTION) {
+    throw new Error(
+      `Raindrop.io ${resourceName} sync received an invalid page batch.`
+    )
+  }
+  pageIds.forEach((ids, index) => {
+    validatePage(startPage + index, ids.length, resourceName)
+    if (index < pageIds.length - 1 && ids.length !== PAGE_SIZE) {
+      throw new Error(
+        `Raindrop.io ${resourceName} sync received data after a terminal page.`
+      )
+    }
+  })
+  const lastPage = pageIds.at(-1)!
+  if (
+    lastPage.length === PAGE_SIZE &&
+    pageIds.length < PAGES_PER_SYNC_EXECUTION
+  ) {
+    throw new Error(
+      `Raindrop.io ${resourceName} sync ended a full page batch early.`
+    )
+  }
+  if (pageIds.reduce((total, ids) => total + ids.length, 0) !== changeCount) {
+    throw new Error(
+      `Raindrop.io ${resourceName} sync produced an unexpected number of changes.`
+    )
+  }
+}
+
+function evaluatePageBatch(
+  state: PageSyncState | undefined,
+  accountId: number,
+  pageIds: string[][],
+  changeCount: number,
+  resourceName: string,
+  terminalFirstPageIds?: string[]
+): EvaluatedPageBatch {
+  const page = currentPage(state, accountId, resourceName)
+  validatePageBatch(page, pageIds, changeCount, resourceName)
+
+  const pageFingerprintLists = pageIds.map((ids) =>
+    pageFingerprints(ids, resourceName)
+  )
+  const firstPageDigest =
+    state?.guard?.firstPageDigest ??
+    (page === 0 ? membershipDigest(pageFingerprintLists[0]) : undefined)
+  let driftDetected = false
+  let previous = state?.guard?.previousPageFingerprints
+  for (const fingerprints of pageFingerprintLists) {
+    if (previous && hasOverlap(previous, fingerprints)) {
+      driftDetected = true
+    }
+    previous = fingerprints
+  }
+
+  const complete = pageIds.at(-1)!.length < PAGE_SIZE
+  if (complete && terminalFirstPageIds !== undefined && firstPageDigest) {
+    const terminalDigest = membershipDigest(
+      pageFingerprints(terminalFirstPageIds, resourceName)
+    )
+    driftDetected ||= terminalDigest !== firstPageDigest
+  }
+
+  const restartUsed = state?.guard?.restartUsed === true
+  if (driftDetected && !restartUsed) {
+    return {
+      complete: false,
+      nextPage: 0,
+      guard: { restartUsed: true },
+      restart: true,
+    }
+  }
+
+  return {
+    complete,
+    nextPage: page + pageIds.length,
+    guard: {
+      ...(firstPageDigest ? { firstPageDigest } : {}),
+      previousPageFingerprints: previous,
+      ...(restartUsed ? { restartUsed: true } : {}),
+    },
+    restart: false,
+  }
+}
+
 export function pageResult<T>(
   state: PageSyncState | undefined,
   accountId: number,
-  items: unknown[],
+  pageIds: string[][],
   changes: T[],
-  resourceName: string
+  resourceName: string,
+  terminalFirstPageIds?: string[]
 ): SyncPageResult<T, PageSyncState> {
-  const page = currentPage(state, accountId, resourceName)
-  validatePage(page, items.length, resourceName)
-
-  const hasMore = items.length === PAGE_SIZE
+  const result = evaluatePageBatch(
+    state,
+    accountId,
+    pageIds,
+    changes.length,
+    resourceName,
+    terminalFirstPageIds
+  )
+  if (result.restart) {
+    return {
+      changes: [],
+      hasMore: true,
+      nextState: { accountId, page: 0, guard: result.guard },
+    }
+  }
+  if (result.complete) {
+    return {
+      changes,
+      hasMore: false,
+      nextState: { accountId, page: 0 },
+    }
+  }
   return {
     changes,
-    hasMore,
-    ...(hasMore
-      ? {
-          nextState: {
-            accountId,
-            page: page + 1,
-          },
-        }
-      : { nextState: { accountId, page: 0 } }),
+    hasMore: true,
+    nextState: {
+      accountId,
+      page: result.nextPage,
+      guard: result.guard,
+    },
   }
 }
 
@@ -147,27 +345,46 @@ export function bookmarkPageResult<T>(
   state: BookmarkSyncState | undefined,
   accountId: number,
   phase: BookmarkPhase,
-  items: unknown[],
-  changes: T[]
+  pageIds: string[][],
+  changes: T[],
+  terminalFirstPageIds?: string[]
 ): SyncPageResult<T, BookmarkSyncState> {
   const position = currentBookmarkPosition(state, accountId)
   if (position.phase !== phase) {
     throw new Error("Raindrop.io bookmarks sync phase changed unexpectedly.")
   }
-  validatePage(position.page, items.length, `${phase} bookmarks`)
-
-  if (items.length === PAGE_SIZE) {
+  const result = evaluatePageBatch(
+    state,
+    accountId,
+    pageIds,
+    changes.length,
+    `${phase} bookmarks`,
+    terminalFirstPageIds
+  )
+  if (result.restart) {
+    return {
+      changes: [],
+      hasMore: true,
+      nextState: {
+        accountId,
+        phase,
+        page: 0,
+        guard: result.guard,
+      },
+    }
+  }
+  if (!result.complete) {
     return {
       changes,
       hasMore: true,
       nextState: {
         accountId,
         phase,
-        page: position.page + 1,
+        page: result.nextPage,
+        guard: result.guard,
       },
     }
   }
-
   if (phase === "active") {
     return {
       changes,
@@ -179,7 +396,6 @@ export function bookmarkPageResult<T>(
       },
     }
   }
-
   return {
     changes,
     hasMore: false,

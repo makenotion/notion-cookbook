@@ -2,10 +2,13 @@ import { RateLimitError } from "@notionhq/workers"
 
 const API_BASE_URL = "https://api.raindrop.io"
 export const PAGE_SIZE = 50
+export const PAGES_PER_SYNC_EXECUTION = 3
+export const MAX_PAGINATED_RECORDS = 10_000
+export const MAX_COLLECTIONS = 1_000
 export const MAX_RESPONSE_BYTES = 10 * 1_024 * 1_024
 export const REQUEST_TIMEOUT_MS = 30_000
 export const NOTION_URL_LIMIT = 2_000
-const MAX_COLLECTIONS = 10_000
+const MAX_PROVIDER_PAGE = MAX_PAGINATED_RECORDS / PAGE_SIZE
 
 export type BeforeRequest = () => Promise<void>
 
@@ -13,6 +16,7 @@ export type RaindropClientOptions = {
   beforeRequest: BeforeRequest
   fetchImpl?: typeof fetch
   getAccessToken?: () => string
+  getExpectedAccountId?: () => number
   requestTimeoutMs?: number
 }
 
@@ -41,6 +45,10 @@ export type RaindropBookmark = {
   created: string
   lastUpdate: string
   highlights: unknown[]
+  contributor?: {
+    id: number
+    fullName: string
+  }
 }
 
 export type RaindropHighlight = {
@@ -73,18 +81,29 @@ export type RaindropHighlightColor =
 export type BookmarkScope = "active" | "trash"
 type CollectionScope = "root" | "child"
 
+export type RaindropAccessLevel = 1 | 2 | 3 | 4
+
 export type RaindropCollection = {
   _id: number
   title: string
   count?: number
   public: boolean
+  ownerId?: number
+  accessLevel?: RaindropAccessLevel
+  shared: boolean
   parentId?: number
+  parentAvailable: boolean
   created?: string
   lastUpdate?: string
 }
 
 export type RaindropPage<T> = {
   items: T[]
+}
+
+export type RaindropPageBatch<T> = {
+  items: T[]
+  pages: T[][]
 }
 
 export type RaindropSession = {
@@ -94,7 +113,14 @@ export type RaindropSession = {
     scope: BookmarkScope,
     page: number
   ): Promise<RaindropPage<RaindropBookmark>>
+  fetchBookmarksBatch(
+    scope: BookmarkScope,
+    page: number
+  ): Promise<RaindropPageBatch<RaindropBookmark>>
   fetchHighlightsPage(page: number): Promise<RaindropPage<RaindropHighlight>>
+  fetchHighlightsBatch(
+    page: number
+  ): Promise<RaindropPageBatch<RaindropHighlight>>
 }
 
 export type RaindropClient = {
@@ -106,6 +132,8 @@ export function createRaindropClient(
 ): RaindropClient {
   const fetchImpl = options.fetchImpl ?? fetch
   const getAccessToken = options.getAccessToken ?? requireAccessToken
+  const getExpectedAccountId =
+    options.getExpectedAccountId ?? requireExpectedAccountId
   const requestTimeoutMs = options.requestTimeoutMs ?? REQUEST_TIMEOUT_MS
   if (!Number.isSafeInteger(requestTimeoutMs) || requestTimeoutMs <= 0) {
     throw new Error("Raindrop.io request timeout must be a positive integer.")
@@ -185,11 +213,32 @@ export function createRaindropClient(
     )
   }
 
+  async function fetchPageBatch<T>(
+    startPage: number,
+    fetchPage: (page: number) => Promise<RaindropPage<T>>
+  ): Promise<RaindropPageBatch<T>> {
+    const pages: T[][] = []
+    for (let offset = 0; offset < PAGES_PER_SYNC_EXECUTION; offset += 1) {
+      const pageNumber = startPage + offset
+      if (pageNumber > MAX_PROVIDER_PAGE) break
+      const page = await fetchPage(pageNumber)
+      pages.push(page.items)
+      if (page.items.length < PAGE_SIZE) break
+    }
+    return { items: pages.flat(), pages }
+  }
+
   return {
     async authenticate() {
       const accessToken = getAccessToken().trim()
       if (!accessToken) {
         throw new Error("RAINDROP_ACCESS_TOKEN is not set.")
+      }
+      const expectedAccountId = getExpectedAccountId()
+      if (!Number.isSafeInteger(expectedAccountId) || expectedAccountId <= 0) {
+        throw new Error(
+          "RAINDROP_ACCOUNT_ID must be a positive integer account ID."
+        )
       }
 
       const payload = responseObject(
@@ -198,6 +247,49 @@ export function createRaindropClient(
       )
       const user = objectValue(payload.user, "user.user")
       const accountId = positiveInteger(user._id, "user.user._id")
+      if (accountId !== expectedAccountId) {
+        throw new Error(
+          "Raindrop.io authenticated a different account than RAINDROP_ACCOUNT_ID. Restore a token for the configured account or deploy a separate Worker."
+        )
+      }
+
+      const fetchBookmarksPage = async (
+        scope: BookmarkScope,
+        page: number
+      ): Promise<RaindropPage<RaindropBookmark>> => {
+        const collectionId = scope === "active" ? 0 : -99
+        const url = new URL(`/rest/v1/raindrops/${collectionId}`, API_BASE_URL)
+        url.searchParams.set("sort", "created")
+        url.searchParams.set("perpage", String(PAGE_SIZE))
+        url.searchParams.set("page", String(page))
+        const bookmarkPayload = responseObject(
+          await request(`${url.pathname}${url.search}`, accessToken),
+          "bookmarks"
+        )
+        const items = responseItems(bookmarkPayload, "bookmarks").map(
+          (item, index) => parseBookmark(item, `bookmarks.items[${index}]`)
+        )
+        assertBookmarkScope(items, scope)
+        assertPage(items, (item) => String(item._id), "bookmark")
+        return { items }
+      }
+
+      const fetchHighlightsPage = async (
+        page: number
+      ): Promise<RaindropPage<RaindropHighlight>> => {
+        const url = new URL("/rest/v1/highlights", API_BASE_URL)
+        url.searchParams.set("perpage", String(PAGE_SIZE))
+        url.searchParams.set("page", String(page))
+        const highlightPayload = responseObject(
+          await request(`${url.pathname}${url.search}`, accessToken),
+          "highlights"
+        )
+        const items = responseItems(highlightPayload, "highlights").map(
+          (item, index) => parseHighlight(item, `highlights.items[${index}]`)
+        )
+        assertPage(items, (item) => item._id, "highlight")
+        return { items }
+      }
 
       return {
         accountId,
@@ -220,16 +312,20 @@ export function createRaindropClient(
               _id: -1,
               title: "Unsorted",
               public: false,
+              shared: false,
+              parentAvailable: true,
             },
             {
               _id: -99,
               title: "Trash",
               public: false,
+              shared: false,
+              parentAvailable: true,
             },
             ...root,
             ...children,
           ]
-          if (collections.length > MAX_COLLECTIONS) {
+          if (root.length + children.length > MAX_COLLECTIONS) {
             throw new Error(
               `Raindrop.io returned more than ${MAX_COLLECTIONS} collections.`
             )
@@ -238,43 +334,21 @@ export function createRaindropClient(
             collections.map((collection) => String(collection._id)),
             "collection ID"
           )
-          return collections
+          return validateCollectionHierarchy(collections)
         },
 
-        async fetchBookmarksPage(scope, page) {
-          const collectionId = scope === "active" ? 0 : -99
-          const url = new URL(
-            `/rest/v1/raindrops/${collectionId}`,
-            API_BASE_URL
+        fetchBookmarksPage,
+
+        async fetchBookmarksBatch(scope, page) {
+          return fetchPageBatch(page, (nextPage) =>
+            fetchBookmarksPage(scope, nextPage)
           )
-          url.searchParams.set("sort", "created")
-          url.searchParams.set("perpage", String(PAGE_SIZE))
-          url.searchParams.set("page", String(page))
-          const bookmarkPayload = responseObject(
-            await request(`${url.pathname}${url.search}`, accessToken),
-            "bookmarks"
-          )
-          const items = responseItems(bookmarkPayload, "bookmarks").map(
-            (item, index) => parseBookmark(item, `bookmarks.items[${index}]`)
-          )
-          assertBookmarkScope(items, scope)
-          assertPage(items, (item) => String(item._id), "bookmark")
-          return { items }
         },
 
-        async fetchHighlightsPage(page) {
-          const url = new URL("/rest/v1/highlights", API_BASE_URL)
-          url.searchParams.set("perpage", String(PAGE_SIZE))
-          url.searchParams.set("page", String(page))
-          const highlightPayload = responseObject(
-            await request(`${url.pathname}${url.search}`, accessToken),
-            "highlights"
-          )
-          const items = responseItems(highlightPayload, "highlights").map(
-            (item, index) => parseHighlight(item, `highlights.items[${index}]`)
-          )
-          assertPage(items, (item) => item._id, "highlight")
-          return { items }
+        fetchHighlightsPage,
+
+        async fetchHighlightsBatch(page) {
+          return fetchPageBatch(page, fetchHighlightsPage)
         },
       }
     },
@@ -328,6 +402,22 @@ function requireAccessToken(): string {
     throw new Error("RAINDROP_ACCESS_TOKEN is not set.")
   }
   return token
+}
+
+function requireExpectedAccountId(): number {
+  const value = process.env.RAINDROP_ACCOUNT_ID?.trim()
+  if (!value || !/^\d+$/.test(value)) {
+    throw new Error(
+      "RAINDROP_ACCOUNT_ID must be a positive integer account ID."
+    )
+  }
+  const accountId = Number(value)
+  if (!Number.isSafeInteger(accountId) || accountId <= 0) {
+    throw new Error(
+      "RAINDROP_ACCOUNT_ID must be a positive integer account ID."
+    )
+  }
+  return accountId
 }
 
 function retryAfterSeconds(headers: Headers): number {
@@ -445,6 +535,26 @@ function optionalReminderDate(
   return dateTimeValue(reminder.data, `${label}.data`)
 }
 
+function optionalContributor(
+  value: unknown,
+  label: string
+): RaindropBookmark["contributor"] {
+  if (value === undefined) return undefined
+  const author = objectValue(value, label)
+  return {
+    id: positiveInteger(author._id, `${label}._id`),
+    fullName: stringValue(author.fullName, `${label}.fullName`),
+  }
+}
+
+function accessLevel(value: unknown, label: string): RaindropAccessLevel {
+  const level = integerValue(value, label)
+  if (level !== 1 && level !== 2 && level !== 3 && level !== 4) {
+    throw new Error(`Raindrop.io ${label} must be 1, 2, 3, or 4.`)
+  }
+  return level
+}
+
 function dateTimeValue(value: unknown, label: string): string {
   const dateTime = stringValue(value, label)
   if (!dateTime || !Number.isFinite(Date.parse(dateTime))) {
@@ -554,6 +664,7 @@ function parseBookmark(value: unknown, label: string): RaindropBookmark {
     created: dateTimeValue(item.created, `${label}.created`),
     lastUpdate: dateTimeValue(item.lastUpdate, `${label}.lastUpdate`),
     highlights,
+    contributor: optionalContributor(item.creatorRef, `${label}.creatorRef`),
   }
 }
 
@@ -584,6 +695,15 @@ function parseCollection(
   scope: CollectionScope
 ): RaindropCollection {
   const item = objectValue(value, label)
+  const owner = objectValue(item.user, `${label}.user`)
+  const access = objectValue(item.access, `${label}.access`)
+  const parsedAccessLevel = accessLevel(access.level, `${label}.access.level`)
+  let shared = false
+  if (item.collaborators !== undefined) {
+    objectValue(item.collaborators, `${label}.collaborators`)
+    shared = true
+  }
+  shared ||= parsedAccessLevel === 2 || parsedAccessLevel === 3
   const parent = item.parent
   let parentId: number | undefined
   if (scope === "child") {
@@ -603,10 +723,39 @@ function parseCollection(
     title: stringValue(item.title, `${label}.title`),
     count: nonNegativeInteger(item.count, `${label}.count`),
     public: booleanValue(item.public, `${label}.public`),
+    ownerId: positiveInteger(owner.$id, `${label}.user.$id`),
+    accessLevel: parsedAccessLevel,
+    shared,
     parentId,
+    parentAvailable: true,
     created: dateTimeValue(item.created, `${label}.created`),
     lastUpdate: dateTimeValue(item.lastUpdate, `${label}.lastUpdate`),
   }
+}
+
+function validateCollectionHierarchy(
+  items: RaindropCollection[]
+): RaindropCollection[] {
+  const byId = new Map(items.map((item) => [item._id, item]))
+  const normalized = items.map((item) => ({
+    ...item,
+    parentAvailable: item.parentId === undefined || byId.has(item.parentId),
+  }))
+  const normalizedById = new Map(normalized.map((item) => [item._id, item]))
+  for (const item of normalized) {
+    const ancestors = new Set<number>([item._id])
+    let current = item
+    while (current.parentId !== undefined) {
+      const parent = normalizedById.get(current.parentId)
+      if (!parent) break
+      if (ancestors.has(parent._id)) {
+        throw new Error("Raindrop.io returned a cyclic collection hierarchy.")
+      }
+      ancestors.add(parent._id)
+      current = parent
+    }
+  }
+  return normalized
 }
 
 function assertBookmarkScope(

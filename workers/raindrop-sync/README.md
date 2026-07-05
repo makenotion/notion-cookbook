@@ -1,22 +1,30 @@
 # Worker sync: Raindrop.io research library
 
 Turn your Raindrop.io bookmarks and highlights into evidence you can connect to
-projects, claims, decisions, and finished work in Notion. Follow every passage
-back to its source while Raindrop.io remains the place to capture and organize.
+projects, claims, decisions, and finished work in Notion. Trace each synced
+passage to its bookmark and collection, plus the Raindrop contributor when the
+API provides one.
 
-One deploy creates three related managed databases and refreshes them every
-hour. The Worker is read-only and never deletes a Notion page. Raindrop.io
-remains the source of truth; Notion connects what you save to the work it
-informs.
+One deploy creates three related managed databases and schedules each sync
+hourly. The Worker only reads from Raindrop.io, upserts Notion properties, and
+never emits a page delete. Raindrop.io remains the source of truth for captured
+content; Notion connects it to the work it informs.
 
 ## Quickstart
 
 You need Node.js 22+, npm 10.9.2+, a Raindrop.io account, and a personal test
 token. Create an app in [Raindrop.io App Management][raindrop-apps], open its
-settings, and copy the **Test token**.
+settings, and copy the **Test token**. Use it to retrieve the account ID:
+
+```sh
+curl https://api.raindrop.io/rest/v1/user \
+  --header "Authorization: Bearer replace-with-your-test-token"
+```
+
+Copy `user._id` from the response.
 
 From the repository root, deploy the Worker, pause its schedules, and add the
-token:
+account configuration:
 
 ```sh
 npm install --global ntn@latest
@@ -28,15 +36,17 @@ ntn workers sync pause collectionsSync
 ntn workers sync pause bookmarksSync
 ntn workers sync pause highlightsSync
 ntn workers env set RAINDROP_ACCESS_TOKEN=replace-with-your-test-token
+ntn workers env set RAINDROP_ACCOUNT_ID=replace-with-your-user-id
 ```
 
 Use `--name raindrop-sync` only for the first deployment. After `workers.json`
 identifies it, update the Worker with `ntn workers deploy`.
 
-Preview output can contain private collection names, URLs, notes, and
-highlights. Review the databases' Notion sharing settings before writing data.
+The token may expose owned and shared collections. Raindrop.io ownership,
+access roles, and contributor names are copied as metadata but are not enforced
+by Notion. Review the databases' sharing settings before importing.
 
-Preview all three databases:
+Preview the first output batch from each sync:
 
 ```sh
 ntn workers sync trigger collectionsSync --preview
@@ -76,31 +86,34 @@ ntn workers sync resume highlightsSync
 
 You do not need to create the databases or provide a Notion API token.
 
-After the first successful run, each sync remains bound to the authenticated
-Raindrop.io account. You can rotate a token for that account. Use a separate
-Worker and databases for a different account.
+`RAINDROP_ACCOUNT_ID` binds the entire deployment to one Raindrop.io account.
+You can rotate a token for that account. Use a separate Worker and databases
+for a different account.
 
 ## What you can answer
 
-| Question                                                                                  | Start here                 | How to answer it                                                                                                                                                                                             |
-| ----------------------------------------------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Which sources and exact passages support this project, claim, or decision?                | **Raindrop.io Highlights** | Add and filter by a `Project`, `Claim`, or `Decision` relation. **Text** and **Note** hold the evidence; **Bookmark** identifies its source.                                                                 |
-| Which new or scheduled sources still need processing?                                     | **Raindrop.io Bookmarks**  | Add `Review Status`. Filter **In Trash** unchecked, status empty, and either **Created** recently or **Reminder** due.                                                                                       |
-| Which captured insights have not yet become a brief, decision, document, or other output? | **Raindrop.io Highlights** | Add `Synthesis Status` and optionally `Used in`. Exclude `Used` and `Archived`; when `Used in` exists, filter it to empty.                                                                                   |
-| Where did this idea originate?                                                            | **Raindrop.io Highlights** | Follow **Bookmark** to **URL**, **Collection**, **Domain**, **Excerpt**, and **Note**. To show Collection in Highlights, add a rollup using **Bookmark** as the relation and **Collection** as the property. |
+| Question                                                                                  | Start here                 | How to answer it                                                                                                                                                                                     |
+| ----------------------------------------------------------------------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Which sources and exact passages support this project, claim, or decision?                | **Raindrop.io Highlights** | Add and filter by a `Project`, `Claim`, or `Decision` relation. **Text** is the synced passage, **Note** its annotation, and **Bookmark** its source. Check **Truncated** before quoting.            |
+| Which new or scheduled sources still need processing?                                     | **Raindrop.io Bookmarks**  | Add `Review Status`. Filter **In Trash** unchecked, status empty, and either **Created** recently or **Reminder** due.                                                                               |
+| Which captured insights have not yet become a brief, decision, document, or other output? | **Raindrop.io Highlights** | Add `Synthesis Status` and optionally `Used in`. Exclude `Used` and `Archived`; when `Used in` exists, filter it to empty.                                                                           |
+| Where did this idea originate?                                                            | **Raindrop.io Highlights** | Follow **Bookmark** to **Raindrop contributor**, **URL**, **Collection**, **Domain**, **Excerpt**, and **Note**. Add a rollup using **Bookmark** as the relation and **Collection** as the property. |
 
-Each Highlight links to a **Bookmark**, and each Bookmark links to a
-**Collection**. The reciprocal **Highlights** and **Bookmarks** relations let
-you traverse the source trail in either direction. Project and output databases
-are specific to each workspace, so you add those relations in Notion. The
-Worker preserves them and each page's body content.
+For imported records, each Highlight links to a **Bookmark**, and each Bookmark
+links to a **Collection**. The reciprocal relations let you traverse the source
+trail in either direction. Project and output databases are specific to each
+workspace, so you add those relations in Notion. The Worker preserves those
+properties and each page's body content.
+
+**Raindrop contributor** identifies who created the bookmark in Raindrop when
+the API returns that context. A blank value does not identify the contributor.
 
 ## Views you can build
 
 1. **Project evidence and provenance:** Add a `Project` relation from Highlights
    to your Projects database, filter it to the current project, and show
-   **Text**, **Note**, **Tags**, and **Bookmark**. Add the Collection rollup
-   above, then place the linked view in your project template.
+   **Text**, **Note**, **Tags**, **Bookmark**, and **Truncated**. Add the
+   Collection rollup above, then place the linked view in your project template.
 2. **Insights awaiting an output:** Add a `Synthesis Status` select with
    `To synthesize`, `Drafting`, `Used`, and `Archived`; optionally add a
    `Used in` relation. Exclude `Used` and `Archived`, require `Used in` to be
@@ -108,7 +121,9 @@ Worker preserves them and each page's body content.
 3. **Processing queue:** Add a `Review Status` select to **Raindrop.io
    Bookmarks**. Filter **In Trash** to unchecked and `Review Status` to empty,
    then include recently **Created** bookmarks or those with **Reminder** on or
-   before today. Sort **Reminder** ascending, then **Created** newest first.
+   before today. For a current-only queue, require **Last Seen** within the past
+   day. Sort **Reminder** ascending, then **Created** newest first. Reminder data
+   requires Raindrop Premium; `Review Status` remains the durable state.
 
 ## Reference
 
@@ -122,40 +137,53 @@ Worker preserves them and each page's body content.
 
 ### Included data
 
-| Source      | Included                                                                   | Limit                           |
-| ----------- | -------------------------------------------------------------------------- | ------------------------------- |
-| Collections | Root and child collections, plus synthetic Unsorted and Trash targets      | 10,000 collections              |
-| Bookmarks   | Active bookmarks and Trash, including metadata, notes, tags, and reminders | 10,000 per active or Trash scan |
-| Highlights  | Highlights, notes, colors, tags, bookmark references, and source links     | 10,000 highlights               |
+| Source      | Included                                                                                       | Recipe hard stop                |
+| ----------- | ---------------------------------------------------------------------------------------------- | ------------------------------- |
+| Collections | Root and child collections, access metadata, plus synthetic Unsorted and Trash targets         | 1,000 collections               |
+| Bookmarks   | Active bookmarks and Trash, including source metadata, contributor, notes, tags, and reminders | 10,000 per active or Trash scan |
+| Highlights  | Highlights, notes, colors, tags, bookmark references, and source links                         | 10,000 highlights               |
+
+Collections fit in one output batch; Bookmark and Highlight executions emit at
+most 150 changes. Tests keep the largest envelopes below the Worker output
+limit. A scan that exceeds a hard stop fails and must be partitioned.
 
 The collection-list responses do not include counts for Unsorted and Trash, so
 their synthetic rows leave **Bookmark count** empty. Their **Bookmarks**
 relations still contain the bookmarks observed in each system collection. This
 Worker does not call the separate account-statistics endpoint.
 
+If a shared collection's parent is not visible to the token, **Parent** remains
+empty while **Parent ID** and **Parent unavailable** preserve that context.
+
 The Worker does not copy full article text, cached page contents, or uploaded
-file and media bodies. It syncs the metadata, excerpts, notes, and highlights
-needed for these workflows while Raindrop.io retains the complete source.
+file and media bodies. Those remain in Raindrop.io; Notion receives the source
+metadata, excerpts, notes, and highlights used by these workflows.
 
 ### Update behavior
 
-- Each hourly run scans the current provider data and updates **Last Seen**.
-- Moving a bookmark to Trash updates the same page, checks **In Trash**, and
-  relates it to the synthetic Trash collection. Restoring it reverses both.
-- Hard-deleted or unavailable records remain as last-known Notion pages because
-  the API does not provide reliable deletion tombstones.
+- Each sync is scheduled hourly. Records observed during its paginated scan get
+  a new **Last Seen** value.
+- A bounded drift guard detects common Bookmark and Highlight page shifts and
+  restarts each phase once. Continued changes complete best-effort without
+  deleting pages; later runs may fill omissions.
+- When a bookmark is observed in Trash, the same page is checked **In Trash**
+  and related to Trash. A later observation outside Trash reverses both.
+- The Worker does not infer deletion from absence. Records no longer returned
+  remain as last-known Notion pages.
 - An older **Last Seen** value is a review signal, not proof that a record was
   deleted.
-- Account-scoped provider IDs keep relations stable and prevent duplicates.
+- Account-scoped provider IDs upsert the same Raindrop record to the same Notion
+  page and keep relation keys stable.
 - Oversized text, URLs, and tag sets are bounded and visibly marked rather than
   blocking the scan.
-- Page content and properties added in Notion are preserved.
+- Page content and user-created properties are preserved. Synced properties are
+  refreshed from Raindrop.io.
 
 ## Adapt the sync
 
 - Change the schedules in `src/index.ts` for a slower personal archive.
-- Partition a library above the documented limits by collection rather than
-  only increasing the scan cap.
+- For a library above this recipe's hard stops, implement collection-scoped
+  partitioning rather than only increasing the constants.
 - Add a provider field by updating response validation, the database schema,
   its transform, and tests together.
 

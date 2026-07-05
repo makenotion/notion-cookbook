@@ -25,7 +25,22 @@ export const collectionSchema = {
 
     "Last Seen": Schema.date(),
 
-    Public: Schema.checkbox(),
+    "Raindrop access": Schema.select([
+      { name: "Public: view" },
+      { name: "Collaborator: view" },
+      { name: "Collaborator: edit" },
+      { name: "Owner" },
+    ]),
+
+    "Shared in Raindrop": Schema.checkbox(),
+
+    "Public in Raindrop": Schema.checkbox(),
+
+    "Raindrop Owner ID": Schema.richText(),
+
+    "Parent unavailable": Schema.checkbox(),
+
+    "Parent ID": Schema.richText(),
 
     Created: Schema.date(),
 
@@ -52,12 +67,25 @@ export function collectionToChange(
     properties: {
       Name: Builder.title(boundedText(sourceTitle)),
       Parent:
-        collection.parentId === undefined
+        collection.parentId === undefined || !collection.parentAvailable
           ? []
           : [Builder.relation(collectionKey(accountId, collection.parentId))],
+      "Parent unavailable": Builder.checkbox(
+        collection.parentId !== undefined && !collection.parentAvailable
+      ),
+      "Parent ID": collection.parentId
+        ? Builder.richText(String(collection.parentId))
+        : [],
       "Bookmark count":
         collection.count === undefined ? [] : Builder.number(collection.count),
-      Public: Builder.checkbox(collection.public),
+      "Raindrop access": collection.accessLevel
+        ? Builder.select(accessLabel(collection.accessLevel))
+        : [],
+      "Shared in Raindrop": Builder.checkbox(collection.shared),
+      "Public in Raindrop": Builder.checkbox(collection.public),
+      "Raindrop Owner ID": collection.ownerId
+        ? Builder.richText(String(collection.ownerId))
+        : [],
       Created: collection.created
         ? Builder.dateTime(collection.created, "UTC")
         : [],
@@ -70,5 +98,20 @@ export function collectionToChange(
       "Raindrop Account ID": Builder.richText(String(accountId)),
       "Collection Key": Builder.richText(key),
     },
+  }
+}
+
+function accessLabel(
+  level: NonNullable<RaindropCollection["accessLevel"]>
+): string {
+  switch (level) {
+    case 1:
+      return "Public: view"
+    case 2:
+      return "Collaborator: view"
+    case 3:
+      return "Collaborator: edit"
+    case 4:
+      return "Owner"
   }
 }

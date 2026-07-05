@@ -19,9 +19,11 @@ import worker from "./src/index.js"
 import { bookmarkKey, collectionKey, highlightKey } from "./src/keys.js"
 import {
   createRaindropClient,
+  MAX_COLLECTIONS,
   MAX_RESPONSE_BYTES,
   NOTION_URL_LIMIT,
   PAGE_SIZE,
+  PAGES_PER_SYNC_EXECUTION,
   type RaindropBookmark,
   type RaindropCollection,
   type RaindropHighlight,
@@ -40,6 +42,7 @@ import {
 
 const accountId = 321
 const observedAt = "2026-07-03T12:34:56.000Z"
+process.env.RAINDROP_ACCOUNT_ID = String(accountId)
 
 const bookmark: RaindropBookmark = {
   _id: 42,
@@ -58,6 +61,10 @@ const bookmark: RaindropBookmark = {
   created: "2026-06-01T10:00:00.000Z",
   lastUpdate: "2026-06-02T11:00:00.000Z",
   highlights: [{ _id: "highlight-1" }],
+  contributor: {
+    id: 654,
+    fullName: "Ada Reader",
+  },
 }
 
 const highlight: RaindropHighlight = {
@@ -78,7 +85,11 @@ const collection: RaindropCollection = {
   title: "Developer tools",
   count: 12,
   public: false,
+  ownerId: accountId,
+  accessLevel: 4,
+  shared: false,
   parentId: 3,
+  parentAvailable: true,
   created: "2026-01-01T00:00:00.000Z",
   lastUpdate: "2026-06-02T11:00:00.000Z",
 }
@@ -111,6 +122,12 @@ function bookmarkPayload(overrides: Record<string, unknown> = {}) {
     created: bookmark.created,
     lastUpdate: bookmark.lastUpdate,
     highlights: bookmark.highlights,
+    creatorRef: bookmark.contributor
+      ? {
+          _id: bookmark.contributor.id,
+          fullName: bookmark.contributor.fullName,
+        }
+      : undefined,
     ...overrides,
   }
 }
@@ -125,6 +142,8 @@ function collectionPayload(overrides: Record<string, unknown> = {}) {
     title: collection.title,
     count: collection.count,
     public: collection.public,
+    user: { $id: collection.ownerId },
+    access: { level: collection.accessLevel },
     parent: { $id: collection.parentId },
     created: collection.created,
     lastUpdate: collection.lastUpdate,
@@ -191,7 +210,7 @@ test("schemas lead with the fields used to review and connect research", () => {
     "Bookmark count",
     "Updated",
     "Last Seen",
-    "Public",
+    "Raindrop access",
   ])
   assert.deepEqual(Object.keys(bookmarkSchema.properties).slice(0, 6), [
     "Title",
@@ -303,6 +322,12 @@ test("bookmark transform scopes keys and relations while preserving raw IDs", ()
     )
   )
   assert.ok(propertyIncludes(change.properties["In Trash"], "No"))
+  assert.ok(
+    propertyIncludes(change.properties["Raindrop contributor"], "Ada Reader")
+  )
+  assert.ok(
+    propertyIncludes(change.properties["Raindrop contributor ID"], "654")
+  )
 })
 
 test("trash and restored bookmark upserts use one key and explicitly flip In Trash", () => {
@@ -334,6 +359,7 @@ test("bookmark transform clears optional values without owning page content", ()
       note: "",
       tags: [],
       reminderAt: undefined,
+      contributor: undefined,
     },
     false,
     observedAt
@@ -344,6 +370,8 @@ test("bookmark transform clears optional values without owning page content", ()
   assert.deepEqual(change.properties.Note, [])
   assert.deepEqual(change.properties.Tags, [])
   assert.deepEqual(change.properties.Reminder, [])
+  assert.deepEqual(change.properties["Raindrop contributor"], [])
+  assert.deepEqual(change.properties["Raindrop contributor ID"], [])
   assert.equal("pageContentMarkdown" in change, false)
 })
 
@@ -386,14 +414,46 @@ test("collection transform scopes parent relations and exposes raw identity", ()
   assert.ok(
     propertyIncludes(child.properties.Parent, "raindrop:321:collection:3")
   )
+  assert.ok(propertyIncludes(child.properties["Parent ID"], "3"))
+  assert.ok(propertyIncludes(child.properties["Parent unavailable"], "No"))
   assert.deepEqual(root.properties.Parent, [])
   assert.ok(propertyIncludes(child.properties["Collection ID"], "7"))
   assert.ok(propertyIncludes(child.properties["Bookmark count"], "12"))
+  assert.ok(propertyIncludes(child.properties["Raindrop access"], "Owner"))
+  assert.ok(
+    propertyIncludes(child.properties["Raindrop Owner ID"], String(accountId))
+  )
+  assert.ok(propertyIncludes(child.properties["Shared in Raindrop"], "No"))
+  assert.ok(propertyIncludes(child.properties["Public in Raindrop"], "No"))
   assert.ok(propertyIncludes(child.properties.Created, "UTC"))
   assert.ok(propertyIncludes(child.properties.Updated, "UTC"))
   assert.ok(propertyIncludes(child.properties["Last Seen"], "2026-07-03"))
   assert.ok(propertyIncludes(child.properties["Last Seen"], "12:34"))
   assert.equal("upstreamUpdatedAt" in child, false)
+
+  const shared = collectionToChange(
+    accountId,
+    { ...collection, accessLevel: 2, shared: true },
+    observedAt
+  )
+  assert.ok(
+    propertyIncludes(shared.properties["Raindrop access"], "Collaborator: view")
+  )
+  assert.ok(propertyIncludes(shared.properties["Shared in Raindrop"], "Yes"))
+
+  const system = collectionToChange(
+    accountId,
+    {
+      _id: -1,
+      title: "Unsorted",
+      public: false,
+      shared: false,
+      parentAvailable: true,
+    },
+    observedAt
+  )
+  assert.deepEqual(system.properties["Raindrop access"], [])
+  assert.deepEqual(system.properties["Raindrop Owner ID"], [])
 
   const longTitle = collectionToChange(
     accountId,
@@ -530,27 +590,48 @@ test("tag options deduplicate case variants and preserve normalization collision
   )
 })
 
-test("highlight scan state pins account identity and advances full pages", () => {
-  const full = Array.from({ length: PAGE_SIZE })
-  const first = pageResult(undefined, accountId, full, ["change"], "highlights")
-  assert.deepEqual(first, {
-    changes: ["change"],
-    hasMore: true,
-    nextState: {
-      accountId,
-      page: 1,
-    },
-  })
+test("highlight state advances three pages and preserves a bounded drift guard", () => {
+  const firstPage = Array.from(
+    { length: PAGE_SIZE },
+    (_, index) => `h-${index}`
+  )
+  const secondPage = Array.from(
+    { length: PAGE_SIZE },
+    (_, index) => `h-${PAGE_SIZE + index}`
+  )
+  const thirdPage = Array.from(
+    { length: PAGE_SIZE },
+    (_, index) => `h-${PAGE_SIZE * 2 + index}`
+  )
+  const changes = [...firstPage, ...secondPage, ...thirdPage]
+  const first = pageResult(
+    undefined,
+    accountId,
+    [firstPage, secondPage, thirdPage],
+    changes,
+    "highlights"
+  )
+  assert.equal(first.hasMore, true)
+  assert.equal(first.nextState.page, PAGES_PER_SYNC_EXECUTION)
+  assert.equal(first.nextState.guard?.firstPageDigest?.length, 64)
+  assert.equal(
+    first.nextState.guard?.previousPageFingerprints?.length,
+    PAGE_SIZE
+  )
+  assert.ok(JSON.stringify(first.nextState).length < 8 * 1_024)
+
+  const finalIds = ["h-150"]
   assert.deepEqual(
     pageResult(
       first.nextState,
       accountId,
-      full.slice(1),
-      ["change"],
-      "highlights"
+      [finalIds],
+      finalIds,
+      "highlights",
+      [...firstPage].reverse()
     ),
     {
-      changes: ["change"],
+      changes: finalIds,
       hasMore: false,
       nextState: { accountId, page: 0 },
     }
@@ -561,31 +642,47 @@ test("highlight scan state pins account identity and advances full pages", () =>
   )
 })
 
-test("bookmark state scans active pages before Trash and then finishes", () => {
-  const full = Array.from({ length: PAGE_SIZE })
+test("bookmark state scans three active pages before Trash and then finishes", () => {
+  const firstPage = Array.from(
+    { length: PAGE_SIZE },
+    (_, index) => `b-${index}`
+  )
+  const secondPage = Array.from(
+    { length: PAGE_SIZE },
+    (_, index) => `b-${PAGE_SIZE + index}`
+  )
+  const thirdPage = Array.from(
+    { length: PAGE_SIZE },
+    (_, index) => `b-${PAGE_SIZE * 2 + index}`
+  )
   assert.deepEqual(currentBookmarkPosition(undefined, accountId), {
     phase: "active",
     page: 0,
   })
 
-  const activeFull = bookmarkPageResult(undefined, accountId, "active", full, [
-    "active",
-  ])
-  assert.deepEqual(activeFull.nextState, {
+  const activeChanges = [...firstPage, ...secondPage, ...thirdPage]
+  const activeFull = bookmarkPageResult(
+    undefined,
     accountId,
-    phase: "active",
-    page: 1,
-  })
+    "active",
+    [firstPage, secondPage, thirdPage],
+    activeChanges
+  )
+  assert.equal(activeFull.hasMore, true)
+  assert.equal(activeFull.nextState.phase, "active")
+  assert.equal(activeFull.nextState.page, PAGES_PER_SYNC_EXECUTION)
 
+  const activeFinalIds = ["b-150"]
   const activeEnd = bookmarkPageResult(
     activeFull.nextState,
     accountId,
     "active",
-    [],
-    []
+    [activeFinalIds],
+    activeFinalIds,
+    firstPage
   )
   assert.deepEqual(activeEnd, {
-    changes: [],
+    changes: activeFinalIds,
     hasMore: true,
     nextState: {
       accountId,
@@ -594,21 +691,252 @@ test("bookmark state scans active pages before Trash and then finishes", () => {
     },
   })
 
+  const trashIds = ["trash-1"]
   const trashEnd = bookmarkPageResult(
     activeEnd.nextState,
     accountId,
     "trash",
-    [{}],
-    ["trash"]
+    [trashIds],
+    trashIds,
+    trashIds
   )
   assert.deepEqual(trashEnd, {
-    changes: ["trash"],
+    changes: trashIds,
     hasMore: false,
     nextState: { accountId, phase: "active", page: 0 },
   })
   assert.throws(
     () => currentBookmarkPosition(trashEnd.nextState, 999),
     /account changed/
+  )
+})
+
+test("pagination drift restarts once without permanently stranding state", () => {
+  const firstPage = Array.from(
+    { length: PAGE_SIZE },
+    (_, index) => `d-${index}`
+  )
+  const shiftedPage = [
+    firstPage.at(-1)!,
+    ...Array.from({ length: PAGE_SIZE - 1 }, (_, index) => `e-${index}`),
+  ]
+  const thirdPage = Array.from(
+    { length: PAGE_SIZE },
+    (_, index) => `f-${index}`
+  )
+  const changes = [...firstPage, ...shiftedPage, ...thirdPage]
+  const restarted = pageResult(
+    undefined,
+    accountId,
+    [firstPage, shiftedPage, thirdPage],
+    changes,
+    "highlights"
+  )
+  assert.deepEqual(restarted, {
+    changes: [],
+    hasMore: true,
+    nextState: {
+      accountId,
+      page: 0,
+      guard: { restartUsed: true },
+    },
+  })
+
+  const continued = pageResult(
+    restarted.nextState,
+    accountId,
+    [firstPage, shiftedPage, thirdPage],
+    changes,
+    "highlights"
+  )
+  assert.equal(continued.hasMore, true)
+  assert.equal(continued.changes.length, PAGE_SIZE * 3)
+  assert.equal(continued.nextState.page, 3)
+  assert.equal(continued.nextState.guard?.restartUsed, true)
+})
+
+test("terminal page-zero drift uses the same single bounded restart", () => {
+  const firstPage = Array.from(
+    { length: PAGE_SIZE },
+    (_, index) => `p-${index}`
+  )
+  const secondPage = Array.from(
+    { length: PAGE_SIZE },
+    (_, index) => `q-${index}`
+  )
+  const thirdPage = Array.from(
+    { length: PAGE_SIZE },
+    (_, index) => `r-${index}`
+  )
+  const first = pageResult(
+    undefined,
+    accountId,
+    [firstPage, secondPage, thirdPage],
+    [...firstPage, ...secondPage, ...thirdPage],
+    "highlights"
+  )
+  const drifted = pageResult(
+    first.nextState,
+    accountId,
+    [[]],
+    [],
+    "highlights",
+    [...firstPage.slice(1), "new-id"]
+  )
+  assert.deepEqual(drifted, {
+    changes: [],
+    hasMore: true,
+    nextState: {
+      accountId,
+      page: 0,
+      guard: { restartUsed: true },
+    },
+  })
+
+  const restartedFull = pageResult(
+    drifted.nextState,
+    accountId,
+    [firstPage, secondPage, thirdPage],
+    [...firstPage, ...secondPage, ...thirdPage],
+    "highlights"
+  )
+  const completedBestEffort = pageResult(
+    restartedFull.nextState,
+    accountId,
+    [[]],
+    [],
+    "highlights",
+    [...firstPage.slice(1), "another-new-id"]
+  )
+  assert.deepEqual(completedBestEffort, {
+    changes: [],
+    hasMore: false,
+    nextState: { accountId, page: 0 },
+  })
+})
+
+test("bookmark drift allowance resets between active and Trash", () => {
+  const sameId = ["bookmark-1"]
+  const activeEnd = bookmarkPageResult(
+    undefined,
+    accountId,
+    "active",
+    [sameId],
+    sameId,
+    sameId
+  )
+  assert.deepEqual(activeEnd.nextState, {
+    accountId,
+    phase: "trash",
+    page: 0,
+  })
+
+  const trashEnd = bookmarkPageResult(
+    activeEnd.nextState,
+    accountId,
+    "trash",
+    [sameId],
+    sameId,
+    sameId
+  )
+  assert.deepEqual(trashEnd, {
+    changes: sameId,
+    hasMore: false,
+    nextState: { accountId, phase: "active", page: 0 },
+  })
+})
+
+test("maximum inventories stay inside Worker execution and output budgets", () => {
+  const providerPagesIncludingEmptyProbe = MAX_SYNC_RECORDS / PAGE_SIZE + 1
+  const paginatedExecutions = Math.ceil(
+    providerPagesIncludingEmptyProbe / PAGES_PER_SYNC_EXECUTION
+  )
+  const stableCycleExecutions = 1 + paginatedExecutions * 3
+  const cycleWithEveryBoundedRestart =
+    stableCycleExecutions + paginatedExecutions * 3
+  assert.equal(stableCycleExecutions, 202)
+  assert.equal(cycleWithEveryBoundedRestart, 403)
+  assert.ok(cycleWithEveryBoundedRestart < 600)
+
+  const largestCollectionBatch = Array.from(
+    { length: MAX_COLLECTIONS + 2 },
+    (_, index) =>
+      collectionToChange(
+        accountId,
+        {
+          ...collection,
+          _id: index + 1,
+          title: "x".repeat(NOTION_TEXT_LIMIT),
+        },
+        observedAt
+      )
+  )
+  assert.ok(
+    Buffer.byteLength(JSON.stringify({ changes: largestCollectionBatch })) <
+      10 * 1_024 * 1_024
+  )
+
+  const maximalTags = Array.from(
+    { length: 100 },
+    (_, index) => `${index}-${"t".repeat(95)}`
+  )
+  const largestBookmarkBatch = Array.from(
+    { length: PAGE_SIZE * PAGES_PER_SYNC_EXECUTION },
+    (_, index) =>
+      bookmarkToChange(
+        accountId,
+        {
+          ...bookmark,
+          _id: index + 1,
+          title: "x".repeat(NOTION_TEXT_LIMIT),
+          note: "n".repeat(NOTION_TEXT_LIMIT),
+          excerpt: "e".repeat(NOTION_TEXT_LIMIT),
+          tags: maximalTags,
+          contributor: {
+            id: 654,
+            fullName: "a".repeat(NOTION_TEXT_LIMIT),
+          },
+        },
+        false,
+        observedAt
+      )
+  )
+  assert.ok(
+    Buffer.byteLength(
+      JSON.stringify({
+        changes: largestBookmarkBatch,
+        hasMore: true,
+        nextState: { accountId, phase: "active", page: 3 },
+      })
+    ) <
+      10 * 1_024 * 1_024
+  )
+
+  const largestHighlightBatch = Array.from(
+    { length: PAGE_SIZE * PAGES_PER_SYNC_EXECUTION },
+    (_, index) =>
+      highlightToChange(
+        accountId,
+        {
+          ...highlight,
+          _id: `highlight-${index}`,
+          text: "t".repeat(NOTION_TEXT_LIMIT),
+          note: "n".repeat(NOTION_TEXT_LIMIT),
+          title: "b".repeat(NOTION_TEXT_LIMIT),
+          tags: maximalTags,
+        },
+        observedAt
+      )
+  )
+  assert.ok(
+    Buffer.byteLength(
+      JSON.stringify({
+        changes: largestHighlightBatch,
+        hasMore: true,
+        nextState: { accountId, page: 3 },
+      })
+    ) <
+      10 * 1_024 * 1_024
   )
 })
 
@@ -621,13 +949,25 @@ test("scan state remains account-bound and rejects corrupt or over-limit state",
     () => currentPage(invalidPage, accountId, "highlights"),
     /invalid page/
   )
+  assert.throws(
+    () =>
+      currentPage(
+        {
+          accountId,
+          page: 0,
+          guard: { previousPageFingerprints: ["not-a-fingerprint"] },
+        },
+        accountId,
+        "highlights"
+      ),
+    /invalid page fingerprints/
+  )
   const bound = accountState(undefined, accountId, "collections")
   assert.deepEqual(bound, { accountId } satisfies AccountSyncState)
   assert.throws(
     () => accountState(bound, 999, "collections"),
     /account changed/
   )
-
   const trashState = {
     accountId,
     phase: "trash",
@@ -643,8 +983,8 @@ test("scan state remains account-bound and rejects corrupt or over-limit state",
         { ...trashState, page: MAX_SYNC_RECORDS / PAGE_SIZE },
         accountId,
         "trash",
-        [{}],
-        []
+        [["over-limit"]],
+        ["over-limit"]
       ),
     /exceeds 10000 records/
   )
@@ -660,6 +1000,38 @@ test("client fetches and validates the authenticated account ID", async () => {
 
   const session = await client.authenticate()
   assert.equal(session.accountId, accountId)
+})
+
+test("client enforces one deployment-wide Raindrop account", async () => {
+  let requests = 0
+  const mismatched = createRaindropClient({
+    beforeRequest: async () => undefined,
+    fetchImpl: async () => {
+      requests += 1
+      return jsonResponse({ result: true, user: { _id: accountId } })
+    },
+    getAccessToken: () => "test-token",
+    getExpectedAccountId: () => 999,
+  })
+  await assert.rejects(
+    mismatched.authenticate(),
+    /different account than RAINDROP_ACCOUNT_ID/
+  )
+  assert.equal(requests, 1)
+
+  let paced = false
+  const invalid = createRaindropClient({
+    beforeRequest: async () => {
+      paced = true
+    },
+    fetchImpl: async () => {
+      assert.fail("invalid account configuration must fail before fetch")
+    },
+    getAccessToken: () => "test-token",
+    getExpectedAccountId: () => 0,
+  })
+  await assert.rejects(invalid.authenticate(), /positive integer account ID/)
+  assert.equal(paced, false)
 })
 
 test("authenticated sessions pin one token across identity and data requests", async () => {
@@ -719,6 +1091,10 @@ test("client sends bounded GET requests and sorts active bookmarks ascending", a
 
   assert.equal(page.items[0]._id, 42)
   assert.equal(page.items[0].reminderAt, "2026-06-10T15:00:00.000Z")
+  assert.deepEqual(page.items[0].contributor, {
+    id: 654,
+    fullName: "Ada Reader",
+  })
   assert.equal(paced, 2)
   assert.equal(requests[0].authorization, "Bearer test-token")
   const requestUrl = new URL(requests[0].url)
@@ -729,6 +1105,63 @@ test("client sends bounded GET requests and sorts active bookmarks ascending", a
   assert.equal(requests[0].init?.method, "GET")
   assert.equal(requests[0].init?.redirect, "error")
   assert.ok(requests[0].init?.signal instanceof AbortSignal)
+})
+
+test("client fetches up to three provider pages per Worker execution", async () => {
+  const pages: string[] = []
+  const client = createRaindropClient({
+    beforeRequest: async () => undefined,
+    fetchImpl: withAuthenticatedUser(async (input) => {
+      const url = new URL(input instanceof Request ? input.url : String(input))
+      const page = url.searchParams.get("page") ?? "0"
+      pages.push(page)
+      const items =
+        page === "4" || page === "5"
+          ? Array.from({ length: PAGE_SIZE }, (_, index) =>
+              bookmarkPayload({ _id: Number(page) * 1_000 + index })
+            )
+          : [bookmarkPayload({ _id: 6_000 })]
+      return jsonResponse({ result: true, items })
+    }),
+    getAccessToken: () => "test-token",
+  })
+
+  const batch = await (
+    await client.authenticate()
+  ).fetchBookmarksBatch("active", 4)
+  assert.deepEqual(pages, ["4", "5", "6"])
+  assert.deepEqual(
+    batch.pages.map((page) => page.length),
+    [PAGE_SIZE, PAGE_SIZE, 1]
+  )
+  assert.equal(batch.items.length, PAGE_SIZE * 2 + 1)
+})
+
+test("client never requests beyond the terminal record-cap probe", async () => {
+  const pages: string[] = []
+  const client = createRaindropClient({
+    beforeRequest: async () => undefined,
+    fetchImpl: withAuthenticatedUser(async (input) => {
+      const url = new URL(input instanceof Request ? input.url : String(input))
+      pages.push(url.searchParams.get("page") ?? "0")
+      return jsonResponse({
+        result: true,
+        items: Array.from({ length: PAGE_SIZE }, (_, index) =>
+          highlightPayload({ _id: `over-limit-${index}` })
+        ),
+      })
+    }),
+    getAccessToken: () => "test-token",
+  })
+
+  const batch = await (
+    await client.authenticate()
+  ).fetchHighlightsBatch(MAX_SYNC_RECORDS / PAGE_SIZE)
+  assert.deepEqual(pages, [String(MAX_SYNC_RECORDS / PAGE_SIZE)])
+  assert.deepEqual(
+    batch.pages.map((page) => page.length),
+    [PAGE_SIZE]
+  )
 })
 
 test("client normalizes provider timestamp offsets to UTC", async () => {
@@ -893,7 +1326,14 @@ test("client fetches root, child, Unsorted, and Trash collections", async () => 
     return url.pathname.endsWith("/childrens")
       ? jsonResponse({
           result: true,
-          items: [collectionPayload({ _id: 8, parent: { $id: 7 } })],
+          items: [
+            collectionPayload({
+              _id: 8,
+              parent: { $id: 7 },
+              access: { level: 2 },
+              collaborators: {},
+            }),
+          ],
         })
       : jsonResponse({
           result: true,
@@ -912,6 +1352,19 @@ test("client fetches root, child, Unsorted, and Trash collections", async () => 
   assert.deepEqual(
     collections.map((item) => item._id),
     [-1, -99, 7, 8]
+  )
+  assert.deepEqual(
+    collections.map(({ ownerId, accessLevel, shared }) => ({
+      ownerId,
+      accessLevel,
+      shared,
+    })),
+    [
+      { ownerId: undefined, accessLevel: undefined, shared: false },
+      { ownerId: undefined, accessLevel: undefined, shared: false },
+      { ownerId: accountId, accessLevel: 4, shared: false },
+      { ownerId: accountId, accessLevel: 2, shared: true },
+    ]
   )
   assert.deepEqual(requestedPaths.sort(), [
     "/rest/v1/collections",
@@ -954,6 +1407,114 @@ test("collection endpoints enforce root and child parent scopes", async () => {
     (await rootClient.authenticate()).fetchCollections(),
     /parent must be absent for a root/
   )
+})
+
+test("collection inventory marks unavailable parents, rejects cycles, and stays bounded", async () => {
+  function clientForCollections(rootItems: unknown[], childItems: unknown[]) {
+    return createRaindropClient({
+      beforeRequest: async () => undefined,
+      fetchImpl: withAuthenticatedUser(async (input) => {
+        const url = new URL(
+          input instanceof Request ? input.url : String(input)
+        )
+        return jsonResponse({
+          result: true,
+          items: url.pathname.endsWith("/childrens") ? childItems : rootItems,
+        })
+      }),
+      getAccessToken: () => "test-token",
+    })
+  }
+
+  const missingParent = clientForCollections(
+    [],
+    [collectionPayload({ _id: 8, parent: { $id: 999 } })]
+  )
+  const missingParentItems = await (
+    await missingParent.authenticate()
+  ).fetchCollections()
+  const orphan = missingParentItems.find((item) => item._id === 8)
+  assert.equal(orphan?.parentId, 999)
+  assert.equal(orphan?.parentAvailable, false)
+  const orphanChange = collectionToChange(accountId, orphan!, observedAt)
+  assert.deepEqual(orphanChange.properties.Parent, [])
+  assert.ok(propertyIncludes(orphanChange.properties["Parent ID"], "999"))
+  assert.ok(
+    propertyIncludes(orphanChange.properties["Parent unavailable"], "Yes")
+  )
+
+  const cycle = clientForCollections(
+    [],
+    [
+      collectionPayload({ _id: 8, parent: { $id: 9 } }),
+      collectionPayload({ _id: 9, parent: { $id: 8 } }),
+    ]
+  )
+  await assert.rejects(
+    (await cycle.authenticate()).fetchCollections(),
+    /cyclic collection hierarchy/
+  )
+
+  const oversized = clientForCollections(
+    Array.from({ length: MAX_COLLECTIONS + 1 }, (_, index) =>
+      collectionPayload({ _id: index + 1, parent: null })
+    ),
+    []
+  )
+  await assert.rejects(
+    (await oversized.authenticate()).fetchCollections(),
+    /more than 1000 collections/
+  )
+})
+
+test("client fails closed on malformed collaboration provenance", async () => {
+  const malformedCollection = createRaindropClient({
+    beforeRequest: async () => undefined,
+    fetchImpl: withAuthenticatedUser(async (input) => {
+      const url = new URL(input instanceof Request ? input.url : String(input))
+      return url.pathname.endsWith("/childrens")
+        ? jsonResponse({ result: true, items: [] })
+        : jsonResponse({
+            result: true,
+            items: [collectionPayload({ collaborators: null })],
+          })
+    }),
+    getAccessToken: () => "test-token",
+  })
+  await assert.rejects(
+    (await malformedCollection.authenticate()).fetchCollections(),
+    /collaborators must be an object/
+  )
+
+  const malformedAuthor = createRaindropClient({
+    beforeRequest: async () => undefined,
+    fetchImpl: withAuthenticatedUser(async () =>
+      jsonResponse({
+        result: true,
+        items: [bookmarkPayload({ creatorRef: { _id: 654 } })],
+      })
+    ),
+    getAccessToken: () => "test-token",
+  })
+  await assert.rejects(
+    (await malformedAuthor.authenticate()).fetchBookmarksPage("active", 0),
+    /creatorRef.fullName must be a string/
+  )
+
+  const absentAuthor = createRaindropClient({
+    beforeRequest: async () => undefined,
+    fetchImpl: withAuthenticatedUser(async () =>
+      jsonResponse({
+        result: true,
+        items: [bookmarkPayload({ creatorRef: undefined })],
+      })
+    ),
+    getAccessToken: () => "test-token",
+  })
+  const page = await (
+    await absentAuthor.authenticate()
+  ).fetchBookmarksPage("active", 0)
+  assert.equal(page.items[0].contributor, undefined)
 })
 
 test("client validates highlight references and the documented color enum", async () => {

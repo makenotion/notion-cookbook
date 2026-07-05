@@ -1,7 +1,7 @@
-// Raindrop.io reading library — collections, bookmarks, and highlights in
-// three connected managed Notion databases. The public Raindrop.io API does
-// not expose reliable deletion tombstones, so hourly full scans only upsert
-// observed records and preserve last-known rows that disappear upstream.
+// Raindrop.io research library — collections, bookmarks, and highlights in
+// three connected managed Notion databases. The available list endpoints do
+// not expose deletion tombstones, so scheduled scans only upsert observed
+// records and preserve last-known rows that disappear upstream.
 
 import { Worker } from "@notionhq/workers"
 
@@ -23,7 +23,7 @@ import {
   highlightSchema,
   highlightToChange,
 } from "./highlights.js"
-import { createRaindropClient } from "./raindrop.js"
+import { PAGE_SIZE, createRaindropClient } from "./raindrop.js"
 import {
   accountState,
   bookmarkPageResult,
@@ -97,16 +97,23 @@ worker.sync("bookmarksSync", {
   execute: async (state: BookmarkSyncState | undefined) => {
     const session = await client.authenticate()
     const { phase, page } = currentBookmarkPosition(state, session.accountId)
-    const result = await session.fetchBookmarksPage(phase, page)
+    const result = await session.fetchBookmarksBatch(phase, page)
+    const complete = result.pages.at(-1)!.length < PAGE_SIZE
+    const terminalFirstPageIds = complete
+      ? (await session.fetchBookmarksPage(phase, 0)).items.map((item) =>
+          String(item._id)
+        )
+      : undefined
     const observedAt = new Date().toISOString()
     return bookmarkPageResult(
       state,
       session.accountId,
       phase,
-      result.items,
+      result.pages.map((items) => items.map((item) => String(item._id))),
       result.items.map((item) =>
         bookmarkToChange(session.accountId, item, phase === "trash", observedAt)
-      )
+      ),
+      terminalFirstPageIds
     )
   },
 })
@@ -118,16 +125,21 @@ worker.sync("highlightsSync", {
   execute: async (state: PageSyncState | undefined) => {
     const session = await client.authenticate()
     const page = currentPage(state, session.accountId, "highlights")
-    const result = await session.fetchHighlightsPage(page)
+    const result = await session.fetchHighlightsBatch(page)
+    const complete = result.pages.at(-1)!.length < PAGE_SIZE
+    const terminalFirstPageIds = complete
+      ? (await session.fetchHighlightsPage(0)).items.map((item) => item._id)
+      : undefined
     const observedAt = new Date().toISOString()
     return pageResult(
       state,
       session.accountId,
-      result.items,
+      result.pages.map((items) => items.map((item) => item._id)),
       result.items.map((item) =>
         highlightToChange(session.accountId, item, observedAt)
       ),
-      "highlights"
+      "highlights",
+      terminalFirstPageIds
     )
   },
 })

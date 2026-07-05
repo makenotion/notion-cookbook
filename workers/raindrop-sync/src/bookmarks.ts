@@ -32,6 +32,10 @@ export const bookmarkSchema = {
 
     Tags: Schema.multiSelect([]),
 
+    "Raindrop contributor": Schema.richText(),
+
+    "Raindrop contributor ID": Schema.richText(),
+
     Favorite: Schema.checkbox(),
 
     Note: Schema.richText(),
@@ -104,13 +108,20 @@ export function bookmarkToChange(
       Broken: Builder.checkbox(bookmark.broken),
       "In Trash": Builder.checkbox(inTrash),
       Note: bookmark.note ? Builder.richText(boundedText(bookmark.note)) : [],
+      "Raindrop contributor": bookmark.contributor
+        ? Builder.richText(boundedText(bookmark.contributor.fullName))
+        : [],
+      "Raindrop contributor ID": bookmark.contributor
+        ? Builder.richText(String(bookmark.contributor.id))
+        : [],
       Excerpt: bookmark.excerpt
         ? Builder.richText(boundedText(bookmark.excerpt))
         : [],
       Truncated: Builder.checkbox(
         textWasTruncated(sourceTitle) ||
           textWasTruncated(bookmark.note) ||
-          textWasTruncated(bookmark.excerpt)
+          textWasTruncated(bookmark.excerpt) ||
+          textWasTruncated(bookmark.contributor?.fullName ?? "")
       ),
       "Highlight count": Builder.number(bookmark.highlights.length),
       Created: Builder.dateTime(bookmark.created, "UTC"),
