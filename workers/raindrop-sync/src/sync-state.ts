@@ -1,12 +1,13 @@
 import { PAGE_SIZE } from "./raindrop.js"
 
-export const SYNC_STATE_VERSION = 1
 export const MAX_SYNC_RECORDS = 10_000
 const MAX_DATA_PAGES = MAX_SYNC_RECORDS / PAGE_SIZE
 
-export type PageSyncState = {
-  stateVersion: typeof SYNC_STATE_VERSION
+export type AccountSyncState = {
   accountId: number
+}
+
+export type PageSyncState = AccountSyncState & {
   page: number
 }
 
@@ -19,7 +20,7 @@ export type BookmarkSyncState = PageSyncState & {
 type SyncPageResult<T, State> = {
   changes: T[]
   hasMore: boolean
-  nextState?: State
+  nextState: State
 }
 
 function assertAccountId(accountId: number, resourceName: string): void {
@@ -30,16 +31,11 @@ function assertAccountId(accountId: number, resourceName: string): void {
   }
 }
 
-function validateState(
-  state: PageSyncState,
+function validateAccountState(
+  state: AccountSyncState,
   accountId: number,
   resourceName: string
 ): void {
-  if (state.stateVersion !== SYNC_STATE_VERSION) {
-    throw new Error(
-      `Raindrop.io ${resourceName} sync state is incompatible; reset the capability state before retrying.`
-    )
-  }
   if (!Number.isSafeInteger(state.accountId) || state.accountId <= 0) {
     throw new Error(
       `Raindrop.io ${resourceName} sync state has an invalid account ID.`
@@ -47,9 +43,17 @@ function validateState(
   }
   if (state.accountId !== accountId) {
     throw new Error(
-      `Raindrop.io account changed during the ${resourceName} scan; restore the original token or reset this capability state before retrying.`
+      `Raindrop.io account changed for ${resourceName}; restore the original token or deploy a separate Worker for the other account.`
     )
   }
+}
+
+function validatePageState(
+  state: PageSyncState,
+  accountId: number,
+  resourceName: string
+): void {
+  validateAccountState(state, accountId, resourceName)
   if (
     !Number.isSafeInteger(state.page) ||
     state.page < 0 ||
@@ -61,6 +65,16 @@ function validateState(
   }
 }
 
+export function accountState(
+  state: AccountSyncState | undefined,
+  accountId: number,
+  resourceName: string
+): AccountSyncState {
+  assertAccountId(accountId, resourceName)
+  if (state) validateAccountState(state, accountId, resourceName)
+  return { accountId }
+}
+
 export function currentPage(
   state: PageSyncState | undefined,
   accountId: number,
@@ -68,7 +82,7 @@ export function currentPage(
 ): number {
   assertAccountId(accountId, resourceName)
   if (!state) return 0
-  validateState(state, accountId, resourceName)
+  validatePageState(state, accountId, resourceName)
   return state.page
 }
 
@@ -80,7 +94,7 @@ export function currentBookmarkPosition(
     assertAccountId(accountId, "bookmarks")
     return { phase: "active", page: 0 }
   }
-  validateState(state, accountId, "bookmarks")
+  validatePageState(state, accountId, "bookmarks")
   if (state.phase !== "active" && state.phase !== "trash") {
     throw new Error("Raindrop.io bookmarks sync state has an invalid phase.")
   }
@@ -121,12 +135,11 @@ export function pageResult<T>(
     ...(hasMore
       ? {
           nextState: {
-            stateVersion: SYNC_STATE_VERSION,
             accountId,
             page: page + 1,
           },
         }
-      : {}),
+      : { nextState: { accountId, page: 0 } }),
   }
 }
 
@@ -148,7 +161,6 @@ export function bookmarkPageResult<T>(
       changes,
       hasMore: true,
       nextState: {
-        stateVersion: SYNC_STATE_VERSION,
         accountId,
         phase,
         page: position.page + 1,
@@ -161,7 +173,6 @@ export function bookmarkPageResult<T>(
       changes,
       hasMore: true,
       nextState: {
-        stateVersion: SYNC_STATE_VERSION,
         accountId,
         phase: "trash",
         page: 0,
@@ -169,5 +180,9 @@ export function bookmarkPageResult<T>(
     }
   }
 
-  return { changes, hasMore: false }
+  return {
+    changes,
+    hasMore: false,
+    nextState: { accountId, phase: "active", page: 0 },
+  }
 }

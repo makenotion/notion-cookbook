@@ -3,17 +3,18 @@ import { test } from "node:test"
 
 import { RateLimitError } from "@notionhq/workers"
 
-import { bookmarkToChange } from "./src/bookmarks.js"
-import { collectionToChange } from "./src/collections.js"
+import { bookmarkSchema, bookmarkToChange } from "./src/bookmarks.js"
+import { collectionSchema, collectionToChange } from "./src/collections.js"
 import {
   boundedText,
   displayLabel,
   highlightTitle,
   NOTION_TEXT_LIMIT,
   optionNames,
+  TAG_OVERFLOW_SENTINEL,
   textWasTruncated,
 } from "./src/format.js"
-import { highlightToChange } from "./src/highlights.js"
+import { highlightSchema, highlightToChange } from "./src/highlights.js"
 import worker from "./src/index.js"
 import { bookmarkKey, collectionKey, highlightKey } from "./src/keys.js"
 import {
@@ -26,12 +27,13 @@ import {
   type RaindropHighlight,
 } from "./src/raindrop.js"
 import {
+  accountState,
   bookmarkPageResult,
   currentBookmarkPosition,
   currentPage,
   MAX_SYNC_RECORDS,
   pageResult,
-  SYNC_STATE_VERSION,
+  type AccountSyncState,
   type BookmarkSyncState,
   type PageSyncState,
 } from "./src/sync-state.js"
@@ -180,6 +182,33 @@ test("worker manifest declares account-scoped relation targets in dependency ord
   )
 })
 
+test("schemas lead with the fields used to review and connect research", () => {
+  assert.deepEqual(Object.keys(collectionSchema.properties).slice(0, 6), [
+    "Name",
+    "Parent",
+    "Bookmarks",
+    "Updated",
+    "Last Seen",
+    "Public",
+  ])
+  assert.deepEqual(Object.keys(bookmarkSchema.properties).slice(0, 6), [
+    "Title",
+    "URL",
+    "Collection",
+    "Tags",
+    "Favorite",
+    "Updated",
+  ])
+  assert.deepEqual(Object.keys(highlightSchema.properties).slice(0, 6), [
+    "Highlight",
+    "Bookmark",
+    "Text",
+    "Note",
+    "Tags",
+    "Created",
+  ])
+})
+
 test("worker manifest uses non-destructive hourly scans behind one shared pacer", () => {
   type SyncConfig = {
     databaseKey: string
@@ -319,6 +348,13 @@ test("highlight transform scopes its key and bookmark relation", () => {
   assert.ok(propertyIncludes(change.properties["Last Seen"], "12:34"))
   assert.ok(propertyIncludes(change.properties["Highlight ID"], "highlight-1"))
   assert.equal("pageContentMarkdown" in change, false)
+
+  const longBookmarkTitle = highlightToChange(
+    accountId,
+    { ...highlight, title: "🧠".repeat(NOTION_TEXT_LIMIT + 1) },
+    observedAt
+  )
+  assert.ok(propertyIncludes(longBookmarkTitle.properties.Truncated, "Yes"))
 })
 
 test("collection transform scopes parent relations and exposes raw identity", () => {
@@ -344,6 +380,13 @@ test("collection transform scopes parent relations and exposes raw identity", ()
   assert.ok(propertyIncludes(child.properties["Last Seen"], "2026-07-03"))
   assert.ok(propertyIncludes(child.properties["Last Seen"], "12:34"))
   assert.equal("upstreamUpdatedAt" in child, false)
+
+  const longTitle = collectionToChange(
+    accountId,
+    { ...collection, title: "🧠".repeat(NOTION_TEXT_LIMIT + 1) },
+    observedAt
+  )
+  assert.ok(propertyIncludes(longTitle.properties.Truncated, "Yes"))
 })
 
 test("omitted source URLs are disclosed without breaking transforms", () => {
@@ -378,21 +421,23 @@ test("omitted source URLs are disclosed without breaking transforms", () => {
   assert.ok(propertyIncludes(highlightChange.properties["URL Omitted"], "Yes"))
 })
 
-test("text helpers truncate by Unicode character and disclose truncation", () => {
+test("text helpers respect Unicode and UTF-16 limits", () => {
   const source = "🧠".repeat(NOTION_TEXT_LIMIT + 1)
   const bounded = boundedText(source)
 
-  assert.equal(Array.from(bounded).length, NOTION_TEXT_LIMIT)
+  assert.ok(Array.from(bounded).length <= NOTION_TEXT_LIMIT)
+  assert.ok(bounded.length <= NOTION_TEXT_LIMIT)
   assert.equal(bounded.endsWith("…"), true)
   assert.equal(textWasTruncated(source), true)
   assert.equal(textWasTruncated("short"), false)
+  assert.equal(boundedText("x".repeat(NOTION_TEXT_LIMIT + 1)).length, 2_000)
   assert.equal(displayLabel("article"), "Article")
   assert.equal(highlightTitle("a\n  b", "fallback"), "a b")
 })
 
 test("tag options deduplicate case variants and preserve normalization collisions", () => {
   const sourceTags = [" API ", "api", "a,b", "a，b"]
-  const normalized = optionNames("bookmark tags", sourceTags)
+  const normalized = optionNames(sourceTags)
 
   assert.equal(normalized.length, 3)
   assert.equal(normalized.includes("a，b"), true)
@@ -400,29 +445,24 @@ test("tag options deduplicate case variants and preserve normalization collision
     normalized.some((name) => /^a，b.*[0-9a-f]{12}$/.test(name)),
     true
   )
-  assert.deepEqual(
-    optionNames("bookmark tags", [...sourceTags].reverse()),
-    normalized
-  )
+  assert.deepEqual(optionNames([...sourceTags].reverse()), normalized)
   assert.equal(
     normalized.filter((name) => name.toLocaleLowerCase("en-US") === "api")
       .length,
     1
   )
   assert.equal(
-    normalized.every((name) => Array.from(name).length <= 100),
+    normalized.every(
+      (name) => Array.from(name).length <= 100 && name.length <= 100
+    ),
     true
   )
 
-  const generatedName = optionNames("bookmark tags", ["a,b", "a，b"]).find(
+  const generatedName = optionNames(["a,b", "a，b"]).find(
     (name) => name !== "a，b"
   )
   assert.ok(generatedName)
-  const naturalNameCollision = optionNames("bookmark tags", [
-    "a,b",
-    "a，b",
-    generatedName,
-  ])
+  const naturalNameCollision = optionNames(["a,b", "a，b", generatedName])
   assert.equal(naturalNameCollision.length, 3)
   assert.equal(naturalNameCollision.includes(generatedName), true)
   assert.equal(
@@ -431,18 +471,48 @@ test("tag options deduplicate case variants and preserve normalization collision
     3
   )
   assert.equal(
-    naturalNameCollision.every((name) => Array.from(name).length <= 100),
+    naturalNameCollision.every(
+      (name) => Array.from(name).length <= 100 && name.length <= 100
+    ),
     true
   )
 
-  assert.equal(optionNames("bookmark tags", ["x".repeat(101)])[0].length, 100)
-  assert.throws(
-    () =>
-      optionNames(
-        "bookmark tags",
-        Array.from({ length: 101 }, (_, index) => `tag-${index}`)
-      ),
-    /supports at most 100/
+  assert.equal(optionNames(["x".repeat(101)])[0].length, 100)
+  const emojiOption = optionNames(["🧠".repeat(100)])[0]
+  assert.ok(emojiOption.length <= 100)
+
+  const overflowInput = [
+    TAG_OVERFLOW_SENTINEL,
+    TAG_OVERFLOW_SENTINEL.toLocaleUpperCase("en-US"),
+    ...Array.from({ length: 105 }, (_, index) => `tag-${index}`),
+  ]
+  const overflow = optionNames(overflowInput)
+  assert.equal(overflow.length, 100)
+  assert.equal(
+    overflow.filter((name) => name === TAG_OVERFLOW_SENTINEL).length,
+    1
+  )
+  assert.equal(
+    overflow.filter(
+      (name) =>
+        name.toLocaleLowerCase("en-US") ===
+        TAG_OVERFLOW_SENTINEL.toLocaleLowerCase("en-US")
+    ).length,
+    1
+  )
+  assert.equal(
+    overflow.filter((name) => name !== TAG_OVERFLOW_SENTINEL).length,
+    99
+  )
+  assert.deepEqual(overflow, optionNames([...overflowInput].reverse()))
+
+  const pageChanges = [
+    { ...bookmark, tags: overflowInput },
+    { ...bookmark, _id: 43, tags: ["ordinary"] },
+  ].map((item) => bookmarkToChange(accountId, item, false, observedAt))
+  assert.deepEqual(
+    pageChanges.map((change) => change.key),
+    ["raindrop:321:bookmark:42", "raindrop:321:bookmark:43"]
   )
 })
 
@@ -453,7 +523,6 @@ test("highlight scan state pins account identity and advances full pages", () =>
     changes: ["change"],
     hasMore: true,
     nextState: {
-      stateVersion: SYNC_STATE_VERSION,
       accountId,
       page: 1,
     },
@@ -466,10 +535,14 @@ test("highlight scan state pins account identity and advances full pages", () =>
       ["change"],
       "highlights"
     ),
-    { changes: ["change"], hasMore: false }
+    {
+      changes: ["change"],
+      hasMore: false,
+      nextState: { accountId, page: 0 },
+    }
   )
   assert.throws(
-    () => currentPage(first.nextState, 999, "highlights"),
+    () => currentPage({ accountId, page: 0 }, 999, "highlights"),
     /account changed/
   )
 })
@@ -485,7 +558,6 @@ test("bookmark state scans active pages before Trash and then finishes", () => {
     "active",
   ])
   assert.deepEqual(activeFull.nextState, {
-    stateVersion: SYNC_STATE_VERSION,
     accountId,
     phase: "active",
     page: 1,
@@ -502,7 +574,6 @@ test("bookmark state scans active pages before Trash and then finishes", () => {
     changes: [],
     hasMore: true,
     nextState: {
-      stateVersion: SYNC_STATE_VERSION,
       accountId,
       phase: "trash",
       page: 0,
@@ -516,12 +587,19 @@ test("bookmark state scans active pages before Trash and then finishes", () => {
     [{}],
     ["trash"]
   )
-  assert.deepEqual(trashEnd, { changes: ["trash"], hasMore: false })
+  assert.deepEqual(trashEnd, {
+    changes: ["trash"],
+    hasMore: false,
+    nextState: { accountId, phase: "active", page: 0 },
+  })
+  assert.throws(
+    () => currentBookmarkPosition(trashEnd.nextState, 999),
+    /account changed/
+  )
 })
 
-test("scan state rejects corrupt, incompatible, changed-account, and over-limit state", () => {
+test("scan state remains account-bound and rejects corrupt or over-limit state", () => {
   const invalidPage = {
-    stateVersion: SYNC_STATE_VERSION,
     accountId,
     page: -1,
   } satisfies PageSyncState
@@ -529,18 +607,14 @@ test("scan state rejects corrupt, incompatible, changed-account, and over-limit 
     () => currentPage(invalidPage, accountId, "highlights"),
     /invalid page/
   )
+  const bound = accountState(undefined, accountId, "collections")
+  assert.deepEqual(bound, { accountId } satisfies AccountSyncState)
   assert.throws(
-    () =>
-      currentPage(
-        { stateVersion: 99, accountId, page: 1 } as unknown as PageSyncState,
-        accountId,
-        "highlights"
-      ),
-    /incompatible/
+    () => accountState(bound, 999, "collections"),
+    /account changed/
   )
 
   const trashState = {
-    stateVersion: SYNC_STATE_VERSION,
     accountId,
     phase: "trash",
     page: 0,
@@ -737,6 +811,35 @@ test("client scans Trash and accepts the Trash collection relation", async () =>
   assert.equal(new URL(paths[0]).pathname, "/rest/v1/raindrops/-99")
 })
 
+test("client rejects active and Trash collection mismatches", async () => {
+  const activeClient = createRaindropClient({
+    beforeRequest: async () => undefined,
+    fetchImpl: withAuthenticatedUser(async () =>
+      jsonResponse({
+        result: true,
+        items: [bookmarkPayload({ collection: { $id: -99 } })],
+      })
+    ),
+    getAccessToken: () => "test-token",
+  })
+  await assert.rejects(
+    (await activeClient.authenticate()).fetchBookmarksPage("active", 0),
+    /active response returned a bookmark from Trash/
+  )
+
+  const trashClient = createRaindropClient({
+    beforeRequest: async () => undefined,
+    fetchImpl: withAuthenticatedUser(async () =>
+      jsonResponse({ result: true, items: [bookmarkPayload()] })
+    ),
+    getAccessToken: () => "test-token",
+  })
+  await assert.rejects(
+    (await trashClient.authenticate()).fetchBookmarksPage("trash", 0),
+    /Trash response returned a bookmark outside Trash/
+  )
+})
+
 test("client fetches root, child, Unsorted, and Trash collections", async () => {
   const requestedPaths: string[] = []
   const fetchImpl: typeof fetch = async (input) => {
@@ -747,7 +850,10 @@ test("client fetches root, child, Unsorted, and Trash collections", async () => 
           result: true,
           items: [collectionPayload({ _id: 8, parent: { $id: 7 } })],
         })
-      : jsonResponse({ result: true, items: [collectionPayload()] })
+      : jsonResponse({
+          result: true,
+          items: [collectionPayload({ parent: null })],
+        })
   }
   const client = createRaindropClient({
     beforeRequest: async () => undefined,
@@ -766,6 +872,43 @@ test("client fetches root, child, Unsorted, and Trash collections", async () => 
     "/rest/v1/collections",
     "/rest/v1/collections/childrens",
   ])
+})
+
+test("collection endpoints enforce root and child parent scopes", async () => {
+  const childClient = createRaindropClient({
+    beforeRequest: async () => undefined,
+    fetchImpl: withAuthenticatedUser(async (input) => {
+      const url = new URL(input instanceof Request ? input.url : String(input))
+      return url.pathname.endsWith("/childrens")
+        ? jsonResponse({
+            result: true,
+            items: [collectionPayload({ parent: null })],
+          })
+        : jsonResponse({ result: true, items: [] })
+    }),
+    getAccessToken: () => "test-token",
+  })
+
+  await assert.rejects(
+    (await childClient.authenticate()).fetchCollections(),
+    /parent is required for a child/
+  )
+
+  const rootClient = createRaindropClient({
+    beforeRequest: async () => undefined,
+    fetchImpl: withAuthenticatedUser(async (input) => {
+      const url = new URL(input instanceof Request ? input.url : String(input))
+      return url.pathname.endsWith("/childrens")
+        ? jsonResponse({ result: true, items: [] })
+        : jsonResponse({ result: true, items: [collectionPayload()] })
+    }),
+    getAccessToken: () => "test-token",
+  })
+
+  await assert.rejects(
+    (await rootClient.authenticate()).fetchCollections(),
+    /parent must be absent for a root/
+  )
 })
 
 test("client validates highlight references and the documented color enum", async () => {
@@ -829,6 +972,56 @@ test("client rejects duplicate IDs and malformed provider values", async () => {
   await assert.rejects(
     malformedSession.fetchBookmarksPage("active", 0),
     /must use HTTP or HTTPS/
+  )
+})
+
+test("client requires arrays that drive bookmark and highlight fields", async () => {
+  const missingBookmarkTags = createRaindropClient({
+    beforeRequest: async () => undefined,
+    fetchImpl: withAuthenticatedUser(async () =>
+      jsonResponse({
+        result: true,
+        items: [bookmarkPayload({ tags: undefined })],
+      })
+    ),
+    getAccessToken: () => "test-token",
+  })
+  await assert.rejects(
+    (await missingBookmarkTags.authenticate()).fetchBookmarksPage("active", 0),
+    /bookmark.*tags must be an array/
+  )
+
+  const missingEmbeddedHighlights = createRaindropClient({
+    beforeRequest: async () => undefined,
+    fetchImpl: withAuthenticatedUser(async () =>
+      jsonResponse({
+        result: true,
+        items: [bookmarkPayload({ highlights: undefined })],
+      })
+    ),
+    getAccessToken: () => "test-token",
+  })
+  await assert.rejects(
+    (await missingEmbeddedHighlights.authenticate()).fetchBookmarksPage(
+      "active",
+      0
+    ),
+    /bookmark.*highlights must be an array/
+  )
+
+  const missingHighlightTags = createRaindropClient({
+    beforeRequest: async () => undefined,
+    fetchImpl: withAuthenticatedUser(async () =>
+      jsonResponse({
+        result: true,
+        items: [highlightPayload({ tags: undefined })],
+      })
+    ),
+    getAccessToken: () => "test-token",
+  })
+  await assert.rejects(
+    (await missingHighlightTags.authenticate()).fetchHighlightsPage(0),
+    /highlight.*tags must be an array/
   )
 })
 

@@ -21,14 +21,26 @@ export const bookmarkSchema = {
 
     URL: Schema.url(),
 
-    "URL Omitted": Schema.checkbox(),
-
     Collection: Schema.relation("collections", {
       twoWay: true,
       relatedPropertyName: "Synced Bookmarks",
     }),
 
     Tags: Schema.multiSelect([]),
+
+    Favorite: Schema.checkbox(),
+
+    Updated: Schema.date(),
+
+    Note: Schema.richText(),
+
+    Excerpt: Schema.richText(),
+
+    "In Trash": Schema.checkbox(),
+
+    Broken: Schema.checkbox(),
+
+    "Last Seen": Schema.date(),
 
     Type: Schema.select([
       { name: "Link" },
@@ -41,25 +53,13 @@ export const bookmarkSchema = {
 
     Domain: Schema.richText(),
 
-    Favorite: Schema.checkbox(),
-
-    Broken: Schema.checkbox(),
-
-    "In Trash": Schema.checkbox(),
-
-    Note: Schema.richText(),
-
-    Excerpt: Schema.richText(),
-
-    Truncated: Schema.checkbox(),
-
     Highlights: Schema.number(),
 
     Created: Schema.date(),
 
-    Updated: Schema.date(),
+    Truncated: Schema.checkbox(),
 
-    "Last Seen": Schema.date(),
+    "URL Omitted": Schema.checkbox(),
 
     "Raindrop ID": Schema.richText(),
 
@@ -80,7 +80,7 @@ export function bookmarkToChange(
     bookmark.domain.trim() ||
     bookmark.link ||
     "Untitled bookmark"
-  const tags = optionNames("bookmark tags", bookmark.tags)
+  const tags = optionNames(bookmark.tags)
   const key = bookmarkKey(accountId, bookmark._id)
   return {
     type: "upsert",

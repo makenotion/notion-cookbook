@@ -2,6 +2,7 @@ import { notionIcon, type SyncChangeUpsert } from "@notionhq/workers"
 import * as Builder from "@notionhq/workers/builder"
 import * as Schema from "@notionhq/workers/schema"
 
+import { boundedText, textWasTruncated } from "./format.js"
 import { collectionKey } from "./keys.js"
 import type { RaindropCollection } from "./raindrop.js"
 
@@ -20,13 +21,15 @@ export const collectionSchema = {
 
     Bookmarks: Schema.number(),
 
+    Updated: Schema.date(),
+
+    "Last Seen": Schema.date(),
+
     Public: Schema.checkbox(),
 
     Created: Schema.date(),
 
-    Updated: Schema.date(),
-
-    "Last Seen": Schema.date(),
+    Truncated: Schema.checkbox(),
 
     "Collection ID": Schema.richText(),
 
@@ -42,11 +45,12 @@ export function collectionToChange(
   observedAt: string
 ): SyncChangeUpsert<typeof PRIMARY_KEY, typeof collectionSchema.properties> {
   const key = collectionKey(accountId, collection._id)
+  const sourceTitle = collection.title.trim() || "Untitled collection"
   return {
     type: "upsert",
     key,
     properties: {
-      Name: Builder.title(collection.title),
+      Name: Builder.title(boundedText(sourceTitle)),
       Parent:
         collection.parentId === undefined
           ? []
@@ -61,6 +65,7 @@ export function collectionToChange(
         ? Builder.dateTime(collection.lastUpdate, "UTC")
         : [],
       "Last Seen": Builder.dateTime(observedAt, "UTC"),
+      Truncated: Builder.checkbox(textWasTruncated(sourceTitle)),
       "Collection ID": Builder.richText(String(collection._id)),
       "Raindrop Account ID": Builder.richText(String(accountId)),
       "Collection Key": Builder.richText(key),

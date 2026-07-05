@@ -25,10 +25,12 @@ import {
 } from "./highlights.js"
 import { createRaindropClient } from "./raindrop.js"
 import {
+  accountState,
   bookmarkPageResult,
   currentBookmarkPosition,
   currentPage,
   pageResult,
+  type AccountSyncState,
   type BookmarkSyncState,
   type PageSyncState,
 } from "./sync-state.js"
@@ -73,8 +75,9 @@ worker.sync("collectionsSync", {
   database: collections,
   mode: "incremental",
   schedule: "1h",
-  execute: async () => {
+  execute: async (state: AccountSyncState | undefined) => {
     const session = await client.authenticate()
+    const nextState = accountState(state, session.accountId, "collections")
     const items = await session.fetchCollections()
     const observedAt = new Date().toISOString()
     return {
@@ -82,6 +85,7 @@ worker.sync("collectionsSync", {
         collectionToChange(session.accountId, item, observedAt)
       ),
       hasMore: false,
+      nextState,
     }
   },
 })

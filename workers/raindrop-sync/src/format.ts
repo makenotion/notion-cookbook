@@ -3,15 +3,40 @@ import { createHash } from "node:crypto"
 export const NOTION_TEXT_LIMIT = 2_000
 export const NOTION_OPTION_LIMIT = 100
 export const NOTION_MULTI_SELECT_LIMIT = 100
+export const TAG_OVERFLOW_SENTINEL = "⚠ More tags omitted"
+
+function fitsWithinLimit(value: string, limit: number): boolean {
+  return value.length <= limit && Array.from(value).length <= limit
+}
+
+function withBoundedSuffix(
+  value: string,
+  limit: number,
+  suffix: string
+): string {
+  const suffixCharacters = Array.from(suffix).length
+  let prefix = ""
+  let prefixCharacters = 0
+  for (const character of value) {
+    if (
+      prefix.length + character.length + suffix.length > limit ||
+      prefixCharacters + 1 + suffixCharacters > limit
+    ) {
+      break
+    }
+    prefix += character
+    prefixCharacters += 1
+  }
+  return `${prefix}${suffix}`
+}
 
 export function boundedText(value: string): string {
-  const characters = Array.from(value)
-  if (characters.length <= NOTION_TEXT_LIMIT) return value
-  return `${characters.slice(0, NOTION_TEXT_LIMIT - 1).join("")}…`
+  if (fitsWithinLimit(value, NOTION_TEXT_LIMIT)) return value
+  return withBoundedSuffix(value, NOTION_TEXT_LIMIT, "…")
 }
 
 export function textWasTruncated(value: string): boolean {
-  return Array.from(value).length > NOTION_TEXT_LIMIT
+  return !fitsWithinLimit(value, NOTION_TEXT_LIMIT)
 }
 
 export function displayLabel(value: string): string {
@@ -29,7 +54,7 @@ export function highlightTitle(text: string, fallback: string): string {
   return `${characters.slice(0, 119).join("")}…`
 }
 
-export function optionNames(property: string, values: string[]): string[] {
+export function optionNames(values: string[]): string[] {
   const candidatesBySource = new Map<
     string,
     { baseName: string; sourceIdentity: string }
@@ -83,12 +108,15 @@ export function optionNames(property: string, values: string[]): string[] {
     }
   }
 
-  if (result.length > NOTION_MULTI_SELECT_LIMIT) {
-    throw new Error(
-      `Raindrop.io ${property} produced ${result.length} values; this Worker supports at most ${NOTION_MULTI_SELECT_LIMIT}.`
+  const sorted = result.sort(compareOptionNames)
+  if (sorted.length <= NOTION_MULTI_SELECT_LIMIT) return sorted
+
+  const retained = sorted
+    .filter(
+      (name) => optionIdentity(name) !== optionIdentity(TAG_OVERFLOW_SENTINEL)
     )
-  }
-  return result.sort(compareOptionNames)
+    .slice(0, NOTION_MULTI_SELECT_LIMIT - 1)
+  return [...retained, TAG_OVERFLOW_SENTINEL].sort(compareOptionNames)
 }
 
 function compareOptionNames(left: string, right: string): number {
@@ -121,8 +149,7 @@ function optionNameWithIdentitySuffix(
       ? digest.slice(0, 12)
       : `${digest.slice(0, 12)}-${attempt + 1}`
   const suffix = ` … ${discriminator}`
-  const prefixLength = NOTION_OPTION_LIMIT - Array.from(suffix).length
-  return `${Array.from(baseName).slice(0, prefixLength).join("")}${suffix}`
+  return withBoundedSuffix(baseName, NOTION_OPTION_LIMIT, suffix)
 }
 
 function optionName(value: string): string | undefined {
@@ -134,14 +161,12 @@ function optionName(value: string): string | undefined {
     .replace(/,/gu, "，")
   if (!normalized) return undefined
 
-  const characters = Array.from(normalized)
-  if (characters.length <= NOTION_OPTION_LIMIT) return normalized
+  if (fitsWithinLimit(normalized, NOTION_OPTION_LIMIT)) return normalized
 
   const digest = createHash("sha256")
     .update(normalized)
     .digest("hex")
     .slice(0, 8)
   const suffix = `… ${digest}`
-  const prefixLength = NOTION_OPTION_LIMIT - Array.from(suffix).length
-  return `${characters.slice(0, prefixLength).join("")}${suffix}`
+  return withBoundedSuffix(normalized, NOTION_OPTION_LIMIT, suffix)
 }

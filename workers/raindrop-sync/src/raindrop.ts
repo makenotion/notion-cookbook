@@ -70,6 +70,7 @@ export type RaindropHighlightColor =
   | "yellow"
 
 export type BookmarkScope = "active" | "trash"
+type CollectionScope = "root" | "child"
 
 export type RaindropCollection = {
   _id: number
@@ -174,11 +175,12 @@ export function createRaindropClient(
   async function fetchCollectionList(
     path: string,
     label: string,
+    scope: CollectionScope,
     accessToken: string
   ): Promise<RaindropCollection[]> {
     const payload = responseObject(await request(path, accessToken), label)
     return responseItems(payload, label).map((item, index) =>
-      parseCollection(item, `${label}.items[${index}]`)
+      parseCollection(item, `${label}.items[${index}]`, scope)
     )
   }
 
@@ -203,11 +205,13 @@ export function createRaindropClient(
           const root = await fetchCollectionList(
             "/rest/v1/collections",
             "root collections",
+            "root",
             accessToken
           )
           const children = await fetchCollectionList(
             "/rest/v1/collections/childrens",
             "child collections",
+            "child",
             accessToken
           )
           const collections: RaindropCollection[] = [
@@ -252,6 +256,7 @@ export function createRaindropClient(
           const items = responseItems(bookmarkPayload, "bookmarks").map(
             (item, index) => parseBookmark(item, `bookmarks.items[${index}]`)
           )
+          assertBookmarkScope(items, scope)
           assertPage(items, (item) => String(item._id), "bookmark")
           return { items }
         },
@@ -515,7 +520,7 @@ function parseBookmark(value: unknown, label: string): RaindropBookmark {
   const item = objectValue(value, label)
   const collection = objectValue(item.collection, `${label}.collection`)
   const link = notionUrlValue(item.link, `${label}.link`)
-  const highlights = item.highlights ?? []
+  const highlights = item.highlights
   if (!Array.isArray(highlights)) {
     throw new Error(`Raindrop.io ${label}.highlights must be an array.`)
   }
@@ -529,7 +534,7 @@ function parseBookmark(value: unknown, label: string): RaindropBookmark {
     excerpt: optionalString(item.excerpt, `${label}.excerpt`),
     note: optionalString(item.note, `${label}.note`),
     type: bookmarkType(item.type, `${label}.type`),
-    tags: stringArray(item.tags ?? [], `${label}.tags`),
+    tags: stringArray(item.tags, `${label}.tags`),
     collection: {
       $id: collectionIdValue(collection.$id, `${label}.collection.$id`),
     },
@@ -557,20 +562,29 @@ function parseHighlight(value: unknown, label: string): RaindropHighlight {
     title: optionalString(item.title, `${label}.title`),
     link: link.value,
     linkOmitted: link.omitted,
-    tags: stringArray(item.tags ?? [], `${label}.tags`),
+    tags: stringArray(item.tags, `${label}.tags`),
     created: dateTimeValue(item.created, `${label}.created`),
   }
 }
 
-function parseCollection(value: unknown, label: string): RaindropCollection {
+function parseCollection(
+  value: unknown,
+  label: string,
+  scope: CollectionScope
+): RaindropCollection {
   const item = objectValue(value, label)
   const parent = item.parent
   let parentId: number | undefined
-  if (parent !== undefined && parent !== null) {
+  if (scope === "child") {
+    if (parent === undefined || parent === null) {
+      throw new Error(`Raindrop.io ${label}.parent is required for a child.`)
+    }
     parentId = positiveInteger(
       objectValue(parent, `${label}.parent`).$id,
       `${label}.parent.$id`
     )
+  } else if (parent !== undefined && parent !== null) {
+    throw new Error(`Raindrop.io ${label}.parent must be absent for a root.`)
   }
 
   return {
@@ -581,6 +595,25 @@ function parseCollection(value: unknown, label: string): RaindropCollection {
     parentId,
     created: dateTimeValue(item.created, `${label}.created`),
     lastUpdate: dateTimeValue(item.lastUpdate, `${label}.lastUpdate`),
+  }
+}
+
+function assertBookmarkScope(
+  items: RaindropBookmark[],
+  scope: BookmarkScope
+): void {
+  for (const item of items) {
+    const collectionId = item.collection.$id
+    if (scope === "trash" && collectionId !== -99) {
+      throw new Error(
+        "Raindrop.io Trash response returned a bookmark outside Trash."
+      )
+    }
+    if (scope === "active" && collectionId === -99) {
+      throw new Error(
+        "Raindrop.io active response returned a bookmark from Trash."
+      )
+    }
   }
 }
 

@@ -20,20 +20,18 @@ export const highlightSchema = {
   properties: {
     Highlight: Schema.title(),
 
-    Text: Schema.richText(),
-
-    Note: Schema.richText(),
-
     Bookmark: Schema.relation("bookmarks", {
       twoWay: true,
       relatedPropertyName: "Synced Highlights",
     }),
 
-    "Bookmark title": Schema.richText(),
+    Text: Schema.richText(),
 
-    URL: Schema.url(),
+    Note: Schema.richText(),
 
-    "URL Omitted": Schema.checkbox(),
+    Tags: Schema.multiSelect([]),
+
+    Created: Schema.date(),
 
     Color: Schema.select([
       { name: "Blue" },
@@ -50,13 +48,15 @@ export const highlightSchema = {
       { name: "Yellow" },
     ]),
 
-    Tags: Schema.multiSelect([]),
+    URL: Schema.url(),
+
+    "Bookmark title": Schema.richText(),
+
+    "Last Seen": Schema.date(),
 
     Truncated: Schema.checkbox(),
 
-    Created: Schema.date(),
-
-    "Last Seen": Schema.date(),
+    "URL Omitted": Schema.checkbox(),
 
     "Highlight ID": Schema.richText(),
 
@@ -71,7 +71,7 @@ export function highlightToChange(
   highlight: RaindropHighlight,
   observedAt: string
 ): SyncChangeUpsert<typeof PRIMARY_KEY, typeof highlightSchema.properties> {
-  const tags = optionNames("highlight tags", highlight.tags)
+  const tags = optionNames(highlight.tags)
   const key = highlightKey(accountId, highlight._id)
   return {
     type: "upsert",
@@ -91,7 +91,9 @@ export function highlightToChange(
       Color: Builder.select(displayLabel(highlight.color)),
       Tags: tags.length > 0 ? Builder.multiSelect(...tags) : [],
       Truncated: Builder.checkbox(
-        textWasTruncated(highlight.text) || textWasTruncated(highlight.note)
+        textWasTruncated(highlight.text) ||
+          textWasTruncated(highlight.note) ||
+          textWasTruncated(highlight.title)
       ),
       Created: Builder.dateTime(highlight.created, "UTC"),
       "Last Seen": Builder.dateTime(observedAt, "UTC"),
