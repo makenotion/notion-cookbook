@@ -20,8 +20,6 @@ import type {
 
 export const INITIAL_TITLE = "Todoist Projects"
 export const PRIMARY_KEY = "Todoist Project ID"
-export const MAX_AGGREGATED_PROJECTS = 250
-export const MAX_AGGREGATED_ITEMS = 5_000
 export const MAX_RECENT_COMPLETIONS = 5
 export const MAX_RECENT_COMPLETION_TITLE_CHARACTERS = 120
 
@@ -75,24 +73,12 @@ export const projectSchema = {
   },
 } satisfies Schema.Schema<typeof PRIMARY_KEY>
 
-export class ProjectAggregationLimitError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = "ProjectAggregationLimitError"
-  }
-}
-
 function aggregateFor(
   aggregates: ProjectAggregateMap,
   projectId: string
 ): ProjectAggregate {
   const existing = aggregates[projectId]
   if (existing) return existing
-  if (Object.keys(aggregates).length >= MAX_AGGREGATED_PROJECTS) {
-    throw new ProjectAggregationLimitError(
-      `Todoist project summary exceeded ${MAX_AGGREGATED_PROJECTS} projects before publishing any rows.`
-    )
-  }
   const aggregate: ProjectAggregate = {
     projectId,
     openTasks: 0,
@@ -111,39 +97,13 @@ function aggregateFor(
   return aggregate
 }
 
-function distinctIds(
-  prior: ReadonlyArray<string>,
-  candidates: ReadonlyArray<string>,
-  resource: string
-): string[] {
-  const seen = new Set(prior)
-  for (const id of candidates) {
-    if (seen.has(id)) {
-      throw new Error(`Todoist ${resource} snapshot repeated ${id}.`)
-    }
-    seen.add(id)
-    if (seen.size > MAX_AGGREGATED_ITEMS) {
-      throw new ProjectAggregationLimitError(
-        `Todoist project summary exceeded ${MAX_AGGREGATED_ITEMS} ${resource}.`
-      )
-    }
-  }
-  return [...seen]
-}
-
 export function aggregateTasks(
   prior: ProjectAggregateMap,
-  priorTaskIds: ReadonlyArray<string>,
   tasks: ReadonlyArray<TodoistTask>,
   userTimeZone: string,
   observedAt: Date | string
-): { aggregates: ProjectAggregateMap; seenTaskIds: string[] } {
+): ProjectAggregateMap {
   const aggregates = structuredClone(prior)
-  const seenTaskIds = distinctIds(
-    priorTaskIds,
-    tasks.map((task) => task.id),
-    "active tasks"
-  )
 
   for (const task of tasks) {
     const aggregate = aggregateFor(aggregates, task.projectId)
@@ -177,7 +137,7 @@ export function aggregateTasks(
     }
   }
 
-  return { aggregates, seenTaskIds }
+  return aggregates
 }
 
 export function completionOccurrenceId(task: TodoistCompletedTask): string {
@@ -186,11 +146,10 @@ export function completionOccurrenceId(task: TodoistCompletedTask): string {
 
 export function aggregateCompletions(
   prior: ProjectAggregateMap,
-  priorOccurrenceIds: ReadonlyArray<string>,
   tasks: ReadonlyArray<TodoistCompletedTask>,
   since: Date | string,
   until: Date | string
-): { aggregates: ProjectAggregateMap; seenCompletionIds: string[] } {
+): ProjectAggregateMap {
   const sinceMs = new Date(since).getTime()
   const untilMs = new Date(until).getTime()
   if (
@@ -201,12 +160,6 @@ export function aggregateCompletions(
     throw new Error("Todoist completion aggregation has invalid bounds.")
   }
   const aggregates = structuredClone(prior)
-  const occurrenceIds = tasks.map(completionOccurrenceId)
-  const seenCompletionIds = distinctIds(
-    priorOccurrenceIds,
-    occurrenceIds,
-    "completion occurrences"
-  )
 
   for (const task of tasks) {
     const completedAtMs = Date.parse(task.completedAt)
@@ -248,7 +201,7 @@ export function aggregateCompletions(
     )
   }
 
-  return { aggregates, seenCompletionIds }
+  return aggregates
 }
 
 function recentCompletionSummary(aggregate: ProjectAggregate): string | null {

@@ -107,20 +107,22 @@ Due** is the earliest non-overdue due value.
 
 1. Every page request verifies the authenticated user against `TODOIST_USER_ID`
    and uses that account's timezone.
-2. Tasks and projects are discovered, traversed again, and published only from
-   the verified traversal.
+2. Tasks and projects are discovered, then emitted during a second traversal.
+   That traversal must reproduce the discovered identity set before replacement
+   completes.
 3. Project rows aggregate verified active tasks and a separately verified recent
    completion window.
 4. Replace-mode removal happens only after the final identity set is verified.
    An incomplete run does not remove unseen pages, although earlier upserts may
    already be visible.
 
-The worker rejects duplicate identities, identity-set changes, and invalid or
-repeated inventory cursors. A stuck publish traversal can be abandoned with
+Before rows are emitted, an identity change or expired cursor starts a fresh
+discovery. After emission, the worker fails closed so an incomplete traversal
+cannot authorize deletion. Duplicate identities and cursors that repeat without
+advancing are always rejected. A stuck traversal can be abandoned with
 `ntn workers sync state reset projectsSync` or
 `ntn workers sync state reset tasksSync`. Each inventory is bounded to 5,000
-tasks, projects, or completion occurrences, 250 referenced project aggregates,
-and a 200 KiB continuation state.
+tasks, projects, or completion occurrences and a 200 KiB continuation state.
 
 A record absent from Todoist's active inventory is removed from Notion after a
 successful replacement. Completing a recurring task normally advances the same
@@ -140,10 +142,11 @@ managed databases for another account.
 
 ## Development
 
-`src/index.ts` registers both databases and schedules; `src/todoist.ts` owns the
-bounded API client; `src/sync-state.ts` owns snapshot and recovery state;
+`src/index.ts` registers both databases and schedules; `src/sync.ts` owns sync
+traversal and continuation state; `src/todoist.ts` owns the bounded API client;
 `src/tasks.ts` and `src/projects.ts` contain the schemas and transforms; and
-`src/helpers.ts` contains shared value normalization.
+`src/helpers.ts` contains shared text, date, due-status, duration, and link
+transforms.
 
 To add a field, validate it in `src/todoist.ts`, update the relevant schema and
 transform, and test both populated and missing values. Keep Todoist IDs as sync

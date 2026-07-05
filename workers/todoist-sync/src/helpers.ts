@@ -5,18 +5,13 @@ import { createHash } from "node:crypto"
 
 import * as Builder from "@notionhq/workers/builder"
 
-export const MAX_RICH_TEXT_CHARACTERS = 2_000
-export const MAX_OPTION_NAME_CHARACTERS = 100
-export const MAX_MULTI_SELECT_OPTIONS = 100
+const MAX_RICH_TEXT_CHARACTERS = 2_000
+const MAX_OPTION_NAME_CHARACTERS = 100
+const MAX_MULTI_SELECT_OPTIONS = 100
 
-export type DueStatus =
-  | "Overdue"
-  | "Today"
-  | "Next 7 days"
-  | "Later"
-  | "No due date"
+type DueStatus = "Overdue" | "Today" | "Next 7 days" | "Later" | "No due date"
 
-export type DueClassification = {
+type DueClassification = {
   status: DueStatus
   sortKey?: string
   dueNextSevenDays: boolean

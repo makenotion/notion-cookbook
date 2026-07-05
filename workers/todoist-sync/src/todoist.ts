@@ -4,13 +4,13 @@
 
 import { RateLimitError } from "@notionhq/workers"
 
-export const TODOIST_API_BASE_URL = "https://api.todoist.com/api/v1"
-export const TODOIST_PAGE_SIZE = 200
-export const MAX_SUCCESS_RESPONSE_BYTES = 8 * 1_024 * 1_024
-export const MAX_ERROR_RESPONSE_BYTES = 64 * 1_024
-export const REQUEST_TIMEOUT_MS = 30_000
-export const MAX_CURSOR_CHARACTERS = 2_048
-export const MAX_USER_ID_CHARACTERS = 256
+const TODOIST_API_BASE_URL = "https://api.todoist.com/api/v1"
+const TODOIST_PAGE_SIZE = 200
+const MAX_SUCCESS_RESPONSE_BYTES = 8 * 1_024 * 1_024
+const MAX_ERROR_RESPONSE_BYTES = 64 * 1_024
+const REQUEST_TIMEOUT_MS = 30_000
+const MAX_CURSOR_CHARACTERS = 2_048
+const MAX_USER_ID_CHARACTERS = 256
 const DEFAULT_RATE_LIMIT_DELAY_SECONDS = 60
 
 export type TodoistDue = {
@@ -400,7 +400,7 @@ function parseProjectsPage(value: unknown): TodoistProjectsPage {
   })
 }
 
-export function parseRetryAfterSeconds(
+function parseRetryAfterSeconds(
   value: string | null,
   now = Date.now()
 ): number | undefined {
@@ -501,6 +501,38 @@ function requireApiToken(): string {
   const token = process.env.TODOIST_API_TOKEN?.trim()
   if (!token) throw new Error("TODOIST_API_TOKEN is not set.")
   return token
+}
+
+export function getExpectedTodoistUserId(
+  env: NodeJS.ProcessEnv = process.env
+): string {
+  const userId = env.TODOIST_USER_ID?.trim() ?? ""
+  if (!userId) throw new Error("TODOIST_USER_ID is not set.")
+  if (Array.from(userId).length > MAX_USER_ID_CHARACTERS) {
+    throw new Error("TODOIST_USER_ID is oversized.")
+  }
+  return userId
+}
+
+export function assertExpectedTodoistUserId(
+  authenticatedUserId: string,
+  expectedUserId: string
+): void {
+  const authenticated = authenticatedUserId.trim()
+  const expected = expectedUserId.trim()
+  if (
+    !authenticated ||
+    !expected ||
+    Array.from(authenticated).length > MAX_USER_ID_CHARACTERS ||
+    Array.from(expected).length > MAX_USER_ID_CHARACTERS
+  ) {
+    throw new Error("Todoist account ID is invalid.")
+  }
+  if (authenticated !== expected) {
+    throw new Error(
+      "Todoist account does not match TODOIST_USER_ID; restore the expected account token or deploy a separate Worker."
+    )
+  }
 }
 
 export function createTodoistClient(
