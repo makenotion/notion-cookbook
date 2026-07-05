@@ -20,17 +20,18 @@ database or Redis is required.
 - “Inspect this Sentry issue: `https://acme.sentry.io/issues/12345/`.”
 - “Declare the issue we just inspected as SEV-1.”
 - “Did we already declare an incident for this occurrence?”
-- “Retry that declaration without creating a duplicate incident.”
+- “Retry that declaration and reuse the matching incident if PagerDuty has it.”
 
 The Agent helps find the issue, shows the exact production occurrence and
-PagerDuty destination, asks for confirmation, and then declares that same
-occurrence.
+either its existing incident or PagerDuty destination, asks for confirmation,
+and then declares that same occurrence.
 
 ## Quickstart
 
 You need Node.js 22+, npm 10.9.2+, access to deploy Notion Workers, a Sentry
 token with `event:read`, and a PagerDuty API identity that can read services,
 priorities, on-call coverage, and incidents and can create incidents.
+The optional ID lookup commands below also use `curl` and `jq`.
 
 In PagerDuty:
 
@@ -39,12 +40,12 @@ In PagerDuty:
 2. Enable incident priorities and record the IDs for the three priorities that
    map to SEV-1, SEV-2, and SEV-3. The List Priorities API returns both IDs and
    display names.
-3. Optionally configure an Incident Workflow to run when an incident is
-   created for this service. PagerDuty owns and runs that workflow; this Worker
-   does not start its individual actions.
+3. Optionally configure an Incident Workflow for incidents created on this
+   service. A configured workflow may run independently; this Worker does not
+   verify its execution.
 4. Use a team-owned API identity whose permissions are limited to the intended
-   PagerDuty scope. `PAGERDUTY_FROM_EMAIL` must identify a PagerDuty user
-   associated with its API token.
+   PagerDuty scope. `PAGERDUTY_FROM_EMAIL` must be the email address of a valid
+   user on the PagerDuty account.
 
 With the PagerDuty token in your shell, these read-only calls make the required
 IDs easy to copy. Use `https://api.eu.pagerduty.com` for an EU account.
@@ -94,11 +95,11 @@ Agents or limit this Agent to people authorized for both.
 
 The Worker exposes three tools:
 
-| Tool                        | What it does                                                                                                                             |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `searchSentryIssues`        | Returns up to 10 unresolved issues from the configured project, environment, and time window.                                            |
-| `inspectSentryIssue`        | Accepts a search result, short ID, or Sentry URL and shows the exact latest occurrence, PagerDuty destination, and available priorities. |
-| `declareProductionIncident` | Re-reads the inspected issue and event, then creates or reuses the PagerDuty incident for that event.                                    |
+| Tool                        | What it does                                                                                                        |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `searchSentryIssues`        | Returns up to 10 unresolved issues from the configured project, environment, and time window.                       |
+| `inspectSentryIssue`        | Shows the exact latest occurrence, any matching incident, and the destination and priorities for a new declaration. |
+| `declareProductionIncident` | Reuses a matching PagerDuty incident or validates the destination and re-reads Sentry before one creation request.  |
 
 Users choose issues by title or short ID. The Agent carries the numeric issue
 ID and event ID from inspection into declaration.
@@ -107,16 +108,23 @@ Search and inspection are read-only. Declaration is a write operation, so
 Notion asks for confirmation before it runs. Search and inspection can also be
 used on their own for triage.
 
-Immediately before creating an incident, the Worker re-reads the exact Sentry
-issue and event. It stops without writing if the issue was resolved or the
-event no longer belongs to the configured project and environment. It also
-checks PagerDuty for an incident with the same event-based key. A matching
-incident returns as a no-op, including after it has been resolved.
+The Worker first checks PagerDuty for an incident with the same event-based
+key. A matching incident returns as a no-op, including after it has been
+resolved, without depending on current Sentry status or on-call coverage.
 
-The event-based key lets an identical retry reuse the same incident while a
-later Sentry occurrence can be declared separately. PagerDuty runs any
-incident-created workflow configured for the service; the Worker reports only
-the incident state it can verify.
+For a new incident, the Worker checks the configured PagerDuty service,
+priority, and on-call coverage. It then re-reads the exact Sentry issue and
+event as its final network check. It stops without writing if the issue was
+resolved, the event no longer belongs to the configured project and
+environment, or the safety checks cannot finish with enough time left for the
+write and reconciliation.
+
+The event-based key lets an identical retry reuse an incident PagerDuty already
+returns, while a later Sentry occurrence can be declared separately. Because
+PagerDuty only rejects a duplicate key while the matching incident is open,
+this stateless recipe does not promise exactly-once creation across concurrent
+requests or incident resolution. A configured PagerDuty workflow may run
+independently; the Worker reports only the incident state it can verify.
 
 The Agent should never choose between ambiguous search results or infer
 severity from urgent language. A person selects the issue and severity.
@@ -137,8 +145,8 @@ The recipe keeps that shared authority narrow:
 - Declaration requires the exact issue and event returned by inspection; a
   later occurrence receives a separate declaration key.
 - One invocation sends at most one incident-creation request.
-- A matching incident returns `changed: false`; an uncertain write returns
-  `changed: null`, never a guessed result.
+- A matching incident returned by PagerDuty produces `changed: false`; an
+  uncertain write produces `changed: null`, never a guessed result.
 
 Use a separate Agent and PagerDuty destination for restricted incident types,
 such as security incidents.

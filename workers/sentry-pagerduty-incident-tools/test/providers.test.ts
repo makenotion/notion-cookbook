@@ -180,6 +180,39 @@ test("Sentry rejects a malformed event identity", async () => {
   await assert.rejects(() => client.inspectIssue("123"), ProviderError)
 })
 
+test("Sentry rechecks unresolved status after reading the exact event", async () => {
+  let issueReads = 0
+  const eventId = "a".repeat(32)
+  const client = new SentryClient(config(), async (input) => {
+    const url = new URL(String(input))
+    if (url.pathname.endsWith("/issues/123/")) {
+      issueReads += 1
+      return json({
+        ...issue(123),
+        status: issueReads === 1 ? "unresolved" : "resolved",
+      })
+    }
+    if (url.pathname.endsWith(`/issues/123/events/${eventId}/`)) {
+      return json({
+        eventID: eventId,
+        groupID: "123",
+        projectID: "42",
+        title: "Payment confirmation timed out",
+        dateCreated: "2026-07-05T15:01:00Z",
+        tags: [{ key: "environment", value: "production" }],
+      })
+    }
+    throw new Error(`unexpected ${url}`)
+  })
+
+  await assert.rejects(
+    () => client.verifyEvent("123", eventId),
+    (error: unknown) =>
+      error instanceof SentryStateError && error.kind === "conflict"
+  )
+  assert.equal(issueReads, 2)
+})
+
 test("PagerDuty destination verifies service, priorities, and current coverage", async () => {
   const paths: string[] = []
   const client = new PagerDutyClient(config(), {
@@ -350,6 +383,48 @@ function stalledResponse(status: number, signal: AbortSignal): Response {
     { status }
   )
 }
+
+test("expired provider deadlines prevent outbound requests", async () => {
+  let calls = 0
+  const now = () => new Date("2026-07-05T15:00:00Z")
+  const expired = now().getTime() - 1
+  const fetch = async () => {
+    calls += 1
+    return json({})
+  }
+
+  await assert.rejects(
+    () =>
+      getJson({
+        provider: "Sentry",
+        url: new URL("https://sentry.io/api/0/issues/"),
+        headers: {},
+        fetch,
+        timeoutMs: 100,
+        deadlineAtMs: expired,
+        now,
+      }),
+    (error: unknown) =>
+      error instanceof ProviderError && error.retryable === true
+  )
+  await assert.rejects(
+    () =>
+      postJsonOnce({
+        provider: "PagerDuty",
+        url: new URL("https://api.pagerduty.com/incidents"),
+        headers: {},
+        body: {},
+        fetch,
+        timeoutMs: 100,
+        deadlineAtMs: expired,
+        now,
+      }),
+    (error: unknown) =>
+      error instanceof ProviderError &&
+      error.mutationOutcome === "not_attempted"
+  )
+  assert.equal(calls, 0)
+})
 
 test("provider timeout covers response body streaming", async () => {
   await assert.rejects(

@@ -36,6 +36,24 @@ export class ProviderError extends Error {
   }
 }
 
+function remainingTimeout(
+  timeoutMs: number,
+  deadlineAtMs: number | undefined,
+  now: () => Date,
+  provider: string
+): number {
+  if (deadlineAtMs === undefined) return timeoutMs
+  const remaining = deadlineAtMs - now().getTime()
+  if (remaining <= 0) {
+    throw new ProviderError(
+      provider,
+      `${provider} could not be called within the operation deadline.`,
+      { retryable: true }
+    )
+  }
+  return Math.max(1, Math.min(timeoutMs, remaining))
+}
+
 function requestId(response: Response): string | null {
   const value =
     response.headers.get("x-request-id") ??
@@ -133,6 +151,7 @@ export async function getJson(options: {
   attempts?: number
   sleep?: (milliseconds: number) => Promise<void>
   now?: () => Date
+  deadlineAtMs?: number
 }): Promise<{ data: unknown; requestId: string | null }> {
   const attempts = options.attempts ?? 2
   const sleep =
@@ -143,11 +162,17 @@ export async function getJson(options: {
 
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
+      const timeoutMs = remainingTimeout(
+        options.timeoutMs,
+        options.deadlineAtMs,
+        now,
+        options.provider
+      )
       const result = await withResponseTimeout(
         options.fetch,
         options.url,
         { method: "GET", headers: options.headers },
-        options.timeoutMs,
+        timeoutMs,
         async (response) => {
           const id = requestId(response)
           if (response.ok) {
@@ -198,7 +223,23 @@ export async function getJson(options: {
             }
           )
         }
-        await sleep((result.retryAfter ?? attempt) * 1_000)
+        const delay = (result.retryAfter ?? attempt) * 1_000
+        if (
+          options.deadlineAtMs !== undefined &&
+          now().getTime() + delay >= options.deadlineAtMs
+        ) {
+          throw new ProviderError(
+            options.provider,
+            `${options.provider} could not be retried within the operation deadline.`,
+            {
+              status: result.status,
+              requestId: result.requestId,
+              retryable: true,
+              retryAfterSeconds: result.retryAfter,
+            }
+          )
+        }
+        await sleep(delay)
         continue
       }
       throw new ProviderError(
@@ -215,7 +256,18 @@ export async function getJson(options: {
       if (error instanceof ProviderError) throw error
       if (!(error instanceof RequestFailure)) throw error
       if (attempt < attempts) {
-        await sleep(250 * attempt)
+        const delay = 250 * attempt
+        if (
+          options.deadlineAtMs !== undefined &&
+          now().getTime() + delay >= options.deadlineAtMs
+        ) {
+          throw new ProviderError(
+            options.provider,
+            `${options.provider} could not be retried within the operation deadline.`,
+            { retryable: true }
+          )
+        }
+        await sleep(delay)
         continue
       }
       throw new ProviderError(
@@ -236,9 +288,16 @@ export async function postJsonOnce(options: {
   fetch: FetchLike
   timeoutMs: number
   now?: () => Date
+  deadlineAtMs?: number
 }): Promise<{ data: unknown; requestId: string | null }> {
   const now = options.now ?? (() => new Date())
   try {
+    const timeoutMs = remainingTimeout(
+      options.timeoutMs,
+      options.deadlineAtMs,
+      now,
+      options.provider
+    )
     return await withResponseTimeout(
       options.fetch,
       options.url,
@@ -247,7 +306,7 @@ export async function postJsonOnce(options: {
         headers: options.headers,
         body: JSON.stringify(options.body),
       },
-      options.timeoutMs,
+      timeoutMs,
       async (response) => {
         const id = requestId(response)
         if (response.status !== 201) {

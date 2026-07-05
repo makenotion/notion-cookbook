@@ -197,7 +197,10 @@ export class SentryClient {
     }
   }
 
-  private async get(url: URL): Promise<unknown> {
+  private async get(
+    url: URL,
+    options: { deadlineAtMs?: number } = {}
+  ): Promise<unknown> {
     return (
       await getJson({
         provider: "Sentry",
@@ -205,6 +208,7 @@ export class SentryClient {
         headers: this.headers(),
         fetch: this.fetch,
         timeoutMs: this.config.requestTimeoutMs,
+        deadlineAtMs: options.deadlineAtMs,
       })
     ).data
   }
@@ -318,7 +322,10 @@ export class SentryClient {
     return string(group.id, 20)
   }
 
-  private async readIssue(issueId: string): Promise<SentryIssueSnapshot> {
+  private async readIssue(
+    issueId: string,
+    options: { deadlineAtMs?: number } = {}
+  ): Promise<SentryIssueSnapshot> {
     if (!/^[1-9][0-9]{0,19}$/.test(issueId)) {
       throw new SentryStateError("The Sentry issue ID is invalid.")
     }
@@ -329,7 +336,7 @@ export class SentryClient {
     url.searchParams.append("environment", this.config.sentryEnvironment)
     url.searchParams.append("collapse", "stats")
     url.searchParams.append("collapse", "tags")
-    const issue = parseIssue(await this.get(url), this.config)
+    const issue = parseIssue(await this.get(url, options), this.config)
     if (issue.issueId !== issueId) {
       throw new SentryStateError(
         "The Sentry issue identity changed.",
@@ -341,7 +348,8 @@ export class SentryClient {
 
   private async readEvent(
     issue: SentryIssueSnapshot,
-    eventId: string
+    eventId: string,
+    options: { deadlineAtMs?: number } = {}
   ): Promise<SentryEventSnapshot> {
     if (eventId !== "latest" && !/^[0-9a-f]{32}$/i.test(eventId)) {
       throw new SentryStateError("The Sentry event ID is invalid.")
@@ -353,7 +361,7 @@ export class SentryClient {
     url.searchParams.append("environment", this.config.sentryEnvironment)
     let raw: unknown
     try {
-      raw = await this.get(url)
+      raw = await this.get(url, options)
     } catch (error) {
       if (error instanceof ProviderError && error.status === 404) {
         throw new SentryStateError(
@@ -385,16 +393,28 @@ export class SentryClient {
 
   async verifyEvent(
     issueId: string,
-    eventId: string
+    eventId: string,
+    options: { deadlineAtMs?: number } = {}
   ): Promise<SentryInspection> {
-    const issue = await this.readIssue(issueId)
-    if (issue.status !== "unresolved") {
+    const initialIssue = await this.readIssue(issueId, options)
+    if (initialIssue.status !== "unresolved") {
       throw new SentryStateError(
         "The Sentry issue is no longer unresolved.",
         "conflict"
       )
     }
-    const event = await this.readEvent(issue, eventId)
+    const event = await this.readEvent(initialIssue, eventId, options)
+    const issue = await this.readIssue(issueId, options)
+    if (
+      issue.status !== "unresolved" ||
+      issue.projectId !== event.projectId ||
+      issue.issueId !== event.issueId
+    ) {
+      throw new SentryStateError(
+        "The Sentry issue is no longer unresolved or its identity changed.",
+        "conflict"
+      )
+    }
     return { issue, event }
   }
 }

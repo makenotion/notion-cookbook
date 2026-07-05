@@ -15,6 +15,9 @@ import type {
 } from "./sentry.js"
 import { SentryStateError } from "./sentry.js"
 
+const DECLARATION_TIMEOUT_MS = 45_000
+const RECONCILIATION_RESERVE_MS = 14_000
+
 export interface IssueView extends Record<string, JSONValue> {
   issueId: string
   shortId: string
@@ -90,6 +93,7 @@ interface Dependencies {
     "getDestination" | "findIncident" | "createIncident"
   >
   sleep?: (milliseconds: number) => Promise<void>
+  now?: () => number
 }
 
 function issueView(inspection: SentryInspection): IssueView {
@@ -146,17 +150,22 @@ function source(inspection: SentryInspection): DeclarationResult["source"] {
 
 export function incidentKey(
   config: WorkerConfig,
-  inspection: SentryInspection
+  identity: { issueId: string; eventId: string }
 ): string {
+  const sentryUrl = new URL(config.sentryBaseUrl)
+  const sentryInstance =
+    sentryUrl.hostname === "sentry.io" ||
+    sentryUrl.hostname.endsWith(".sentry.io")
+      ? "sentry-cloud"
+      : sentryUrl.origin
   const digest = createHash("sha256")
     .update(
       JSON.stringify({
-        version: 1,
-        sentryOrgSlug: config.sentryOrgSlug,
-        sentryProjectSlug: config.sentryProjectSlug,
-        environment: config.sentryEnvironment,
-        issueId: inspection.issue.issueId,
-        eventId: inspection.event.eventId,
+        version: 2,
+        sentryInstance,
+        issueId: identity.issueId,
+        eventId: identity.eventId.toLowerCase(),
+        pagerDutyBaseUrl: config.pagerDutyBaseUrl,
         pagerDutyServiceId: config.pagerDutyServiceId,
       })
     )
@@ -167,26 +176,31 @@ export function incidentKey(
 async function reconcileIncident(
   dependencies: Dependencies,
   key: string,
-  attempts: number
+  attempts: number,
+  deadlineAtMs: number
 ): Promise<PagerDutyIncident | null> {
   const sleep =
     dependencies.sleep ??
     ((milliseconds: number) =>
       new Promise<void>((resolve) => setTimeout(resolve, milliseconds)))
   const delays = [0, 500, 1_500]
+  const now = dependencies.now ?? Date.now
   let providerDelay = 0
   for (let attempt = 0; attempt < attempts; attempt++) {
     const delay = Math.max(delays[attempt] ?? 0, providerDelay)
+    if (now() + delay >= deadlineAtMs) return null
     if (delay > 0) await sleep(delay)
     providerDelay = 0
     try {
       const incident = await dependencies.pagerDuty.findIncident(key, {
         attempts: 1,
         timeoutMs: 3_000,
+        deadlineAtMs,
       })
       if (incident) return incident
     } catch (error) {
       if (!(error instanceof ProviderError)) throw error
+      if (!error.retryable) return null
       providerDelay = (error.retryAfterSeconds ?? 0) * 1_000
       if (providerDelay > 2_000) return null
       // A later bounded read may still establish the exact incident.
@@ -246,20 +260,23 @@ export async function inspectSentryIssue(
   let destination: PagerDutyDestination | null = null
   try {
     inspection = await dependencies.sentry.inspectIssue(reference)
-    destination = await dependencies.pagerDuty.getDestination()
     const existing = await dependencies.pagerDuty.findIncident(
-      incidentKey(config, inspection)
+      incidentKey(config, {
+        issueId: inspection.issue.issueId,
+        eventId: inspection.event.eventId,
+      })
     )
     if (existing) {
       return {
         status: "already_declared",
         issue: issueView(inspection),
         event: eventView(inspection),
-        destination: destinationView(destination),
+        destination: null,
         existingIncident: incidentView(existing),
         message: `This exact Sentry occurrence already has PagerDuty incident #${existing.incidentNumber}.`,
       }
     }
+    destination = await dependencies.pagerDuty.getDestination()
     if (inspection.issue.status !== "unresolved") {
       return {
         status: "ineligible",
@@ -338,14 +355,94 @@ export async function declareProductionIncident(
     )
   }
 
-  let inspection: SentryInspection
+  const now = dependencies.now ?? Date.now
+  const deadlineAtMs = now() + DECLARATION_TIMEOUT_MS
+  const writeDeadlineAtMs = deadlineAtMs - RECONCILIATION_RESERVE_MS
+  const preflightDeadlineAtMs = writeDeadlineAtMs - config.requestTimeoutMs
+  const key = incidentKey(config, input)
+  const requestedPriorityId = config.pagerDutyPriorityIds[input.severity]
+
+  let existing: PagerDutyIncident | null
+  try {
+    existing = await dependencies.pagerDuty.findIncident(key, {
+      deadlineAtMs: preflightDeadlineAtMs,
+    })
+  } catch (error) {
+    if (!(error instanceof ProviderError)) throw error
+    return declarationFailure("blocked", error.message)
+  }
+  if (existing) {
+    if (existing.priorityId !== requestedPriorityId) {
+      return {
+        ok: false,
+        status: "conflict",
+        changed: false,
+        source: null,
+        incident: incidentView(existing),
+        requestId: null,
+        message:
+          "This exact Sentry occurrence was already declared with a different PagerDuty priority.",
+      }
+    }
+    return {
+      ok: true,
+      status: "already_declared",
+      changed: false,
+      source: null,
+      incident: incidentView(existing),
+      requestId: null,
+      message: `PagerDuty incident #${existing.incidentNumber} already represents this exact Sentry occurrence.`,
+    }
+  }
+
+  if (now() >= preflightDeadlineAtMs) {
+    return declarationFailure(
+      "blocked",
+      "The declaration safety checks did not finish in time. No PagerDuty write was attempted."
+    )
+  }
+
   let destination: PagerDutyDestination
+  try {
+    destination = await dependencies.pagerDuty.getDestination({
+      deadlineAtMs: preflightDeadlineAtMs,
+    })
+  } catch (error) {
+    const message = knownReadFailure(error)
+    if (!message) throw error
+    return declarationFailure("blocked", message)
+  }
+
+  if (!destination.hasOnCall) {
+    return declarationFailure(
+      "blocked",
+      "The configured PagerDuty service has no current on-call coverage."
+    )
+  }
+  const priority = destination.priorities.find(
+    (candidate) => candidate.severity === input.severity
+  )
+  if (!priority) {
+    return declarationFailure(
+      "blocked",
+      "The requested severity is not configured in PagerDuty."
+    )
+  }
+
+  if (now() >= preflightDeadlineAtMs) {
+    return declarationFailure(
+      "blocked",
+      "The declaration safety checks did not finish in time. No PagerDuty write was attempted."
+    )
+  }
+
+  let inspection: SentryInspection
   try {
     inspection = await dependencies.sentry.verifyEvent(
       input.issueId,
-      input.eventId
+      input.eventId,
+      { deadlineAtMs: preflightDeadlineAtMs }
     )
-    destination = await dependencies.pagerDuty.getDestination()
   } catch (error) {
     const message = knownReadFailure(error)
     if (!message) throw error
@@ -357,54 +454,12 @@ export async function declareProductionIncident(
     )
   }
 
-  if (!destination.hasOnCall) {
+  if (now() >= preflightDeadlineAtMs) {
     return declarationFailure(
       "blocked",
-      "The configured PagerDuty service has no current on-call coverage.",
+      "The final Sentry check did not finish in time. No PagerDuty write was attempted.",
       inspection
     )
-  }
-  const priority = destination.priorities.find(
-    (candidate) => candidate.severity === input.severity
-  )
-  if (!priority) {
-    return declarationFailure(
-      "blocked",
-      "The requested severity is not configured in PagerDuty.",
-      inspection
-    )
-  }
-
-  const key = incidentKey(config, inspection)
-  let existing: PagerDutyIncident | null
-  try {
-    existing = await dependencies.pagerDuty.findIncident(key)
-  } catch (error) {
-    if (!(error instanceof ProviderError)) throw error
-    return declarationFailure("blocked", error.message, inspection)
-  }
-  if (existing) {
-    if (existing.priorityId !== priority.priorityId) {
-      return {
-        ok: false,
-        status: "conflict",
-        changed: false,
-        source: source(inspection),
-        incident: incidentView(existing),
-        requestId: null,
-        message:
-          "This exact Sentry occurrence was already declared with a different PagerDuty priority.",
-      }
-    }
-    return {
-      ok: true,
-      status: "already_declared",
-      changed: false,
-      source: source(inspection),
-      incident: incidentView(existing),
-      requestId: null,
-      message: `PagerDuty incident #${existing.incidentNumber} already represents this exact Sentry occurrence.`,
-    }
   }
 
   const severityLabel = input.severity.replace("sev", "SEV-")
@@ -421,12 +476,15 @@ export async function declareProductionIncident(
   ].join("\n")
 
   try {
-    const created = await dependencies.pagerDuty.createIncident({
-      incidentKey: key,
-      priorityId: priority.priorityId,
-      title,
-      details,
-    })
+    const created = await dependencies.pagerDuty.createIncident(
+      {
+        incidentKey: key,
+        priorityId: priority.priorityId,
+        title,
+        details,
+      },
+      { deadlineAtMs: writeDeadlineAtMs }
+    )
     return {
       ok: true,
       status: "declared",
@@ -441,7 +499,8 @@ export async function declareProductionIncident(
     const reconciled = await reconcileIncident(
       dependencies,
       key,
-      error.mutationOutcome === "unknown" ? 3 : 1
+      error.mutationOutcome === "unknown" ? 3 : 1,
+      deadlineAtMs
     )
     if (reconciled) {
       if (reconciled.priorityId !== priority.priorityId) {

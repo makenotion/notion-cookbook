@@ -154,7 +154,11 @@ export class PagerDutyClient {
 
   private async get(
     url: URL,
-    options: { attempts?: number; timeoutMs?: number } = {}
+    options: {
+      attempts?: number
+      timeoutMs?: number
+      deadlineAtMs?: number
+    } = {}
   ): Promise<unknown> {
     return (
       await getJson({
@@ -164,16 +168,20 @@ export class PagerDutyClient {
         fetch: this.fetch,
         timeoutMs: options.timeoutMs ?? this.config.requestTimeoutMs,
         attempts: options.attempts,
+        deadlineAtMs: options.deadlineAtMs,
+        now: this.now,
       })
     ).data
   }
 
-  async getDestination(): Promise<PagerDutyDestination> {
+  async getDestination(
+    options: { deadlineAtMs?: number } = {}
+  ): Promise<PagerDutyDestination> {
     const serviceUrl = new URL(
       `/services/${encodeURIComponent(this.config.pagerDutyServiceId)}`,
       this.config.pagerDutyBaseUrl
     )
-    const serviceResponse = object(await this.get(serviceUrl))
+    const serviceResponse = object(await this.get(serviceUrl, options))
     const service = object(serviceResponse.service)
     const escalationPolicy = object(service.escalation_policy)
     const serviceId = string(service.id, 100)
@@ -195,7 +203,7 @@ export class PagerDutyClient {
     const prioritiesUrl = new URL("/priorities", this.config.pagerDutyBaseUrl)
     prioritiesUrl.searchParams.set("limit", "100")
     prioritiesUrl.searchParams.set("offset", "0")
-    const priorityResponse = object(await this.get(prioritiesUrl))
+    const priorityResponse = object(await this.get(prioritiesUrl, options))
     if (
       !Array.isArray(priorityResponse.priorities) ||
       priorityResponse.priorities.length > 100 ||
@@ -235,7 +243,7 @@ export class PagerDutyClient {
       "escalation_policy_ids[]",
       string(escalationPolicy.id, 100)
     )
-    const onCallsResponse = object(await this.get(onCallsUrl))
+    const onCallsResponse = object(await this.get(onCallsUrl, options))
     if (
       !Array.isArray(onCallsResponse.oncalls) ||
       onCallsResponse.oncalls.length > 1
@@ -267,7 +275,11 @@ export class PagerDutyClient {
 
   async findIncident(
     incidentKey: string,
-    options: { attempts?: number; timeoutMs?: number } = {}
+    options: {
+      attempts?: number
+      timeoutMs?: number
+      deadlineAtMs?: number
+    } = {}
   ): Promise<PagerDutyIncident | null> {
     const url = new URL("/incidents", this.config.pagerDutyBaseUrl)
     url.searchParams.set("date_range", "all")
@@ -299,12 +311,18 @@ export class PagerDutyClient {
         )
   }
 
-  async createIncident(input: {
-    incidentKey: string
-    priorityId: string
-    title: string
-    details: string
-  }): Promise<{ incident: PagerDutyIncident; requestId: string | null }> {
+  async createIncident(
+    input: {
+      incidentKey: string
+      priorityId: string
+      title: string
+      details: string
+    },
+    options: { deadlineAtMs?: number } = {}
+  ): Promise<{
+    incident: PagerDutyIncident
+    requestId: string | null
+  }> {
     const url = new URL("/incidents", this.config.pagerDutyBaseUrl)
     const response = await postJsonOnce({
       provider: "PagerDuty",
@@ -326,6 +344,7 @@ export class PagerDutyClient {
       fetch: this.fetch,
       timeoutMs: this.config.requestTimeoutMs,
       now: this.now,
+      deadlineAtMs: options.deadlineAtMs,
     })
     try {
       const envelope = object(response.data)

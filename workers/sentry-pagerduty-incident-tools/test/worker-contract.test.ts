@@ -49,6 +49,7 @@ test("manifest exposes bounded discovery, inspection, and one write", () => {
   assert.deepEqual(inspect.schema.required, ["issueReference"])
   assert.match(inspect.description, /short ID or canonical URL/)
   assert.match(inspect.description, /never infer severity/)
+  assert.match(inspect.description, /when a new declaration is eligible/)
 
   const declare = tool("declareProductionIncident")
   assert.equal(declare.hints.readOnlyHint, false)
@@ -70,5 +71,7 @@ test("manifest exposes bounded discovery, inspection, and one write", () => {
     { type: "null" },
   ])
   assert.match(declare.description, /explicitly confirms/)
-  assert.match(declare.description, /configured incident-created workflow/)
+  assert.match(declare.description, /workflow may run independently/)
+  assert.match(declare.description, /does not verify workflow execution/)
+  assert.doesNotMatch(declare.description, /PagerDuty runs its configured/)
 })
