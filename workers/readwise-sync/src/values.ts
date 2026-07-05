@@ -1,9 +1,13 @@
+import { createHash } from "node:crypto"
+
 import * as Builder from "@notionhq/workers/builder"
 
 export const MAX_TEXT_PROPERTY_CHARACTERS = 1_900
 export const MAX_TITLE_CHARACTERS = 240
 export const MAX_MULTI_SELECT_OPTIONS = 100
 export const MAX_SELECT_NAME_CHARACTERS = 100
+export const TAG_HASH_HEX_CHARACTERS = 12
+export const TAG_OVERFLOW_SENTINEL = "⚠ More tags omitted"
 
 export function trimmed(value: string | null | undefined): string | undefined {
   const result = value?.trim()
@@ -35,6 +39,29 @@ export function selectName(
   return boundedText(value, MAX_SELECT_NAME_CHARACTERS)
 }
 
+function boundedTagName(value: string): string {
+  const characters = [...value]
+  if (
+    characters.length <= MAX_SELECT_NAME_CHARACTERS &&
+    value.length <= MAX_SELECT_NAME_CHARACTERS
+  ) {
+    return value
+  }
+
+  const hash = createHash("sha256")
+    .update(value)
+    .digest("hex")
+    .slice(0, TAG_HASH_HEX_CHARACTERS)
+  const suffix = `…#${hash}`
+  const prefixBudget = MAX_SELECT_NAME_CHARACTERS - suffix.length
+  let prefix = ""
+  for (const character of characters) {
+    if (prefix.length + character.length > prefixBudget) break
+    prefix += character
+  }
+  return `${prefix}${suffix}`
+}
+
 export function uniqueSelectNames(values: Array<string | null | undefined>) {
   const names = values
     .map((value) =>
@@ -45,22 +72,18 @@ export function uniqueSelectNames(values: Array<string | null | undefined>) {
         .replace(/,/gu, "，")
     )
     .filter((value): value is string => Boolean(value))
-  for (const name of names) {
-    if ([...name].length > MAX_SELECT_NAME_CHARACTERS) {
-      throw new Error(
-        `Readwise tag names cannot exceed ${MAX_SELECT_NAME_CHARACTERS} characters in Notion.`
-      )
-    }
-  }
+    .map(boundedTagName)
   const unique = [...new Set(names)].sort((left, right) =>
     left.localeCompare(right)
   )
-  if (unique.length > MAX_MULTI_SELECT_OPTIONS) {
-    throw new Error(
-      `Readwise records cannot sync more than ${MAX_MULTI_SELECT_OPTIONS} unique tags without loss.`
-    )
-  }
-  return unique
+  if (unique.length <= MAX_MULTI_SELECT_OPTIONS) return unique
+
+  const retained = unique
+    .filter((name) => name !== TAG_OVERFLOW_SENTINEL)
+    .slice(0, MAX_MULTI_SELECT_OPTIONS - 1)
+  return [...retained, TAG_OVERFLOW_SENTINEL].sort((left, right) =>
+    left.localeCompare(right)
+  )
 }
 
 export function readerTagNames(
@@ -108,6 +131,7 @@ export function normalizedCategory(
     books: "book",
     emails: "email",
     podcasts: "podcast",
+    supplementals: "supplemental",
     tweets: "tweet",
   }
   return singular[category] ?? category

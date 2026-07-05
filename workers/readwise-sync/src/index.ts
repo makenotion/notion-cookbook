@@ -26,9 +26,9 @@ import {
 
 const worker = new Worker()
 
-// Reader LIST is documented at 20 requests/minute per token. Both syncs share
-// a conservative 15/minute budget; provider 429s also become retryable
-// Workers RateLimitError values in the client.
+// Reader LIST and Readwise Books LIST are documented at 20 requests/minute per
+// token. Both syncs share a conservative 15/minute budget; provider 429s also
+// become retryable Workers RateLimitError values in the client.
 const pacer = worker.pacer("readwise", {
   allowedRequests: 15,
   intervalMs: 60_000,

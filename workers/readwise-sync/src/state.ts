@@ -1,10 +1,9 @@
 // Incremental state is plain JSON. A cycle pins one updatedAfter/checkpoint
 // window until its traversal finishes, then overlaps the next by five minutes.
-// Sources keep the same window while moving from Readwise Export to Reader.
+// Sources keep the same window while moving through Books, Export, and Reader.
 
 import { createHash } from "node:crypto"
 
-export const SYNC_STATE_VERSION = 4
 export const INITIAL_UPDATED_AFTER = new Date(0).toISOString()
 export const CONSISTENCY_BUFFER_MS = 60_000
 export const WATERMARK_OVERLAP_MS = 5 * 60_000
@@ -13,13 +12,11 @@ export const MAX_CURSOR_LENGTH = 4_096
 export const MAX_SAFE_SYNC_STATE_BYTES = 240 * 1_024
 export const MAX_PAGINATION_RESTARTS = 3
 
-// Version 3 incremental cursors share this shape. Accept them once so existing
-// deployments can upgrade without replaying their full archives.
-const LEGACY_SYNC_STATE_VERSION = 3
 const CURSOR_FINGERPRINT_BYTES = 12
+const CREDENTIAL_FINGERPRINT_PATTERN = /^[0-9a-f]{64}$/
 const textEncoder = new TextEncoder()
 
-export type SyncPhase = "reader" | "readwise"
+export type SyncPhase = "books" | "reader" | "readwise"
 
 export type CursorGuardState = {
   pageCursor?: string
@@ -28,7 +25,7 @@ export type CursorGuardState = {
 }
 
 export type IncrementalSyncState = CursorGuardState & {
-  stateVersion: typeof SYNC_STATE_VERSION | typeof LEGACY_SYNC_STATE_VERSION
+  credentialFingerprint: string
   updatedAfter: string
   checkpoint?: string
   paginationRestartCount?: number
@@ -36,6 +33,7 @@ export type IncrementalSyncState = CursorGuardState & {
 
 export type SourcesIncrementalSyncState = IncrementalSyncState & {
   phase?: SyncPhase
+  booksExpectedCount?: number
 }
 
 export class PaginationInstabilityError extends Error {
@@ -52,16 +50,37 @@ function isoDateTime(value: unknown, label: string): string {
   return value
 }
 
-function validVersion(state: { stateVersion?: unknown } | undefined) {
-  if (
-    state &&
-    state.stateVersion !== SYNC_STATE_VERSION &&
-    state.stateVersion !== LEGACY_SYNC_STATE_VERSION
-  ) {
+export function isCredentialFingerprint(value: unknown): value is string {
+  return typeof value === "string" && CREDENTIAL_FINGERPRINT_PATTERN.test(value)
+}
+
+function validCredentialFingerprint(value: unknown, resource: string): string {
+  if (!isCredentialFingerprint(value)) {
     throw new Error(
-      "Readwise sync state is incompatible; reset the sync state before retrying."
+      `Readwise ${resource} state is missing its credential binding; reset this sync's state before retrying.`
     )
   }
+  return value
+}
+
+export function boundCredentialFingerprint(
+  state: { credentialFingerprint?: unknown } | undefined,
+  currentFingerprint: string,
+  resource: string
+): string {
+  const current = validCredentialFingerprint(currentFingerprint, resource)
+  if (!state) return current
+
+  const persisted = validCredentialFingerprint(
+    state.credentialFingerprint,
+    resource
+  )
+  if (persisted !== current) {
+    throw new Error(
+      `Readwise credentials changed for ${resource}. Restore the configured token or deploy a separate Worker for the new token.`
+    )
+  }
+  return current
 }
 
 function validPageCursor(value: unknown): string | undefined {
@@ -172,10 +191,20 @@ export function nextPaginationRestartCount(
 
 export function incrementalWindow(
   state: IncrementalSyncState | undefined,
+  currentFingerprint: string,
   now = Date.now()
-): { updatedAfter: string; checkpoint: string; pageCursor?: string } {
-  validVersion(state)
+): {
+  credentialFingerprint: string
+  updatedAfter: string
+  checkpoint: string
+  pageCursor?: string
+} {
   if (state) boundedSyncState(state, "incremental")
+  const credentialFingerprint = boundCredentialFingerprint(
+    state,
+    currentFingerprint,
+    "incremental"
+  )
   paginationRestartCount(state?.paginationRestartCount)
   if (!Number.isFinite(now) || now < 0) {
     throw new Error("Readwise sync clock is invalid.")
@@ -199,7 +228,12 @@ export function incrementalWindow(
   }
   decodedCursorFingerprints(state)
 
-  return { updatedAfter, checkpoint, ...(pageCursor ? { pageCursor } : {}) }
+  return {
+    credentialFingerprint,
+    updatedAfter,
+    checkpoint,
+    ...(pageCursor ? { pageCursor } : {}),
+  }
 }
 
 export function nextCursorState(
@@ -237,11 +271,16 @@ export function nextCursorState(
 }
 
 export function completedIncrementalState(
-  checkpoint: string
+  checkpoint: string,
+  credentialFingerprint: string
 ): IncrementalSyncState {
+  const boundFingerprint = validCredentialFingerprint(
+    credentialFingerprint,
+    "incremental"
+  )
   const parsed = Date.parse(isoDateTime(checkpoint, "checkpoint"))
   return {
-    stateVersion: SYNC_STATE_VERSION,
+    credentialFingerprint: boundFingerprint,
     updatedAfter: new Date(
       Math.max(0, parsed - WATERMARK_OVERLAP_MS)
     ).toISOString(),
@@ -249,8 +288,8 @@ export function completedIncrementalState(
 }
 
 export function phase(value: unknown): SyncPhase {
-  if (value === undefined) return "readwise"
-  if (value !== "reader" && value !== "readwise") {
+  if (value === undefined) return "books"
+  if (value !== "books" && value !== "reader" && value !== "readwise") {
     throw new Error("Readwise source sync state has an invalid phase.")
   }
   return value

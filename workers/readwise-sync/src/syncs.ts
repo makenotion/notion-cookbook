@@ -4,10 +4,13 @@ import type {
   ReadwiseClient,
   ReadwiseSource,
 } from "./readwise.js"
-import { exportSourceToChange, readerDocumentToChange } from "./sources.js"
+import {
+  exportSourceToChange,
+  readerDocumentToChange,
+  readwiseBookToChange,
+} from "./sources.js"
 import {
   INITIAL_UPDATED_AFTER,
-  SYNC_STATE_VERSION,
   PaginationInstabilityError,
   boundedSyncState,
   completedIncrementalState,
@@ -24,6 +27,12 @@ import {
 
 type SourceChange = NonNullable<ReturnType<typeof exportSourceToChange>>
 type HighlightChange = ReturnType<typeof highlightToChange>
+
+type SourcePage = {
+  changes: SourceChange[]
+  nextPageCursor: string | undefined
+  booksCount?: number
+}
 
 function defined<T>(value: T | undefined): value is T {
   return value !== undefined
@@ -74,17 +83,55 @@ function cursorProgress(
   }
 }
 
+function booksExpectedCount(value: unknown): number | undefined {
+  if (value === undefined) return undefined
+  if (!Number.isSafeInteger(value) || Number(value) < 0) {
+    throw new Error("Readwise source sync state has an invalid Books count.")
+  }
+  return Number(value)
+}
+
 async function sourcePage(
   client: ReadwiseClient,
   currentPhase: SyncPhase,
   options: {
     updatedAfter: string
+    updatedBefore: string
     pageCursor?: string
     initialBackfill: boolean
   }
-): Promise<{ changes: SourceChange[]; nextPageCursor: string | undefined }> {
+): Promise<SourcePage> {
+  if (currentPhase === "books") {
+    const pageNumber = options.pageCursor
+      ? Number(options.pageCursor)
+      : undefined
+    if (
+      pageNumber !== undefined &&
+      (!Number.isSafeInteger(pageNumber) || pageNumber < 1)
+    ) {
+      throw new Error("Readwise source sync state has an invalid book page.")
+    }
+    const page = await client.listReadwiseBooks({
+      updatedAfter: options.updatedAfter,
+      updatedBefore: options.updatedBefore,
+      ...(pageNumber !== undefined ? { page: pageNumber } : {}),
+    })
+    return {
+      changes: uniqueChanges(
+        page.books.map(readwiseBookToChange).filter(defined),
+        "book page"
+      ),
+      nextPageCursor:
+        page.nextPage !== undefined ? String(page.nextPage) : undefined,
+      booksCount: page.count,
+    }
+  }
+
   if (currentPhase === "reader") {
-    const page = await client.listReaderDocuments(options)
+    const page = await client.listReaderDocuments({
+      updatedAfter: options.updatedAfter,
+      ...(options.pageCursor ? { pageCursor: options.pageCursor } : {}),
+    })
     return {
       changes: uniqueChanges(
         page.documents
@@ -97,7 +144,8 @@ async function sourcePage(
   }
 
   const page = await client.exportHighlights({
-    ...options,
+    updatedAfter: options.updatedAfter,
+    ...(options.pageCursor ? { pageCursor: options.pageCursor } : {}),
     // Historical tombstones would create blank archive rows for records this
     // deployment never imported. Start requesting them after the backfill.
     includeDeleted: !options.initialBackfill,
@@ -105,11 +153,7 @@ async function sourcePage(
   return {
     changes: uniqueChanges(
       page.sources
-        .map((source: ReadwiseSource) =>
-          exportSourceToChange(source, {
-            initialBackfill: options.initialBackfill,
-          })
-        )
+        .map((source: ReadwiseSource) => exportSourceToChange(source))
         .filter(defined),
       "source export page"
     ),
@@ -122,13 +166,68 @@ export async function runSourcesIncrementalPage(
   state: SourcesIncrementalSyncState | undefined,
   now = Date.now()
 ) {
-  const window = incrementalWindow(state, now)
+  const window = incrementalWindow(state, client.credentialFingerprint(), now)
   const currentPhase = phase(state?.phase)
-  const page = await sourcePage(client, currentPhase, {
-    updatedAfter: window.updatedAfter,
-    initialBackfill: window.updatedAfter === INITIAL_UPDATED_AFTER,
-    ...(window.pageCursor ? { pageCursor: window.pageCursor } : {}),
+  const expectedBooksCount = booksExpectedCount(state?.booksExpectedCount)
+  if (currentPhase !== "books" && expectedBooksCount !== undefined) {
+    throw new Error(
+      "Readwise source sync state retained a Books count in another phase."
+    )
+  }
+  if (
+    currentPhase === "books" &&
+    (window.pageCursor !== undefined) !== (expectedBooksCount !== undefined)
+  ) {
+    throw new Error(
+      "Readwise source sync state has incomplete Books pagination."
+    )
+  }
+
+  const restart = (restartCount: number) => ({
+    changes: [] as SourceChange[],
+    hasMore: true as const,
+    nextState: boundedSyncState(
+      {
+        credentialFingerprint: window.credentialFingerprint,
+        updatedAfter: window.updatedAfter,
+        checkpoint: window.checkpoint,
+        phase: currentPhase,
+        paginationRestartCount: restartCount,
+      } satisfies SourcesIncrementalSyncState,
+      "incremental sources"
+    ),
   })
+
+  let page: SourcePage
+  try {
+    page = await sourcePage(client, currentPhase, {
+      updatedAfter: window.updatedAfter,
+      updatedBefore: window.checkpoint,
+      initialBackfill: window.updatedAfter === INITIAL_UPDATED_AFTER,
+      ...(window.pageCursor ? { pageCursor: window.pageCursor } : {}),
+    })
+  } catch (error) {
+    if (!(error instanceof PaginationInstabilityError)) throw error
+    return restart(
+      nextPaginationRestartCount(
+        state?.paginationRestartCount,
+        `${currentPhase} sources`
+      )
+    )
+  }
+
+  // Books uses offset pagination. Pinning the documented raw count catches a
+  // live-data shift that could otherwise move an unseen record onto an
+  // already-read page and permanently advance past its metadata update.
+  if (
+    currentPhase === "books" &&
+    expectedBooksCount !== undefined &&
+    page.booksCount !== expectedBooksCount
+  ) {
+    return restart(
+      nextPaginationRestartCount(state?.paginationRestartCount, "Books sources")
+    )
+  }
 
   if (page.nextPageCursor) {
     const progress = cursorProgress(
@@ -137,20 +236,7 @@ export async function runSourcesIncrementalPage(
       `${currentPhase} sources`
     )
     if (progress.kind === "restart") {
-      return {
-        changes: [] as SourceChange[],
-        hasMore: true,
-        nextState: boundedSyncState(
-          {
-            stateVersion: SYNC_STATE_VERSION,
-            updatedAfter: window.updatedAfter,
-            checkpoint: window.checkpoint,
-            phase: currentPhase,
-            paginationRestartCount: progress.restartCount,
-          } satisfies SourcesIncrementalSyncState,
-          "incremental sources"
-        ),
-      }
+      return restart(progress.restartCount)
     }
 
     return {
@@ -158,10 +244,13 @@ export async function runSourcesIncrementalPage(
       hasMore: true,
       nextState: boundedSyncState(
         {
-          stateVersion: SYNC_STATE_VERSION,
+          credentialFingerprint: window.credentialFingerprint,
           updatedAfter: window.updatedAfter,
           checkpoint: window.checkpoint,
           phase: currentPhase,
+          ...(currentPhase === "books"
+            ? { booksExpectedCount: page.booksCount }
+            : {}),
           ...(progress.restartCount > 0
             ? { paginationRestartCount: progress.restartCount }
             : {}),
@@ -172,16 +261,16 @@ export async function runSourcesIncrementalPage(
     }
   }
 
-  if (currentPhase === "readwise") {
+  if (currentPhase === "books" || currentPhase === "readwise") {
     return {
       changes: page.changes,
       hasMore: true,
       nextState: boundedSyncState(
         {
-          stateVersion: SYNC_STATE_VERSION,
+          credentialFingerprint: window.credentialFingerprint,
           updatedAfter: window.updatedAfter,
           checkpoint: window.checkpoint,
-          phase: "reader",
+          phase: currentPhase === "books" ? "readwise" : "reader",
         } satisfies SourcesIncrementalSyncState,
         "incremental sources"
       ),
@@ -192,7 +281,10 @@ export async function runSourcesIncrementalPage(
     changes: page.changes,
     hasMore: false,
     nextState: boundedSyncState(
-      completedIncrementalState(window.checkpoint),
+      completedIncrementalState(
+        window.checkpoint,
+        window.credentialFingerprint
+      ),
       "incremental sources"
     ),
   }
@@ -212,7 +304,7 @@ export async function runHighlightsIncrementalPage(
   state: IncrementalSyncState | undefined,
   now = Date.now()
 ) {
-  const window = incrementalWindow(state, now)
+  const window = incrementalWindow(state, client.credentialFingerprint(), now)
   const page = await client.exportHighlights({
     updatedAfter: window.updatedAfter,
     ...(window.pageCursor ? { pageCursor: window.pageCursor } : {}),
@@ -228,7 +320,7 @@ export async function runHighlightsIncrementalPage(
         hasMore: true,
         nextState: boundedSyncState(
           {
-            stateVersion: SYNC_STATE_VERSION,
+            credentialFingerprint: window.credentialFingerprint,
             updatedAfter: window.updatedAfter,
             checkpoint: window.checkpoint,
             paginationRestartCount: progress.restartCount,
@@ -243,7 +335,7 @@ export async function runHighlightsIncrementalPage(
       hasMore: true,
       nextState: boundedSyncState(
         {
-          stateVersion: SYNC_STATE_VERSION,
+          credentialFingerprint: window.credentialFingerprint,
           updatedAfter: window.updatedAfter,
           checkpoint: window.checkpoint,
           ...(progress.restartCount > 0
@@ -260,7 +352,10 @@ export async function runHighlightsIncrementalPage(
     changes,
     hasMore: false,
     nextState: boundedSyncState(
-      completedIncrementalState(window.checkpoint),
+      completedIncrementalState(
+        window.checkpoint,
+        window.credentialFingerprint
+      ),
       "incremental highlights"
     ),
   }

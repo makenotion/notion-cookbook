@@ -1,10 +1,13 @@
-// Typed, read-only clients for Reader's document list and Readwise's highlight
-// export. Each method fetches exactly one provider page; sync executors own the
-// opaque pageCursor and durable checkpoint transitions.
+// Typed, read-only clients for Reader documents, Readwise books, and Readwise
+// highlight export. Each method fetches exactly one provider page; sync
+// executors own pagination and durable checkpoint transitions.
+
+import { createHash } from "node:crypto"
 
 import { RateLimitError } from "@notionhq/workers"
 
 export const READER_PAGE_SIZE = 100
+export const READWISE_BOOK_PAGE_SIZE = 1_000
 export const REQUEST_TIMEOUT_MS = 30_000
 export const MAX_RESPONSE_BYTES = 16 * 1024 * 1024
 const DEFAULT_RETRY_AFTER_SECONDS = 60
@@ -55,17 +58,24 @@ export type ReadwiseSource = {
   is_deleted: boolean
   title: string | null
   readable_title: string | null
-  author: string | null
   source: string
-  unique_url: string | null
-  book_tags: ReadwiseTag[]
-  category: string | null
-  document_note: string | null
   summary: string | null
-  readwise_url: string | null
-  source_url: string | null
   external_id: string | null
   highlights: ReadwiseHighlight[]
+}
+
+export type ReadwiseBook = {
+  id: string
+  title: string | null
+  author: string | null
+  category: string | null
+  source: string
+  num_highlights: number
+  updated: string
+  tags: ReadwiseTag[]
+  document_note: string | null
+  highlights_url: string | null
+  source_url: string | null
 }
 
 export type ReaderDocumentPage = {
@@ -78,11 +88,23 @@ export type ReadwiseExportPage = {
   nextPageCursor: string | undefined
 }
 
+export type ReadwiseBookPage = {
+  books: ReadwiseBook[]
+  count: number
+  nextPage: number | undefined
+}
+
 export type ReadwiseClient = {
+  credentialFingerprint(): string
   listReaderDocuments(options: {
     updatedAfter?: string
     pageCursor?: string
   }): Promise<ReaderDocumentPage>
+  listReadwiseBooks(options: {
+    updatedAfter?: string
+    updatedBefore?: string
+    page?: number
+  }): Promise<ReadwiseBookPage>
   exportHighlights(options: {
     updatedAfter?: string
     pageCursor?: string
@@ -106,6 +128,15 @@ function requiredToken(): string {
   const token = process.env.READWISE_ACCESS_TOKEN?.trim()
   if (!token) throw new Error("READWISE_ACCESS_TOKEN is not set.")
   return token
+}
+
+export function credentialFingerprintForToken(token: string): string {
+  const normalized = token.trim()
+  if (!normalized) throw new Error("READWISE_ACCESS_TOKEN is not set.")
+  return createHash("sha256")
+    .update("notion-readwise-worker\0")
+    .update(normalized)
+    .digest("hex")
 }
 
 function record(value: unknown, label: string): Record<string, unknown> {
@@ -149,10 +180,25 @@ function nullableNumber(value: unknown, label: string): number | null {
   return value
 }
 
+function nonnegativeInteger(value: unknown, label: string): number {
+  if (!Number.isSafeInteger(value) || Number(value) < 0) {
+    throw new Error(`Readwise ${label} must be a non-negative integer.`)
+  }
+  return Number(value)
+}
+
 function nullableDate(value: unknown, label: string): string | null {
   const date = nullableString(value, label)
   if (date !== null && (!date.trim() || !Number.isFinite(Date.parse(date)))) {
     throw new Error(`Readwise ${label} must be a valid date or null.`)
+  }
+  return date
+}
+
+function requiredDate(value: unknown, label: string): string {
+  const date = requiredString(value, label)
+  if (!Number.isFinite(Date.parse(date))) {
+    throw new Error(`Readwise ${label} must be a valid date.`)
   }
   return date
 }
@@ -366,15 +412,8 @@ function parseSource(value: unknown): ReadwiseSource {
         item.readable_title,
         "source readable_title"
       ),
-      author: null,
       source,
-      unique_url: null,
-      book_tags: [],
-      category: null,
-      document_note: null,
       summary: null,
-      readwise_url: null,
-      source_url: null,
       external_id: externalId,
       highlights: sourceHighlights,
     }
@@ -388,19 +427,38 @@ function parseSource(value: unknown): ReadwiseSource {
       item.readable_title,
       "source readable_title"
     ),
-    author: nullableString(item.author, "source author"),
     source,
-    unique_url: nullableString(item.unique_url, "source unique_url"),
-    book_tags: tags(item.book_tags, "source tags"),
-    category: nullableString(item.category, "source category"),
-    document_note: nullableString(item.document_note, "source document_note"),
     summary: nullableString(item.summary, "source summary"),
-    readwise_url: nullableString(item.readwise_url, "source readwise_url"),
-    source_url: nullableString(item.source_url, "source source_url"),
     external_id: externalId,
     highlights: array(item.highlights, "source highlights").map((highlight) =>
       parseHighlight(highlight)
     ),
+  }
+}
+
+function parseBook(value: unknown): ReadwiseBook {
+  const item = record(value, "book")
+  return {
+    id: numericIdentifier(item.id, "book"),
+    title: optionalNullableString(item.title, "book title"),
+    author: optionalNullableString(item.author, "book author"),
+    category: optionalNullableString(item.category, "book category"),
+    source: requiredString(item.source, "book source"),
+    num_highlights: nonnegativeInteger(
+      item.num_highlights,
+      "book num_highlights"
+    ),
+    updated: requiredDate(item.updated, "book updated"),
+    tags: tags(item.tags, "book tags"),
+    document_note: optionalNullableString(
+      item.document_note,
+      "book document_note"
+    ),
+    highlights_url: optionalNullableString(
+      item.highlights_url,
+      "book highlights_url"
+    ),
+    source_url: optionalNullableString(item.source_url, "book source_url"),
   }
 }
 
@@ -412,6 +470,38 @@ function parseCursor(value: unknown, label: string): string | undefined {
     )
   }
   return value
+}
+
+function positivePage(value: unknown, label: string): number {
+  if (!Number.isSafeInteger(value) || Number(value) < 1) {
+    throw new Error(`Readwise ${label} must be a positive page number.`)
+  }
+  return Number(value)
+}
+
+function parseNextBookPage(value: unknown): number | undefined {
+  if (value === null) return undefined
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(
+      "Readwise book page has an invalid next URL; expected null or a Readwise URL."
+    )
+  }
+
+  let next: URL
+  try {
+    next = new URL(value)
+  } catch {
+    throw new Error("Readwise book page returned an invalid next URL.")
+  }
+  if (
+    next.protocol !== "https:" ||
+    next.hostname !== "readwise.io" ||
+    next.pathname !== "/api/v2/books/"
+  ) {
+    throw new Error("Readwise book page returned an unexpected next URL.")
+  }
+
+  return positivePage(Number(next.searchParams.get("page")), "next page")
 }
 
 function parseJson(text: string, label: string): unknown {
@@ -523,6 +613,10 @@ export function createReadwiseClient(
   }
 
   return {
+    credentialFingerprint() {
+      return credentialFingerprintForToken(requiredToken())
+    },
+
     async listReaderDocuments({ updatedAfter, pageCursor }) {
       const url = new URL("https://readwise.io/api/v3/list/")
       url.searchParams.set("limit", String(READER_PAGE_SIZE))
@@ -538,6 +632,22 @@ export function createReadwiseClient(
           body.nextPageCursor,
           "Reader document page"
         ),
+      }
+    },
+
+    async listReadwiseBooks({ updatedAfter, updatedBefore, page = 1 }) {
+      const currentPage = positivePage(page, "book page")
+      const url = new URL("https://readwise.io/api/v2/books/")
+      url.searchParams.set("page_size", String(READWISE_BOOK_PAGE_SIZE))
+      url.searchParams.set("page", String(currentPage))
+      if (updatedAfter) url.searchParams.set("updated__gt", updatedAfter)
+      if (updatedBefore) url.searchParams.set("updated__lt", updatedBefore)
+
+      const body = await fetchObject(url, "listing Readwise books")
+      return {
+        books: array(body.results, "book results").map(parseBook),
+        count: nonnegativeInteger(body.count, "book count"),
+        nextPage: parseNextBookPage(body.next),
       }
     },
 

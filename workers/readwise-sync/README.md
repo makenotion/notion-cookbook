@@ -44,8 +44,9 @@ ntn workers env set READWISE_ACCESS_TOKEN=your-token
 Use `--name readwise-sync` only for the first deployment. After `workers.json`
 identifies it, update the Worker with `ntn workers deploy`.
 
-One deployment represents one Readwise account. You can rotate a token for that
-account, but use a separate deployment and databases for a different account.
+One deployment is bound to one Readwise access token. If the token changes, the
+Worker stops before reading or writing so two accounts cannot be mixed. Restore
+the original token or use a separate deployment and databases for the new one.
 
 Reading activity, highlights, notes, tags, titles, and URLs can reveal private
 interests or routines. Review both databases' Notion sharing settings before
@@ -135,12 +136,17 @@ Highlight Export remain in scope. Change the Reader location filter if your use
 case needs the complete feed. If an imported document is later moved back to
 Feed, its existing archive row stays unchanged rather than being deleted.
 
-## How two APIs become one archive
+## How Reader and Readwise become one archive
 
 The [Reader Document LIST API](https://readwise.io/reader_api) supplies
 top-level Reader documents, reading progress, location, and document metadata.
 Nested Reader highlights and notes are skipped because the Readwise export is
 the authoritative input for them.
+
+The [Readwise Books LIST API](https://readwise.io/api_deets) refreshes titles,
+authors, tags, and document notes for non-Reader sources with highlights. Reader
+books are skipped here because this endpoint does not include the Reader
+document ID needed to unify their rows.
 
 The [Readwise Highlight EXPORT API](https://readwise.io/api_deets#export)
 supplies source containers and highlights from every connected reading service.
@@ -159,9 +165,16 @@ Both capabilities are incremental. Stable keys keep updates and relations on
 the same rows when titles change. Supported removal signals update **Removed
 upstream**; neither capability deletes pages.
 
-Reader and Readwise can update the same unified Source. Each change patches only
-the properties it can safely supply, so a Readwise Export update cannot clear
-Reader queue fields such as **Location** or **Reading Progress**.
+Reader and Readwise can update the same Source. Reader owns its document and
+queue fields, Books LIST owns non-Reader metadata and links, and Highlight
+Export owns summaries and explicit removal signals. **Source** is intentionally
+shared so every API can keep the required title current and Export can name a
+relation target first observed through a Highlight. Other endpoint-owned fields
+remain untouched.
+
+Tags longer than Notion's option limit receive a stable hash suffix. Records
+with more than 100 tags retain 99 plus a visible **⚠ More tags omitted** marker
+instead of blocking later sync pages.
 
 The Worker updates only the properties declared in its schemas. It does not
 write page body content, user-added properties, views, formulas, or rollups.

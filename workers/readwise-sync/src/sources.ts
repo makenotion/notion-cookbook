@@ -1,13 +1,17 @@
-// One Sources database unifies top-level Reader documents with the source
-// containers returned by Readwise's highlight export. Reader-backed export
-// sources use the Reader document id, so highlights can relate to the richer
-// Reader row without relying on titles or URLs as identity.
+// One Sources database unifies top-level Reader documents with Readwise Books
+// metadata and Highlight Export containers. Reader-backed export sources use
+// the Reader document id, so highlights can relate to the richer Reader row
+// without relying on titles or URLs as identity.
 
 import { notionIcon, type SyncChangeUpsert } from "@notionhq/workers"
 import * as Builder from "@notionhq/workers/builder"
 import * as Schema from "@notionhq/workers/schema"
 
-import type { ReaderDocument, ReadwiseSource } from "./readwise.js"
+import type {
+  ReaderDocument,
+  ReadwiseBook,
+  ReadwiseSource,
+} from "./readwise.js"
 import {
   boundedText,
   dateValue,
@@ -74,8 +78,12 @@ export function readerSourceKey(documentId: string): string {
   return `reader:${id}`
 }
 
+function isReaderOrigin(source: string): boolean {
+  return source.trim().toLowerCase() === "reader"
+}
+
 function isReaderSource(source: ReadwiseSource): boolean {
-  return source.source.trim().toLowerCase() === "reader"
+  return isReaderOrigin(source.source)
 }
 
 export function readerExternalId(source: ReadwiseSource): string | undefined {
@@ -87,10 +95,6 @@ export function exportSourceKey(source: ReadwiseSource): string {
   return externalId
     ? readerSourceKey(externalId)
     : `readwise:${source.user_book_id}`
-}
-
-function readwiseTagNames(source: ReadwiseSource): string[] {
-  return uniqueSelectNames(source.book_tags.map((tag) => tag.name))
 }
 
 const READER_LOCATION_LABELS: Record<string, string> = {
@@ -179,9 +183,8 @@ function retainedSourcePatch(key: string, removed: boolean) {
 function readerExportPatch(source: ReadwiseSource, key: string) {
   const title = trimmed(source.readable_title) ?? trimmed(source.title)
   return {
-    // A newly highlighted Feed item may not have a Reader-created row. Always
-    // include a title so the Highlight relation has a useful target, while
-    // leaving Reader-owned queue fields untouched.
+    // Source is intentionally shared: Export must be able to name a highlighted
+    // Feed item that Reader import excludes. Queue fields remain Reader-owned.
     Source: Builder.title(
       displayTitle(title, `Untitled Readwise source ${source.user_book_id}`)
     ),
@@ -189,44 +192,62 @@ function readerExportPatch(source: ReadwiseSource, key: string) {
   }
 }
 
-function fullExportProperties(source: ReadwiseSource) {
-  const key = exportSourceKey(source)
+function nonReaderExportPatch(source: ReadwiseSource, key: string) {
   const summary = boundedText(source.summary)
-  const note = boundedText(source.document_note)
-  const category = categoryLabel(normalizedCategory(source.category))
   const title = trimmed(source.readable_title) ?? trimmed(source.title)
-  const originalUrl = validUrl(source.source_url) ?? validUrl(source.unique_url)
-  const readwiseUrl = validUrl(source.readwise_url)
 
   return {
+    // Source is intentionally shared: Export can observe a new highlight after
+    // this cycle's Books cutoff and must create a named relation target.
     Source: Builder.title(
       displayTitle(title, `Untitled Readwise source ${source.user_book_id}`)
     ),
-    Location: [],
-    "Reading Progress": [],
-    Category: category ? Builder.select(category) : [],
-    Author: trimmed(source.author)
-      ? Builder.richText(source.author!.trim())
-      : [],
-    Site: [],
-    Tags: Builder.multiSelect(...readwiseTagNames(source)),
     Summary: summary ? Builder.richText(summary) : [],
-    Note: note ? Builder.richText(note) : [],
-    Origin: Builder.select(sourceName(source.source)),
-    "Reading Time": [],
-    Saved: [],
-    "Last Opened": [],
-    Published: [],
-    "Open in Readwise": readwiseUrl ? Builder.url(readwiseUrl) : [],
-    "Original URL": originalUrl ? Builder.url(originalUrl) : [],
-    "Removed upstream": Builder.checkbox(false),
-    "Source Key": Builder.richText(key),
+    ...retainedSourcePatch(key, false),
+  }
+}
+
+export function readwiseBookToChange(
+  book: ReadwiseBook
+): SourceChange | undefined {
+  // Reader LIST has the stable document id needed for unified reader:<id>
+  // rows. Books LIST does not expose that id, so it only owns non-Reader
+  // source metadata.
+  const category = normalizedCategory(book.category)
+  if (isReaderOrigin(book.source) || book.num_highlights === 0) {
+    return undefined
+  }
+
+  const key = `readwise:${book.id}`
+  const categoryName = categoryLabel(category)
+  const note = boundedText(book.document_note)
+  const readwiseUrl = validUrl(book.highlights_url)
+  const originalUrl = validUrl(book.source_url)
+
+  return {
+    type: "upsert" as const,
+    key,
+    upstreamUpdatedAt: book.updated,
+    properties: sourcePropertyPatch({
+      Source: Builder.title(
+        displayTitle(book.title, `Untitled Readwise source ${book.id}`)
+      ),
+      Author: trimmed(book.author) ? Builder.richText(book.author!.trim()) : [],
+      Category: categoryName ? Builder.select(categoryName) : [],
+      Tags: Builder.multiSelect(
+        ...uniqueSelectNames(book.tags.map((tag) => tag.name))
+      ),
+      Note: note ? Builder.richText(note) : [],
+      Origin: Builder.select(sourceName(book.source)),
+      "Open in Readwise": readwiseUrl ? Builder.url(readwiseUrl) : [],
+      "Original URL": originalUrl ? Builder.url(originalUrl) : [],
+      "Source Key": Builder.richText(key),
+    }),
   }
 }
 
 export function exportSourceToChange(
-  source: ReadwiseSource,
-  options: { initialBackfill?: boolean } = {}
+  source: ReadwiseSource
 ): SourceChange | undefined {
   const key = exportSourceKey(source)
   const readerId = readerExternalId(source)
@@ -258,10 +279,9 @@ export function exportSourceToChange(
     }
   }
 
-  // On the initial full-history cycle, Reader's own full-history phase follows
-  // Export and deterministically restores its owned fields. Later Export-only
-  // deltas use a narrow patch so an unchanged Reader parent cannot be clobbered.
-  if (readerId && !options.initialBackfill) {
+  // Reader owns its queue metadata. Export updates only the intentionally
+  // shared title plus archive bookkeeping.
+  if (readerId) {
     return {
       type: "upsert" as const,
       key,
@@ -272,6 +292,6 @@ export function exportSourceToChange(
   return {
     type: "upsert" as const,
     key,
-    properties: fullExportProperties(source),
+    properties: sourcePropertyPatch(nonReaderExportPatch(source, key)),
   }
 }

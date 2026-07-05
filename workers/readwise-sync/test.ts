@@ -8,9 +8,12 @@ import { highlightSchema, highlightToChange } from "./src/highlights.js"
 import worker from "./src/index.js"
 import {
   MAX_RESPONSE_BYTES,
+  READWISE_BOOK_PAGE_SIZE,
   ReadwiseApiError,
+  credentialFingerprintForToken,
   createReadwiseClient,
   type ReaderDocumentPage,
+  type ReadwiseBookPage,
   type ReadwiseClient,
   type ReadwiseExportPage,
   type ReadwiseSource,
@@ -20,6 +23,7 @@ import {
   exportSourceToChange,
   readerDocumentToChange,
   readerSourceKey,
+  readwiseBookToChange,
   sourceSchema,
 } from "./src/sources.js"
 import {
@@ -28,7 +32,6 @@ import {
   MAX_CURSOR_LENGTH,
   MAX_PAGINATION_RESTARTS,
   MAX_SAFE_SYNC_STATE_BYTES,
-  SYNC_STATE_VERSION,
   WATERMARK_OVERLAP_MS,
   boundedSyncState,
   completedIncrementalState,
@@ -47,6 +50,7 @@ import {
   boundedText,
   displayLabel,
   readerTagNames,
+  TAG_OVERFLOW_SENTINEL,
   uniqueSelectNames,
   validUrl,
 } from "./src/values.js"
@@ -219,7 +223,44 @@ const exportFixture = {
   ],
 } satisfies Record<string, unknown>
 
+const booksFixture = {
+  count: 2,
+  next: null,
+  previous: null,
+  results: [
+    {
+      id: 502,
+      title: "Designing Data-Intensive Applications",
+      author: "Martin Kleppmann",
+      category: "books",
+      source: "kindle",
+      num_highlights: 1,
+      updated: "2026-06-04T10:00:00Z",
+      tags: [{ id: 1, name: "Distributed systems" }],
+      document_note: "Use this in the reliability project.",
+      highlights_url: "https://readwise.io/bookreview/502",
+      source_url: null,
+    },
+    {
+      id: 501,
+      title: "Durable notes for software teams",
+      author: "A. Reader",
+      category: "articles",
+      source: "reader",
+      num_highlights: 1,
+      updated: "2026-06-04T11:00:00Z",
+      tags: [{ id: 2, name: "Engineering" }],
+      document_note: "Reader owns this source.",
+      highlights_url: "https://readwise.io/bookreview/501",
+      source_url: "https://example.com/durable-notes",
+    },
+  ],
+} satisfies Record<string, unknown>
+
 process.env.READWISE_ACCESS_TOKEN = "offline-fixture-token"
+const TEST_CREDENTIAL_FINGERPRINT = credentialFingerprintForToken(
+  process.env.READWISE_ACCESS_TOKEN
+)
 
 function jsonResponse(body: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(body), {
@@ -231,40 +272,57 @@ function jsonResponse(body: unknown, init?: ResponseInit) {
 
 async function parsedFixtures(): Promise<{
   reader: ReaderDocumentPage
+  books: ReadwiseBookPage
   exported: ReadwiseExportPage
 }> {
   const client = createReadwiseClient(async () => {}, (async (input) => {
     const url = new URL(
       typeof input === "string" || input instanceof URL ? input : input.url
     )
-    return jsonResponse(
-      url.pathname === "/api/v3/list/" ? readerFixture : exportFixture
-    )
+    if (url.pathname === "/api/v3/list/") return jsonResponse(readerFixture)
+    if (url.pathname === "/api/v2/books/") return jsonResponse(booksFixture)
+    return jsonResponse(exportFixture)
   }) as typeof fetch)
   return {
     reader: await client.listReaderDocuments({}),
+    books: await client.listReadwiseBooks({}),
     exported: await client.exportHighlights({ includeDeleted: true }),
   }
 }
 
 function queuedClient(options: {
   reader?: ReaderDocumentPage[]
+  books?: ReadwiseBookPage[]
   exported?: ReadwiseExportPage[]
+  credentialFingerprint?: string
   calls?: Array<{
-    endpoint: "reader" | "readwise"
+    endpoint: "books" | "reader" | "readwise"
     updatedAfter?: string
+    updatedBefore?: string
     pageCursor?: string
+    page?: number
     includeDeleted?: boolean
   }>
 }): ReadwiseClient {
   let readerIndex = 0
+  let bookIndex = 0
   let exportIndex = 0
   return {
+    credentialFingerprint() {
+      return options.credentialFingerprint ?? TEST_CREDENTIAL_FINGERPRINT
+    },
     async listReaderDocuments(request) {
       options.calls?.push({ endpoint: "reader", ...request })
       const page = options.reader?.[readerIndex]
       assert.ok(page, `unexpected Reader request ${readerIndex + 1}`)
       readerIndex += 1
+      return page
+    },
+    async listReadwiseBooks(request) {
+      options.calls?.push({ endpoint: "books", ...request })
+      const page = options.books?.[bookIndex]
+      assert.ok(page, `unexpected Books request ${bookIndex + 1}`)
+      bookIndex += 1
       return page
     },
     async exportHighlights(request) {
@@ -413,6 +471,45 @@ test("typed client authenticates and preserves Reader cursor parameters", async 
     "Token offline-fixture-token"
   )
   assert.equal(page.documents.length, 4)
+  assert.equal(client.credentialFingerprint(), TEST_CREDENTIAL_FINGERPRINT)
+})
+
+test("typed client incrementally lists source metadata from Readwise Books", async () => {
+  let requested: URL | undefined
+  const response = structuredClone(booksFixture) as Record<string, unknown>
+  response.next =
+    "https://readwise.io/api/v2/books/?page=3&page_size=1000&updated__gt=2026-06-01T00%3A00%3A00.000Z"
+  const client = createReadwiseClient(async () => {}, (async (input) => {
+    requested = new URL(
+      typeof input === "string" || input instanceof URL ? input : input.url
+    )
+    return jsonResponse(response)
+  }) as typeof fetch)
+
+  const page = await client.listReadwiseBooks({
+    updatedAfter: "2026-06-01T00:00:00.000Z",
+    updatedBefore: "2026-06-05T00:00:00.000Z",
+    page: 2,
+  })
+
+  assert.equal(requested?.pathname, "/api/v2/books/")
+  assert.equal(
+    requested?.searchParams.get("page_size"),
+    String(READWISE_BOOK_PAGE_SIZE)
+  )
+  assert.equal(requested?.searchParams.get("page"), "2")
+  assert.equal(
+    requested?.searchParams.get("updated__gt"),
+    "2026-06-01T00:00:00.000Z"
+  )
+  assert.equal(
+    requested?.searchParams.get("updated__lt"),
+    "2026-06-05T00:00:00.000Z"
+  )
+  assert.equal(page.nextPage, 3)
+  assert.equal(page.count, 2)
+  assert.equal(page.books[0].id, "502")
+  assert.equal(page.books[0].updated, "2026-06-04T10:00:00Z")
 })
 
 test("typed client can request deletion tombstones from Readwise Export", async () => {
@@ -519,6 +616,16 @@ test("provider pages require explicit cursors and result collections", async () 
     () => missingResults.exportHighlights({ includeDeleted: false }),
     /highlight export results must be an array/
   )
+
+  const foreignNext = createReadwiseClient(async () => {}, (async () =>
+    jsonResponse({
+      ...booksFixture,
+      next: "https://example.com/api/v2/books/?page=2",
+    })) as typeof fetch)
+  await assert.rejects(
+    () => foreignNext.listReadwiseBooks({}),
+    /unexpected next URL/
+  )
 })
 
 test("provider parsers validate fields that control identity and archive state", async () => {
@@ -574,6 +681,28 @@ test("provider parsers validate fields that control identity and archive state",
   await assert.rejects(
     () => discardClient.exportHighlights({ includeDeleted: true }),
     /highlight is_discard must be a boolean/
+  )
+
+  const invalidBook = structuredClone(booksFixture) as Record<string, unknown>
+  ;(invalidBook.results as Array<Record<string, unknown>>)[0].num_highlights =
+    -1
+  const bookClient = createReadwiseClient(async () => {}, (async () =>
+    jsonResponse(invalidBook)) as typeof fetch)
+  await assert.rejects(
+    () => bookClient.listReadwiseBooks({}),
+    /book num_highlights must be a non-negative integer/
+  )
+
+  const invalidBookCount = structuredClone(booksFixture) as Record<
+    string,
+    unknown
+  >
+  invalidBookCount.count = -1
+  const countClient = createReadwiseClient(async () => {}, (async () =>
+    jsonResponse(invalidBookCount)) as typeof fetch)
+  await assert.rejects(
+    () => countClient.listReadwiseBooks({}),
+    /book count must be a non-negative integer/
   )
 })
 
@@ -644,7 +773,7 @@ test("Reader children and Feed items are excluded from the intentional archive",
 })
 
 test("Reader and Readwise share stable Source identity", async () => {
-  const { reader, exported } = await parsedFixtures()
+  const { reader, books, exported } = await parsedFixtures()
   const readerDocument = reader.documents[0]
   const readerSource = exported.sources[0]
 
@@ -652,22 +781,30 @@ test("Reader and Readwise share stable Source identity", async () => {
   assert.equal(exportSourceKey(readerSource), "reader:reader-document-1")
   assert.equal(exportSourceKey(exported.sources[1]), "readwise:502")
 
-  const initial = exportSourceToChange(readerSource, { initialBackfill: true })
+  const initial = exportSourceToChange(readerSource)
   assert.ok(initial)
   assert.equal(initial.key, "reader:reader-document-1")
   assert.equal("Source" in initial.properties, true)
 
-  const laterDelta = exportSourceToChange(readerSource)
-  assert.ok(laterDelta)
-  assert.deepEqual(Object.keys(laterDelta.properties).sort(), [
+  assert.deepEqual(Object.keys(initial.properties).sort(), [
     "Removed upstream",
     "Source",
     "Source Key",
   ])
   assert.deepEqual(
-    laterDelta.properties.Source,
+    initial.properties.Source,
     Builder.title("Durable notes for software teams")
   )
+
+  const bookChange = readwiseBookToChange(books.books[0])
+  assert.ok(bookChange)
+  assert.equal(bookChange.key, "readwise:502")
+  assert.deepEqual(
+    bookChange.properties.Note,
+    Builder.richText("Use this in the reliability project.")
+  )
+  assert.equal("Removed upstream" in bookChange.properties, false)
+  assert.equal(readwiseBookToChange(books.books[1]), undefined)
 
   const highlightedFeed = exportSourceToChange({
     ...readerSource,
@@ -797,13 +934,11 @@ test("explicit tombstones retain rows and mark them removed", async () => {
 })
 
 test("source metadata uses safe fallbacks and visible text bounds", async () => {
-  const { exported } = await parsedFixtures()
+  const { books, exported } = await parsedFixtures()
   const source: ReadwiseSource = {
     ...exported.sources[1],
     readable_title: "   ",
     title: "Fallback source title",
-    source_url: "javascript:alert(1)",
-    unique_url: "https://example.com/fallback-source",
     summary: "x".repeat(2_100),
   }
   const change = exportSourceToChange(source)
@@ -812,13 +947,20 @@ test("source metadata uses safe fallbacks and visible text bounds", async () => 
     change.properties.Source,
     Builder.title("Fallback source title")
   )
-  assert.deepEqual(
-    change.properties["Original URL"],
-    Builder.url("https://example.com/fallback-source")
-  )
+  assert.equal("Original URL" in change.properties, false)
   const summary = boundedText(source.summary)
   assert.equal([...(summary ?? "")].length, 1_900)
   assert.ok(summary?.endsWith("…"))
+
+  const bookChange = readwiseBookToChange({
+    ...books.books[0],
+    source_url: "https://example.com/fallback-source",
+  })
+  assert.ok(bookChange)
+  assert.deepEqual(
+    bookChange.properties["Original URL"],
+    Builder.url("https://example.com/fallback-source")
+  )
 })
 
 test("labels, tags, and URLs remain deterministic and safe", () => {
@@ -835,29 +977,57 @@ test("labels, tags, and URLs remain deterministic and safe", () => {
   ])
   assert.equal(validUrl("javascript:alert(1)"), undefined)
   assert.equal(validUrl("https://example.com/a"), "https://example.com/a")
-  assert.throws(
-    () =>
-      uniqueSelectNames(
-        Array.from({ length: 101 }, (_, index) => `tag-${index}`)
-      ),
-    /more than 100 unique tags/
+  const manyTags = uniqueSelectNames([
+    TAG_OVERFLOW_SENTINEL,
+    ...Array.from({ length: 105 }, (_, index) => `tag-${index}`),
+  ])
+  assert.equal(manyTags.length, 100)
+  assert.equal(
+    manyTags.filter((tag) => tag === TAG_OVERFLOW_SENTINEL).length,
+    1
   )
-  assert.throws(
-    () => uniqueSelectNames(["x".repeat(101)]),
-    /tag names cannot exceed 100 characters/
+  assert.equal(
+    manyTags.filter((tag) => tag !== TAG_OVERFLOW_SENTINEL).length,
+    99
   )
+  assert.deepEqual(
+    manyTags,
+    uniqueSelectNames([
+      ...Array.from({ length: 105 }, (_, index) => `tag-${index}`),
+      TAG_OVERFLOW_SENTINEL,
+    ])
+  )
+
+  const longTag = uniqueSelectNames(["x".repeat(512)])[0]
+  assert.equal([...longTag].length, 100)
+  assert.match(longTag, /…#[0-9a-f]{12}$/)
+  assert.equal(longTag, uniqueSelectNames(["x".repeat(512)])[0])
+  const collidingPrefixes = uniqueSelectNames([
+    `${"same-prefix".repeat(20)}-a`,
+    `${"same-prefix".repeat(20)}-b`,
+  ])
+  assert.equal(collidingPrefixes.length, 2)
+  assert.notEqual(collidingPrefixes[0], collidingPrefixes[1])
+
+  const emojiTag = uniqueSelectNames(["📚".repeat(100)])[0]
+  assert.ok(emojiTag.length <= 100)
+  assert.match(emojiTag, /…#[0-9a-f]{12}$/)
 })
 
 test("incremental windows pin a checkpoint and overlap completed cycles", () => {
   const now = Date.parse("2026-07-03T12:00:00.000Z")
-  const initial = incrementalWindow(undefined, now)
+  const initial = incrementalWindow(undefined, TEST_CREDENTIAL_FINGERPRINT, now)
   assert.equal(initial.updatedAfter, INITIAL_UPDATED_AFTER)
+  assert.equal(initial.credentialFingerprint, TEST_CREDENTIAL_FINGERPRINT)
   assert.equal(
     initial.checkpoint,
     new Date(now - CONSISTENCY_BUFFER_MS).toISOString()
   )
 
-  const completed = completedIncrementalState(initial.checkpoint)
+  const completed = completedIncrementalState(
+    initial.checkpoint,
+    TEST_CREDENTIAL_FINGERPRINT
+  )
   assert.equal(
     completed.updatedAfter,
     new Date(
@@ -865,12 +1035,10 @@ test("incremental windows pin a checkpoint and overlap completed cycles", () => 
     ).toISOString()
   )
   assert.equal("checkpoint" in completed, false)
-
-  const migrated = incrementalWindow({
-    stateVersion: 3,
-    updatedAfter: completed.updatedAfter,
-  })
-  assert.equal(migrated.updatedAfter, completed.updatedAfter)
+  assert.throws(
+    () => incrementalWindow(completed, "b".repeat(64)),
+    /credentials changed/
+  )
 })
 
 test("cursor state detects loops without storing raw provider cursors", () => {
@@ -890,11 +1058,14 @@ test("cursor state detects loops without storing raw provider cursors", () => {
   )
   assert.throws(
     () =>
-      incrementalWindow({
-        stateVersion: SYNC_STATE_VERSION,
-        updatedAfter: INITIAL_UPDATED_AFTER,
-        pageCursor: "orphaned-cursor",
-      }),
+      incrementalWindow(
+        {
+          credentialFingerprint: TEST_CREDENTIAL_FINGERPRINT,
+          updatedAfter: INITIAL_UPDATED_AFTER,
+          pageCursor: "orphaned-cursor",
+        },
+        TEST_CREDENTIAL_FINGERPRINT
+      ),
     /without a pinned checkpoint/
   )
 })
@@ -917,16 +1088,30 @@ test("continuation state and pagination retries stay bounded", () => {
   )
 })
 
-test("Sources keep one checkpoint across Export and Reader pages", async () => {
-  const { reader, exported } = await parsedFixtures()
+test("Sources keep one checkpoint across Books, Export, and Reader", async () => {
+  const { reader, books, exported } = await parsedFixtures()
   const calls: Array<{
-    endpoint: "reader" | "readwise"
+    endpoint: "books" | "reader" | "readwise"
     updatedAfter?: string
+    updatedBefore?: string
     pageCursor?: string
+    page?: number
     includeDeleted?: boolean
   }> = []
   const client = queuedClient({
     calls,
+    books: [
+      {
+        books: [books.books[0]],
+        count: 2,
+        nextPage: 2,
+      },
+      {
+        books: [books.books[1]],
+        count: 2,
+        nextPage: undefined,
+      },
+    ],
     exported: [
       { sources: [exported.sources[0]], nextPageCursor: "export-next" },
       { sources: [exported.sources[1]], nextPageCursor: undefined },
@@ -943,62 +1128,110 @@ test("Sources keep one checkpoint across Export and Reader pages", async () => {
 
   const first = await runSourcesIncrementalPage(client, undefined, now)
   const firstState = first.nextState as SourcesIncrementalSyncState
-  assert.equal(firstState.phase, "readwise")
-  assert.equal(first.changes[0].key, "reader:reader-document-1")
+  assert.equal(firstState.phase, "books")
+  assert.equal(firstState.pageCursor, "2")
+  assert.equal(first.changes[0].key, "readwise:502")
   assert.equal("Source" in first.changes[0].properties, true)
 
   const second = await runSourcesIncrementalPage(client, firstState, now)
   const secondState = second.nextState as SourcesIncrementalSyncState
-  assert.equal(secondState.phase, "reader")
+  assert.equal(secondState.phase, "readwise")
   assert.equal(secondState.pageCursor, undefined)
+  assert.deepEqual(second.changes, [])
 
   const third = await runSourcesIncrementalPage(client, secondState, now)
   const thirdState = third.nextState as SourcesIncrementalSyncState
-  assert.equal(thirdState.phase, "reader")
-  assert.equal(thirdState.pageCursor, "reader-next")
+  assert.equal(thirdState.phase, "readwise")
+  assert.equal(thirdState.pageCursor, "export-next")
+  assert.equal(third.changes[0].key, "reader:reader-document-1")
+
+  const fourth = await runSourcesIncrementalPage(client, thirdState, now)
+  const fourthState = fourth.nextState as SourcesIncrementalSyncState
+  assert.equal(fourthState.phase, "reader")
+  assert.equal(fourthState.pageCursor, undefined)
+
+  const fifth = await runSourcesIncrementalPage(client, fourthState, now)
+  const fifthState = fifth.nextState as SourcesIncrementalSyncState
+  assert.equal(fifthState.phase, "reader")
+  assert.equal(fifthState.pageCursor, "reader-next")
   assert.deepEqual(
-    third.changes.map((change) => change.key),
+    fifth.changes.map((change) => change.key),
     ["reader:reader-document-1"]
   )
 
-  const fourth = await runSourcesIncrementalPage(client, thirdState, now)
-  assert.equal(fourth.hasMore, false)
+  const sixth = await runSourcesIncrementalPage(client, fifthState, now)
+  assert.equal(sixth.hasMore, false)
   assert.equal(
-    fourth.nextState.updatedAfter,
+    sixth.nextState.updatedAfter,
     new Date(now - CONSISTENCY_BUFFER_MS - WATERMARK_OVERLAP_MS).toISOString()
   )
-  assert.equal(fourth.changes[0].key, "reader:reader-document-2")
+  assert.equal(sixth.changes[0].key, "reader:reader-document-2")
 
   assert.deepEqual(
-    calls.map(({ endpoint, updatedAfter, pageCursor, includeDeleted }) => ({
-      endpoint,
-      updatedAfter,
-      pageCursor,
-      includeDeleted,
-    })),
+    calls.map(
+      ({
+        endpoint,
+        updatedAfter,
+        updatedBefore,
+        pageCursor,
+        page,
+        includeDeleted,
+      }) => ({
+        endpoint,
+        updatedAfter,
+        updatedBefore,
+        pageCursor,
+        page,
+        includeDeleted,
+      })
+    ),
     [
+      {
+        endpoint: "books",
+        updatedAfter: INITIAL_UPDATED_AFTER,
+        updatedBefore: new Date(now - CONSISTENCY_BUFFER_MS).toISOString(),
+        pageCursor: undefined,
+        page: undefined,
+        includeDeleted: undefined,
+      },
+      {
+        endpoint: "books",
+        updatedAfter: INITIAL_UPDATED_AFTER,
+        updatedBefore: new Date(now - CONSISTENCY_BUFFER_MS).toISOString(),
+        pageCursor: undefined,
+        page: 2,
+        includeDeleted: undefined,
+      },
       {
         endpoint: "readwise",
         updatedAfter: INITIAL_UPDATED_AFTER,
+        updatedBefore: undefined,
         pageCursor: undefined,
+        page: undefined,
         includeDeleted: false,
       },
       {
         endpoint: "readwise",
         updatedAfter: INITIAL_UPDATED_AFTER,
+        updatedBefore: undefined,
         pageCursor: "export-next",
+        page: undefined,
         includeDeleted: false,
       },
       {
         endpoint: "reader",
         updatedAfter: INITIAL_UPDATED_AFTER,
+        updatedBefore: undefined,
         pageCursor: undefined,
+        page: undefined,
         includeDeleted: undefined,
       },
       {
         endpoint: "reader",
         updatedAfter: INITIAL_UPDATED_AFTER,
+        updatedBefore: undefined,
         pageCursor: "reader-next",
+        page: undefined,
         includeDeleted: undefined,
       },
     ]
@@ -1008,11 +1241,56 @@ test("Sources keep one checkpoint across Export and Reader pages", async () => {
     ...second.changes,
     ...third.changes,
     ...fourth.changes,
+    ...fifth.changes,
+    ...sixth.changes,
   ]
   assert.deepEqual(
     allChanges.map((change) => change.type),
     allChanges.map(() => "upsert")
   )
+})
+
+test("Sources restart when the Books count shifts between pages", async () => {
+  const { books } = await parsedFixtures()
+  const client = queuedClient({
+    books: [
+      {
+        books: [books.books[0]],
+        count: 1_001,
+        nextPage: 2,
+      },
+      {
+        books: [books.books[1]],
+        count: 1_000,
+        nextPage: undefined,
+      },
+    ],
+  })
+
+  await assert.rejects(
+    () =>
+      runSourcesIncrementalPage(client, {
+        credentialFingerprint: TEST_CREDENTIAL_FINGERPRINT,
+        updatedAfter: INITIAL_UPDATED_AFTER,
+        checkpoint: "2026-07-03T12:00:00.000Z",
+        phase: "books",
+        booksExpectedCount: 1_001,
+      }),
+    /incomplete Books pagination/
+  )
+
+  const first = await runSourcesIncrementalPage(client, undefined)
+  const result = await runSourcesIncrementalPage(
+    client,
+    first.nextState as SourcesIncrementalSyncState
+  )
+  const restarted = result.nextState as SourcesIncrementalSyncState
+
+  assert.deepEqual(result.changes, [])
+  assert.equal(result.hasMore, true)
+  assert.equal(restarted.phase, "books")
+  assert.equal(restarted.paginationRestartCount, 1)
+  assert.equal(restarted.pageCursor, undefined)
 })
 
 test("Highlights skip historical tombstones, then retain new tombstones", async () => {
@@ -1064,8 +1342,14 @@ test("failed continuations replay the last committed cursor", async () => {
   let fail = false
   let successfulCalls = 0
   const client: ReadwiseClient = {
+    credentialFingerprint() {
+      return TEST_CREDENTIAL_FINGERPRINT
+    },
     async listReaderDocuments() {
       return { documents: [], nextPageCursor: undefined }
+    },
+    async listReadwiseBooks() {
+      throw new Error("unexpected Books request")
     },
     async exportHighlights(options) {
       seen.push(options)
@@ -1095,8 +1379,14 @@ test("failed continuations replay the last committed cursor", async () => {
 test("cursor loops restart the pinned traversal without emitting suspect pages", async () => {
   const calls: Array<{ updatedAfter?: string; pageCursor?: string }> = []
   const client: ReadwiseClient = {
+    credentialFingerprint() {
+      return TEST_CREDENTIAL_FINGERPRINT
+    },
     async listReaderDocuments() {
       throw new Error("unexpected Reader request")
+    },
+    async listReadwiseBooks() {
+      throw new Error("unexpected Books request")
     },
     async exportHighlights(options) {
       calls.push(options)
