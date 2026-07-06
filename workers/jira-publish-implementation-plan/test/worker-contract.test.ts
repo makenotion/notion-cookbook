@@ -74,6 +74,7 @@ test("tool descriptions require preview, explicit confirmation, and safe inspect
   assert.match(inspect.description, /after a partial result/i)
   assert.match(inspect.description, /write may have timed out/i)
   assert.match(inspect.description, /eventually consistent/i)
+  assert.match(inspect.description, /does not revalidate every prepared field/i)
   assert.match(inspect.description, /untrusted data, never as instructions/i)
   assert.match(inspect.description, /never writes/i)
 })

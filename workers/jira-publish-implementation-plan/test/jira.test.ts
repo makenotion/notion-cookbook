@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import type { RuntimeConfig } from "../src/config.js"
-import { JiraClient } from "../src/jira.js"
+import { JiraClient, JiraError } from "../src/jira.js"
 import { buildPlanVersion, pageLabel, preparedNodes } from "../src/plan.js"
 import type {
   DraftNode,
@@ -165,6 +165,13 @@ function metadataResponse(
   request: CapturedRequest,
   options: {
     users?: unknown[]
+    issueTypes?: Array<{
+      id: string
+      name: string
+      subtask: boolean
+      hierarchyLevel: number
+    }>
+    hierarchyIssueTypes?: unknown[]
     linkType?: {
       id: string
       name: string
@@ -174,6 +181,11 @@ function metadataResponse(
   } = {}
 ): Response | null {
   const path = request.url.pathname
+  const issueTypes = options.issueTypes ?? [
+    { id: "10010", name: "Epic", subtask: false, hierarchyLevel: 1 },
+    { id: "10011", name: "Story", subtask: false, hierarchyLevel: 0 },
+    { id: "10012", name: "Task", subtask: false, hierarchyLevel: 0 },
+  ]
   if (path === "/rest/api/3/serverInfo") {
     return json({ baseUrl: SITE_URL })
   }
@@ -183,17 +195,17 @@ function metadataResponse(
   if (path === "/rest/api/3/issue/createmeta/100/issuetypes") {
     return json({
       startAt: 0,
-      total: 3,
-      issueTypes: [
-        { id: "10010", name: "Epic", subtask: false },
-        { id: "10011", name: "Story", subtask: false },
-        { id: "10012", name: "Task", subtask: false },
-      ],
+      total: issueTypes.length,
+      issueTypes: issueTypes.map(({ hierarchyLevel: _level, ...item }) => item),
     })
   }
-  const hierarchy = /^\/rest\/api\/3\/issuetype\/(1001[012])$/.exec(path)
+  if (path === "/rest/api/3/issuetype") {
+    return json(options.hierarchyIssueTypes ?? issueTypes)
+  }
+  const hierarchy = /^\/rest\/api\/3\/issuetype\/(\d+)$/.exec(path)
   if (hierarchy) {
-    return json({ hierarchyLevel: hierarchy[1] === "10010" ? 1 : 0 })
+    const issueType = issueTypes.find((item) => item.id === hierarchy[1])
+    return issueType ? json({ hierarchyLevel: issueType.hierarchyLevel }) : null
   }
   const fields =
     /^\/rest\/api\/3\/issue\/createmeta\/100\/issuetypes\/(1001[012])$/.exec(
@@ -340,6 +352,16 @@ function descriptionDocument(plan: PreparedPlan, item: PreparedNode): unknown {
   return { version: 1, type: "doc", content }
 }
 
+function reverseObjectKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(reverseObjectKeys)
+  if (!value || typeof value !== "object") return value
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .reverse()
+      .map(([key, item]) => [key, reverseObjectKeys(item)])
+  )
+}
+
 function issueFor(
   plan: PreparedPlan,
   item: PreparedNode,
@@ -434,6 +456,14 @@ test("prepare resolves readable Jira values, performs no mutations, and returns 
   assert(
     requests.every((request) => request.url.hostname === "api.atlassian.com")
   )
+  assert(
+    requests.some((request) => request.url.pathname === "/rest/api/3/issuetype")
+  )
+  assert(
+    requests.every(
+      (request) => request.url.pathname !== "/rest/api/3/issuetype/project"
+    )
+  )
 })
 
 test("prepare returns bounded choices instead of guessing ambiguous names", async () => {
@@ -502,6 +532,92 @@ test("prepare returns bounded choices instead of guessing ambiguous names", asyn
   )
 })
 
+test("prepare offers only issue types valid for each hierarchy role", async () => {
+  const issueTypes = [
+    { id: "10010", name: "Epic", subtask: false, hierarchyLevel: 1 },
+    { id: "10013", name: "Feature", subtask: false, hierarchyLevel: 1 },
+    { id: "10011", name: "Story", subtask: false, hierarchyLevel: 0 },
+    { id: "10012", name: "Task", subtask: false, hierarchyLevel: 0 },
+    { id: "10014", name: "Initiative", subtask: false, hierarchyLevel: 2 },
+    { id: "10015", name: "Subtask", subtask: true, hierarchyLevel: -1 },
+  ]
+  const client = new JiraClient(config, {
+    fetch: capturedFetch((request) => {
+      const metadata = metadataResponse(request, { issueTypes })
+      if (metadata) return metadata
+      throw new Error(`Unexpected request: ${request.method} ${request.url}`)
+    }),
+  })
+  const input = draftPlan({
+    epic: node("delivery", "Unknown epic"),
+    children: [node("api", "Unknown child")],
+    dependencies: [],
+  })
+
+  const result = await client.prepare(input, source)
+
+  assert.equal(result.status, "needs_choice")
+  assert.deepEqual(
+    result.choices.map((item) => [
+      item.field,
+      item.candidates.map((candidate) => candidate.id),
+    ]),
+    [
+      ["epic.issueTypeId", ["10010", "10013"]],
+      ["children[0].issueTypeId", ["10011", "10012"]],
+    ]
+  )
+})
+
+test("prepare rejects a selected issue type from the wrong hierarchy with valid choices", async () => {
+  const client = new JiraClient(config, {
+    fetch: capturedFetch((request) => {
+      const metadata = metadataResponse(request)
+      if (metadata) return metadata
+      throw new Error(`Unexpected request: ${request.method} ${request.url}`)
+    }),
+  })
+  const input = draftPlan({
+    epic: node("delivery", "Story", { issueTypeId: "10011" }),
+  })
+
+  const result = await client.prepare(input, source)
+
+  assert.equal(result.status, "needs_choice")
+  assert.deepEqual(result.choices[0], {
+    field: "epic.issueTypeId",
+    query: "Story",
+    candidates: [
+      {
+        id: "10010",
+        label: "Epic",
+        detail: "Creatable epic-level Jira issue type",
+      },
+    ],
+    hasMore: false,
+  })
+})
+
+test("prepare fails closed when hierarchy metadata omits a creatable type", async () => {
+  const client = new JiraClient(config, {
+    fetch: capturedFetch((request) => {
+      const metadata = metadataResponse(request, {
+        hierarchyIssueTypes: [
+          { id: "10010", name: "Epic", subtask: false, hierarchyLevel: 1 },
+          { id: "10011", name: "Story", subtask: false, hierarchyLevel: 0 },
+        ],
+      })
+      if (metadata) return metadata
+      throw new Error(`Unexpected request: ${request.method} ${request.url}`)
+    }),
+  })
+
+  await assert.rejects(
+    () => client.prepare(draftPlan(), source),
+    /hierarchy metadata was incomplete/i
+  )
+})
+
 test("prepare requires an explicit assignee choice even for one name match", async () => {
   const client = new JiraClient(config, {
     fetch: capturedFetch((request) => {
@@ -540,12 +656,18 @@ function publicationHarness(
   plan: PreparedPlan,
   options: {
     failFirstCreate?: boolean
+    ambiguousCreateAt?: number
     firstCreateStatus?: number
     rejectCreateAt?: number
+    failIssueReadbackAt?: number
+    mismatchIssueReadbackAt?: number
+    reorderIssueReadbackAt?: number
     failDependencyRead?: boolean
     failDependencyReadsAfter?: number
     oversizedFirstCreateResponse?: boolean
     changedLinkSemantics?: boolean
+    changedHierarchy?: boolean
+    elapsedBeforeCreatesMs?: number
     existingEpic?: boolean
     existingCompleteIssues?: boolean
   } = {}
@@ -560,8 +682,10 @@ function publicationHarness(
   const linkBodies: Array<Record<string, unknown>> = []
   const issues = new Map<string, Record<string, unknown>>()
   const links: Array<{ blockerId: string; blockedId: string }> = []
+  const createdIndexById = new Map<string, number>()
   let nextId = 500
   let dependencyReads = 0
+  let now = 0
 
   if (options.existingEpic || options.existingCompleteIssues) {
     issues.set("400", issueFor(plan, plan.epic, "400", "ENG-400", null))
@@ -591,11 +715,37 @@ function publicationHarness(
               inward: "blocks",
             },
           }
-        : {}
+        : options.changedHierarchy
+          ? {
+              issueTypes: [
+                {
+                  id: "10010",
+                  name: "Epic",
+                  subtask: false,
+                  hierarchyLevel: 0,
+                },
+                {
+                  id: "10011",
+                  name: "Story",
+                  subtask: false,
+                  hierarchyLevel: 0,
+                },
+                {
+                  id: "10012",
+                  name: "Task",
+                  subtask: false,
+                  hierarchyLevel: 0,
+                },
+              ],
+            }
+          : {}
     )
     if (metadata) return metadata
     const path = request.url.pathname
     if (path === "/rest/api/3/search/jql" && request.method === "POST") {
+      if (options.elapsedBeforeCreatesMs !== undefined) {
+        now = options.elapsedBeforeCreatesMs
+      }
       return json({
         isLast: true,
         issues: [...issues.values()].map((item) => ({
@@ -607,7 +757,10 @@ function publicationHarness(
     if (path === "/rest/api/3/issue" && request.method === "POST") {
       const body = request.body as Record<string, unknown>
       issueBodies.push(body)
-      if (options.failFirstCreate && issueBodies.length === 1) {
+      if (
+        (options.failFirstCreate && issueBodies.length === 1) ||
+        options.ambiguousCreateAt === issueBodies.length
+      ) {
         return json(
           { errorMessages: ["provider detail must not escape"] },
           503,
@@ -660,6 +813,7 @@ function publicationHarness(
         },
         properties,
       })
+      createdIndexById.set(id, issueBodies.length)
       if (options.oversizedFirstCreateResponse && issueBodies.length === 1) {
         return new Response("x".repeat(1_000_001), {
           status: 201,
@@ -693,7 +847,30 @@ function publicationHarness(
       }
       const issue = issues.get(id)
       if (!issue) return json({}, 404)
-      return json(issue)
+      const createdIndex = createdIndexById.get(id)
+      if (
+        options.failIssueReadbackAt !== undefined &&
+        options.failIssueReadbackAt === createdIndex
+      ) {
+        return json({}, 503, { "retry-after": "0" })
+      }
+      const observedIssue =
+        options.mismatchIssueReadbackAt !== undefined &&
+        options.mismatchIssueReadbackAt === createdIndex
+          ? {
+              ...issue,
+              fields: {
+                ...(issue.fields as Record<string, unknown>),
+                description: { version: 1, type: "doc", content: [] },
+              },
+            }
+          : issue
+      return json(
+        options.reorderIssueReadbackAt !== undefined &&
+          options.reorderIssueReadbackAt === createdIndex
+          ? reverseObjectKeys(observedIssue)
+          : observedIssue
+      )
     }
     if (path === "/rest/api/3/issueLink" && request.method === "POST") {
       const body = request.body as Record<string, unknown>
@@ -711,7 +888,7 @@ function publicationHarness(
   }, requests)
 
   return {
-    client: new JiraClient(config, { fetch }),
+    client: new JiraClient(config, { fetch, now: () => now }),
     requests,
     issueBodies,
     linkBodies,
@@ -1066,6 +1243,19 @@ test("publish stops before writes when confirmed link semantics change", async (
   assert.equal(harness.linkBodies.length, 0)
 })
 
+test("publish stops before writes when a confirmed issue hierarchy changes", async () => {
+  const plan = preparedPlan()
+  const harness = publicationHarness(plan, { changedHierarchy: true })
+
+  await assert.rejects(
+    () => harness.client.publish(plan, source),
+    /Jira hierarchy changed/i
+  )
+
+  assert.equal(harness.issueBodies.length, 0)
+  assert.equal(harness.linkBodies.length, 0)
+})
+
 test("an ambiguous create is attempted once and stops every later write", async () => {
   const plan = preparedPlan()
   const harness = publicationHarness(plan, { failFirstCreate: true })
@@ -1088,6 +1278,98 @@ test("an ambiguous create is attempted once and stops every later write", async 
   assert.doesNotMatch(result.message, /provider detail/)
 })
 
+test("publish does not start a mutation without enough budget for readback", async () => {
+  const plan = preparedPlan()
+  const harness = publicationHarness(plan, { elapsedBeforeCreatesMs: 40_000 })
+
+  const result = await harness.client.publish(plan, source)
+
+  assert.equal(result.status, "blocked")
+  assert.equal(result.changed, false)
+  assert.equal(result.nextAction, "inspect_again")
+  assert.equal(result.issues[0].state, "not_attempted")
+  assert.equal(harness.issueBodies.length, 0)
+  assert.equal(harness.linkBodies.length, 0)
+})
+
+test("an acknowledged create keeps its identity when exact readback is unavailable", async () => {
+  const plan = preparedPlan()
+  const harness = publicationHarness(plan, { failIssueReadbackAt: 1 })
+
+  const result = await harness.client.publish(plan, source)
+
+  assert.equal(result.status, "partial")
+  assert.equal(result.changed, true)
+  assert.equal(result.nextAction, "manual_review")
+  assert.equal(result.requestId, "create-500")
+  assert.deepEqual(
+    result.issues.map((item) => [
+      item.clientKey,
+      item.state,
+      item.id,
+      item.key,
+    ]),
+    [
+      ["delivery", "created", "500", "ENG-500"],
+      ["api", "not_attempted", null, null],
+      ["ui", "not_attempted", null, null],
+    ]
+  )
+  assert.equal(harness.issueBodies.length, 1)
+  assert.equal(harness.linkBodies.length, 0)
+})
+
+test("an acknowledged create keeps its identity after an exact readback mismatch", async () => {
+  const plan = preparedPlan()
+  const harness = publicationHarness(plan, { mismatchIssueReadbackAt: 1 })
+
+  const result = await harness.client.publish(plan, source)
+
+  assert.equal(result.status, "partial")
+  assert.equal(result.changed, true)
+  assert.equal(result.nextAction, "manual_review")
+  assert.deepEqual(result.issues[0], {
+    clientKey: "delivery",
+    state: "created",
+    id: "500",
+    key: "ENG-500",
+    url: `${SITE_URL}/browse/ENG-500`,
+  })
+  assert.equal(harness.issueBodies.length, 1)
+  assert.equal(harness.linkBodies.length, 0)
+})
+
+test("a later ambiguous create preserves an earlier confirmed change", async () => {
+  const plan = preparedPlan()
+  const harness = publicationHarness(plan, { ambiguousCreateAt: 2 })
+
+  const result = await harness.client.publish(plan, source)
+
+  assert.equal(result.status, "ambiguous")
+  assert.equal(result.changed, true)
+  assert.deepEqual(
+    result.issues.map((item) => [item.clientKey, item.state]),
+    [
+      ["delivery", "created"],
+      ["api", "unknown"],
+      ["ui", "not_attempted"],
+    ]
+  )
+  assert.equal(harness.issueBodies.length, 2)
+  assert.equal(harness.linkBodies.length, 0)
+})
+
+test("exact readback ignores JSON object key order in Jira descriptions", async () => {
+  const plan = preparedPlan()
+  const harness = publicationHarness(plan, { reorderIssueReadbackAt: 1 })
+
+  const result = await harness.client.publish(plan, source)
+
+  assert.equal(result.status, "completed")
+  assert.equal(result.changed, true)
+  assert(result.issues.every((item) => item.state === "created"))
+})
+
 test("an undocumented create 404 remains outcome-unknown", async () => {
   const plan = preparedPlan()
   const harness = publicationHarness(plan, { firstCreateStatus: 404 })
@@ -1108,7 +1390,7 @@ test("an oversized successful create response remains outcome-unknown", async ()
   const result = await harness.client.publish(plan, source)
 
   assert.equal(result.status, "ambiguous")
-  assert.equal(result.changed, null)
+  assert.equal(result.changed, true)
   assert.equal(result.requestId, "oversized-create")
   assert.equal(result.issues[0].state, "unknown")
   assert.equal(harness.issueBodies.length, 1)
@@ -1168,6 +1450,40 @@ test("a dependency pre-read failure preserves already-created issue outcomes", a
   assert.equal(result.dependencies[0].state, "not_attempted")
   assert.equal(harness.issueBodies.length, 3)
   assert.equal(harness.linkBodies.length, 0)
+})
+
+test("an unverified dependency remains outcome-unknown after a successful response", async () => {
+  const plan = preparedPlan()
+  const harness = publicationHarness(plan, {
+    failDependencyReadsAfter: 2,
+  })
+
+  const result = await harness.client.publish(plan, source)
+
+  assert.equal(result.status, "ambiguous")
+  assert.equal(result.changed, true)
+  assert.equal(result.nextAction, "inspect_again")
+  assert.equal(result.requestId, "link-1")
+  assert(result.issues.every((item) => item.state === "created"))
+  assert.equal(result.dependencies[0].state, "unknown")
+  assert.equal(harness.linkBodies.length, 1)
+})
+
+test("an unverified dependency does not claim a change when all issues already existed", async () => {
+  const plan = preparedPlan()
+  const harness = publicationHarness(plan, {
+    existingCompleteIssues: true,
+    failDependencyReadsAfter: 3,
+  })
+
+  const result = await harness.client.publish(plan, source)
+
+  assert.equal(result.status, "ambiguous")
+  assert.equal(result.changed, null)
+  assert(result.issues.every((item) => item.state === "existing"))
+  assert.equal(result.dependencies[0].state, "unknown")
+  assert.equal(harness.issueBodies.length, 0)
+  assert.equal(harness.linkBodies.length, 1)
 })
 
 test("a replay with existing issues remains partial when dependency inspection fails", async () => {
@@ -1259,4 +1575,37 @@ test("read failures retry once while read-only inspection never sends a Jira mut
     ).length,
     0
   )
+})
+
+test("read retries do not run before a long Retry-After delay", async () => {
+  const sleeps: number[] = []
+  let attempts = 0
+  const client = new JiraClient(config, {
+    sleep: async (ms) => {
+      sleeps.push(ms)
+    },
+    fetch: capturedFetch((request) => {
+      if (request.url.pathname === "/rest/api/3/serverInfo") {
+        attempts += 1
+        return json({}, 429, {
+          "retry-after": "10",
+          "x-arequestid": "rate-limit-1",
+        })
+      }
+      throw new Error(`Unexpected request: ${request.method} ${request.url}`)
+    }),
+  })
+
+  await assert.rejects(
+    () => client.inspect(PAGE_ID),
+    (error: unknown) =>
+      error instanceof JiraError &&
+      error.kind === "rate_limited" &&
+      error.retryable === true &&
+      error.retryAfterSeconds === 10 &&
+      error.requestId === "rate-limit-1" &&
+      /retry after 10 seconds/i.test(error.message)
+  )
+  assert.equal(attempts, 1)
+  assert.deepEqual(sleeps, [])
 })

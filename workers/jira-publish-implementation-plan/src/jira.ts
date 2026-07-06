@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from "node:util"
+
 import type { RuntimeConfig } from "./config.js"
 import {
   buildPlanVersion,
@@ -41,6 +43,9 @@ const MAX_CANDIDATES = 5
 const MAX_CALLS = 160
 const MAX_EXECUTION_MS = 55_000
 const REQUEST_TIMEOUT_MS = 8_000
+const MAX_INLINE_RETRY_DELAY_MS = 2_000
+const MIN_MUTATION_BUDGET_MS =
+  REQUEST_TIMEOUT_MS * 3 + MAX_INLINE_RETRY_DELAY_MS
 const PROPERTY_KEY = "notion.cookbook.jira-plan"
 const CLIENT_KEY = /^[a-z0-9][a-z0-9_-]{0,39}$/
 const PLAN_VERSION = /^sha256:[a-f0-9]{64}$/
@@ -50,6 +55,7 @@ const NOTIFICATION_WARNING =
 type ApiResponse<T> = {
   data: T
   requestId: string | null
+  status: number
 }
 
 type IssueTypeMeta = {
@@ -106,6 +112,7 @@ export class JiraError extends Error {
   readonly retryable: boolean
   readonly retryAfterSeconds: number | null
   readonly mutationUnknown: boolean
+  readonly mutationAcknowledged: boolean
   readonly requestId: string | null
 
   constructor(
@@ -115,6 +122,7 @@ export class JiraError extends Error {
       retryable?: boolean
       retryAfterSeconds?: number | null
       mutationUnknown?: boolean
+      mutationAcknowledged?: boolean
       requestId?: string | null
     }
   ) {
@@ -124,6 +132,7 @@ export class JiraError extends Error {
     this.retryable = options.retryable ?? false
     this.retryAfterSeconds = options.retryAfterSeconds ?? null
     this.mutationUnknown = options.mutationUnknown ?? false
+    this.mutationAcknowledged = options.mutationAcknowledged ?? false
     this.requestId = options.requestId ?? null
   }
 }
@@ -251,7 +260,8 @@ async function discardBody(response: Response): Promise<void> {
 
 async function readBoundedBody(
   response: Response,
-  mutation: boolean
+  mutation: boolean,
+  mutationAcknowledged: boolean
 ): Promise<string> {
   const declared = response.headers.get("content-length")
   if (declared !== null && Number(declared) > MAX_RESPONSE_BYTES) {
@@ -260,6 +270,7 @@ async function readBoundedBody(
       kind: mutation ? "ambiguous" : "unavailable",
       retryable: true,
       mutationUnknown: mutation,
+      mutationAcknowledged,
       requestId: requestId(response),
     })
   }
@@ -277,6 +288,7 @@ async function readBoundedBody(
         kind: mutation ? "ambiguous" : "unavailable",
         retryable: true,
         mutationUnknown: mutation,
+        mutationAcknowledged,
         requestId: requestId(response),
       })
     }
@@ -289,6 +301,7 @@ function httpError(response: Response, mutationPath: string | null): JiraError {
   const status = response.status
   const providerRequestId = requestId(response)
   const delay = retryAfter(response)
+  const retryGuidance = delay === null ? "" : ` Retry after ${delay} seconds.`
   if (mutationPath !== null) {
     const definite: Record<string, Set<number>> = {
       "/rest/api/3/issue": new Set([400, 401, 403, 422]),
@@ -326,12 +339,15 @@ function httpError(response: Response, mutationPath: string | null): JiraError {
     })
   }
   if (status === 429) {
-    return new JiraError("Jira rate limited the request (HTTP 429)", {
-      kind: "rate_limited",
-      retryable: true,
-      retryAfterSeconds: delay,
-      requestId: providerRequestId,
-    })
+    return new JiraError(
+      `Jira rate limited the request (HTTP 429).${retryGuidance}`,
+      {
+        kind: "rate_limited",
+        retryable: true,
+        retryAfterSeconds: delay,
+        requestId: providerRequestId,
+      }
+    )
   }
   if ([400, 409, 412, 422].includes(status)) {
     return new JiraError(`Jira rejected current state (HTTP ${status})`, {
@@ -339,12 +355,15 @@ function httpError(response: Response, mutationPath: string | null): JiraError {
       requestId: providerRequestId,
     })
   }
-  return new JiraError(`Jira request failed (HTTP ${status})`, {
-    kind: "unavailable",
-    retryable: status === 408 || status >= 500,
-    retryAfterSeconds: delay,
-    requestId: providerRequestId,
-  })
+  return new JiraError(
+    `Jira request failed (HTTP ${status}).${retryGuidance}`,
+    {
+      kind: "unavailable",
+      retryable: status === 408 || status >= 500,
+      retryAfterSeconds: delay,
+      requestId: providerRequestId,
+    }
+  )
 }
 
 function choice(
@@ -436,14 +455,20 @@ export class JiraClient {
     const issueTypes = [...(await this.fetchIssueTypes()).values()].filter(
       (item) => !item.subtask
     )
+    const hierarchyByType = await this.fetchHierarchyLevels(issueTypes)
     const choices: ResolutionChoice[] = []
     const drafts = [plan.epic, ...plan.children]
     const typeByClientKey = new Map<string, IssueTypeMeta>()
 
     for (const [index, node] of drafts.entries()) {
+      const expectedHierarchyLevel = index === 0 ? 1 : 0
+      const eligibleIssueTypes = issueTypes.filter(
+        (value) => hierarchyByType.get(value.id) === expectedHierarchyLevel
+      )
       const match = node.issueTypeId
-        ? (issueTypes.find((value) => value.id === node.issueTypeId) ?? null)
-        : exactNamedMatch(node.issueTypeName, issueTypes)
+        ? (eligibleIssueTypes.find((value) => value.id === node.issueTypeId) ??
+          null)
+        : exactNamedMatch(node.issueTypeName, eligibleIssueTypes)
       const field =
         index === 0 ? "epic.issueTypeId" : `children[${index - 1}].issueTypeId`
       if (!match) {
@@ -451,10 +476,10 @@ export class JiraClient {
           choice(
             field,
             node.issueTypeName,
-            rankedCandidates(
-              node.issueTypeName,
-              issueTypes,
-              () => "Creatable Jira issue type"
+            rankedCandidates(node.issueTypeName, eligibleIssueTypes, () =>
+              index === 0
+                ? "Creatable epic-level Jira issue type"
+                : "Creatable standard Jira issue type"
             )
           )
         )
@@ -508,31 +533,9 @@ export class JiraClient {
     const uniqueTypes = new Map(
       [...typeByClientKey.values()].map((value) => [value.id, value])
     )
-    const hierarchyByType = new Map<string, number>()
     const fieldsByType = new Map<string, Map<string, FieldMeta>>()
     for (const issueType of uniqueTypes.values()) {
-      hierarchyByType.set(
-        issueType.id,
-        await this.fetchHierarchyLevel(issueType.id)
-      )
       fieldsByType.set(issueType.id, await this.fetchFields(issueType.id))
-    }
-
-    const epicType = typeByClientKey.get(plan.epic.clientKey) as IssueTypeMeta
-    if (hierarchyByType.get(epicType.id) !== 1) {
-      throw new JiraError(
-        "The selected Jira issue type is not currently an epic-level type",
-        { kind: "conflict" }
-      )
-    }
-    for (const child of plan.children) {
-      const issueType = typeByClientKey.get(child.clientKey) as IssueTypeMeta
-      if (hierarchyByType.get(issueType.id) !== 0) {
-        throw new JiraError(
-          `${child.clientKey}: the selected Jira issue type is not currently a standard child type`,
-          { kind: "conflict" }
-        )
-      }
     }
 
     const fixVersionByClientKey = new Map<string, JiraNamedRef | null>()
@@ -875,11 +878,28 @@ export class JiraClient {
           key: created.ref.key,
           url: created.ref.url,
         })
+        if (created.verificationError) {
+          return result({
+            status: "partial",
+            changed: true,
+            message:
+              "Jira acknowledged and identified the created work item, but its exact fields could not be verified. No later writes were attempted; review the created item manually and do not republish blindly.",
+            nextAction: "manual_review",
+            retryAfterSeconds: created.verificationError.retryAfterSeconds,
+            requestId: created.requestId,
+          })
+        }
       } catch (error) {
         if (!(error instanceof JiraError)) throw error
+        const notAttempted =
+          !error.mutationUnknown && error.kind === "unavailable"
         issueOutcomes.set(node.clientKey, {
           clientKey: node.clientKey,
-          state: error.mutationUnknown ? "unknown" : "rejected",
+          state: error.mutationUnknown
+            ? "unknown"
+            : notAttempted
+              ? "not_attempted"
+              : "rejected",
           id: null,
           key: null,
           url: null,
@@ -892,11 +912,22 @@ export class JiraClient {
               : error.kind === "conflict"
                 ? "conflict"
                 : "blocked",
-          changed: error.mutationUnknown ? null : knownChange,
-          message: error.mutationUnknown
-            ? "A Jira create outcome is unknown. No later writes were attempted; inspect Jira before taking another action."
-            : `Jira rejected a work item. No later writes were attempted. ${error.message}`,
-          nextAction: error.mutationUnknown ? "inspect_again" : "manual_review",
+          changed: error.mutationUnknown
+            ? knownChange || error.mutationAcknowledged
+              ? true
+              : null
+            : knownChange,
+          message: error.mutationAcknowledged
+            ? "Jira acknowledged the create but did not return a verifiable work-item identity. No later writes were attempted; inspect Jira before manual review and do not republish blindly."
+            : error.mutationUnknown
+              ? "A Jira create outcome is unknown. No later writes were attempted; inspect Jira before taking another action."
+              : notAttempted
+                ? `The Worker stopped before sending the next Jira create. ${error.message}`
+                : `Jira rejected a work item. No later writes were attempted. ${error.message}`,
+          nextAction:
+            error.mutationUnknown || notAttempted
+              ? "inspect_again"
+              : "manual_review",
           retryAfterSeconds: error.retryAfterSeconds,
           requestId: error.requestId ?? lastRequestId,
         })
@@ -933,17 +964,32 @@ export class JiraClient {
         dependencyOutcomes.set(identity, { ...dependency, state: "created" })
       } catch (error) {
         if (!(error instanceof JiraError)) throw error
+        const notAttempted =
+          !error.mutationUnknown && error.kind === "unavailable"
         dependencyOutcomes.set(identity, {
           ...dependency,
-          state: error.mutationUnknown ? "unknown" : "rejected",
+          state: error.mutationUnknown
+            ? "unknown"
+            : notAttempted
+              ? "not_attempted"
+              : "rejected",
         })
         return result({
           status: error.mutationUnknown ? "ambiguous" : "partial",
-          changed: error.mutationUnknown ? null : knownChange,
+          changed: error.mutationUnknown
+            ? knownChange
+              ? true
+              : null
+            : knownChange,
           message: error.mutationUnknown
             ? "A Jira dependency outcome is unknown. No later writes were attempted; inspect Jira before taking another action."
-            : `Jira rejected a dependency. No later writes were attempted. ${error.message}`,
-          nextAction: error.mutationUnknown ? "inspect_again" : "manual_review",
+            : notAttempted
+              ? `The Worker stopped before sending the next Jira dependency. ${error.message}`
+              : `Jira rejected a dependency. No later writes were attempted. ${error.message}`,
+          nextAction:
+            error.mutationUnknown || notAttempted
+              ? "inspect_again"
+              : "manual_review",
           retryAfterSeconds: error.retryAfterSeconds,
           requestId: error.requestId ?? lastRequestId,
         })
@@ -1122,6 +1168,51 @@ export class JiraClient {
     throw new JiraError("Jira issue-type metadata exceeded the page limit", {
       kind: "conflict",
     })
+  }
+
+  private async fetchHierarchyLevels(
+    issueTypes: IssueTypeMeta[]
+  ): Promise<Map<string, number>> {
+    const projectTypes = await this.readJson("/rest/api/3/issuetype")
+    if (!Array.isArray(projectTypes)) {
+      throw new JiraError("Jira issue-type hierarchy metadata was malformed", {
+        kind: "unavailable",
+        retryable: true,
+      })
+    }
+    const result = new Map<string, number>()
+    for (const value of projectTypes) {
+      const item = record(value)
+      const id = numericId(item?.id)
+      const level = item?.hierarchyLevel
+      if (
+        !id ||
+        typeof level !== "number" ||
+        !Number.isSafeInteger(level) ||
+        result.has(id)
+      ) {
+        throw new JiraError(
+          "Jira issue-type hierarchy metadata was malformed",
+          {
+            kind: "unavailable",
+            retryable: true,
+          }
+        )
+      }
+      result.set(id, level)
+    }
+    for (const issueType of issueTypes) {
+      if (!result.has(issueType.id)) {
+        throw new JiraError(
+          "Jira issue-type hierarchy metadata was incomplete",
+          {
+            kind: "unavailable",
+            retryable: true,
+          }
+        )
+      }
+    }
+    return result
   }
 
   private async fetchHierarchyLevel(issueTypeId: string): Promise<number> {
@@ -1651,6 +1742,11 @@ export class JiraClient {
     const incomplete =
       missingClientKeys.length > 0 ||
       dependencies.some((dependency) => dependency.state === "missing")
+    if (incomplete) {
+      warnings.push(
+        "Jira enhanced search and link reads may lag recent writes; missing marked work is not proof that an uncertain mutation failed."
+      )
+    }
     const status = conflict ? "conflict" : incomplete ? "partial" : "complete"
     return {
       ok: status === "complete",
@@ -1788,8 +1884,10 @@ export class JiraClient {
       text(issue.key) !== ref.key ||
       numericId(project?.id) !== plan.project.id ||
       text(fields?.summary) !== node.summary ||
-      JSON.stringify(fields?.description) !==
-        JSON.stringify(this.descriptionDocument(plan, node)) ||
+      !isDeepStrictEqual(
+        fields?.description,
+        this.descriptionDocument(plan, node)
+      ) ||
       numericId(issueType?.id) !== node.issueType.id ||
       numericId(observedParent?.id) !== (parent?.id ?? null) ||
       (node.assignee !== null &&
@@ -1814,7 +1912,11 @@ export class JiraClient {
     plan: PreparedPlan,
     node: PreparedNode,
     parent: IssueRef | null
-  ): Promise<{ ref: IssueRef; requestId: string | null }> {
+  ): Promise<{
+    ref: IssueRef
+    requestId: string | null
+    verificationError: JiraError | null
+  }> {
     const fields: Record<string, unknown> = {
       project: { id: plan.project.id },
       issuetype: { id: node.issueType.id },
@@ -1840,6 +1942,7 @@ export class JiraClient {
         kind: "ambiguous",
         retryable: true,
         mutationUnknown: true,
+        mutationAcknowledged: response.status === 201,
         requestId: response.requestId,
       })
     }
@@ -1848,17 +1951,14 @@ export class JiraClient {
       key,
       url: `${this.config.siteUrl}/browse/${encodeURIComponent(key)}`,
     }
+    let verificationError: JiraError | null = null
     try {
       await this.verifyExactNode(ref, plan, node, parent)
-    } catch {
-      throw new JiraError("Jira created work could not be read back exactly", {
-        kind: "ambiguous",
-        retryable: true,
-        mutationUnknown: true,
-        requestId: response.requestId,
-      })
+    } catch (error) {
+      if (!(error instanceof JiraError)) throw error
+      verificationError = error
     }
-    return { ref, requestId: response.requestId }
+    return { ref, requestId: response.requestId, verificationError }
   }
 
   private async dependencyExists(
@@ -1935,7 +2035,8 @@ export class JiraClient {
           throw error
         }
         lastError = error
-        const delay = Math.min(2_000, (error.retryAfterSeconds ?? 0) * 1_000)
+        const delay = (error.retryAfterSeconds ?? 0) * 1_000
+        if (delay > MAX_INLINE_RETRY_DELAY_MS) throw error
         if (delay > 0) await this.sleep(delay)
       }
     }
@@ -1967,6 +2068,7 @@ export class JiraClient {
     mutation: boolean,
     allowEmpty = false
   ): Promise<ApiResponse<unknown>> {
+    let mutationAcknowledged = false
     this.calls += 1
     if (this.calls > MAX_CALLS) {
       throw new JiraError("Jira call ceiling exceeded", {
@@ -1979,6 +2081,12 @@ export class JiraClient {
         kind: "unavailable",
         retryable: true,
       })
+    }
+    if (mutation && remainingMs < MIN_MUTATION_BUDGET_MS) {
+      throw new JiraError(
+        "The Jira execution budget is too low to safely attempt another mutation and verify it",
+        { kind: "unavailable", retryable: true }
+      )
     }
     const controller = new AbortController()
     const timer = setTimeout(
@@ -2003,25 +2111,43 @@ export class JiraClient {
         await discardBody(response)
         throw httpError(response, mutation ? path : null)
       }
+      mutationAcknowledged = mutation && response.status === 201
       const providerRequestId = requestId(response)
       if (
         response.status === 204 ||
         response.headers.get("content-length") === "0"
       ) {
-        return { data: null, requestId: providerRequestId }
+        return {
+          data: null,
+          requestId: providerRequestId,
+          status: response.status,
+        }
       }
-      const body = await readBoundedBody(response, mutation)
+      const body = await readBoundedBody(
+        response,
+        mutation,
+        mutationAcknowledged
+      )
       if (body === "" && allowEmpty) {
-        return { data: null, requestId: providerRequestId }
+        return {
+          data: null,
+          requestId: providerRequestId,
+          status: response.status,
+        }
       }
       try {
-        return { data: JSON.parse(body), requestId: providerRequestId }
+        return {
+          data: JSON.parse(body),
+          requestId: providerRequestId,
+          status: response.status,
+        }
       } catch {
         if (mutation) {
           throw new JiraError("Jira mutation response could not be verified", {
             kind: "ambiguous",
             retryable: true,
             mutationUnknown: true,
+            mutationAcknowledged,
             requestId: providerRequestId,
           })
         }
@@ -2041,6 +2167,7 @@ export class JiraClient {
           kind: mutation ? "ambiguous" : "unavailable",
           retryable: true,
           mutationUnknown: mutation,
+          mutationAcknowledged,
         }
       )
     } finally {
