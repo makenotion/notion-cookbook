@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import type { WorkerConfig } from "../src/config.js"
-import { getJson, postJsonOnce, ProviderError } from "../src/http.js"
+import { getJson, postJsonOnce, ProviderError } from "../src/api-requests.js"
 import { PagerDutyClient } from "../src/pagerduty.js"
 import { SentryClient, SentryStateError } from "../src/sentry.js"
 

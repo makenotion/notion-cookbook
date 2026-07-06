@@ -1,6 +1,11 @@
 import type { JSONValue } from "@notionhq/workers/types"
 import type { Severity, WorkerConfig } from "./config.js"
-import { getJson, postJsonOnce, ProviderError, type FetchLike } from "./http.js"
+import {
+  getJson,
+  postJsonOnce,
+  ProviderError,
+  type FetchLike,
+} from "./api-requests.js"
 
 export interface PagerDutyPriority extends Record<string, JSONValue> {
   severity: Severity

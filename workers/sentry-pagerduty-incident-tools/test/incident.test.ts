@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import type { WorkerConfig } from "../src/config.js"
-import { ProviderError } from "../src/http.js"
+import { ProviderError } from "../src/api-requests.js"
 import {
   declareProductionIncident,
   incidentKey,

@@ -1,6 +1,6 @@
 import type { JSONValue } from "@notionhq/workers/types"
 import type { WorkerConfig } from "./config.js"
-import { getJson, ProviderError, type FetchLike } from "./http.js"
+import { getJson, ProviderError, type FetchLike } from "./api-requests.js"
 
 const RESULT_LIMIT = 10
 export type SearchTimeRange = "1h" | "6h" | "24h" | "7d" | "14d"

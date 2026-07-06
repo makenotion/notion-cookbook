@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto"
 import type { JSONValue } from "@notionhq/workers/types"
 import type { Severity, WorkerConfig } from "./config.js"
-import { ProviderError } from "./http.js"
+import { ProviderError } from "./api-requests.js"
 import type {
   PagerDutyDestination,
   PagerDutyIncident,

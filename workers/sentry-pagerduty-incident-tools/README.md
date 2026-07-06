@@ -17,14 +17,11 @@ database or Redis is required.
 - “Find unresolved checkout issues in production from the last hour.”
 - “Are any payment failures regressing in production?”
 - “Inspect `CHECKOUT-431` and show me where it would be routed.”
-- “Inspect this Sentry issue: `https://acme.sentry.io/issues/12345/`.”
-- “Declare the issue we just inspected as SEV-1.”
-- “Did we already declare an incident for this occurrence?”
-- “Retry that declaration and reuse the matching incident if PagerDuty has it.”
+- “Declare that occurrence as SEV-1.”
+- “Retry the declaration and reuse the matching incident if PagerDuty has it.”
 
-The Agent helps find the issue, shows the exact production occurrence and
-either its existing incident or PagerDuty destination, asks for confirmation,
-and then declares that same occurrence.
+The Agent finds and inspects the occurrence, shows any existing incident or the
+configured PagerDuty destination, asks for confirmation, then declares it.
 
 ## Quickstart
 
@@ -87,9 +84,8 @@ ntn workers env set \
 HTTPS origin. `PAGERDUTY_REGION=eu` selects PagerDuty's EU REST API.
 
 In Notion, add the deployed Worker to a Custom Agent under **Tools and access >
-Add connection**. Keep confirmation enabled for `declareProductionIncident`.
-If the Sentry and PagerDuty audiences differ, deploy separate Workers and
-Agents or limit this Agent to people authorized for both.
+Add connection**, and keep confirmation enabled for
+`declareProductionIncident`.
 
 ## How it works
 
@@ -101,39 +97,31 @@ The Worker exposes three tools:
 | `inspectSentryIssue`        | Shows the exact latest occurrence, any matching incident, and the destination and priorities for a new declaration. |
 | `declareProductionIncident` | Reuses a matching PagerDuty incident or validates the destination and re-reads Sentry before one creation request.  |
 
-Users choose issues by title or short ID. The Agent carries the numeric issue
-ID and event ID from inspection into declaration.
+The Agent passes the issue and event IDs from inspection into declaration.
+Search and inspection are read-only; Notion asks for confirmation before
+declaration.
 
-Search and inspection are read-only. Declaration is a write operation, so
-Notion asks for confirmation before it runs. Search and inspection can also be
-used on their own for triage.
+Before creating, the Worker looks for the same event-based PagerDuty key. A
+match—even a resolved incident—returns as a no-op without depending on current
+Sentry status or on-call coverage.
 
-The Worker first checks PagerDuty for an incident with the same event-based
-key. A matching incident returns as a no-op, including after it has been
-resolved, without depending on current Sentry status or on-call coverage.
+For a new incident, it validates the PagerDuty destination and coverage, then
+rechecks the exact Sentry occurrence immediately before one creation request.
+It stops if the issue resolved, the occurrence no longer matches the configured
+project and environment, or too little time remains to reconcile the result.
 
-For a new incident, the Worker checks the configured PagerDuty service,
-priority, and on-call coverage. It then re-reads the exact Sentry issue and
-event as its final network check. It stops without writing if the issue was
-resolved, the event no longer belongs to the configured project and
-environment, or the safety checks cannot finish with enough time left for the
-write and reconciliation.
-
-The event-based key lets an identical retry reuse an incident PagerDuty already
-returns, while a later Sentry occurrence can be declared separately. Because
-PagerDuty only rejects a duplicate key while the matching incident is open,
-this stateless recipe does not promise exactly-once creation across concurrent
-requests or incident resolution. A configured PagerDuty workflow may run
-independently; the Worker reports only the incident state it can verify.
+Identical retries can reuse incidents PagerDuty returns; later occurrences get
+separate keys. PagerDuty rejects duplicate keys only while a matching incident
+is open, so this stateless recipe cannot guarantee exactly-once creation after
+resolution or during concurrent requests.
 
 The Agent should never choose between ambiguous search results or infer
 severity from urgent language. A person selects the issue and severity.
 
 ## Authentication and safety
 
-Everyone using the Agent reads Sentry and writes PagerDuty through the same
-configured identities. The Worker does not apply each caller's personal
-provider permissions.
+The Agent uses configured shared identities instead of each caller's personal
+Sentry and PagerDuty permissions.
 
 The recipe keeps that shared authority narrow:
 
@@ -142,11 +130,9 @@ The recipe keeps that shared authority narrow:
 - Search returns at most 10 results; outputs omit stack traces, request data,
   users, and raw provider responses.
 - Text read from providers is treated as data, never as instructions.
-- Declaration requires the exact issue and event returned by inspection; a
-  later occurrence receives a separate declaration key.
-- One invocation sends at most one incident-creation request.
-- A matching incident returned by PagerDuty produces `changed: false`; an
-  uncertain write produces `changed: null`, never a guessed result.
+- Declaration uses the inspected issue and event, sends at most one creation
+  request, and returns `changed: false` for a matching incident or
+  `changed: null` when the result cannot be confirmed.
 
 Use a separate Agent and PagerDuty destination for restricted incident types,
 such as security incidents.
@@ -184,20 +170,19 @@ npm run build
 
 ## Extend it
 
-Useful next steps include mapping several fixed Sentry projects to separate
-PagerDuty services, adding a managed PagerDuty incident sync for browsing, or
-adding separate tools for incident updates and resolution. None is required
-for the core search, inspect, and declare workflow.
+Possible extensions include routing several fixed Sentry projects to separate
+services, a PagerDuty incident sync for browsing, and separate update or
+resolution tools.
 
 ## Project map
 
 ```text
-src/index.ts      Worker and tool registration
-src/config.ts     Fixed Sentry and PagerDuty configuration
-src/http.ts       Bounded provider reads and one-shot writes
-src/sentry.ts     Issue search, reference resolution, and event inspection
-src/pagerduty.ts  Service, priority, incident lookup, and creation
-src/incident.ts   Inspection guards and declaration flow
+src/index.ts         Worker and tool registration
+src/config.ts        Fixed Sentry and PagerDuty configuration
+src/api-requests.ts  Bounded API requests, deadlines, and one-shot writes
+src/sentry.ts        Issue search, reference resolution, and event inspection
+src/pagerduty.ts     Service, priority, incident lookup, and creation
+src/incident.ts      Inspection guards and declaration flow
 ```
 
 ## Learn more
