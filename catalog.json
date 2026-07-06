@@ -331,14 +331,14 @@
     },
     {
       "id": "intercom-escalate-customer-issue",
-      "title": "Intercom customer escalation agent tool",
-      "summary": "Create or deterministically enrich one approved Jira issue from an authoritative Intercom ticket or conversation, route support internally, and permanently prove the replay-safe Notion receipt.",
+      "title": "Intercom to Notion ticket agent tool",
+      "summary": "Inspect an Intercom conversation, create or reuse its Notion ticket, then apply a fixed tag, team assignment, and internal note.",
       "path": "workers/intercom-escalate-customer-issue",
       "kind": "worker-tool",
       "status": "ready",
       "language": "typescript",
       "runtime": "node",
-      "integrations": ["notion-workers", "intercom", "jira-cloud", "redis"],
+      "integrations": ["notion-workers", "intercom"],
       "entrypoints": ["src/index.ts"],
       "commands": {
         "install": "npm install",

@@ -7,8 +7,7 @@
     "check": "tsc --project tsconfig.test.json",
     "test": "tsx --test test/*.test.ts",
     "format": "prettier --write README.md src/**/*.ts test/**/*.ts package.json tsconfig.json",
-    "format:check": "prettier --check README.md src/**/*.ts test/**/*.ts package.json tsconfig.json",
-    "fingerprint": "tsx src/fingerprint-cli.ts"
+    "format:check": "prettier --check README.md src/**/*.ts test/**/*.ts package.json tsconfig.json"
   },
   "engines": {
     "node": ">=22.0.0",

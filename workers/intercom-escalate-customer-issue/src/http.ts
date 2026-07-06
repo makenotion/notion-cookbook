@@ -16,6 +16,10 @@ const DEFINITE_MUTATION_REJECTIONS = new Set([
   400, 401, 403, 404, 409, 422, 429,
 ])
 
+function isTransientStatus(status: number): boolean {
+  return status === 408 || status === 429 || status >= 500
+}
+
 export function retryAfterMs(headers: Headers): number | null {
   const raw = headers.get("retry-after")
   if (!raw) return null
@@ -98,7 +102,7 @@ function safeProviderMessage(provider: string, status: number): string {
 }
 
 export async function requestJson<T>(
-  provider: "Intercom" | "Jira",
+  provider: "Intercom",
   url: string,
   init: RequestInit,
   options: HttpRequestOptions & {
@@ -130,6 +134,25 @@ export async function requestJson<T>(
       )
     } catch (error) {
       clearTimeout(timeout)
+      if (error instanceof ProviderError && !options.mutation) {
+        const oversizedTransientResponse =
+          error.code === "RESPONSE_TOO_LARGE" &&
+          error.httpStatus !== null &&
+          isTransientStatus(error.httpStatus)
+        if (oversizedTransientResponse && attempt + 1 < attempts) {
+          await sleep(50 * 2 ** attempt)
+          continue
+        }
+        if (oversizedTransientResponse) {
+          throw new ProviderError(
+            "PROVIDER_UNAVAILABLE",
+            safeProviderMessage(provider, error.httpStatus as number),
+            error.httpStatus,
+            { retryable: true }
+          )
+        }
+        throw error
+      }
       if (!options.mutation && attempt + 1 < attempts) {
         await sleep(50 * 2 ** attempt)
         continue
@@ -170,7 +193,7 @@ export async function requestJson<T>(
     const delay = retryAfterMs(response.headers)
     if (
       !options.mutation &&
-      (response.status === 429 || response.status >= 500) &&
+      isTransientStatus(response.status) &&
       attempt + 1 < attempts
     ) {
       await sleep(Math.min(delay ?? 50 * 2 ** attempt, 5_000))
@@ -196,7 +219,7 @@ export async function requestJson<T>(
       safeProviderMessage(provider, response.status),
       response.status,
       {
-        retryable: response.status === 429 || response.status >= 500,
+        retryable: isTransientStatus(response.status),
         retryAfterMs: delay,
         status: response.status === 409 ? "conflict" : "blocked",
       }

@@ -130,7 +130,7 @@ and a **webhook** handles events from another service. See the complete
 | Sync an employee-facing directory                                    | [Workday employee directory sync](workers/workday-sync/)    | Workday     |
 | Sync related tickets, users, organizations, and metrics              | [Zendesk sync](workers/zendesk-sync/)                       | Zendesk     |
 
-### Add tools to a Notion Agent
+### Add Agent Tools to a Notion Agent
 
 An agent tool can coordinate a workflow across multiple apps. For example, the
 [Sentry to PagerDuty incident tools](workers/sentry-pagerduty-incident-tools/)
@@ -143,7 +143,7 @@ find and inspect an issue in Sentry, then declare an incident in PagerDuty.
 | Browse log groups, streams, and events              | [CloudWatch Logs](workers/cloudwatch-logs/)                                       | AWS CloudWatch Logs |
 | Learn the database-query pattern with seeded data   | [DuckDB query](workers/duckdb-query/)                                             | DuckDB              |
 | Review and publish an existing draft release        | [GitHub draft release tools](workers/github-draft-release-tools/)                 | GitHub              |
-| Create a reviewed ticket and route the conversation | [Intercom customer escalation](workers/intercom-escalate-customer-issue/)         | Intercom, Notion    |
+| Create or reuse a ticket and route the conversation | [Intercom customer escalation](workers/intercom-escalate-customer-issue/)         | Intercom, Notion    |
 | Query a database with read-only SQL                 | [Postgres query](workers/postgres-query/)                                         | PostgreSQL          |
 | Turn a Notion page into PowerPoint slides (`.pptx`) | [PowerPoint creator](workers/powerpoint-creator/)                                 | Notion, PowerPoint  |
 | Find Sentry issues and declare PagerDuty incidents  | [Sentry to PagerDuty incident tools](workers/sentry-pagerduty-incident-tools/)    | Sentry, PagerDuty   |
