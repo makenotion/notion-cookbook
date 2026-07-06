@@ -130,6 +130,10 @@ and a **webhook** handles events from another service. See the complete
 
 ### Add tools to a Notion Agent
 
+An agent tool can coordinate a workflow across multiple apps. For example, the
+[Sentry to PagerDuty incident tools](workers/sentry-pagerduty-incident-tools/)
+find and inspect an issue in Sentry, then declare an incident in PagerDuty.
+
 | Task                                                | Worker                                                                            | Integration         |
 | --------------------------------------------------- | --------------------------------------------------------------------------------- | ------------------- |
 | Inspect DAGs, runs, tasks, and logs                 | [Airflow](workers/airflow/)                                                       | Apache Airflow      |
