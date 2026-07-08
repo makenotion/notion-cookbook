@@ -41,10 +41,18 @@ type DataSourceRow = QueryDataSourceResponse["results"][number]
 // one row at a time so you never hold the whole data source in memory.
 async function streamFirstRows(limit: number): Promise<void> {
   let shown = 0
-  for await (const row of iteratePaginatedAPI(notion.dataSources.query, {
-    data_source_id: dataSourceId,
-    page_size: Math.min(limit, 100),
-  })) {
+  // The pagination helpers only thread start_cursor, and dataSources.query also
+  // needs data_source_id, so bind the id and page_size in a wrapper; the helper
+  // supplies the cursor on each call.
+  for await (const row of iteratePaginatedAPI(
+    (args) =>
+      notion.dataSources.query({
+        data_source_id: dataSourceId,
+        page_size: Math.min(limit, 100),
+        ...args,
+      }),
+    {}
+  )) {
     console.log(`  ${row.id}`)
     shown += 1
     if (shown >= limit) break
@@ -54,9 +62,12 @@ async function streamFirstRows(limit: number): Promise<void> {
 // Also the simple way: collectPaginatedAPI gathers every row into an array.
 // Only use it when you know the result fits in memory and under the limit.
 async function collectAll(): Promise<DataSourceRow[]> {
-  return collectPaginatedAPI(notion.dataSources.query, {
-    data_source_id: dataSourceId,
-  })
+  // Same wrapper as above so the helper's paginated calls carry data_source_id.
+  return collectPaginatedAPI(
+    (args) =>
+      notion.dataSources.query({ data_source_id: dataSourceId, ...args }),
+    {}
+  )
 }
 
 // Get every row, even when the data source exceeds the per-query limit.
