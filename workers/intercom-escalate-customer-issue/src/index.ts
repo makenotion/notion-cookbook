@@ -1,14 +1,11 @@
 import { Worker } from "@notionhq/workers"
 import { j } from "@notionhq/workers/schema-builder"
 import { loadConfig } from "./config.js"
+import { configurationFailure, createNotionTicket } from "./create-ticket.js"
+import { inspectIntercomConversation } from "./inspect-conversation.js"
 import { IntercomClient } from "./intercom.js"
 import type { NotionClientLike } from "./notion.js"
 import type { CreateTicketInput, InspectConversationInput } from "./types.js"
-import {
-  configurationFailure,
-  createNotionTicket,
-  inspectIntercomConversation,
-} from "./workflow.js"
 
 const worker = new Worker()
 export default worker

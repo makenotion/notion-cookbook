@@ -3,20 +3,21 @@ import test from "node:test"
 import type { RuntimeConfig } from "../src/config.js"
 import worker from "../src/index.js"
 import {
+  IntercomApiError,
   intercomNoteDigest,
   type ConversationSnapshot,
 } from "../src/intercom.js"
 import type { NotionClientLike } from "../src/notion.js"
 import type { CreateTicketInput, TicketDraft } from "../src/types.js"
-import { ProviderError, WorkflowError } from "../src/types.js"
+import { EscalationError } from "../src/types.js"
+import { createNotionTicket } from "../src/create-ticket.js"
 import {
   conversationInspectionVersion,
-  createNotionTicket,
   inspectIntercomConversation,
   sourceKey,
   ticketNoteBody,
-  type WorkflowDependencies,
-} from "../src/workflow.js"
+  type EscalationDependencies,
+} from "../src/inspect-conversation.js"
 
 const TICKETS_DATA_SOURCE_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 const SOURCE_DATA_SOURCE_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
@@ -365,7 +366,7 @@ class FakeNotion implements NotionClientLike {
 }
 
 interface MutationFailure {
-  error: WorkflowError
+  error: EscalationError
   apply: boolean
 }
 
@@ -470,7 +471,7 @@ class FakeIntercom {
 function harness(snapshot = baseConversation()): {
   notion: FakeNotion
   intercom: FakeIntercom
-  dependencies: WorkflowDependencies
+  dependencies: EscalationDependencies
 } {
   const notion = new FakeNotion()
   const intercom = new FakeIntercom(snapshot)
@@ -526,8 +527,8 @@ function writeCounts(intercom: FakeIntercom): [number, number, number] {
   return [intercom.addTagCalls, intercom.routeCalls, intercom.noteCalls]
 }
 
-function lostMutation(message: string): WorkflowError {
-  return new WorkflowError(
+function lostMutation(message: string): EscalationError {
+  return new EscalationError(
     "MUTATION_OUTCOME_UNKNOWN",
     message,
     "ambiguous",
@@ -993,7 +994,7 @@ test("a failed read after a confirmed note is terminal ambiguous", async () => {
   environment.intercom.snapshot.teamAssigneeId = TARGET_TEAM_ID
   environment.intercom.onConversationRead = (call) => {
     if (call === 3) {
-      throw new ProviderError(
+      throw new IntercomApiError(
         "PROVIDER_UNAVAILABLE",
         "Intercom could not be read.",
         503,
@@ -1105,7 +1106,7 @@ test("a same-invocation human state change stops the remaining compound writes",
 test("a definite late failure preserves the created ticket as a partial failure", async () => {
   const environment = harness()
   environment.intercom.noteFailure = {
-    error: new ProviderError(
+    error: new IntercomApiError(
       "HTTP_403",
       "Intercom rejected the internal note.",
       403

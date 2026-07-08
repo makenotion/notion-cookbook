@@ -1,8 +1,267 @@
 import { createHash } from "node:crypto"
 import type { RuntimeConfig } from "./config.js"
 import { intercomAppBaseUrl, intercomBaseUrl } from "./config.js"
-import { requestJson, type FetchLike } from "./http.js"
-import { WorkflowError } from "./types.js"
+import { EscalationError } from "./types.js"
+
+export class IntercomApiError extends EscalationError {
+  constructor(
+    code: string,
+    message: string,
+    public readonly httpStatus: number | null,
+    options: {
+      retryable?: boolean
+      retryAfterMs?: number | null
+      ambiguous?: boolean
+      status?: "conflict" | "partial_failure" | "ambiguous" | "blocked"
+    } = {}
+  ) {
+    super(
+      code,
+      message,
+      options.status ?? (options.ambiguous ? "ambiguous" : "blocked"),
+      options.retryable ?? false,
+      options.ambiguous ?? false
+    )
+    this.retryAfterMs = options.retryAfterMs ?? null
+    this.name = "IntercomApiError"
+  }
+
+  readonly retryAfterMs: number | null
+}
+
+export type FetchLike = (
+  input: string | URL,
+  init?: RequestInit
+) => Promise<Response>
+
+interface IntercomRequestOptions {
+  fetchFn?: FetchLike
+  timeoutMs: number
+  sleep?: (milliseconds: number) => Promise<void>
+  maximumBytes?: number
+}
+
+const DEFINITE_MUTATION_REJECTIONS = new Set([
+  400, 401, 403, 404, 409, 422, 429,
+])
+
+function isTransientStatus(status: number): boolean {
+  return status === 408 || status === 429 || status >= 500
+}
+
+function retryAfterMs(headers: Headers): number | null {
+  const raw = headers.get("retry-after")
+  if (!raw) return null
+  const seconds = Number(raw)
+  if (Number.isFinite(seconds))
+    return Math.min(300_000, Math.max(0, Math.round(seconds * 1_000)))
+  const date = Date.parse(raw)
+  if (Number.isNaN(date)) return null
+  return Math.min(300_000, Math.max(0, date - Date.now()))
+}
+
+async function boundedResponseText(
+  response: Response,
+  maximumBytes = 262_144,
+  signal?: AbortSignal
+): Promise<string> {
+  if (!response.body) return ""
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let total = 0
+  let output = ""
+  try {
+    while (true) {
+      if (signal?.aborted) throw new DOMException("Aborted", "AbortError")
+      const pending = reader.read()
+      const { done, value } = signal
+        ? await new Promise<ReadableStreamReadResult<Uint8Array>>(
+            (resolve, reject) => {
+              const aborted = (): void => {
+                void reader.cancel()
+                reject(new DOMException("Aborted", "AbortError"))
+              }
+              signal.addEventListener("abort", aborted, { once: true })
+              void pending.then(
+                (chunk) => {
+                  signal.removeEventListener("abort", aborted)
+                  resolve(chunk)
+                },
+                (error: unknown) => {
+                  signal.removeEventListener("abort", aborted)
+                  reject(error)
+                }
+              )
+            }
+          )
+        : await pending
+      if (done) break
+      total += value.byteLength
+      if (total > maximumBytes) {
+        await reader.cancel()
+        throw new IntercomApiError(
+          "RESPONSE_TOO_LARGE",
+          "Intercom response exceeded the fixed byte limit.",
+          response.status
+        )
+      }
+      output += decoder.decode(value, { stream: true })
+    }
+    output += decoder.decode()
+    return output
+  } finally {
+    reader.releaseLock()
+  }
+}
+
+export function isDefiniteIntercomMutationRejection(
+  error: unknown
+): error is IntercomApiError {
+  return (
+    error instanceof IntercomApiError &&
+    error.httpStatus !== null &&
+    DEFINITE_MUTATION_REJECTIONS.has(error.httpStatus) &&
+    (error.code === "AUTHENTICATION_EXPIRED" ||
+      error.code === `HTTP_${error.httpStatus}`)
+  )
+}
+
+function safeIntercomMessage(status: number): string {
+  return `Intercom returned HTTP ${status}; the response body was not exposed.`
+}
+
+export async function requestIntercomJson<T>(
+  url: string,
+  init: RequestInit,
+  options: IntercomRequestOptions & {
+    mutation: boolean
+    expectedStatuses: number[]
+  }
+): Promise<T> {
+  const fetchFn = options.fetchFn ?? fetch
+  const sleep =
+    options.sleep ??
+    ((milliseconds) =>
+      new Promise((resolve) => setTimeout(resolve, milliseconds)))
+  const attempts = options.mutation ? 1 : 3
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), options.timeoutMs)
+    let response: Response
+    let text: string
+    try {
+      response = await fetchFn(url, {
+        ...init,
+        redirect: "manual",
+        signal: controller.signal,
+      })
+      text = await boundedResponseText(
+        response,
+        options.maximumBytes,
+        controller.signal
+      )
+    } catch (error) {
+      clearTimeout(timeout)
+      if (error instanceof IntercomApiError && !options.mutation) {
+        const oversizedTransientResponse =
+          error.code === "RESPONSE_TOO_LARGE" &&
+          error.httpStatus !== null &&
+          isTransientStatus(error.httpStatus)
+        if (oversizedTransientResponse && attempt + 1 < attempts) {
+          await sleep(50 * 2 ** attempt)
+          continue
+        }
+        if (oversizedTransientResponse) {
+          throw new IntercomApiError(
+            "PROVIDER_UNAVAILABLE",
+            safeIntercomMessage(error.httpStatus as number),
+            error.httpStatus,
+            { retryable: true }
+          )
+        }
+        throw error
+      }
+      if (!options.mutation && attempt + 1 < attempts) {
+        await sleep(50 * 2 ** attempt)
+        continue
+      }
+      throw new IntercomApiError(
+        options.mutation ? "MUTATION_OUTCOME_UNKNOWN" : "PROVIDER_UNAVAILABLE",
+        options.mutation
+          ? `Intercom mutation response was not observed; reconcile before any retry.`
+          : `Intercom could not be reached within the bounded retry policy.`,
+        null,
+        { retryable: !options.mutation, ambiguous: options.mutation }
+      )
+    }
+    if (options.expectedStatuses.includes(response.status)) {
+      if (!text) {
+        clearTimeout(timeout)
+        return undefined as T
+      }
+      try {
+        const parsed = JSON.parse(text) as T
+        clearTimeout(timeout)
+        return parsed
+      } catch {
+        clearTimeout(timeout)
+        throw new IntercomApiError(
+          options.mutation
+            ? "MUTATION_OUTCOME_UNKNOWN"
+            : "INVALID_PROVIDER_RESPONSE",
+          options.mutation
+            ? `Intercom mutation returned malformed JSON; reconcile before any retry.`
+            : `Intercom returned malformed JSON.`,
+          response.status,
+          options.mutation ? { ambiguous: true } : {}
+        )
+      }
+    }
+    clearTimeout(timeout)
+    const delay = retryAfterMs(response.headers)
+    if (
+      !options.mutation &&
+      isTransientStatus(response.status) &&
+      attempt + 1 < attempts
+    ) {
+      await sleep(Math.min(delay ?? 50 * 2 ** attempt, 5_000))
+      continue
+    }
+    if (
+      options.mutation &&
+      !DEFINITE_MUTATION_REJECTIONS.has(response.status)
+    ) {
+      throw new IntercomApiError(
+        "MUTATION_OUTCOME_UNKNOWN",
+        safeIntercomMessage(response.status),
+        response.status,
+        {
+          ambiguous: true,
+        }
+      )
+    }
+    throw new IntercomApiError(
+      response.status === 401
+        ? "AUTHENTICATION_EXPIRED"
+        : `HTTP_${response.status}`,
+      safeIntercomMessage(response.status),
+      response.status,
+      {
+        retryable: isTransientStatus(response.status),
+        retryAfterMs: delay,
+        status: response.status === 409 ? "conflict" : "blocked",
+      }
+    )
+  }
+  throw new IntercomApiError(
+    "PROVIDER_UNAVAILABLE",
+    `Intercom exhausted its bounded retry policy.`,
+    null,
+    {
+      retryable: true,
+    }
+  )
+}
 
 const MAX_CONVERSATION_BYTES = 8 * 1024 * 1024
 const MAX_CONTACTS = 20
@@ -79,15 +338,15 @@ interface IntercomClientOptions {
   sleep?: (milliseconds: number) => Promise<void>
 }
 
-function invalidResponse(message: string): WorkflowError {
-  return new WorkflowError(
+function invalidResponse(message: string): EscalationError {
+  return new EscalationError(
     "INVALID_PROVIDER_RESPONSE",
     `Intercom returned ${message}.`
   )
 }
 
-function ambiguousResponse(message: string): WorkflowError {
-  return new WorkflowError(
+function ambiguousResponse(message: string): EscalationError {
+  return new EscalationError(
     "MUTATION_OUTCOME_UNKNOWN",
     `Intercom may have completed the mutation, but ${message}; reconcile live state before retrying.`,
     "ambiguous",
@@ -112,7 +371,7 @@ function providerId(value: unknown, label: string): string {
 
 function inputProviderId(value: string, label: string): string {
   if (typeof value !== "string" || !PROVIDER_ID.test(value)) {
-    throw new WorkflowError(
+    throw new EscalationError(
       "INVALID_INPUT",
       `${label} must be a 1–100 character Intercom identifier.`
     )
@@ -125,7 +384,7 @@ function canonicalConversationId(value: string): string {
     ? value.slice("conversation_".length)
     : value
   if (candidate.startsWith("conversation_")) {
-    throw new WorkflowError(
+    throw new EscalationError(
       "INVALID_INPUT",
       "Conversation reference contains more than one conversation_ prefix."
     )
@@ -141,14 +400,14 @@ export function normalizeIntercomConversationReference(
   }
 ): string {
   if (typeof value !== "string") {
-    throw new WorkflowError(
+    throw new EscalationError(
       "INVALID_INPUT",
       "Conversation reference must be an Intercom conversation ID or Inbox URL."
     )
   }
   const reference = value.trim()
   if (!reference) {
-    throw new WorkflowError(
+    throw new EscalationError(
       "INVALID_INPUT",
       "Conversation reference must be an Intercom conversation ID or Inbox URL."
     )
@@ -159,7 +418,7 @@ export function normalizeIntercomConversationReference(
     try {
       url = new URL(reference)
     } catch {
-      throw new WorkflowError(
+      throw new EscalationError(
         "INVALID_INPUT",
         "Conversation reference must be a canonical Intercom Inbox URL."
       )
@@ -175,7 +434,7 @@ export function normalizeIntercomConversationReference(
       url.password ||
       !allowedHosts.has(url.hostname)
     ) {
-      throw new WorkflowError(
+      throw new EscalationError(
         "INVALID_INPUT",
         "Conversation reference must be a canonical Intercom Inbox URL."
       )
@@ -190,7 +449,7 @@ export function normalizeIntercomConversationReference(
       parts[5] !== "all" ||
       parts[6] !== "conversation"
     ) {
-      throw new WorkflowError(
+      throw new EscalationError(
         "INVALID_INPUT",
         "Conversation reference must be a canonical Intercom Inbox URL."
       )
@@ -201,7 +460,7 @@ export function normalizeIntercomConversationReference(
       workspaceId = decodeURIComponent(parts[2])
       conversationId = decodeURIComponent(parts[7])
     } catch {
-      throw new WorkflowError(
+      throw new EscalationError(
         "INVALID_INPUT",
         "Conversation reference contains an invalid encoded identifier."
       )
@@ -213,7 +472,7 @@ export function normalizeIntercomConversationReference(
       (workspaceId !== expected.workspaceId ||
         url.origin !== intercomAppBaseUrl(expected.region))
     ) {
-      throw new WorkflowError(
+      throw new EscalationError(
         "INTERCOM_REFERENCE_MISMATCH",
         "The Intercom Inbox URL belongs to a different configured workspace or region.",
         "conflict"
@@ -359,14 +618,14 @@ export function intercomNoteDigest(body: string): string {
     body.length > MAX_NOTE_TEXT ||
     /[\u0000\u000b\u000c\u000e-\u001f\u007f]/.test(body)
   ) {
-    throw new WorkflowError(
+    throw new EscalationError(
       "INVALID_INPUT",
       `The Intercom internal note must contain 1–${MAX_NOTE_TEXT} characters of bounded text.`
     )
   }
   const normalized = normalizedNoteBody(body)
   if (!normalized) {
-    throw new WorkflowError(
+    throw new EscalationError(
       "INVALID_INPUT",
       "The Intercom internal note cannot be empty."
     )
@@ -604,8 +863,7 @@ export class IntercomClient {
     expectedStatuses = [200],
     maximumBytes = 262_144
   ): Promise<T> {
-    return requestJson<T>(
-      "Intercom",
+    return requestIntercomJson<T>(
       `${this.baseUrl}${path}`,
       { ...init, headers: { ...this.headers, ...(init.headers ?? {}) } },
       {

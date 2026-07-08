@@ -8,7 +8,7 @@ import {
   intercomBaseUrl,
   loadConfig,
 } from "../src/config.js"
-import { configurationFailure } from "../src/workflow.js"
+import { configurationFailure } from "../src/create-ticket.js"
 
 type JsonRecord = Record<string, unknown>
 

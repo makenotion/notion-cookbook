@@ -90,7 +90,7 @@ export interface CreateTicketResult {
   message: string
 }
 
-export class WorkflowError extends Error {
+export class EscalationError extends Error {
   constructor(
     public readonly code: string,
     message: string,
@@ -102,32 +102,6 @@ export class WorkflowError extends Error {
     public readonly ambiguous = false
   ) {
     super(message)
-    this.name = "WorkflowError"
+    this.name = "EscalationError"
   }
-}
-
-export class ProviderError extends WorkflowError {
-  constructor(
-    code: string,
-    message: string,
-    public readonly httpStatus: number | null,
-    options: {
-      retryable?: boolean
-      retryAfterMs?: number | null
-      ambiguous?: boolean
-      status?: Exclude<CreateTicketResult["status"], "completed" | "no_op">
-    } = {}
-  ) {
-    super(
-      code,
-      message,
-      options.status ?? (options.ambiguous ? "ambiguous" : "blocked"),
-      options.retryable ?? false,
-      options.ambiguous ?? false
-    )
-    this.retryAfterMs = options.retryAfterMs ?? null
-    this.name = "ProviderError"
-  }
-
-  readonly retryAfterMs: number | null
 }
