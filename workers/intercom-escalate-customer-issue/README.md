@@ -105,11 +105,11 @@ the conversation and exact ticket identity; it is not approval or an
 idempotency key.
 
 After review, the Agent passes the returned `conversationId`, exact
-`inspectionVersion`, and `ticketDraft` to `createNotionTicket`. If inspection
-found a ticket, show it and ask whether to reuse it with `ticketDraft: null`.
-The Worker never overwrites its Notion content. It may no-op, complete missing
-Intercom steps, or stop when it cannot prove the exact note is absent. A missing
-ticket requires a reviewed draft.
+`inspectionVersion`, and `ticketDraft` to `createNotionTicket`. If the existing
+ticket and route are complete, show the ticket and stop. Otherwise, ask whether
+to finish the missing Intercom steps with `ticketDraft: null`. The Worker never
+overwrites existing Notion content and stops when it cannot prove the exact note
+is absent. A missing ticket requires a reviewed draft.
 
 Intercom's remote MCP can find and read conversations in US-hosted workspaces.
 This Agent Tool owns the fixed cross-API creation, tagging, assignment, and note
@@ -131,9 +131,9 @@ These checks do not make two APIs atomic or guarantee exactly-once execution.
 Concurrent calls for one conversation are unsupported because their races may
 not be visible. If a create or note response is lost, the Worker checks live
 state once. It either proves the result or returns `ambiguous`; do not
-automatically retry an ambiguous write. On `conflict`, inspect again. On
-`ambiguous`, verify both systems manually, then inspect again. If the result
-includes a ticket link, show it with `nextStep`.
+automatically retry an ambiguous write. Follow `nextStep`: reinspect live-state
+conflicts, resolve duplicate-ticket conflicts manually, and verify both systems
+after an ambiguous result. If the result includes a ticket link, show it too.
 
 Hosted Notion calls use the Custom Agent's `context.notion` permissions.
 Intercom calls use the shared private app, so every caller must be authorized to
