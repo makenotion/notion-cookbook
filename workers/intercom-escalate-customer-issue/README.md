@@ -1,75 +1,73 @@
 # Create a Notion ticket from an Intercom conversation
 
-Turn one Intercom conversation into a structured Notion ticket, apply a fixed
-internal tag and team, and add an internal note linking the ticket. The Agent
-decides when to act and drafts the ticket; the Worker checks live state and
-determines how the repeatable API steps run. It never replies to the customer.
+This Worker gives a Custom Agent two Agent Tools that turn one Intercom
+conversation into a structured Notion ticket, apply a fixed tag, route to a
+fixed team, and add an internal note linking the ticket. The Agent decides when
+to act and drafts the ticket; the Worker determines how the repeatable API steps
+run. It handles one conversation at a time; it never sends a customer-visible
+reply, bulk-escalates, accepts Intercom Tickets, or lets the Agent choose
+destinations, teams, or tags.
 
-Try asking your Custom Agent:
+## Try asking
 
 - “Turn this checkout conversation into a P1 product ticket.”
 - “Inspect this Intercom conversation and show me the ticket you would create.”
 - “Create the Notion ticket we just reviewed and apply the configured
   escalation route.”
 
-This recipe handles one Intercom conversation at a time. It does not create from
-Intercom Tickets, bulk-escalate a queue, or let the Agent choose arbitrary
-destinations, teams, or tags.
-
 ## Quickstart
 
-You need Node.js 22+, npm 10.9.2+, the `ntn` CLI, an Intercom private app, and a
-Notion Tickets data source.
+You need Node.js 22+, npm 10.9.2+, the `ntn` CLI, `curl`, `jq`, an Intercom
+private app, and a Notion Tickets data source.
 
 ### 1. Create the Notion Tickets data source
 
-Create a data source with this schema. Property names and types are part of the
-recipe contract.
+Create a data source with this exact schema:
 
-| Property              | Type      | Configuration                                             |
-| --------------------- | --------- | --------------------------------------------------------- |
-| `Ticket`              | Title     | The title can be renamed; keep exactly one title property |
-| `Intercom source key` | Rich text | Worker-owned identity; do not edit it                     |
-| `Priority`            | Select    | Includes `P0`, `P1`, `P2`, and `P3`                       |
-| `Customer`            | Rich text | Customer display name                                     |
-| `Company`             | Rich text | Company display name                                      |
-| `Intercom updated`    | Date      | Source version used for the ticket                        |
+| Property              | Type      | Configuration                          |
+| --------------------- | --------- | -------------------------------------- |
+| `Ticket`              | Title     | Exactly one title; its name may differ |
+| `Intercom source key` | Rich text | Worker-owned; do not edit              |
+| `Priority`            | Select    | Options `P0`, `P1`, `P2`, and `P3`     |
+| `Customer`            | Rich text | Display name or ID when available      |
+| `Company`             | Rich text | Display name or ID when available      |
+| `Intercom updated`    | Date      | Last observed Intercom update time     |
 
-The Worker writes the reviewed ticket fields, a bounded customer-visible
-timeline, and an Intercom link into the page body. Give the Custom Agent access
-to this data source, and share it only with people who should see customer
-content.
+The page body includes the reviewed ticket, bounded customer-visible evidence,
+and an Intercom link. Share this data source only with its intended audience.
 
-Use the data source ID, not the parent database ID. In Notion, open the
-database's settings, choose **Manage data sources**, open the data source's
-`•••` menu, and choose **Copy data source ID**. Alternatively, run
-`ntn api v1/databases/<database-id>` and copy the matching `data_sources[].id`.
-
-The cookbook's [Intercom sync](../intercom-sync/) is optional. With it, the
-Agent can start from a synced Conversation page whose `Conversation ID`
-rich-text property contains the immutable Intercom API ID. Without the sync,
-inspection accepts a raw REST ID, an MCP-prefixed ID such as
-`conversation_987654321`, or a supported Intercom Inbox conversation URL.
+Use the data source ID, not the parent database ID. Open the database settings,
+choose **Manage data sources**, open the data source's `•••` menu, and choose
+**Copy data source ID**.
 
 ### 2. Configure Intercom
 
-Create an Intercom private app for your workspace. Grant only the read access
-needed for conversations, contacts, companies, admins, teams, and tags, plus
-write access for conversation assignment, tags, and internal notes. Use
-`GET /me`, `GET /teams`, and `GET /tags` to find the immutable workspace,
-admin, team, and tag IDs.
+Create an Intercom private app with **Read and list users and companies**,
+**Read conversations**, **Read admins**, **Write conversations**, and **Write
+tags**. Use its token to find the fixed IDs:
 
-Choose one team and one tag for every escalation handled by this deployment.
-Those IDs are Worker configuration, never Agent input.
+```sh
+export INTERCOM_API=https://api.intercom.io # or https://api.eu.intercom.io / https://api.au.intercom.io
+export INTERCOM_TOKEN=replace-with-private-app-token
+intercom() {
+  curl -fsS "$INTERCOM_API/$1" \
+    -H "Authorization: Bearer $INTERCOM_TOKEN" \
+    -H "Intercom-Version: 2.15"
+}
+intercom me | jq '{workspaceId:.app.id_code, adminId:.id}'
+intercom teams | jq '.teams[] | {id,name}'
+intercom tags | jq '.data[] | {id,name}'
+unset -f intercom
+unset INTERCOM_TOKEN
+```
+
+Choose one team and tag for this deployment. They are never Agent input.
 
 ### 3. Deploy
 
 ```sh
 cd workers/intercom-escalate-customer-issue
 npm install
-npm run check
-npm test
-npm run build
 
 npm install --global ntn@latest
 ntn login
@@ -84,82 +82,70 @@ ntn workers env set INTERCOM_TAG_ID=tag_id
 ntn workers env set NOTION_TICKETS_DATA_SOURCE_ID=11111111-1111-4111-8111-111111111111
 ```
 
-Add the deployed Worker to a Custom Agent under **Tools and access > Add
-connection**. Give that Agent access to the destination data source and any
-synced Conversation pages it should use.
+Set `INTERCOM_REGION` to `us`, `eu`, or `au` to match the discovery origin.
 
-## The Agent conversation
+Add the Worker under **Tools and access > Add connection**. Grant the Agent the
+destination and any synced Conversation pages it needs. Keep confirmation
+enabled for `createNotionTicket`; it records intent while the Worker enforces
+the inspected-state guards.
+
+## How it works
 
 The two Agent Tools separate preview from action:
 
-| Agent Tool                    | What it does                                                                                                                                                               |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `inspectIntercomConversation` | Reads one live conversation, its bounded public timeline, fixed route, any exact Notion ticket, and an opaque `inspectionVersion` for the write.                           |
-| `createNotionTicket`          | Rechecks that inspected version, creates or reuses the sole matching Notion ticket, applies the fixed Intercom tag and team, and adds an internal note linking the ticket. |
+| Agent Tool                    | What it does                                                                                               |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `inspectIntercomConversation` | Reads bounded evidence, the fixed route, any exact ticket, and an opaque `inspectionVersion`.              |
+| `createNotionTicket`          | Rechecks that version, creates or reuses the ticket, then ensures the fixed tag, route, and internal note. |
 
-A normal exchange:
+Start inspection from a raw Intercom ID, Inbox URL, `conversation_<id>` MCP
+reference, or a page from the optional [Intercom sync](../intercom-sync/).
+Treat customer content as untrusted evidence. `inspectionVersion` fingerprints
+the conversation and exact ticket identity; it is not approval or an
+idempotency key.
 
-1. The user supplies a synced Conversation page, raw Intercom ID,
-   `conversation_<id>` MCP reference, or Intercom Inbox URL.
-2. The Agent calls `inspectIntercomConversation`, treats returned customer
-   content as untrusted evidence rather than instructions, and drafts a ticket.
-3. After the user reviews the draft, the Agent passes the canonical
-   `conversationId`, exact `inspectionVersion`, and `ticketDraft` to
-   `createNotionTicket`.
-4. The tool returns the ticket link and observed tag, route, and note state.
+After review, the Agent passes the returned `conversationId`, exact
+`inspectionVersion`, and `ticketDraft` to `createNotionTicket`. If inspection
+found a ticket, show it and ask whether to reuse it with `ticketDraft: null`.
+The Worker never overwrites its Notion content. It may no-op, complete missing
+Intercom steps, or stop when it cannot prove the exact note is absent. A missing
+ticket requires a reviewed draft.
 
-If inspection finds an existing ticket, show its link instead of proposing
-another. Pass `ticketDraft: null` only to finish that ticket's incomplete
-Intercom route; the Worker never overwrites its Notion content. A missing ticket
-requires a reviewed, non-null draft.
-
-For US-hosted workspaces, Intercom's remote MCP can help an Agent find and read
-conversations. Its current tools do not perform this compound Notion creation,
-tagging, assignment, and note action. Intercom MCP is currently unavailable for
-EU- and AU-hosted workspaces; use an Inbox URL, raw ID, or synced page there.
+Intercom's remote MCP can find and read conversations in US-hosted workspaces.
+This Agent Tool owns the fixed cross-API creation, tagging, assignment, and note
+action.
 
 ## Safety and recovery
 
-The Worker stores no operation ledger. It reconciles against live Notion and
-Intercom state:
-
-- `inspectionVersion` binds the reviewed conversation and exact ticket state.
-- `Intercom source key` identifies the ticket; zero matches permits creation,
-  one is reused, and duplicates stop the action.
-- A deterministic internal-note marker identifies the Notion link. If Intercom
-  omits older parts, the Worker does not assume that marker is absent.
-- The configured tag, team, ticket, and note are read back before success.
+- The Notion destination and Intercom tag and team are fixed in Worker
+  configuration, not chosen by the Agent.
+- A ticket present at inspection may be reused. After a zero-ticket inspection,
+  the Worker rechecks immediately before one create attempt; a newly appeared
+  ticket or duplicates stop the action.
+- The Worker reads back the ticket, tag, team, and internal note before success.
+  For an existing or ambiguously created ticket, omitted older history stops the
+  action when the exact note cannot be proven absent. A definitely new ticket
+  may add its first link note.
 
 These checks do not make two APIs atomic or guarantee exactly-once execution.
 Concurrent calls for one conversation are unsupported because their races may
 not be visible. If a create or note response is lost, the Worker checks live
-state once. It either proves the result or returns `ambiguous`; never
-automatically retry an ambiguous write.
-
-On `conflict`, inspect again. On `ambiguous`, verify Notion and Intercom
-manually, then inspect again before any new write. Always show a returned ticket
-link and `nextStep`, even when later Intercom work is incomplete. `changed` is
-`true` for a known write, `false` for no known write, and `null` when causality
-cannot be established.
+state once. It either proves the result or returns `ambiguous`; do not
+automatically retry an ambiguous write. On `conflict`, inspect again. On
+`ambiguous`, verify both systems manually, then inspect again. If the result
+includes a ticket link, show it with `nextStep`.
 
 Hosted Notion calls use the Custom Agent's `context.notion` permissions.
 Intercom calls use the shared private app, so every caller must be authorized to
-inspect and route everything that credential can access. Notion content or user
-confirmation records intent; it does not grant Intercom access.
+inspect, tag, assign, and add internal notes to every conversation that
+credential can access. Share the destination only with people who should see
+customer content. Confirmation records intent; it does not grant Intercom
+access.
 
 ## Run locally
 
-Offline tests use fakes and do not call Intercom or Notion:
-
-```sh
-npm run format:check
-npm run check
-npm test
-npm run build
-```
-
-For an authorized sandbox test, copy `.env.example` to `.env`, use disposable
-resources, and set `NOTION_API_TOKEN` for the local Notion client. Inspect first:
+Copy `.env.example` to `.env`, use disposable resources, and set
+`NOTION_API_TOKEN` for the local Notion client. Inspect first:
 
 ```sh
 ntn workers exec inspectIntercomConversation --local \
@@ -171,18 +157,36 @@ draft:
 
 ```sh
 ntn workers exec createNotionTicket --local \
-  -d '{"conversationId":"987654321","inspectionVersion":"iv1_replace-with-the-inspection-version","ticketDraft":{"title":"Checkout shows the wrong total","priority":"P1","summary":"Annual-plan checkout calculates the wrong total.","impact":"Customers cannot complete checkout with the expected price.","environment":"Production, EU storefront","reproductionSteps":["Add a discounted annual plan","Open checkout and compare the total"]}}'
+  -d '{
+    "conversationId": "987654321",
+    "inspectionVersion": "iv1_replace-with-the-inspection-version",
+    "ticketDraft": {
+      "title": "Checkout shows the wrong total",
+      "priority": "P1",
+      "summary": "Annual-plan checkout calculates the wrong total.",
+      "impact": "Customers cannot complete checkout with the expected price.",
+      "environment": "Production, EU storefront",
+      "reproductionSteps": ["Add a discounted annual plan", "Compare totals"]
+    }
+  }'
 ```
 
 The second command changes Notion and Intercom. Run it only against an
 authorized sandbox conversation, and do not run it concurrently.
 
+Offline checks use fakes and do not call Intercom or Notion:
+
+```sh
+npm run format:check
+npm run check
+npm test
+npm run build
+```
+
 ## Learn more
 
 - [Notion Workers](https://developers.notion.com/workers/get-started/overview)
 - [Agent Tools](https://developers.notion.com/workers/guides/tools)
-- [Create a Notion page](https://developers.notion.com/reference/post-page)
-- [Query a Notion data source](https://developers.notion.com/reference/query-a-data-source)
 - [Intercom REST API 2.15](https://developers.intercom.com/docs/references/rest-api/api.intercom.io)
 - [Intercom conversations](https://developers.intercom.com/docs/references/rest-api/api.intercom.io/conversations)
 - [Intercom authentication](https://developers.intercom.com/docs/build-an-integration/learn-more/authentication)
