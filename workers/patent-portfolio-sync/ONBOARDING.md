@@ -298,7 +298,7 @@ a portfolio.
 - **Trigger:** scheduled, weekly.
 - **Instructions:** _"In the Patent Portfolio database, find every row where
   **Est. Expiry** is within the next 6 months (or, if advanced enrichment is on,
-  **Next Renewal Due** within 90 days), excluding rows whose **Status** is
+  **Next Deadline** within 90 days), excluding rows whose **Status** is
   abandoned or expired. Post a digest grouped by **Jurisdiction**, each line
   showing Title, App. No. / Patent #, and the date. If nothing is due, say so."_
 - **Access:** read the Patent Portfolio database; post to one Slack channel or a

@@ -83,10 +83,23 @@ calls. Extend `OdpRecord`/projection + `PatentRecord` + schema/builder:
 - **Art unit:** `applicationMetaData.groupArtUnitNumber` → `Art Unit`.
 - **Publication #:** `pgpubDocumentMetaData.xmlFileName` encodes it as
   `<appNumber>_<publicationNumber>.xml` → `US<publicationNumber>`.
-- **Maintenance-fee schedule** (`Next Renewal Due`): granted US utility owes
-  fees at grant + 3.5 / 7.5 / 11.5 years. Detect payments from event codes
-  `M{1,2,3}55{1,2,3}` (entity × stage); the next unpaid window's date is due
-  (overdue shows as-is — a lapse-risk signal). Designs/provisionals owe none.
+- **Lifecycle deadlines** (`Next Deadline` date + `Deadline Type` select):
+  one pair spanning prosecution and maintenance, first match wins:
+  - `OA Response` — status descriptor matches a non-final/final rejection →
+    status date + 3 months (the shortened statutory period; extensions to 6
+    months for fees are not modeled — say so in the column description).
+  - `Issue Fee` — notice of allowance, not yet granted → status date + 3 months.
+  - `Convert Provisional` — live ungranted provisional → filing + 12 months.
+  - `National Phase Entry` — live PCT → international filing + 30 months.
+  - `Renewal` — granted US utility owes maintenance fees at grant + 3.5 /
+    7.5 / 11.5 years; detect payments from event codes `M{1,2,3}55{1,2,3}`
+    (entity × stage), the next unpaid window's date is due. Designs and
+    provisionals owe none. (EP annuities via Rule 51(1) also land here if
+    the EPO adapter is enabled.)
+    Dead cases (abandoned/expired) get neither. Write both properties
+    explicitly blanked when absent so a met deadline clears on the next sync
+    — incremental upserts leave unspecified properties alone. Overdue dates
+    show as-is: a look-into-it signal, not necessarily a lapse.
 - Remember to project these new fields at the fetch boundary (state size).
 
 ## 5. EP orphan audit

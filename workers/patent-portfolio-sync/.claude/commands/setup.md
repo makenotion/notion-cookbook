@@ -84,7 +84,7 @@ which they want (multi-select):
 - JP/CN/WO grant detection + adverse legal events (via OPS family data)
 - Forward-citation counts (renew-vs-prune value signal)
 - US term & prosecution fields (PTA, Track One, art unit, terminal
-  disclaimer, maintenance-fee schedule / Next Renewal Due)
+  disclaimer, lifecycle deadlines / Next Deadline + Deadline Type)
 - EP orphan audit (EP filings missing from your docket) — needs docketing
   If they pick any, run `/add-advanced-enrichment` with their selections.
 

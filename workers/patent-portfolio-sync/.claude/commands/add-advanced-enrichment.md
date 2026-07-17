@@ -20,7 +20,9 @@ Otherwise, ask which they want (multi-select):
 3. **Forward-citation counts** — renew-vs-prune value signal; per-publication
    OPS search on a rotating refresh.
 4. **US term & prosecution fields** — PTA days, Track One, art unit, terminal
-   disclaimer, and the maintenance-fee schedule (`Next Renewal Due`). Mostly
+   disclaimer, and lifecycle deadlines (`Next Deadline` + `Deadline Type`:
+   OA responses, issue fees, provisional conversion, PCT national phase,
+   and the maintenance-fee schedule). Mostly
    free — already in the USPTO search payload.
 5. **EP orphan audit** — EP filings present at the office but missing from your
    docket (requires docketing enabled).
