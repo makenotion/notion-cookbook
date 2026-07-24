@@ -1,0 +1,619 @@
+/* Habit tracker — all colors/radii/shadows/spacing/fonts from NDS tokens. */
+
+.ht-shell {
+	min-height: 100%;
+}
+
+.ht-root {
+	box-sizing: border-box;
+	padding: var(--spacing-12) var(--spacing-16) var(--spacing-10);
+	font-size: var(--text-body);
+	line-height: var(--text-body--line-height);
+}
+
+.ht-root *,
+.ht-root *::before,
+.ht-root *::after {
+	box-sizing: border-box;
+}
+
+/* ---------- Header ---------- */
+
+.ht-header {
+	display: flex;
+	align-items: center;
+	gap: var(--spacing-8);
+	margin-bottom: var(--spacing-8);
+	min-height: 28px;
+}
+
+.ht-month {
+	font-size: var(--text-title);
+	line-height: var(--text-title--line-height);
+	font-weight: var(--text-title--font-weight);
+	color: var(--content-primary);
+	margin: 0;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.ht-controls {
+	margin-left: auto;
+	display: flex;
+	align-items: center;
+	gap: var(--spacing-2);
+}
+
+.ht-iconbtn,
+.ht-textbtn {
+	appearance: none;
+	border: none;
+	background: transparent;
+	color: var(--content-secondary);
+	font-family: var(--font-sans);
+	font-size: var(--text-body-sm);
+	font-weight: var(--font-weight-medium);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	height: 26px;
+	min-width: 26px;
+	padding: 0 var(--spacing-6);
+	border-radius: var(--radius-6);
+	cursor: pointer;
+	transition:
+		background-color 150ms var(--ease-default),
+		color 150ms var(--ease-default);
+}
+
+.ht-iconbtn:hover,
+.ht-textbtn:hover:not(:disabled) {
+	background: var(--bg-control-hover);
+	color: var(--content-primary);
+}
+
+.ht-iconbtn:active,
+.ht-textbtn:active:not(:disabled) {
+	background: var(--bg-control-pressed);
+}
+
+.ht-textbtn:disabled {
+	color: var(--content-disabled);
+	cursor: default;
+}
+
+.ht-iconbtn:focus-visible,
+.ht-textbtn:focus-visible,
+.ht-cell:focus-visible,
+.ht-newhabit:focus-visible {
+	outline: 2px solid var(--blue-80);
+	outline-offset: 1px;
+}
+
+.ht-progress {
+	display: flex;
+	align-items: center;
+	gap: var(--spacing-6);
+	margin-left: var(--spacing-8);
+	color: var(--content-secondary);
+	font-size: var(--text-body-xs);
+	line-height: var(--text-body-xs--line-height);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.ht-ringsvg {
+	display: block;
+	flex: none;
+}
+
+/* ---------- Grid ---------- */
+
+.ht-scroll {
+	overflow: auto;
+	/* The SDK sizes the iframe to #root, so let the grid contribute its full
+	   height instead of trapping longer trackers in a nested vertical scroll. */
+	overscroll-behavior-x: contain;
+}
+
+.ht-grid {
+	display: inline-grid;
+	min-width: 100%;
+	position: relative;
+	align-items: center;
+}
+
+.ht-corner,
+.ht-label {
+	position: sticky;
+	left: 0;
+	z-index: 2;
+	background: var(--bg-base);
+}
+
+.ht-count,
+.ht-corner-right {
+	position: sticky;
+	right: 0;
+	z-index: 2;
+	background: var(--bg-base);
+}
+
+/* Hairline edges on the sticky columns, only while content is scrolled under them. */
+.ht-scroll[data-overflow-left="true"] .ht-label,
+.ht-scroll[data-overflow-left="true"] .ht-corner {
+	border-right: 1px solid var(--border-secondary-translucent);
+}
+
+.ht-scroll[data-overflow-right="true"] .ht-count,
+.ht-scroll[data-overflow-right="true"] .ht-corner-right {
+	border-left: 1px solid var(--border-secondary-translucent);
+}
+
+.ht-headrow {
+	height: 26px;
+	position: sticky;
+	top: 0;
+	z-index: 3;
+	background: var(--bg-base);
+}
+
+/* Header corners stick in both axes and sit above everything. */
+.ht-corner.ht-headrow,
+.ht-corner-right.ht-headrow {
+	z-index: 4;
+}
+
+.ht-dayhead {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 26px;
+}
+
+.ht-daynum {
+	position: relative;
+	min-width: 18px;
+	height: 18px;
+	padding: 0 var(--spacing-2);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: var(--radius-full);
+	font-size: var(--text-body-xs);
+	line-height: 1;
+	color: var(--content-tertiary);
+	font-variant-numeric: tabular-nums;
+	/* Perfect-day tint fades in quietly; no other motion. */
+	transition:
+		background-color 150ms var(--ease-default),
+		color 150ms var(--ease-default);
+}
+
+.ht-weekend {
+	opacity: 0.7;
+}
+
+.ht-daynum-perfect {
+	background: var(--translucent-green-40);
+	color: var(--green-120);
+	font-weight: var(--font-weight-medium);
+	opacity: 1;
+}
+
+.ht-daynum-today {
+	background: var(--bg-interactive-strong);
+	color: var(--content-on-interactive-strong);
+	font-weight: var(--font-weight-medium);
+	opacity: 1;
+}
+
+.ht-daynum-today.ht-daynum-perfect {
+	background: var(--translucent-green-80);
+	color: var(--green-150);
+}
+
+/* Today column band */
+.ht-todayband {
+	background: var(--bg-hover);
+}
+
+.ht-dayhead.ht-todayband {
+	border-radius: var(--radius-6) var(--radius-6) 0 0;
+	/* Sticky header cells must stay opaque: layer the translucent band tint
+	   over the base background. */
+	background: linear-gradient(var(--bg-hover), var(--bg-hover)) var(--bg-base);
+}
+
+.ht-cell.ht-todayband.ht-lastrow {
+	border-radius: 0 0 var(--radius-6) var(--radius-6);
+}
+
+/* ---------- Habit label column ---------- */
+
+.ht-label {
+	display: flex;
+	align-items: center;
+	gap: var(--spacing-6);
+	height: 30px;
+	padding-right: var(--spacing-8);
+	min-width: 0;
+}
+
+.ht-emoji {
+	width: 20px;
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: var(--text-body-sm);
+	line-height: 1;
+}
+
+/* Neutral fallback when a habit has no emoji. */
+.ht-emoji-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: var(--radius-full);
+	background: var(--translucent-gray-60);
+}
+
+/* Row whose create is still in flight. */
+.ht-label-pending {
+	opacity: 0.6;
+}
+
+.ht-name {
+	color: var(--content-primary);
+	font-size: var(--text-body);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.ht-streak {
+	margin-left: auto;
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	padding-left: var(--spacing-4);
+	font-size: var(--text-body-xs);
+	line-height: var(--text-body-xs--line-height);
+	color: var(--content-secondary);
+	font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Count column ---------- */
+
+.ht-count {
+	height: 30px;
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	padding-left: var(--spacing-6);
+	font-size: var(--text-body-xs);
+	line-height: var(--text-body-xs--line-height);
+	color: var(--content-secondary);
+	font-variant-numeric: tabular-nums;
+}
+
+.ht-count-dim {
+	color: var(--content-tertiary);
+}
+
+/* ---------- Cells ---------- */
+
+.ht-cellwrap {
+	display: contents;
+}
+
+.ht-cell {
+	appearance: none;
+	border: none;
+	margin: 0;
+	padding: 0;
+	background: transparent;
+	width: 100%;
+	height: 30px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	position: relative;
+	cursor: pointer;
+	border-radius: var(--radius-4);
+}
+
+.ht-cell[aria-disabled="true"] {
+	cursor: default;
+}
+
+.ht-cell[aria-busy="true"] {
+	cursor: progress;
+}
+
+.ht-dot {
+	position: relative;
+	width: 18px;
+	height: 18px;
+	border-radius: var(--radius-full);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-shadow: inset 0 0 0 1.5px var(--border-secondary);
+	transition:
+		box-shadow 150ms var(--ease-default),
+		background-color 150ms var(--ease-default);
+}
+
+.ht-cell:hover:not([aria-disabled="true"]) .ht-dot:not(.ht-dot-done) {
+	box-shadow: inset 0 0 0 1.5px var(--border-strong);
+	background: var(--h-soft);
+}
+
+.ht-dot-done {
+	background: var(--h-fill);
+	box-shadow: none;
+}
+
+.ht-cell:hover:not([aria-disabled="true"]) .ht-dot-done {
+	box-shadow: 0 0 0 2px var(--h-soft);
+}
+
+.ht-cell[aria-disabled="true"] .ht-dot {
+	box-shadow: inset 0 0 0 1.5px var(--border-secondary-translucent);
+	opacity: 0.55;
+}
+
+/* ---------- Motion (single micro-interaction) ----------
+   The only animation in the block: a soft fill-in when a dot is checked.
+   No overshoot, nothing scales above 1. Everything else is an instant state
+   change or a <=150ms background/border transition. */
+
+@keyframes ht-fill-in {
+	from {
+		transform: scale(0.85);
+		opacity: 0.4;
+	}
+	to {
+		transform: scale(1);
+		opacity: 1;
+	}
+}
+
+.ht-dot-fill {
+	animation: ht-fill-in 150ms var(--ease-default);
+}
+
+/* ---------- Footer / new habit ---------- */
+
+.ht-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--spacing-12);
+	margin-top: var(--spacing-4);
+	min-height: 28px;
+}
+
+.ht-newhabit {
+	appearance: none;
+	border: none;
+	background: transparent;
+	display: inline-flex;
+	align-items: center;
+	gap: var(--spacing-6);
+	height: 28px;
+	padding: 0 var(--spacing-6);
+	border-radius: var(--radius-6);
+	color: var(--content-secondary);
+	font-family: var(--font-sans);
+	font-size: var(--text-body-sm);
+	cursor: pointer;
+	transition:
+		background-color 150ms var(--ease-default),
+		color 150ms var(--ease-default);
+}
+
+.ht-newhabit:hover {
+	background: var(--bg-control-hover);
+	color: var(--content-primary);
+}
+
+.ht-newhabit:active {
+	background: var(--bg-control-pressed);
+}
+
+.ht-plus {
+	font-size: var(--text-body-xs);
+	line-height: 1;
+}
+
+.ht-newhabit-edit {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--spacing-8);
+}
+
+.ht-newhabit-input {
+	height: 28px;
+	width: 190px;
+	padding: 0 var(--spacing-8);
+	border: 1px solid var(--border-primary);
+	border-radius: var(--radius-6);
+	background: var(--bg-base);
+	color: var(--content-primary);
+	font-family: var(--font-sans);
+	font-size: var(--text-body);
+}
+
+.ht-newhabit-input:focus-visible {
+	outline: 2px solid var(--blue-80);
+	outline-offset: -1px;
+}
+
+.ht-newhabit-input::placeholder {
+	color: var(--content-tertiary);
+}
+
+.ht-newhabit-input:disabled {
+	color: var(--content-disabled);
+}
+
+.ht-newhabit-hint {
+	font-size: var(--text-body-xs);
+	color: var(--content-tertiary);
+	white-space: nowrap;
+}
+
+.ht-error {
+	font-size: var(--text-body-xs);
+	line-height: var(--text-body-xs--line-height);
+	color: var(--translucent-red-100);
+	overflow-wrap: anywhere;
+}
+
+/* ---------- Empty state ---------- */
+
+.ht-empty {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: var(--spacing-6);
+	padding: var(--spacing-24) var(--spacing-4) var(--spacing-16);
+}
+
+.ht-empty-title {
+	font-weight: var(--font-weight-semibold);
+	color: var(--content-primary);
+}
+
+.ht-empty-sub {
+	margin: 0 0 var(--spacing-6);
+	color: var(--content-secondary);
+	font-size: var(--text-body-sm);
+	line-height: var(--text-body-sm--line-height);
+}
+
+/* ---------- Unbound ---------- */
+
+.ht-unbound {
+	position: relative;
+}
+
+.ht-unbound-demo {
+	opacity: 0.6;
+	pointer-events: none;
+	user-select: none;
+}
+
+.ht-setup {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: var(--spacing-16);
+}
+
+.ht-setup-card {
+	background: var(--bg-base);
+	border: 1px solid var(--border-primary);
+	border-radius: var(--radius-12);
+	box-shadow: var(--shadow-md);
+	padding: var(--spacing-16) var(--spacing-20);
+	max-width: 360px;
+}
+
+.ht-setup-title {
+	font-weight: var(--font-weight-semibold);
+	color: var(--content-primary);
+	margin-bottom: var(--spacing-4);
+}
+
+.ht-setup-body {
+	margin: 0;
+	color: var(--content-secondary);
+	font-size: var(--text-body-sm);
+	line-height: var(--text-body-sm--line-height);
+}
+
+.ht-setup-detail {
+	margin: var(--spacing-8) 0 0;
+	color: var(--content-tertiary);
+	font-size: var(--text-body-xs);
+	line-height: var(--text-body-xs--line-height);
+	overflow-wrap: anywhere;
+}
+
+/* ---------- Skeleton ---------- */
+
+.ht-skel {
+	display: inline-block;
+	background: var(--bg-control);
+	border-radius: var(--radius-4);
+	animation: ht-shimmer 1.1s var(--ease-default) infinite alternate;
+}
+
+.ht-skel-row {
+	display: flex;
+	align-items: center;
+	gap: var(--spacing-12);
+	height: 30px;
+}
+
+.ht-skel-grow {
+	flex: 1;
+}
+
+@keyframes ht-shimmer {
+	from {
+		opacity: 0.35;
+	}
+	to {
+		opacity: 0.7;
+	}
+}
+
+/* ---------- Reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+	.ht-root *,
+	.ht-root *::before,
+	.ht-root *::after {
+		animation: none !important;
+		transition: none !important;
+	}
+}
+
+@media (max-width: 560px) {
+	.ht-root {
+		padding-inline: var(--spacing-8);
+	}
+
+	.ht-header {
+		align-items: flex-start;
+		flex-wrap: wrap;
+	}
+
+	.ht-controls {
+		width: 100%;
+		margin-left: 0;
+	}
+
+	.ht-progress {
+		margin-left: auto;
+	}
+
+	.ht-newhabit-edit {
+		width: 100%;
+	}
+
+	.ht-newhabit-input {
+		width: min(190px, 100%);
+		min-width: 0;
+	}
+
+	.ht-newhabit-hint {
+		display: none;
+	}
+}

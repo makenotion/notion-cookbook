@@ -16,7 +16,7 @@
     "prepare": "husky"
   },
   "lint-staged": {
-    "*.{md,json,yml,yaml}": [
+    "!(*AGENTS|*CLAUDE).{md,json,yml,yaml}": [
       "prettier --write",
       "markdownlint --config .markdownlint.jsonc --fix"
     ],
