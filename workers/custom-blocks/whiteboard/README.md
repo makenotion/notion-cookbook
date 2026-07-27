@@ -39,9 +39,9 @@ is one row:
 | `z`               | number    | Stacking order                                                                         |
 | `points`          | rich_text | JSON point array relative to `x`/`y`, chunked under the 2000-character rich-text limit |
 
-Reads load once via `useDataSource` (limit 999). Writes are optimistic:
-creates and deletes go out eagerly, moves and edits are debounced ~500ms, and
-failed writes revert quietly from a persisted baseline.
+Rows stay synchronized through `useDataSource` (limit 999). Writes are
+optimistic: creates and deletes go out eagerly, moves and edits are debounced
+~500ms, and failed writes revert quietly from a persisted baseline.
 
 ## Tools and shortcuts
 
@@ -85,4 +85,3 @@ blocks/whiteboard/
 ## Limitations
 
 - No resize handles, multi-select, or undo; stickies are fixed at 160×160.
-- Remote edits made while the block is open are picked up on reload, not live.

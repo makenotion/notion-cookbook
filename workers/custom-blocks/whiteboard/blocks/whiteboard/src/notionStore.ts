@@ -96,8 +96,8 @@ function patchToProperties(
 }
 
 /**
- * Notion-backed whiteboard store: loads rows once on mount, keeps optimistic
- * local state, debounces writes (~500ms), creates/deletes pages eagerly.
+ * Notion-backed whiteboard store: reconciles live rows with optimistic local
+ * state, debounces writes (~500ms), creates/deletes pages eagerly.
  * Failed writes revert quietly; a small inline wisp shows save status.
  */
 export function useNotionStore(): WhiteboardStore {
@@ -121,6 +121,11 @@ export function useNotionStore(): WhiteboardStore {
   const baselines = useRef(new Map<string, BoardItem>())
   // localId -> merged patch awaiting flush.
   const pending = useRef(new Map<string, ItemPatch>())
+  // localId -> patches currently being written. Keep these overlaid when a
+  // live data-source snapshot arrives before the corresponding write result.
+  const activePatches = useRef(new Map<string, ItemPatch[]>())
+  // Locally-created items stay visible until they appear in a live snapshot.
+  const optimisticCreates = useRef(new Set<string>())
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
   const inFlight = useRef(0)
   const errorUntil = useRef(0)
@@ -128,30 +133,52 @@ export function useNotionStore(): WhiteboardStore {
   const propertyIdsRef = useRef(propertyIdsByKey)
   propertyIdsRef.current = propertyIdsByKey
   const localSeq = useRef(0)
+  // useDataSource resolves fresh row wrapper objects on every render. Depend on
+  // their serializable board values so local reconciliation only runs when the
+  // actual database snapshot changes.
+  const rowsRevision = rows
+    .map((row) => JSON.stringify(rowToItem(row)))
+    .join("\n")
 
   // The SDK exposes an empty, non-loading snapshot before its query effect runs.
-  // Wait until we have observed the query cycle (or actual rows) so that snapshot
-  // cannot lock the board into an empty local state on every reload.
+  // Wait until we have observed the query cycle (or actual rows), then reconcile
+  // every live snapshot while preserving local creates and unconfirmed writes.
   useEffect(() => {
-    if (
-      local === null &&
-      !isLoading &&
-      !error &&
-      (queryStarted.current || rows.length > 0)
-    ) {
-      const seeded: BoardItem[] = []
-      for (const row of rows) {
-        const item = rowToItem(row)
-        if (item) {
-          seeded.push(item)
-          pageIds.current.set(item.id, item.id)
-          baselines.current.set(item.id, item)
-        }
-      }
-      seeded.sort((a, b) => a.z - b.z)
-      setLocal(seeded)
+    if (isLoading || error || (!queryStarted.current && rows.length === 0)) return
+
+    const localIdByPageId = new Map<string, string>()
+    for (const [localId, pageId] of pageIds.current) {
+      if (pageId) localIdByPageId.set(pageId, localId)
     }
-  }, [local, isLoading, error, rows])
+
+    const synced: BoardItem[] = []
+    const syncedIds = new Set<string>()
+    for (const row of rows) {
+      const remoteItem = rowToItem(row)
+      if (!remoteItem) continue
+
+      const localId = localIdByPageId.get(remoteItem.id) ?? remoteItem.id
+      const item = { ...remoteItem, id: localId }
+      baselines.current.set(localId, item)
+      pageIds.current.set(localId, remoteItem.id)
+      optimisticCreates.current.delete(localId)
+
+      for (const patch of activePatches.current.get(localId) ?? []) {
+        Object.assign(item, patch)
+      }
+      Object.assign(item, pending.current.get(localId))
+      synced.push(item)
+      syncedIds.add(localId)
+    }
+
+    setLocal((previous) => {
+      const localOnly = (previous ?? []).filter(
+        (item) =>
+          optimisticCreates.current.has(item.id) && !syncedIds.has(item.id)
+      )
+      return [...synced, ...localOnly].sort((a, b) => a.z - b.z)
+    })
+  }, [isLoading, error, rowsRevision])
 
   useEffect(() => {
     const timerMap = timers.current
@@ -191,6 +218,10 @@ export function useNotionStore(): WhiteboardStore {
     const base = baselines.current.get(localId)
     if (!base) return
     const keys = Object.keys(patch) as Array<keyof ItemPatch>
+    const overlays = [
+      ...(activePatches.current.get(localId) ?? []),
+      pending.current.get(localId),
+    ].filter((value): value is ItemPatch => value !== undefined)
     setLocal((prev) =>
       prev
         ? prev.map((it) => {
@@ -198,6 +229,11 @@ export function useNotionStore(): WhiteboardStore {
             const restored: BoardItem = { ...it }
             for (const key of keys) {
               ;(restored as Record<string, unknown>)[key] = base[key]
+              for (const overlay of overlays) {
+                if (overlay[key] !== undefined) {
+                  ;(restored as Record<string, unknown>)[key] = overlay[key]
+                }
+              }
             }
             return restored
           })
@@ -232,6 +268,19 @@ export function useNotionStore(): WhiteboardStore {
       }
       if (Object.keys(properties).length === 0) return
 
+      const active = activePatches.current.get(localId) ?? []
+      activePatches.current.set(localId, [...active, patch])
+      const clearActivePatch = () => {
+        const remaining = (activePatches.current.get(localId) ?? []).filter(
+          (candidate) => candidate !== patch
+        )
+        if (remaining.length > 0) {
+          activePatches.current.set(localId, remaining)
+        } else {
+          activePatches.current.delete(localId)
+        }
+      }
+
       beginWrite()
       void pages
         .update({
@@ -239,6 +288,7 @@ export function useNotionStore(): WhiteboardStore {
           properties,
         })
         .then((result) => {
+          clearActivePatch()
           if (result.status === "success") {
             const base = baselines.current.get(localId)
             if (base) baselines.current.set(localId, { ...base, ...patch })
@@ -250,6 +300,7 @@ export function useNotionStore(): WhiteboardStore {
           }
         })
         .catch(() => {
+          clearActivePatch()
           revertPatch(localId, patch)
           endWrite(false)
         })
@@ -261,10 +312,12 @@ export function useNotionStore(): WhiteboardStore {
     (item: Omit<BoardItem, "id">): string => {
       const localId = `local-${++localSeq.current}`
       const withTitle = { ...item, title: item.title || autoLabel(item.type) }
+      optimisticCreates.current.add(localId)
       setLocal((prev) => [...(prev ?? []), { ...withTitle, id: localId }])
       pageIds.current.set(localId, "")
 
       const removeOptimistic = () => {
+        optimisticCreates.current.delete(localId)
         pageIds.current.delete(localId)
         pending.current.delete(localId)
         const t = timers.current.get(localId)
@@ -331,6 +384,8 @@ export function useNotionStore(): WhiteboardStore {
       if (timer) clearTimeout(timer)
       timers.current.delete(id)
       pending.current.delete(id)
+      activePatches.current.delete(id)
+      optimisticCreates.current.delete(id)
       baselines.current.delete(id)
       const pageId = pageIds.current.get(id)
       pageIds.current.delete(id)
