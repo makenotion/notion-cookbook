@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc && vite build blocks/custom",
+    "build": "tsc",
     "check": "tsc --noEmit && tsc -p blocks/custom/tsconfig.json --noEmit",
     "test": "node --test test/*.test.mjs"
   },

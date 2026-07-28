@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc && vite build blocks/org-chart",
+    "build": "tsc",
     "check": "tsc --noEmit && tsc -p blocks/org-chart/tsconfig.json --noEmit",
     "test": "tsx --test test/*.test.ts"
   },
