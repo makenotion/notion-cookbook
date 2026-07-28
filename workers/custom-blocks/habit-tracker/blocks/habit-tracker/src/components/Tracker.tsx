@@ -146,31 +146,10 @@ function Cell(props: CellProps) {
 	);
 }
 
-function NewHabitRow({
-	onCreate,
-	autoOpen,
-}: {
-	onCreate: (name: string) => Promise<boolean>;
-	autoOpen?: boolean;
-}) {
-	const [editing, setEditing] = useState(Boolean(autoOpen));
+function NewHabitRow({ onCreate }: { onCreate: (name: string) => Promise<boolean> }) {
+	// The editor always starts closed and without focus.
+	const [editing, setEditing] = useState(false);
 	const [value, setValue] = useState("");
-	const inputRef = useRef<HTMLInputElement>(null);
-	// Only editors the user opened take focus. Focusing on mount would pull the
-	// caret into the block's iframe, and the host page scrolls the iframe into
-	// view to follow it.
-	const focusOnOpen = useRef(false);
-
-	useEffect(() => {
-		if (!editing || !focusOnOpen.current) return;
-		focusOnOpen.current = false;
-		inputRef.current?.focus();
-	}, [editing]);
-
-	const openEditor = () => {
-		focusOnOpen.current = true;
-		setEditing(true);
-	};
 
 	const submit = () => {
 		const name = value.trim();
@@ -184,7 +163,7 @@ function NewHabitRow({
 
 	if (!editing) {
 		return (
-			<button type="button" className="ht-newhabit" onClick={openEditor}>
+			<button type="button" className="ht-newhabit" onClick={() => setEditing(true)}>
 				<span className="ht-plus" aria-hidden="true">
 					＋
 				</span>
@@ -196,7 +175,7 @@ function NewHabitRow({
 	return (
 		<span className="ht-newhabit-edit">
 			<input
-				ref={inputRef}
+				autoFocus
 				className="ht-newhabit-input"
 				type="text"
 				placeholder="Habit name"
@@ -418,7 +397,7 @@ export function Tracker({ store, readOnly }: { store: HabitStore; readOnly?: boo
 				<p className="ht-empty-sub">
 					Each habit becomes a row, each day a dot — check off the days you follow through.
 				</p>
-				{!readOnly ? <NewHabitRow onCreate={store.createHabit} autoOpen /> : null}
+				{!readOnly ? <NewHabitRow onCreate={store.createHabit} /> : null}
 				{store.lastError ? (
 					<span className="ht-error" role="alert">
 						{store.lastError}
