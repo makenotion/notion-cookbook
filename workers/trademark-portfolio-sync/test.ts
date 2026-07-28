@@ -160,6 +160,17 @@ test("classifyReportName distinguishes the two reports by filename", () => {
     classifyReportName("ACME CORP - Properties Report 07172026.xlsx"),
     "properties"
   )
+  // Separator/case drift between counsel's export runs must not matter.
+  assert.equal(
+    classifyReportName("ACME_Docket_Report_-_07272026.xlsx"),
+    "docket"
+  )
+  assert.equal(classifyReportName("DOCKETREPORT.xlsx"), "docket")
+  assert.equal(classifyReportName("DOCKET.xlsx"), "docket")
+  assert.equal(
+    classifyReportName("docket-properties-combined.xlsx"),
+    "properties"
+  )
   assert.equal(classifyReportName("random-attachment.xlsx"), null)
   assert.equal(classifyReportName("Docket Report.pdf"), null)
 })
@@ -169,6 +180,11 @@ test("reportDateFromName reads the MMDDYYYY filename token", () => {
     reportDateFromName("ACME - Properties Report 07172026.xlsx"),
     "2026-07-17"
   )
+  assert.equal(
+    reportDateFromName("ACME_Docket_Report_-_07272026.xlsx"),
+    "2026-07-27"
+  )
+  assert.equal(reportDateFromName("Docket 2026-07-27.xlsx"), "2026-07-27")
   assert.equal(reportDateFromName("no-date.xlsx"), null)
 })
 

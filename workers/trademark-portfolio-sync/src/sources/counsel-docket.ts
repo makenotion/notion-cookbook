@@ -144,8 +144,15 @@ export function classifyReportName(
   name: string
 ): "properties" | "docket" | null {
   if (!/\.xlsx$/i.test(name)) return null
-  if (/propert/i.test(name)) return "properties"
-  if (/docket\s*report/i.test(name)) return "docket"
+  // Firms' export naming drifts between runs ("Docket Report 07172026",
+  // "Docket_Report_-_07272026", "DOCKETREPORT", bare "DOCKET"…), so
+  // matching ignores case and separators entirely: strip to letters+digits
+  // and keyword-search. "propert" wins over "docket" — a combined title
+  // like "Docket - Properties Report" is the full-rights listing, not the
+  // deadline report.
+  const bare = name.toLowerCase().replace(/[^a-z0-9]/g, "")
+  if (bare.includes("propert")) return "properties"
+  if (bare.includes("docket")) return "docket"
   return null
 }
 
@@ -156,10 +163,30 @@ export function classifyReportName(
 // minute, so edit times can quietly re-elect an OLD report as latest.
 // Files without the token fall back to edit time alone.
 export function reportDateFromName(name: string): string | null {
-  const m = /(\d{2})(\d{2})(\d{4})\s*\.xlsx$/i.exec(name)
-  if (!m) return null
-  const [, mm, dd, yyyy] = m
-  return `${yyyy}-${mm}-${dd}`
+  const tail = name.replace(/\.xlsx$/i, "").trim()
+  // MMDDYYYY, optionally separated: "07272026", "07-27-2026", "07.27.2026"
+  let m = /(\d{2})[-._ ]?(\d{2})[-._ ]?((?:19|20)\d{2})$/.exec(tail)
+  if (
+    m &&
+    Number(m[1]) >= 1 &&
+    Number(m[1]) <= 12 &&
+    Number(m[2]) >= 1 &&
+    Number(m[2]) <= 31
+  ) {
+    return `${m[3]}-${m[1]}-${m[2]}`
+  }
+  // YYYYMMDD, optionally separated: "20260727", "2026-07-27"
+  m = /((?:19|20)\d{2})[-._ ]?(\d{2})[-._ ]?(\d{2})$/.exec(tail)
+  if (
+    m &&
+    Number(m[2]) >= 1 &&
+    Number(m[2]) <= 12 &&
+    Number(m[3]) >= 1 &&
+    Number(m[3]) <= 31
+  ) {
+    return `${m[1]}-${m[2]}-${m[3]}`
+  }
+  return null
 }
 
 // ── Parser helpers ─────────────────────────────────────────────────────
@@ -443,9 +470,12 @@ export async function fetchCounselDocket(
   const latest: { properties?: InboxFile; docket?: InboxFile } = {}
   const newer = (a: InboxFile, b: InboxFile | undefined): boolean => {
     if (!b) return true
-    const ad = reportDateFromName(a.name) ?? ""
-    const bd = reportDateFromName(b.name) ?? ""
-    if (ad !== bd) return ad > bd
+    const ad = reportDateFromName(a.name)
+    const bd = reportDateFromName(b.name)
+    // Filename dates decide only when BOTH files carry one — otherwise a
+    // dated old file would permanently beat an undated new upload. Mixed
+    // or undated pairs fall back to edit time.
+    if (ad && bd && ad !== bd) return ad > bd
     return a.lastEdited > b.lastEdited
   }
   for (const f of inbox) {
