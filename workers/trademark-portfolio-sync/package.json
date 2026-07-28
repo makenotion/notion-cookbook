@@ -1,0 +1,23 @@
+{
+  "name": "@notion-cookbook/trademark-portfolio-sync",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Sync a company's global trademark portfolio (USPTO + TMview + counsel docket reports) into managed Notion databases, keyless-first.",
+  "scripts": {
+    "build": "tsc",
+    "check": "tsc --project tsconfig.test.json",
+    "test": "node --import tsx --test test.ts"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.9.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.8.0"
+  },
+  "dependencies": {
+    "@notionhq/workers": ">=0.0.0"
+  }
+}
