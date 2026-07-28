@@ -156,10 +156,21 @@ function NewHabitRow({
 	const [editing, setEditing] = useState(Boolean(autoOpen));
 	const [value, setValue] = useState("");
 	const inputRef = useRef<HTMLInputElement>(null);
+	// Only editors the user opened take focus. Focusing on mount would pull the
+	// caret into the block's iframe, and the host page scrolls the iframe into
+	// view to follow it.
+	const focusOnOpen = useRef(false);
 
 	useEffect(() => {
-		if (editing) inputRef.current?.focus();
+		if (!editing || !focusOnOpen.current) return;
+		focusOnOpen.current = false;
+		inputRef.current?.focus();
 	}, [editing]);
+
+	const openEditor = () => {
+		focusOnOpen.current = true;
+		setEditing(true);
+	};
 
 	const submit = () => {
 		const name = value.trim();
@@ -173,7 +184,7 @@ function NewHabitRow({
 
 	if (!editing) {
 		return (
-			<button type="button" className="ht-newhabit" onClick={() => setEditing(true)}>
+			<button type="button" className="ht-newhabit" onClick={openEditor}>
 				<span className="ht-plus" aria-hidden="true">
 					＋
 				</span>
