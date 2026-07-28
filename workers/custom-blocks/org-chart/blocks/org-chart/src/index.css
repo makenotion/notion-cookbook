@@ -1,0 +1,13 @@
+body {
+	margin: 0;
+}
+
+#root {
+	height: 520px;
+}
+
+.nds {
+	color: var(--content-primary);
+	background: var(--bg-base);
+	font-family: var(--font-sans);
+}
