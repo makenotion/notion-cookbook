@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc && vite build blocks/habit-tracker",
+    "build": "tsc",
     "check": "tsc --noEmit && tsc -p blocks/habit-tracker/tsconfig.json --noEmit",
     "test": "tsx --test test/*.test.ts"
   },
