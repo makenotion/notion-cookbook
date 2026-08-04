@@ -22,6 +22,20 @@
 
 Before scaffolding a custom block frontend, add `@notionhq/custom-blocks` to the worker's existing root `package.json` and install it from the worker root. The block frontend shares that package and its `node_modules`. Do not create a second `package.json` inside the Vite app. Read the installed package's README and docs for the current client API.
 
+#### Test blocks in the dev shell before deploying
+
+Because a custom block has no `execute` handler, `ntn workers exec` cannot exercise it. The custom blocks dev shell is the local test loop: always render the block there and confirm it initializes with its data sources bound before running `ntn workers deploy`.
+
+```shell
+ntn customblocks dev
+```
+
+Run it from anywhere inside the worker project and open http://localhost:9873. The dev shell builds the worker, reads the manifest declared by the `worker.customBlock(...)` calls, serves each block with the project's own Vite (edits hot-reload), and renders it in a mock Notion host.
+
+To give a block data, open **Connect data** in the shell toolbar and bind each of the block's data-source slots. The sources on offer are JSON files in the worker's `src/data/` directory; the shell materializes missing ones from the schemas declared in `dataSources`. The shell reads `src/data/*.json` and the worker manifest once at spin-up, so restart the command after editing sample data or `worker.customBlock(...)` options.
+
+The `@notionhq/custom-blocks-dev-shell` package ships the reference docs: `docs/bindings.md` (connecting sources, auto-mapping rules) and `docs/data-sources.md` (the `src/data/*.json` file format).
+
 #### Custom block sources
 
 A project source is the default. `path` points to a buildable project directory relative to the worker root. The deploy pipeline runs `npm run build` in that directory and serves its `dist` output by default:
@@ -400,6 +414,7 @@ When `ntn datasources query <id>` returns 404 or "Could not find data source", t
 - `ntn login`: connect to a Notion workspace.
 - `ntn workers deploy`: build and publish capabilities. Does not reset sync state.
 - `ntn workers exec <capability>`: run a sync or tool.
+- `ntn customblocks dev`: render custom blocks locally in the dev shell; test there before deploying.
 - `ntn workers sync status`: monitor sync health (live-updating).
 - `ntn workers sync trigger <key> --preview`: preview sync output without writing to the database.
 - `ntn workers sync trigger <key>`: trigger a real sync immediately (writes to the database).
@@ -476,6 +491,7 @@ ntn workers sync state reset <key>
 ## Testing Guidelines
 
 - No test runner configured; validate with `npm run check` and end-to-end testing via `ntn workers exec`.
+- Custom blocks are exercised in the dev shell (`ntn customblocks dev`), not with `ntn workers exec`.
 - Write a test script that exercises each tool capability using `ntn workers exec`. This can be a bash script (`test.sh`) or a TypeScript script (`test.ts`, run via `npx tsx test.ts`). Use the `--local` flag for local execution or omit it to run against the deployed worker.
 
 **Local execution** runs your worker code directly on your machine. Any `.env` file in the project root is automatically loaded, so secrets and config values are available via `process.env`.
