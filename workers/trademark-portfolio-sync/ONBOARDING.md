@@ -353,10 +353,13 @@ redeploys, and your assistant can do each one for you:
 
 - **Fresher US data + documents: add a TSDR key.** A free key from the
   [USPTO API portal](https://account.uspto.gov/api-manager/) upgrades US rows
-  to same-day freshness and unlocks the **document tools** — listing a mark's
-  file-wrapper documents (office actions, specimens, registration
-  certificates) and attaching them to Notion pages, plus `refreshMarkImages`
-  for in-table mark images and page icons.
+  to same-day freshness, adds the **Status Date** column (and the
+  office-action response deadlines computed from it — USPTO retired the
+  keyless source for these in July 2026, so they're key-only now), and
+  unlocks the **document tools** — listing a mark's file-wrapper documents
+  (office actions, specimens, registration certificates) and attaching them
+  to Notion pages, plus `refreshMarkImages` for in-table mark images and
+  page icons.
 - **Official overlays for AU and EU.** IP Australia
   ([portal.api.ipaustralia.gov.au](https://portal.api.ipaustralia.gov.au))
   and the EUIPO ([dev.euipo.europa.eu](https://dev.euipo.europa.eu)) offer

@@ -14,21 +14,25 @@ credits)? This doc assumes that baseline — see the
 
 ## Sources
 
-| Source                                | Status                          | Auth                        | Pacer                  |
-| ------------------------------------- | ------------------------------- | --------------------------- | ---------------------- |
-| **USPTO search** (+ TSDR last-update) | ✅ works out of the box         | **none — keyless**          | 10/min (+ TSDR 60/min) |
-| **TMview** (all non-US offices)       | ✅ works out of the box         | **none — keyless**          | 6/min                  |
-| **TSDR overlay** (same-day US data)   | 🔑 optional upgrade             | free API key                | 60/min                 |
-| **Counsel Docket Inbox**              | 🔧 live, config-gated           | Notion integration token    | — (Notion API)         |
-| **IP Australia** (official overlay)   | 🔑 optional upgrade             | free OAuth, registration    | 60/min (shared)        |
-| **EUIPO** (official overlay)          | 🔑 optional upgrade             | free OAuth, manual approval | 60/min (shared)        |
-| **E-billing / spend** (your system)   | 🔧 example stub — you implement | your call                   | —                      |
+| Source                                            | Status                          | Auth                        | Pacer           |
+| ------------------------------------------------- | ------------------------------- | --------------------------- | --------------- |
+| **USPTO search**                                  | ✅ works out of the box         | **none — keyless**          | 10/min          |
+| **TMview** (all non-US offices)                   | ✅ works out of the box         | **none — keyless**          | 6/min           |
+| **TSDR overlay** (same-day US data + Status Date) | 🔑 optional upgrade             | free API key                | 60/min          |
+| **Counsel Docket Inbox**                          | 🔧 live, config-gated           | Notion integration token    | — (Notion API)  |
+| **IP Australia** (official overlay)               | 🔑 optional upgrade             | free OAuth, registration    | 60/min (shared) |
+| **EUIPO** (official overlay)                      | 🔑 optional upgrade             | free OAuth, manual approval | 60/min (shared) |
+| **E-billing / spend** (your system)               | 🔧 example stub — you implement | your call                   | —               |
 
 **Keyless-first is the design center.** The two row-defining registry sources
 need no credentials, so the template deploys before any key paperwork clears;
 every credential is an optional, _independent_ upgrade, read at **run time**
 — `ntn workers env set TSDR_API_KEY=…` upgrades the next cycle, no redeploy,
-and each key-gated health probe appears only once its key is configured. The
+and each key-gated health probe appears only once its key is configured.
+One keyless capability was lost upstream: USPTO retired TSDR's keyless
+last-update endpoint (2026-07-30), so **Status Date on US rows — and the
+OA-response deadlines anchored on it — now require the TSDR key**; keyless
+deployments still get everything tmsearch carries. The
 trade-off of keyless: both backends are undocumented and WAF-fronted, so
 their pacer budgets (declared in `src/index.ts`) are deliberately tiny —
 nothing this worker does should ever look like scraping — and the platform

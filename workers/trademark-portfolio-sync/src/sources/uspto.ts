@@ -2,7 +2,7 @@
 // USPTO adapter (live, keyless-first)
 // ──────────────────────────────────────────────────────────────────────
 //
-// Discovers US marks by owner name and normalizes them to UsCase. Three
+// Discovers US marks by owner name and normalizes them to UsCase. Two
 // endpoints, layered by trust:
 //
 //   1. tmsearch.uspto.gov — the undocumented Elasticsearch proxy behind
@@ -10,16 +10,18 @@
 //      case record for every mark (status, dates, classes, goods &
 //      services, basis, affidavits) with NO API key — this is what lets
 //      the template deploy before any key paperwork clears. The index
-//      lags case changes by ~1-2 days.
-//   2. TSDR last-update (keyless) — real-time per-case change stamps.
-//      Their status-date component supplies UsCase.statusDate, which
-//      tmsearch simply doesn't carry.
-//   3. TSDR caseMultiStatus (optional, TSDR_API_KEY) — the authoritative
+//      lags case changes by ~1-2 days and carries no status date.
+//   2. TSDR caseMultiStatus (optional, TSDR_API_KEY) — the authoritative
 //      same-day record, merged over the tmsearch baseline field by
-//      field. Enrichment, never row-defining: when the keyed overlay
-//      fails, the keyless baseline still ships (with a warning).
+//      field, and the ONLY source of UsCase.statusDate (which anchors
+//      the OA-response deadline): keyless deployments get no Status
+//      Date. There used to be a keyless middle layer — TSDR's
+//      last-update endpoint supplied change stamps + status dates
+//      without a key — but USPTO retired it on 2026-07-30 (connection
+//      reset from every network; it was the last pre-ODP keyless TSDR
+//      endpoint). Don't re-add it.
 //
-// Both keyless backends are unofficial and WAF-fronted; a WAF can decide
+// The keyless backend is unofficial and WAF-fronted; a WAF can decide
 // to block datacenter egress at any time. Every response is therefore
 // treated defensively, and the one failure mode that could silently
 // destroy the portfolio — a challenge page that parses as a valid EMPTY
@@ -35,21 +37,17 @@ const TMSEARCH_URL = "https://tmsearch.uspto.gov/prod-v1-0-0/tmsearch"
 // TSDR's API host. The human-facing site (tsdr.uspto.gov, no "api") is a
 // different host that serves pages and images, not JSON.
 const TSDR_BASE = "https://tsdrapi.uspto.gov"
-const TSDR_LAST_UPDATE_URL = (serials: string[]) =>
-  `${TSDR_BASE}/last-update/info.json?sn=${serials.join(",")}`
 // Batch case status. Envelope (verified live):
 //   { transactionList: [{ trademarks: […], searchId: "<serial>" }], … }
 // — each element is the same shape the per-case info.json returns.
 const TSDR_MULTI_STATUS_URL = (serials: string[]) =>
   `${TSDR_BASE}/ts/cd/caseMultiStatus/sn?ids=${serials.join(",")}`
-const TSDR_STATUS_URL = (serial: string) =>
-  `${TSDR_BASE}/ts/cd/casestatus/sn${serial}/info.json`
 
-// Serials per TSDR batch call (last-update and caseMultiStatus alike).
-// TSDR throttles aggressively ("Max transaction limit reached per user"):
-// one call per serial trips its 429 on the very first full refresh, while
-// batches of 20 keep a whole mid-sized portfolio at ~2 requests/endpoint.
-const TSDR_LUS_BATCH = 20
+// Serials per caseMultiStatus batch call. TSDR throttles aggressively
+// ("Max transaction limit reached per user"): one call per serial trips
+// its 429 on the very first full refresh, while batches of 20 keep a
+// whole mid-sized portfolio at ~2 requests.
+const TSDR_MULTI_STATUS_BATCH = 20
 
 // tmsearch page size — one page comfortably covers a company portfolio.
 // EXTEND: if an owner name legitimately returns more marks, raise it (the
@@ -217,8 +215,8 @@ function projectTmsearchHit(serial: string, src: AnyRec): UsCase {
     statusText: statusDescription,
     tm5StatusDesc:
       src.alive === false ? "DEAD" : src.alive === true ? "LIVE" : null,
-    // tmsearch has no status-date field — the TM-LUS stamp fills this in
-    // fetchUsCases, and the keyed overlay refines it further.
+    // tmsearch has no status-date field — only the keyed TSDR overlay
+    // supplies it (the keyless TM-LUS stamp source retired 2026-07-30).
     statusDate: null,
     filingDate: day(src.filedDate),
     registrationDate: day(src.registrationDate),
@@ -241,49 +239,6 @@ function projectTmsearchHit(serial: string, src: AnyRec): UsCase {
     attorneyDocket: null, // TSDR-only field
     disclaimer: str(src.disclaimer),
   }
-}
-
-// ── TSDR last-update stamps (keyless) ──────────────────────────────────
-
-// Per-case lastModifiedDate stamps for status, prosecution, and document
-// activity — this endpoint answers WITHOUT an API key (the header rides
-// along when one is configured). Only the status component is kept: the
-// date the case status last changed, i.e. the keyless answer to the
-// Status Date column.
-async function fetchLastUpdateStamps(
-  serials: string[],
-  pace: () => Promise<void>
-): Promise<Record<string, string | null>> {
-  const stamps: Record<string, string | null> = {}
-  for (let i = 0; i < serials.length; i += TSDR_LUS_BATCH) {
-    const batch = serials.slice(i, i + TSDR_LUS_BATCH)
-    await pace()
-    const res = await fetchWithTimeout(TSDR_LAST_UPDATE_URL(batch), {
-      headers: {
-        "USPTO-API-KEY": tsdrKeyOptional() ?? "",
-        Accept: "application/json",
-      },
-    })
-    if (!res.ok) {
-      throw new Error(
-        `TSDR last-update ${res.status}: ${await res.text().catch(() => "")}`
-      )
-    }
-    const data = rec(await res.json())
-    const infos = arr(data.caseUpdateInfo)
-    for (let k = 0; k < infos.length; k++) {
-      const info = rec(infos[k])
-      // Verified live shape: { caseData: {…}, name: "Serial Number",
-      // value: "12345678" } — the serial arrives in the `value` field,
-      // with positional fallback to the batch order.
-      const serial = str(info.value) ?? str(info.serialNumber) ?? batch[k] ?? ""
-      const statusDate = day(
-        rec(rec(info.caseData).caseStatusData).lastModifiedDate
-      )
-      if (serial) stamps[serial] = statusDate
-    }
-  }
-  return stamps
 }
 
 // ── TSDR case-status overlay (optional, keyed) ─────────────────────────
@@ -397,8 +352,8 @@ async function fetchTsdrCasesBatch(
   pace: () => Promise<void>
 ): Promise<Record<string, UsCase>> {
   const out: Record<string, UsCase> = {}
-  for (let i = 0; i < serials.length; i += TSDR_LUS_BATCH) {
-    const batch = serials.slice(i, i + TSDR_LUS_BATCH)
+  for (let i = 0; i < serials.length; i += TSDR_MULTI_STATUS_BATCH) {
+    const batch = serials.slice(i, i + TSDR_MULTI_STATUS_BATCH)
     await pace()
     const res = await fetchWithTimeout(TSDR_MULTI_STATUS_URL(batch), {
       headers: { "USPTO-API-KEY": key, Accept: "application/json" },
@@ -486,34 +441,20 @@ export async function fetchUsCases(
     )
   }
 
-  // 2. TM-LUS status dates (keyless). A total failure throws — the
-  // runner's snapshot serves — rather than degrading to stamp-less rows,
-  // which would blank every Status Date and re-emit the whole portfolio.
+  // 2. Optional keyed overlay — the key is read here, at call time (see
+  // tsdrKeyOptional). Since USPTO retired the keyless TM-LUS stamp
+  // endpoint (2026-07-30) this is the ONLY source of statusDate, so when
+  // a key is configured an overlay failure THROWS — the runner's
+  // snapshot serves — rather than degrading to overlay-less rows, which
+  // would blank every Status Date (and the OA-response deadlines
+  // anchored on it) and re-emit the whole portfolio.
   const serials = Object.keys(cases).sort()
-  const stamps = await fetchLastUpdateStamps(serials, pace.tsdr)
-  for (const sn of serials) {
-    const stamp = stamps[sn]
-    if (stamp) cases[sn].statusDate = stamp
-  }
-
-  // 3. Optional keyed overlay — the key is read here, at call time (see
-  // tsdrKeyOptional). Overlay failures degrade to the keyless baseline
-  // with a warning: the overlay refines rows, it never defines them, so
-  // losing it must never cost the cycle.
   const key = tsdrKeyOptional()
   if (key) {
-    try {
-      const overlay = await fetchTsdrCasesBatch(serials, key, pace.tsdr)
-      for (const sn of serials) {
-        const o = overlay[sn]
-        if (o) cases[sn] = mergeTsdrOverlay(cases[sn], o)
-      }
-    } catch (err) {
-      console.warn(
-        `[uspto] TSDR overlay unavailable this cycle — serving the keyless baseline: ${
-          err instanceof Error ? err.message : err
-        }`
-      )
+    const overlay = await fetchTsdrCasesBatch(serials, key, pace.tsdr)
+    for (const sn of serials) {
+      const o = overlay[sn]
+      if (o) cases[sn] = mergeTsdrOverlay(cases[sn], o)
     }
   }
 
@@ -545,7 +486,9 @@ export async function probeTmsearch(
 // gateway while the backend rejects every call, so a token-level check
 // would lie. The probe takes any serial from the live portfolio —
 // hardcoding one would break for adopters whose portfolio doesn't
-// contain it — and fetches its full case status with the key.
+// contain it — and fetches it through caseMultiStatus, the exact
+// endpoint the overlay depends on (a sibling endpoint being up proves
+// nothing: USPTO retired last-update while casestatus stayed healthy).
 export async function probeTsdrKeyed(
   ownerNames: string[],
   pace: { search: () => Promise<void>; tsdr: () => Promise<void> }
@@ -561,17 +504,10 @@ export async function probeTsdrKeyed(
   if (!/^\d{8}$/.test(serial)) {
     throw new Error(`tmsearch returned no usable serial for "${owner}"`)
   }
-  await pace.tsdr()
-  const res = await fetchWithTimeout(TSDR_STATUS_URL(serial), {
-    headers: { "USPTO-API-KEY": key, Accept: "application/json" },
-  })
-  if (!res.ok) {
+  const overlay = await fetchTsdrCasesBatch([serial], key, pace.tsdr)
+  if (!overlay[serial]?.serial) {
     throw new Error(
-      `TSDR casestatus ${res.status}: key rejected or endpoint down`
+      "TSDR caseMultiStatus returned no usable case — key rejected or endpoint down"
     )
-  }
-  const parsed = parseTsdrCase(await res.json(), "")
-  if (!parsed.serial) {
-    throw new Error("TSDR casestatus returned an unparseable payload")
   }
 }
