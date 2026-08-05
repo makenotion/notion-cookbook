@@ -652,6 +652,25 @@
       }
     },
     {
+      "id": "stripe-sync",
+      "title": "Stripe sync",
+      "summary": "Sync Stripe customers, subscriptions, and charges into managed Notion databases.",
+      "path": "workers/stripe-sync",
+      "kind": "worker-sync",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "stripe"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name stripe-sync"
+      }
+    },
+    {
       "id": "todoist-sync",
       "title": "Todoist sync",
       "summary": "Sync open Todoist tasks and project summaries with recent completion context.",
