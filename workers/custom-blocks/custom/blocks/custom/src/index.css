@@ -1,0 +1,131 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-base);
+}
+
+.nds {
+  color: var(--content-primary);
+  background: var(--bg-base);
+  font-family: var(--font-sans);
+}
+
+main {
+  width: 100%;
+  padding: var(--spacing-16);
+}
+
+.starter-card {
+  width: min(100%, 520px);
+  padding: var(--spacing-24);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-12);
+  color: var(--content-primary);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-sm);
+}
+
+.starter-status {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-6);
+  margin-bottom: var(--spacing-20);
+  color: var(--content-tertiary);
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.02em;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green-80);
+  box-shadow: 0 0 0 3px var(--translucent-green-30);
+}
+
+.starter-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-12);
+}
+
+.wave {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: var(--radius-8);
+  background: var(--bg-muted);
+  font-size: 20px;
+  line-height: 1;
+}
+
+h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.starter-heading p {
+  margin: var(--spacing-4) 0 0;
+  color: var(--content-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.next-step {
+  margin-top: var(--spacing-24);
+  padding: var(--spacing-12) var(--spacing-16);
+  border: 1px solid var(--border-secondary);
+  border-radius: var(--radius-8);
+  background: var(--bg-muted);
+}
+
+.next-step > span {
+  display: block;
+  margin-bottom: var(--spacing-4);
+  color: var(--content-tertiary);
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.next-step p {
+  margin: 0;
+  color: var(--content-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+code {
+  padding: 2px 5px;
+  border: 1px solid var(--border-secondary);
+  border-radius: var(--radius-4);
+  color: var(--content-primary);
+  background: var(--bg-base);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  white-space: nowrap;
+}
+
+@media (max-width: 420px) {
+  main {
+    padding: var(--spacing-8);
+  }
+
+  .starter-card {
+    padding: var(--spacing-20);
+  }
+
+  .next-step p {
+    line-height: 1.7;
+  }
+}

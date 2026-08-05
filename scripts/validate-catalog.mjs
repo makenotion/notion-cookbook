@@ -29,9 +29,17 @@ async function isFile(path) {
 async function findProjects() {
   const projects = new Map()
 
-  for (const root of ["examples", "workers"]) {
+  for (const root of ["examples", "workers", "workers/custom-blocks"]) {
     const rootPath = resolve(repoRoot, root)
-    const entries = await readdir(rootPath, { withFileTypes: true })
+    let entries
+    try {
+      entries = await readdir(rootPath, { withFileTypes: true })
+    } catch (error) {
+      console.warn(
+        `Skipping ${root}: ${error instanceof Error ? error.message : String(error)}`
+      )
+      continue
+    }
 
     for (const entry of entries) {
       if (!entry.isDirectory()) continue
@@ -75,6 +83,7 @@ function requireString(recipe, field, label) {
 
 function expectedKind(path, id) {
   if (path.startsWith("examples/")) return "api-example"
+  if (path.startsWith("workers/custom-blocks/")) return "worker-custom-block"
   if (id.endsWith("-sync")) return "worker-sync"
   if (id.endsWith("-webhook")) return "worker-webhook"
   return "worker-tool"
@@ -127,13 +136,15 @@ async function validateRecipe(recipe, index, projects, readme, ids, paths) {
     report(`${label}.path duplicates ${JSON.stringify(path)}`)
   else paths.add(path)
 
-  const pathParts = path.split("/")
-  if (
-    pathParts.length !== 2 ||
-    !["examples", "workers"].includes(pathParts[0]) ||
-    pathParts[1] !== id
-  ) {
-    report(`${label}.path must be examples/${id} or workers/${id}`)
+  const validPaths = [
+    `examples/${id}`,
+    `workers/${id}`,
+    `workers/custom-blocks/${id}`,
+  ]
+  if (!validPaths.includes(path)) {
+    report(
+      `${label}.path must be examples/${id}, workers/${id}, or workers/custom-blocks/${id}`
+    )
   }
 
   const allowedKinds = new Set([
@@ -141,6 +152,7 @@ async function validateRecipe(recipe, index, projects, readme, ids, paths) {
     "worker-sync",
     "worker-tool",
     "worker-webhook",
+    "worker-custom-block",
   ])
   if (!allowedKinds.has(kind)) {
     report(`${label}.kind is invalid: ${JSON.stringify(kind)}`)
@@ -234,7 +246,7 @@ async function validateRecipe(recipe, index, projects, readme, ids, paths) {
     }
   }
 
-  if (!readme.includes(`(${path}/)`)) {
+  if (kind !== "worker-custom-block" && !readme.includes(`(${path}/)`)) {
     report(`README.md must link directly to ${path}/`)
   }
 }

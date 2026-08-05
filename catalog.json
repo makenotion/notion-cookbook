@@ -197,6 +197,82 @@
       }
     },
     {
+      "id": "custom",
+      "title": "Hello world custom block",
+      "summary": "Render a minimal Hello world view inside a Notion page with no data-source setup.",
+      "path": "workers/custom-blocks/custom",
+      "kind": "worker-custom-block",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "notion-custom-blocks"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name custom"
+      }
+    },
+    {
+      "id": "habit-tracker",
+      "title": "Habit tracker custom block",
+      "summary": "Render a month-at-a-glance habit grid with streaks inside a Notion page, backed by Habits and Habits Log databases.",
+      "path": "workers/custom-blocks/habit-tracker",
+      "kind": "worker-custom-block",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "notion-custom-blocks"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name habit-tracker"
+      }
+    },
+    {
+      "id": "org-chart",
+      "title": "Org chart custom block",
+      "summary": "Render a tree org chart inside a Notion page from a People database with a self-referencing Reports to relation.",
+      "path": "workers/custom-blocks/org-chart",
+      "kind": "worker-custom-block",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "notion-custom-blocks"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name org-chart"
+      }
+    },
+    {
+      "id": "whiteboard",
+      "title": "Whiteboard custom block",
+      "summary": "Render a freeform whiteboard with sticky notes, pen, lines, and arrows inside a Notion page, persisted to a Whiteboard items database.",
+      "path": "workers/custom-blocks/whiteboard",
+      "kind": "worker-custom-block",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "notion-custom-blocks"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name whiteboard"
+      }
+    },
+    {
       "id": "duckdb-query",
       "title": "DuckDB query agent tool",
       "summary": "Learn the Worker tool pattern by querying a seeded, in-memory DuckDB sales database with no credentials.",
