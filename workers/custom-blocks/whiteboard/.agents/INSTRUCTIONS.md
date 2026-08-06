@@ -20,7 +20,7 @@
 
 `worker.customBlock()` declares a front-end web app that Notion serves in an iframe. It is a build-time/deploy-time capability with no `execute` handler, so it cannot be run with `ntn workers exec`. A custom block has two SDK surfaces: `@notionhq/workers` declares how the block is built and which data-source schemas it expects, while `@notionhq/custom-blocks` allows the the iframe frontend code to communicate with the Notion host at runtime.
 
-Before scaffolding a custom block frontend, add `@notionhq/custom-blocks` to the worker's existing root `package.json` and install it from the worker root. The block frontend shares that package and its `node_modules`. Do not create a second `package.json` inside the Vite app. Read the installed package's README and docs for the current client API.
+Before scaffolding a custom block frontend, add `@notionhq/custom-blocks` to the worker's existing root `package.json`, add `@notionhq/custom-blocks-dev-shell` to its `devDependencies`, and install from the worker root. The block frontend shares that package and its `node_modules`. Do not create a second `package.json` inside the Vite app. Read the installed packages' READMEs and docs for the current client API.
 
 #### Test blocks in the dev shell before deploying
 
@@ -30,11 +30,9 @@ Because a custom block has no `execute` handler, `ntn workers exec` cannot exerc
 ntn customblocks dev
 ```
 
-Run it from anywhere inside the worker project and open http://localhost:9873. The dev shell builds the worker, reads the manifest declared by the `worker.customBlock(...)` calls, serves each block with the project's own Vite (edits hot-reload), and renders it in a mock Notion host.
+Run it from anywhere inside the worker project and open http://localhost:9873. The dev shell builds the worker, serves each block with the project's own Vite (edits hot-reload), and renders it in a mock Notion host with sample data sources to bind.
 
-To give a block data, open **Connect data** in the shell toolbar and bind each of the block's data-source slots. The sources on offer are JSON files in the worker's `src/data/` directory; the shell materializes missing ones from the schemas declared in `dataSources`. The shell reads `src/data/*.json` and the worker manifest once at spin-up, so restart the command after editing sample data or `worker.customBlock(...)` options.
-
-The `@notionhq/custom-blocks-dev-shell` package ships the reference docs: `docs/bindings.md` (connecting sources, auto-mapping rules) and `docs/data-sources.md` (the `src/data/*.json` file format).
+The dev shell package's reference docs are installed with it: read `node_modules/@notionhq/custom-blocks-dev-shell/docs/bindings.md` (connecting blocks to data sources) and `node_modules/@notionhq/custom-blocks-dev-shell/docs/data-sources.md` (the `src/data/*.json` sample-data format) before authoring sample data.
 
 #### Custom block sources
 
