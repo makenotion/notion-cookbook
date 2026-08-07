@@ -396,7 +396,7 @@
 .oc-zoom-controls {
 	position: absolute;
 	right: var(--spacing-12);
-	bottom: var(--spacing-12);
+	top: var(--spacing-12);
 	z-index: 10;
 	display: flex;
 	align-items: center;
@@ -609,8 +609,11 @@
 		width: calc(100vw - var(--spacing-16));
 	}
 
+	/* The search bar spans the full width up top on narrow screens, so the
+	 * zoom controls drop back to the bottom corner to stay clear of it. */
 	.oc-zoom-controls {
 		right: var(--spacing-8);
+		top: auto;
 		bottom: var(--spacing-8);
 	}
 
