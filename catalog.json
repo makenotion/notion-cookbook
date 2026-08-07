@@ -406,6 +406,25 @@
       }
     },
     {
+      "id": "jira-publish-implementation-plan",
+      "title": "Publish a Notion implementation plan to Jira",
+      "summary": "Prepare, publish, and inspect a bounded Notion implementation plan in one configured Jira project.",
+      "path": "workers/jira-publish-implementation-plan",
+      "kind": "worker-tool",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "jira-cloud"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name jira-publish-implementation-plan"
+      }
+    },
+    {
       "id": "jira-sync",
       "title": "Jira sync",
       "summary": "Sync Jira Cloud issues, current sprints, sprint analytics, and projects into managed Notion databases.",
