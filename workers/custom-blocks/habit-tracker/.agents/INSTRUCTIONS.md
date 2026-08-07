@@ -20,7 +20,17 @@
 
 `worker.customBlock()` declares a front-end web app that Notion serves in an iframe. It is a build-time/deploy-time capability with no `execute` handler, so it cannot be run with `ntn workers exec`. A custom block has two SDK surfaces: `@notionhq/workers` declares how the block is built and which data-source schemas it expects, while `@notionhq/custom-blocks` allows the the iframe frontend code to communicate with the Notion host at runtime.
 
-Before scaffolding a custom block frontend, add `@notionhq/custom-blocks` to the worker's existing root `package.json` and install it from the worker root. The block frontend shares that package and its `node_modules`. Do not create a second `package.json` inside the Vite app. Read the installed package's README and docs for the current client API.
+Before scaffolding a custom block frontend, add `@notionhq/custom-blocks` to the worker's existing root `package.json`, add `@notionhq/custom-blocks-dev-shell` to its `devDependencies`, and install from the worker root. The block frontend shares that package and its `node_modules`. Do not create a second `package.json` inside the Vite app. Read the installed packages' READMEs and docs for the current client API.
+
+Use the custom blocks dev shell to test locally:
+
+```shell
+ntn customblocks dev
+```
+
+This builds the worker, serves each block with the project's Vite server, and renders in a mock Notion host with sample data sources to bind.
+
+See docs in `node_modules/@notionhq/custom-blocks-dev-shell/docs` for information on data bindings and sample data.
 
 #### Custom block sources
 
@@ -400,6 +410,7 @@ When `ntn datasources query <id>` returns 404 or "Could not find data source", t
 - `ntn login`: connect to a Notion workspace.
 - `ntn workers deploy`: build and publish capabilities. Does not reset sync state.
 - `ntn workers exec <capability>`: run a sync or tool.
+- `ntn customblocks dev`: render custom blocks locally in the dev shell; test there before deploying.
 - `ntn workers sync status`: monitor sync health (live-updating).
 - `ntn workers sync trigger <key> --preview`: preview sync output without writing to the database.
 - `ntn workers sync trigger <key>`: trigger a real sync immediately (writes to the database).
@@ -476,6 +487,7 @@ ntn workers sync state reset <key>
 ## Testing Guidelines
 
 - No test runner configured; validate with `npm run check` and end-to-end testing via `ntn workers exec`.
+- Custom blocks are exercised in the dev shell (`ntn customblocks dev`), not with `ntn workers exec`.
 - Write a test script that exercises each tool capability using `ntn workers exec`. This can be a bash script (`test.sh`) or a TypeScript script (`test.ts`, run via `npx tsx test.ts`). Use the `--local` flag for local execution or omit it to run against the deployed worker.
 
 **Local execution** runs your worker code directly on your machine. Any `.env` file in the project root is automatically loaded, so secrets and config values are available via `process.env`.

@@ -12,6 +12,14 @@ From the repository root:
 cd workers/custom-blocks/custom
 npm install
 npm run check
+ntn customblocks dev
+```
+
+Open http://localhost:9873 to preview the block in the custom blocks dev
+shell — a mock Notion host that serves the block from this project. When it
+looks right, deploy:
+
+```zsh
 ntn login
 ntn workers deploy --name custom
 ```
@@ -21,15 +29,12 @@ because it does not need a database mapping.
 
 ## Local development
 
-Run the view with Vite:
-
-```zsh
-cd blocks/custom
-npx vite
-```
-
-Edit `blocks/custom/src/index.tsx` to change the rendered content. Add
-data-source definitions to `src/index.ts` when the block needs Notion data.
+The dev shell (`ntn customblocks dev`, above) is the local test loop: it
+builds the worker, serves the block with this project's Vite, and renders it
+in a mock Notion host. Edit `blocks/custom/src/index.tsx` to change the
+rendered content; edits hot-reload. Add data-source definitions to
+`src/index.ts` when the block needs Notion data, then restart the dev shell
+to pick up the new manifest and bind sample data.
 
 ## Project structure
 
