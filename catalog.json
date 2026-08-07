@@ -406,6 +406,25 @@
       }
     },
     {
+      "id": "intercom-escalate-customer-issue",
+      "title": "Intercom to Notion ticket agent tool",
+      "summary": "Inspect an Intercom conversation, create or reuse its Notion ticket, then apply a fixed tag, team assignment, and internal note.",
+      "path": "workers/intercom-escalate-customer-issue",
+      "kind": "worker-tool",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "intercom"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name intercom-escalate-customer-issue"
+      }
+    },
+    {
       "id": "jira-sync",
       "title": "Jira sync",
       "summary": "Sync Jira Cloud issues, current sprints, sprint analytics, and projects into managed Notion databases.",
