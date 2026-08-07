@@ -20,6 +20,7 @@ directory.
   [GitHub stars](workers/github-stars-sync/), [HubSpot](workers/hubspot-sync/),
   [Intercom](workers/intercom-sync/),
   [Linear](workers/linear-sync/), [PagerDuty](workers/pagerduty-sync/),
+  [Patents](workers/patent-portfolio-sync/),
   [Readwise and Reader](workers/readwise-sync/),
   [Salesforce](workers/salesforce-sync/), [Sentry](workers/sentry-sync/),
   [Todoist](workers/todoist-sync/), [Zendesk](workers/zendesk-sync/) and more.
@@ -119,6 +120,7 @@ and a **webhook** handles events from another service. See the complete
 | Sync issues, sprints, analytics, and projects                        | [Jira sync](workers/jira-sync/)                             | Jira Cloud  |
 | Sync projects, issues, and initiatives                               | [Linear sync](workers/linear-sync/)                         | Linear      |
 | Monitor PagerDuty incidents and service readiness in Notion          | [PagerDuty sync](workers/pagerduty-sync/)                   | PagerDuty   |
+| Sync US and European patent filings grouped into families            | [Patent portfolio sync](workers/patent-portfolio-sync/)     | USPTO / EPO |
 | Turn saved sources and highlights into project evidence              | [Raindrop.io research library sync](workers/raindrop-sync/) | Raindrop.io |
 | Build a related reading library and highlight knowledge base         | [Readwise and Reader sync](workers/readwise-sync/)          | Readwise    |
 | Sync accounts and opportunities                                      | [Salesforce sync](workers/salesforce-sync/)                 | Salesforce  |

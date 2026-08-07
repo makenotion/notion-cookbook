@@ -23,6 +23,7 @@ For self-hosted integrations built directly with the Notion API, see the [API ex
 | [Intercom sync](intercom-sync/)                     | Companies, contacts, conversations, and tickets linked for support operations and customer context.                                  |
 | [Jira sync](jira-sync/)                             | Jira Cloud issues, current sprints, sprint analytics, and projects.                                                                  |
 | [Linear sync](linear-sync/)                         | Linear projects, issues, and initiatives.                                                                                            |
+| [Patent portfolio sync](patent-portfolio-sync/)     | US (USPTO) and European (EPO) patent filings, grouped into families.                                                                 |
 | [PagerDuty sync](pagerduty-sync/)                   | Active and recent incidents linked to service readiness, current on-call coverage, ownership, and routing context.                   |
 | [Raindrop.io research library sync](raindrop-sync/) | Sources and exact passages linked to their collections and ready to connect to projects, decisions, and downstream work.             |
 | [Readwise and Reader sync](readwise-sync/)          | A Reader library and Readwise highlights linked into a durable archive that preserves Notion pages.                                  |
