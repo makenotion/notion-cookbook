@@ -22,17 +22,15 @@
 
 Before scaffolding a custom block frontend, add `@notionhq/custom-blocks` to the worker's existing root `package.json`, add `@notionhq/custom-blocks-dev-shell` to its `devDependencies`, and install from the worker root. The block frontend shares that package and its `node_modules`. Do not create a second `package.json` inside the Vite app. Read the installed packages' READMEs and docs for the current client API.
 
-#### Test blocks in the dev shell before deploying
-
-Because a custom block has no `execute` handler, `ntn workers exec` cannot exercise it. The custom blocks dev shell is the local test loop: always render the block there and confirm it initializes with its data sources bound before running `ntn workers deploy`.
+Use the custom blocks dev shell to test locally:
 
 ```shell
 ntn customblocks dev
 ```
 
-Run it from anywhere inside the worker project and open http://localhost:9873. The dev shell builds the worker, serves each block with the project's own Vite (edits hot-reload), and renders it in a mock Notion host with sample data sources to bind.
+This builds the worker, serves each block with the project's Vite server, and renders in a mock Notion host with sample data sources to bind.
 
-The dev shell package's reference docs are installed with it: read `node_modules/@notionhq/custom-blocks-dev-shell/docs/bindings.md` (connecting blocks to data sources) and `node_modules/@notionhq/custom-blocks-dev-shell/docs/data-sources.md` (the `src/data/*.json` sample-data format) before authoring sample data.
+See docs in `node_modules/@notionhq/custom-blocks-dev-shell/docs` for information on data bindings and sample data.
 
 #### Custom block sources
 
