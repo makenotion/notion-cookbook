@@ -14,6 +14,14 @@ cd workers/custom-blocks/org-chart
 npm install
 npm run check
 npm test
+ntn customblocks dev
+```
+
+Open http://localhost:9873 to preview the block in the custom blocks dev
+shell — a mock Notion host with sample data sources to bind. When it looks
+right, deploy:
+
+```zsh
 ntn login
 ntn workers deploy --name org-chart
 ```
@@ -51,7 +59,11 @@ otherwise.
 
 ## Local development
 
-The view renders standalone with a seeded 12-person org, no Notion host
+Test the block in the custom blocks dev shell (`ntn customblocks dev`,
+above), which renders it in a mock Notion host with sample data sources to
+bind against, before any deploy.
+
+The view also renders standalone with a seeded 12-person org, no Notion host
 required:
 
 ```zsh
