@@ -26,18 +26,32 @@ Every source fetch goes through `SourceRunner.run(key, fetcher, absentFallback?)
 
 New sources get resilience for free by fetching inside `runner.run("key", …)`.
 
-## 2. Sync-state size — TWO limits (`state.ts`)
+## 2. Sync-state size — TWO limits, one of them MOVING (`state.ts`)
 
 - The platform **rejects saves over 256KB**.
 - A run **fails to _start_** (instant exit, empty logs) when handed state above
-  **~200KB** — below the save cap. A state that saved fine can poison every
-  subsequent run; recovery needs `ntn workers sync state reset <key>`.
+  an **undocumented run-input ceiling that has tightened over time** — ~200KB
+  held in June 2026, but production workers wedged at **~99KB in August 2026**
+  on the current SDK. Treat the ceiling as unknowable and budget total state
+  to stay **well under ~80KB**. A state that saved fine can poison every
+  subsequent run.
 
-So: snapshots are stored gzip+base64 (`packSnapshots`/`unpackSnapshots`), and
-you **project at the fetch boundary** — keep only the fields the join reads,
-drop the rest before it ever enters a snapshot. Each delta logs
-`packed snapshots <N>B`; if it climbs toward ~150KB, shrink projections before
-it bites. The failure mode gives no error message, so this is on you to watch.
+Recognize the wedge: failed runs exit in ~2 seconds with completely empty
+logs, and `ntn workers sync status <key> --json` shows
+`lastSystemErrorMessage: "The request to the worker was invalid"` (run logs
+never mention it). `ntn workers sync state reset <key>` recovers but is only
+a stopgap — the wedge returns as state regrows; the durable fix is persisting
+less.
+
+So: snapshots are stored gzip+base64 (`packSnapshots`/`unpackSnapshots`), you
+**project at the fetch boundary** — keep only the fields the join reads, drop
+the rest before it ever enters a snapshot — and you **pre-aggregate unbounded
+terms**: never snapshot per-transaction rows whose count only grows (invoices
+are the classic trap); reduce them to per-entity sums at the boundary so the
+snapshot tracks portfolio size, not history. Each delta logs
+`packed snapshots <N>B`; if total state climbs toward ~80KB, shrink
+projections before it bites. The failure mode gives no error message, so this
+is on you to watch.
 
 ## 3. Change detection (`fingerprint.ts`)
 

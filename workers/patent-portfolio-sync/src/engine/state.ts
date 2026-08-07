@@ -7,15 +7,18 @@
 //
 //   1. The platform REJECTS SAVES over 256KB.
 //   2. More subtly, a run FAILS TO *START* (instant exit, empty logs) when
-//      handed state above ~200KB — below the save cap. A state that saved
-//      fine can poison every subsequent run; recovery needs `sync state
-//      reset`.
+//      handed state above an undocumented ceiling that has TIGHTENED over
+//      time — ~200KB held in June 2026; production workers wedged at ~99KB
+//      in August 2026. A state that saved fine can poison every subsequent
+//      run; `sync state reset` recovers, but only until state regrows.
 //
 // So we (a) store the last-known-good snapshots gzip+base64 (≈10:1 on this
-// data), and (b) project hard at the fetch boundary (keep only the fields
-// the join reads). Each delta cycle logs the packed size — if it trends
-// toward ~150KB, shrink projections BEFORE it bites; the failure mode is
-// silent.
+// data), (b) project hard at the fetch boundary (keep only the fields the
+// join reads), and (c) pre-aggregate unbounded terms (per-transaction rows
+// reduce to per-entity sums — history must never accumulate in state).
+// Each delta cycle logs the packed size — budget the TOTAL state to stay
+// well under ~80KB and shrink projections BEFORE it bites; the failure
+// mode is silent.
 
 import { gunzipSync, gzipSync } from "node:zlib"
 import type { SourceSnapshots } from "./resilience.js"

@@ -47,9 +47,12 @@ signal, because the delta degrades gracefully.
 
 The reusable machinery in `src/engine/` (resilience, sync-state size
 discipline, fetch timeouts, change detection) rarely needs editing and encodes
-hard-won lessons — notably that sync state has a ~200KB _run-input_ limit below
-the 256KB _save_ cap, so snapshots are gzipped and the adapters store
-already-normalized `PatentRecord`s (not raw API payloads) to keep state small.
+hard-won lessons — notably that sync state hits an undocumented _run-input_
+ceiling well below the 256KB _save_ cap (observed ~200KB in June 2026, ~99KB
+in August 2026 — treat it as moving), so snapshots are gzipped, the adapters
+store already-normalized `PatentRecord`s (not raw API payloads), and
+per-transaction data whose count grows without bound is pre-aggregated at the
+fetch boundary to keep state small.
 Change detection is fingerprint-based: bump `DERIVATION_VERSION`
 (`engine/fingerprint.ts`) when you change how a field is _computed_ from
 otherwise-unchanged inputs, or the delta won't know to re-emit it.

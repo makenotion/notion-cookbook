@@ -58,10 +58,13 @@ implements against their own systems.
    `ntn workers sync trigger portfolioBackfill`, then the delta provisions.
 
 4. **Sync state has two size limits.** Saves over 256KB are rejected; worse, a
-   run _fails to start_ (instant exit, empty logs) when handed state above
-   ~200KB. Snapshots are gzipped; project payloads at the fetch boundary to
-   only fields the join reads. Each delta logs `packed snapshots <N>B` — keep
-   it well under ~150KB. (See the `sync-engine` skill.)
+   run _fails to start_ (instant exit, empty logs) when handed state above an
+   undocumented ceiling that has tightened over time (~200KB in June 2026;
+   ~99KB wedged production workers in August 2026). Snapshots are gzipped;
+   project payloads at the fetch boundary to only fields the join reads, and
+   pre-aggregate anything whose count grows without bound (invoices!). Each
+   delta logs `packed snapshots <N>B` — budget total state well under ~80KB.
+   (See the `sync-engine` skill.)
 
 5. **Per-execute time budget is ~5 minutes.** Any enrichment that makes one
    API call per item (INPADOC, forward citations, per-matter spend) must be

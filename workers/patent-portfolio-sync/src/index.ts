@@ -77,7 +77,7 @@ worker.sync("portfolioBackfill", {
     // each execute rebuilds the whole (deterministically ordered) row list
     // and emits a BATCH_SIZE slice, advancing `offset` in nextState
     // until it runs past the end. Only the cursor lives in nextState, never
-    // the rows, to stay under the ~200KB run-input cap. Replace-mode
+    // the rows, to stay under the platform's run-input state ceiling
     // mark-and-sweep is unaffected: the runtime tracks every key upserted
     // across the whole cycle and prunes the rest only when the final page
     // returns hasMore:false. Caveat: this re-fetches upstream once per page,

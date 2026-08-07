@@ -35,7 +35,8 @@ the lockstep rule (schema + builder + fingerprint). Several features (1, 3,
 and 2's member refresh) add per-item OPS calls — wire in the resolution
 budgeting from `sync-engine` (chunked backfill resolve phase + rotating TTL'd
 refresh in the delta) so you stay under the ~5-minute handler limit and the
-~200KB state limit.
+platform's undocumented run-input state ceiling (observed as low as ~99KB in
+August 2026 — budget total state well under ~80KB).
 
 When done: `npm run check`, verify with `--local`, then on deploy run the
 backfill before the delta (schema change), and bump `DERIVATION_VERSION` so
