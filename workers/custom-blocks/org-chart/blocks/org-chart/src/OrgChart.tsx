@@ -27,11 +27,17 @@ import {
 } from "./tree";
 import type { OrgDataState, Person } from "./types";
 
-const ZOOM_LEVELS = [0.75, 0.9, 1, 1.15, 1.3, 1.4] as const;
+const ZOOM_LEVELS = [0.25, 0.35, 0.5, 0.65, 0.75, 0.9, 1, 1.15, 1.3, 1.4] as const;
 const MIN_SCALE = ZOOM_LEVELS[0];
 const MAX_SCALE = ZOOM_LEVELS[ZOOM_LEVELS.length - 1];
 const FIT_PADDING = 56;
 const ANIM_MS = 200;
+/** Scale of the initial "home" view: the root card at the top of the view. */
+const HOME_SCALE = 1;
+/** Below this scale the chart counts as "zoomed out": clicking a card zooms
+ * in on that person instead of toggling their selection. */
+const SELECT_ZOOM_THRESHOLD = 0.9;
+const SELECT_ZOOM_TARGET = 1;
 
 // ---------------------------------------------------------------------------
 // Avatar tint: stable hash of the name into the NDS translucent ramps.
@@ -115,6 +121,8 @@ function easeOutCubic(t: number): number {
 function useAnimatedPositions(
 	layout: LayoutResult,
 	reducedMotion: boolean,
+	anchorRef: { current: string | null },
+	onAnchorShift: (dx: number, dy: number) => void,
 ): Map<string, Disp> {
 	const [disp, setDisp] = useState<Map<string, Disp>>(() => snapshotOf(layout));
 	const dispRef = useRef(disp);
@@ -134,6 +142,25 @@ function useAnimatedPositions(
 			safetyTimerRef.current = null;
 		}
 
+		// Anchored relayout: the new layout may shift the whole tree, which
+		// would drag the card the user just toggled across the screen. Measure
+		// how far the anchor moved, let the parent pan the viewport by the same
+		// amount, and start the tween from equally shifted positions so the
+		// anchor (and every card, at t=0) stays screen-continuous.
+		const anchorId = anchorRef.current;
+		anchorRef.current = null;
+		let shiftX = 0;
+		let shiftY = 0;
+		if (anchorId !== null) {
+			const fromAnchor = dispRef.current.get(anchorId);
+			const toAnchor = layout.positions.get(anchorId);
+			if (fromAnchor !== undefined && toAnchor !== undefined) {
+				shiftX = toAnchor.x - fromAnchor.x;
+				shiftY = toAnchor.y - fromAnchor.y;
+				if (shiftX !== 0 || shiftY !== 0) onAnchorShift(shiftX, shiftY);
+			}
+		}
+
 		const finish = (): void => {
 			const final = snapshotOf(layout);
 			dispRef.current = final;
@@ -148,7 +175,10 @@ function useAnimatedPositions(
 
 		// Quiet motion: persisting cards ease to their new spot; entering and
 		// exiting cards just fade in place — no converge/emerge choreography.
-		const from = new Map(dispRef.current);
+		const from = new Map<string, Disp>();
+		for (const [id, d] of dispRef.current) {
+			from.set(id, { x: d.x + shiftX, y: d.y + shiftY, o: d.o });
+		}
 		const targets = new Map<string, Disp>();
 		for (const [id, p] of layout.positions) {
 			targets.set(id, { x: p.x, y: p.y, o: 1 });
@@ -158,6 +188,12 @@ function useAnimatedPositions(
 		}
 		for (const [id, t] of targets) {
 			if (!from.has(id)) from.set(id, { x: t.x, y: t.y, o: 0 });
+		}
+		if (shiftX !== 0 || shiftY !== 0) {
+			// Commit the shifted start positions in the same render as the
+			// viewport compensation, before the first rAF frame runs.
+			dispRef.current = from;
+			setDisp(from);
 		}
 
 		const t0 = performance.now();
@@ -197,7 +233,7 @@ function useAnimatedPositions(
 			rafRef.current = requestAnimationFrame(step);
 		};
 		rafRef.current = requestAnimationFrame(step);
-	}, [layout, reducedMotion]);
+	}, [layout, reducedMotion, anchorRef, onAnchorShift]);
 
 	useEffect(
 		() => () => {
@@ -280,7 +316,6 @@ function ChartCanvas({
 		() => layoutForest(forest.roots, collapsed),
 		[forest, collapsed],
 	);
-	const disp = useAnimatedPositions(layout, reducedMotion);
 
 	const activeChain = useMemo(() => {
 		const focus = hoveredId ?? selectedId;
@@ -310,6 +345,21 @@ function ChartCanvas({
 	/** Once the user pans/zooms manually we stop auto-fitting on resize. */
 	const userMovedRef = useRef(false);
 
+	// Expand/collapse anchoring: the toggled card's id is stashed here, and
+	// when the relayout lands the viewport pans by however far that card
+	// moved, so it stays locked in place on screen.
+	const anchorIdRef = useRef<string | null>(null);
+	const onAnchorShift = useCallback((dx: number, dy: number) => {
+		setViewAnim(false);
+		setView((v) => ({ ...v, tx: v.tx - dx * v.s, ty: v.ty - dy * v.s }));
+	}, []);
+	const disp = useAnimatedPositions(
+		layout,
+		reducedMotion,
+		anchorIdRef,
+		onAnchorShift,
+	);
+
 	const beginViewAnim = useCallback(() => {
 		if (reducedMotion) return;
 		setViewAnim(true);
@@ -318,6 +368,11 @@ function ChartCanvas({
 		}
 		viewAnimTimerRef.current = window.setTimeout(() => setViewAnim(false), 220);
 	}, [reducedMotion]);
+
+	// Which automatic view the viewport is resting in: the initial "home"
+	// view (root card at the top, zoomed in) or the fit-everything view.
+	// Resizes re-apply whichever was last active.
+	const autoViewRef = useRef<"home" | "fit">("home");
 
 	const fitView = useCallback(
 		(animate: boolean) => {
@@ -345,26 +400,54 @@ function ChartCanvas({
 			}
 			const ty = h * s + FIT_PADDING > vh ? FIT_PADDING / 2 : (vh - h * s) / 2;
 			userMovedRef.current = false;
+			autoViewRef.current = "fit";
 			if (animate) beginViewAnim();
 			setView({ tx, ty, s });
 		},
 		[layout, forest, beginViewAnim],
 	);
 
+	// Default view: the primary root centered at the top edge at 100%, so the
+	// chart opens reading down from the top of the org rather than fully fit.
+	const homeView = useCallback(
+		(animate: boolean) => {
+			const el = viewportRef.current;
+			if (el === null) return;
+			const rootId = forest.roots[0]?.person.id;
+			const rootPos =
+				rootId !== undefined ? layout.positions.get(rootId) : undefined;
+			if (rootPos === undefined) {
+				fitView(animate);
+				return;
+			}
+			const s = clampScale(HOME_SCALE);
+			userMovedRef.current = false;
+			autoViewRef.current = "home";
+			if (animate) beginViewAnim();
+			setView({
+				tx: el.clientWidth / 2 - (rootPos.x + CARD_W / 2) * s,
+				ty: FIT_PADDING / 2 - rootPos.y * s,
+				s,
+			});
+		},
+		[layout, forest, beginViewAnim, fitView],
+	);
+
 	const didFitRef = useRef(false);
 	useLayoutEffect(() => {
 		if (!didFitRef.current && layout.positions.size > 0) {
 			didFitRef.current = true;
-			fitView(false);
+			homeView(false);
 		}
-	}, [layout, fitView]);
+	}, [layout, homeView]);
 
 	// Keep the tree fitted as the host resizes the iframe, until the user
 	// takes over the viewport themselves. Only genuine size changes refit —
 	// the observe() call itself always fires once, which must not snap the
 	// viewport after unrelated re-renders.
-	const fitViewRef = useRef(fitView);
-	fitViewRef.current = fitView;
+	const fitViewRef = useRef<(animate: boolean) => void>(fitView);
+	fitViewRef.current = (animate) =>
+		autoViewRef.current === "home" ? homeView(animate) : fitView(animate);
 	useEffect(() => {
 		const el = viewportRef.current;
 		if (el === null || typeof ResizeObserver === "undefined") return;
@@ -515,6 +598,7 @@ function ChartCanvas({
 	// cards skip re-renders in large orgs) ---
 	const toggleCollapsed = useCallback(
 		(id: string) => {
+			anchorIdRef.current = id;
 			const isCollapsing = !collapsed.has(id);
 			if (
 				isCollapsing &&
@@ -534,9 +618,34 @@ function ChartCanvas({
 		[collapsed, forest, selectedId],
 	);
 
-	const toggleSelected = useCallback((id: string) => {
-		setSelectedId((cur) => (cur === id ? null : id));
-	}, []);
+	// Latest layout, readable from the stable card callbacks below.
+	const layoutRef = useRef(layout);
+	layoutRef.current = layout;
+
+	const toggleSelected = useCallback(
+		(id: string) => {
+			// From a zoomed-out overview a card click is a navigation gesture:
+			// zoom in on that person rather than toggling selection.
+			if (viewRef.current.s < SELECT_ZOOM_THRESHOLD) {
+				const p = layoutRef.current.positions.get(id);
+				const el = viewportRef.current;
+				if (p !== undefined && el !== null) {
+					const s2 = clampScale(SELECT_ZOOM_TARGET);
+					userMovedRef.current = true;
+					beginViewAnim();
+					setView({
+						tx: el.clientWidth / 2 - (p.x + CARD_W / 2) * s2,
+						ty: el.clientHeight / 2 - (p.y + CARD_H / 2) * s2,
+						s: s2,
+					});
+				}
+				setSelectedId(id);
+				return;
+			}
+			setSelectedId((cur) => (cur === id ? null : id));
+		},
+		[beginViewAnim],
+	);
 
 	const setHoveredIdStable = useCallback(
 		(id: string, hovering: boolean) => {

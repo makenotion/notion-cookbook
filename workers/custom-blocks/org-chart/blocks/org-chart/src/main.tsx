@@ -83,7 +83,7 @@ root.render(
 	isMock ? (
 		<MockRoot />
 	) : (
-		<NotionCustomBlock>
+		<NotionCustomBlock autoResize={false}>
 			<HostedApp />
 		</NotionCustomBlock>
 	),
