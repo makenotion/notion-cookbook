@@ -56,19 +56,33 @@ Assembly order encodes the trust model — don't reorder it:
    rows carry TMview's values until it recovers, and the fingerprints
    self-heal the enriched values.
 
-## 3. Sync-state size — TWO limits (`state.ts`)
+## 3. Sync-state size — TWO limits, one of them MOVING (`state.ts`)
 
 - The platform **rejects saves over 256KB**.
 - A run **fails to _start_** (instant exit, empty logs) when handed state
-  above **~200KB** — below the save cap. A state that saved fine can poison
-  every subsequent run; recovery needs `ntn workers sync state reset <key>`.
+  above an **undocumented run-input ceiling that has tightened over time** —
+  ~200KB held in June 2026, but production workers wedged at **~99KB in
+  August 2026** on the current SDK. Treat the ceiling as unknowable and
+  budget total state to stay **well under ~80KB**. A state that saved fine
+  can poison every subsequent run.
 
-So: snapshots are stored gzip+base64 (`packSnapshots`/`unpackSnapshots`), and
-you **project at the fetch boundary** — keep only the fields the join reads.
-Each delta logs **both** figures: `packed snapshots <N>B, total state ~<M>B` —
-fingerprints and `sourceHealth` ride raw alongside the gzipped snapshots, so
-watch the total, not just the packed number. If it climbs toward ~150KB,
-shrink projections before it bites; the failure mode has no error message.
+Recognize the wedge: failed runs exit in ~2 seconds with completely empty
+logs, and `ntn workers sync status <key> --json` shows
+`lastSystemErrorMessage: "The request to the worker was invalid"` (run logs
+never mention it). `ntn workers sync state reset <key>` recovers but is only
+a stopgap — the wedge returns as state regrows; the durable fix is
+persisting less.
+
+So: snapshots are stored gzip+base64 (`packSnapshots`/`unpackSnapshots`), you
+**project at the fetch boundary** — keep only the fields the join reads —
+and you **pre-aggregate unbounded terms**: never snapshot per-transaction
+rows whose count only grows (invoices are the classic trap); reduce them to
+per-entity sums at the boundary so the snapshot tracks portfolio size, not
+history. Each delta logs **both** figures:
+`packed snapshots <N>B, total state ~<M>B` — fingerprints and `sourceHealth`
+ride raw alongside the gzipped snapshots, so watch the total, not just the
+packed number. If the total climbs toward ~80KB, shrink projections before
+it bites; the failure mode has no error message.
 
 ## 4. Change detection (`fingerprint.ts`)
 

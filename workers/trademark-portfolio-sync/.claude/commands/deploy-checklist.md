@@ -65,5 +65,7 @@ Run through this with the user. Report each as pass/fail, fix what you can.
 
 **If the delta fails instantly with empty logs:** almost always an unmigrated
 schema change — run `portfolioBackfill` once, then re-trigger the delta. If it
-persists, the sync state may have outgrown the ~200KB start cap — see the
-`sync-engine` skill (`ntn workers sync state reset` is the recovery).
+persists, the sync state may have outgrown the platform's undocumented
+run-input ceiling (observed as low as ~99KB in August 2026) — see the
+`sync-engine` skill (`ntn workers sync state reset` recovers, but only until
+state regrows; shrinking projections is the durable fix).

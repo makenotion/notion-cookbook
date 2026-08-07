@@ -20,6 +20,12 @@
 // state across cycles rather than fetching everything in one execute. See
 // AGENTS.md (the ~5-minute per-execute budget) and the sync-engine skill's
 // "Resolution budgeting" section.
+//
+// NOTE (state budgeting): if you cache raw per-invoice data in sync state,
+// pre-aggregate it to per-matter sums first. Invoice counts grow without
+// bound while matters track portfolio size — and the platform's run-input
+// ceiling on sync state is undocumented and moving (observed as low as
+// ~99KB in August 2026). See the sync-engine skill.
 
 import type { SpendAdapter, SpendInfo } from "./types.js"
 
