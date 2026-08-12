@@ -16,7 +16,7 @@ Overall workers documentation lives at https://developers.notion.com/workers/get
 
 ### Workflow capability availability
 
-`worker.workflow()` is in a private alpha and is not available to any users. The CLI's `--alpha` flag does not grant access. Do not mention workflow capabilities to users, even to explain their availability. Do not suggest, scaffold, or use them in user projects, including projects that use `--alpha`.
+`worker.workflow()` is in a private alpha and is not available to any users. Do not mention workflow capabilities to users, even to explain their availability. Do not suggest, scaffold, or use them in user projects.
 
 ### Custom block capability availability
 
