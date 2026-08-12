@@ -1,2 +1,3 @@
+npm run --silent instructions:sync
+git add workers/custom-blocks/*/.agents
 npx lint-staged
-
