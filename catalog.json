@@ -140,6 +140,24 @@
       }
     },
     {
+      "id": "default",
+      "title": "Default worker template",
+      "summary": "The base worker scaffold with an example agent tool plus focused samples for sync, tool, automation, OAuth, and webhook capabilities.",
+      "path": "workers/default",
+      "kind": "worker-template",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy"
+      }
+    },
+    {
       "id": "airflow",
       "title": "Airflow agent tool",
       "summary": "Let a Notion Agent inspect Airflow DAGs, runs, tasks, logs, and service health through the stable REST API.",

@@ -83,6 +83,7 @@ function requireString(recipe, field, label) {
 
 function expectedKind(path, id) {
   if (path.startsWith("examples/")) return "api-example"
+  if (path === "workers/default") return "worker-template"
   if (path.startsWith("workers/custom-blocks/")) return "worker-custom-block"
   if (id.endsWith("-sync")) return "worker-sync"
   if (id.endsWith("-webhook")) return "worker-webhook"
@@ -149,6 +150,7 @@ async function validateRecipe(recipe, index, projects, readme, ids, paths) {
 
   const allowedKinds = new Set([
     "api-example",
+    "worker-template",
     "worker-sync",
     "worker-tool",
     "worker-webhook",

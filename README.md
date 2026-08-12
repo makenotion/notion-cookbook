@@ -105,7 +105,8 @@ See the [API examples guide](examples/) for shared setup information.
 Workers are server-side extensions deployed to Notion. A **sync** maintains a
 managed Notion database, a **tool** gives a Notion Agent a callable capability,
 and a **webhook** handles events from another service. See the complete
-[Workers guide](workers/) for setup and deployment.
+[Workers guide](workers/) for setup and deployment. Start a worker from
+scratch with the [default worker template](workers/default/).
 
 ### Sync external data into Notion
 

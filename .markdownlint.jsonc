@@ -39,6 +39,14 @@
 
   // MD040/fenced-code-language - Fenced code blocks should have a language specified
   // Disabled: Many code blocks are pseudo-code or generic examples without specific language
-  "MD040": false
+  "MD040": false,
+
+  // MD024/no-duplicate-heading - Multiple headings with the same content
+  // siblings_only: worked examples in skills repeat the same subheadings under different parents
+  "MD024": { "siblings_only": true },
+
+  // MD029/ol-prefix - Ordered list item prefix
+  // Disabled: skills checklists number items continuously across section headings
+  "MD029": false
 }
 
