@@ -32,67 +32,7 @@ This builds the worker, serves each block with the project's Vite server, and re
 
 See docs in `node_modules/@notionhq/custom-blocks-dev-shell/docs` for information on data bindings and sample data.
 
-#### Custom block sources
-
-A project source is the default. `path` points to a buildable project directory relative to the worker root. The deploy pipeline runs `npm run build` in that directory and serves its `dist` output by default:
-
-```ts
-worker.customBlock("issueBoard", {
-  path: "./blocks/issue-board",
-})
-```
-
-Use `command` and `output` to override those build defaults:
-
-```ts
-worker.customBlock("issueBoard", {
-  path: "./blocks/issue-board",
-  command: "npm run build-prod",
-  output: "build",
-})
-```
-
-Use a static source when the directory already contains browser assets that should be served as-is:
-
-```ts
-worker.customBlock("issueBoard", {
-  type: "static",
-  path: "./blocks/issue-board/dist",
-})
-```
-
-#### Custom block data-source schemas
-
-The optional `dataSources` field declares the schema a block expects. It does not bind the block to a concrete database. Schema keys and property keys are author-defined identifiers.
-
-```ts
-worker.customBlock("issueBoard", {
-  path: "./blocks/issue-board",
-  version: 1,
-  dataSources: {
-    issues: {
-      name: "Issues",
-      description: "The team's issues",
-      icon: { type: "emoji", emoji: "🐛" },
-      properties: {
-        title: {
-          name: "Title",
-          type: "title",
-        },
-        status: {
-          name: "Status",
-          description: "Workflow state",
-          type: "status",
-        },
-      },
-    },
-  },
-})
-```
-
-Property types use Public API names such as `title`, `rich_text`, `number`, `select`, `multi_select`, `status`, `date`, `people`, `files`, `checkbox`, `url`, `email`, `phone_number`, `formula`, `relation`, and `rollup`.
-
-At render time, the block maps its configured bindings to the matching `dataSources` keys. Read the example source above with `useDataSource("issues")` from `@notionhq/custom-blocks/react`.
+For block sources (project, static, custom build commands), `dataSources` schemas and property types, and the frontend runtime bindings, use the `custom-blocks` skill in `.agents/skills/custom-blocks/`.
 
 ```ts
 import { Worker } from "@notionhq/workers"
