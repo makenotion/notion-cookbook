@@ -1,3 +1,8 @@
+if ! git diff --quiet -- instructions/; then
+  echo "pre-commit: instructions/ has unstaged changes; the sync would embed them in generated copies."
+  echo "Stage or stash your instructions/ edits, then commit again."
+  exit 1
+fi
 npm run --silent instructions:sync
 git add workers/custom-blocks/*/.agents
 npx lint-staged
