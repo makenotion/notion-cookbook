@@ -138,20 +138,15 @@ for (const group of GROUPS) {
     for (const link of ENTRY_LINKS) {
       const linkPath = resolve(repoRoot, recipe.path, link.name)
       const stat = await lstatIfExists(linkPath)
-      if (stat?.isSymbolicLink()) {
-        if ((await readlink(linkPath)) === link.target) continue
-        if (checkMode) {
-          drifted.push(`${relative(repoRoot, linkPath)} (wrong link target)`)
-          continue
-        }
-        await rm(linkPath)
-      } else if (stat) {
-        // A real file is a deliberate template-specific choice; leave it.
-        continue
-      } else if (checkMode) {
-        drifted.push(`${relative(repoRoot, linkPath)} (missing entry link)`)
+      const current = stat?.isSymbolicLink() ? await readlink(linkPath) : null
+      if (current === link.target) continue
+      if (checkMode) {
+        drifted.push(
+          `${relative(repoRoot, linkPath)} (not a symlink to ${link.target})`
+        )
         continue
       }
+      if (stat) await rm(linkPath)
       await symlink(link.target, linkPath)
       console.log(`linked ${relative(repoRoot, linkPath)} -> ${link.target}`)
       synced += 1

@@ -11,10 +11,11 @@ templates:
 | `custom-blocks/` | every recipe in `catalog.json` with `kind: "worker-custom-block"`                             |
 | `default/`       | every other worker recipe (`worker-template`, `worker-sync`, `worker-tool`, `worker-webhook`) |
 
-The sync also maintains `AGENTS.md` and `CLAUDE.md` symlinks to
-`.agents/INSTRUCTIONS.md` at each managed template root, and deletes stale
-copies inside canonical-managed directories when canonical files are removed.
-Template-specific files elsewhere in `.agents/` are left alone.
+The sync also enforces `AGENTS.md` and `CLAUDE.md` as symlinks to
+`.agents/INSTRUCTIONS.md` at each managed template root, replacing anything
+else found there, and deletes stale copies inside canonical-managed
+directories when canonical files are removed. Template-specific files
+elsewhere in `.agents/` are left alone.
 
 ## Editing instructions
 
