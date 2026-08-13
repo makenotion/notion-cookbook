@@ -28,6 +28,7 @@ const GROUPS = [
 const ENTRY_LINKS = [
   { name: "AGENTS.md", target: ".agents/INSTRUCTIONS.md" },
   { name: "CLAUDE.md", target: ".agents/INSTRUCTIONS.md" },
+  { name: ".claude/skills", target: "../.agents/skills" },
 ]
 
 async function collectFiles(dir, prefix = "") {
@@ -146,7 +147,8 @@ for (const group of GROUPS) {
         )
         continue
       }
-      if (stat) await rm(linkPath)
+      if (stat) await rm(linkPath, { recursive: true })
+      await mkdir(dirname(linkPath), { recursive: true })
       await symlink(link.target, linkPath)
       console.log(`linked ${relative(repoRoot, linkPath)} -> ${link.target}`)
       synced += 1
