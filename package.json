@@ -8,10 +8,12 @@
     "projects:typecheck": "./scripts/typecheck-projects.sh",
     "projects:test": "./scripts/test-projects.sh",
     "catalog:validate": "node scripts/validate-catalog.mjs",
+    "agents:sync": "node scripts/sync-agents.mjs",
+    "agents:check": "node scripts/sync-agents.mjs --check",
     "lint:markdown": "markdownlint \"**/*.md\" --ignore node_modules --ignore \"**/node_modules/**\" --config .markdownlint.jsonc",
     "format": "prettier --write \"**/*.{md,json,yml,yaml}\"",
     "format:check": "prettier --check \"**/*.{md,json,yml,yaml}\"",
-    "verify": "npm run catalog:validate && npm run projects:typecheck && npm run projects:test && npm run lint:markdown && npm run format:check",
+    "verify": "npm run catalog:validate && npm run agents:check && npm run projects:typecheck && npm run projects:test && npm run lint:markdown && npm run format:check",
     "verify:all": "npm run projects:install && npm run verify",
     "prepare": "husky"
   },
