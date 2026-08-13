@@ -1,11 +1,34 @@
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises"
+import {
+  lstat,
+  mkdir,
+  readFile,
+  readdir,
+  readlink,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises"
 import { dirname, join, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const checkMode = process.argv.includes("--check")
 
-const GROUPS = [{ canonicalDir: "instructions/custom-blocks", kind: "worker-custom-block" }]
+const GROUPS = [
+  {
+    canonicalDir: "instructions/custom-blocks",
+    kinds: ["worker-custom-block"],
+  },
+  {
+    canonicalDir: "instructions/default",
+    kinds: ["worker-template", "worker-sync", "worker-tool", "worker-webhook"],
+  },
+]
+
+const ENTRY_LINKS = [
+  { name: "AGENTS.md", target: ".agents/INSTRUCTIONS.md" },
+  { name: "CLAUDE.md", target: ".agents/INSTRUCTIONS.md" },
+]
 
 async function collectFiles(dir, prefix = "") {
   const files = []
@@ -29,6 +52,14 @@ async function readIfExists(path) {
   }
 }
 
+async function lstatIfExists(path) {
+  try {
+    return await lstat(path)
+  } catch {
+    return null
+  }
+}
+
 const catalog = JSON.parse(
   await readFile(resolve(repoRoot, "catalog.json"), "utf8")
 )
@@ -44,16 +75,29 @@ for (const group of GROUPS) {
     process.exit(1)
   }
 
-  const recipes = catalog.recipes.filter((recipe) => recipe.kind === group.kind)
+  const recipes = catalog.recipes.filter((recipe) =>
+    group.kinds.includes(recipe.kind)
+  )
   if (recipes.length === 0) {
-    console.error(`No catalog recipes with kind ${JSON.stringify(group.kind)}`)
+    console.error(
+      `No catalog recipes with kinds ${JSON.stringify(group.kinds)}`
+    )
     process.exit(1)
   }
 
+  // Directories that appear in the canonical set. The sweep only deletes
+  // inside these, so template-specific files elsewhere in .agents/ survive.
+  const managedDirs = new Set(
+    files.map((file) => dirname(file)).filter((dir) => dir !== ".")
+  )
+  const canonicalSet = new Set(files)
+
   for (const recipe of recipes) {
+    const agentsRoot = resolve(repoRoot, recipe.path, ".agents")
+
     for (const file of files) {
       const source = join(canonicalPath, file)
-      const target = resolve(repoRoot, recipe.path, ".agents", file)
+      const target = join(agentsRoot, file)
       const expected = await readFile(source, "utf8")
       const actual = await readIfExists(target)
       if (actual === expected) continue
@@ -66,6 +110,51 @@ for (const group of GROUPS) {
         console.log(`synced ${relative(repoRoot, target)}`)
         synced += 1
       }
+    }
+
+    for (const managedDir of managedDirs) {
+      const targetDir = join(agentsRoot, managedDir)
+      let entries
+      try {
+        entries = await readdir(targetDir, { withFileTypes: true })
+      } catch {
+        continue
+      }
+      for (const entry of entries) {
+        if (entry.isDirectory()) continue
+        const relPath = join(managedDir, entry.name)
+        if (canonicalSet.has(relPath)) continue
+        const stale = join(agentsRoot, relPath)
+        if (checkMode) {
+          drifted.push(`${relative(repoRoot, stale)} (stale, not in canonical)`)
+        } else {
+          await rm(stale)
+          console.log(`removed ${relative(repoRoot, stale)}`)
+          synced += 1
+        }
+      }
+    }
+
+    for (const link of ENTRY_LINKS) {
+      const linkPath = resolve(repoRoot, recipe.path, link.name)
+      const stat = await lstatIfExists(linkPath)
+      if (stat?.isSymbolicLink()) {
+        if ((await readlink(linkPath)) === link.target) continue
+        if (checkMode) {
+          drifted.push(`${relative(repoRoot, linkPath)} (wrong link target)`)
+          continue
+        }
+        await rm(linkPath)
+      } else if (stat) {
+        // A real file is a deliberate template-specific choice; leave it.
+        continue
+      } else if (checkMode) {
+        drifted.push(`${relative(repoRoot, linkPath)} (missing entry link)`)
+        continue
+      }
+      await symlink(link.target, linkPath)
+      console.log(`linked ${relative(repoRoot, linkPath)} -> ${link.target}`)
+      synced += 1
     }
   }
 }
@@ -84,5 +173,5 @@ console.log(
     ? "Template instructions match instructions/."
     : synced === 0
       ? "Template instructions already up to date."
-      : `Synced ${synced} file(s).`
+      : `Synced ${synced} change(s).`
 )
