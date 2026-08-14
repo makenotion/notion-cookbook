@@ -1,6 +1,6 @@
 # Notion Worker examples
 
-[Notion Workers](https://developers.notion.com/docs/workers) are server-side extensions deployed to Notion. Each direct child of [`templates/`](templates/) is an independently executable and deployable Worker.
+[Notion Workers](https://developers.notion.com/docs/workers) are server-side extensions deployed to Notion. Each direct child of [`templates/`](templates/) is an independently executable and deployable Worker. [`agents/`](agents/) holds the canonical agent files every template ships.
 
 There are 3 different type of Worker capabilties:
 
