@@ -4,5 +4,5 @@ if ! git diff --quiet -- workers/agents/; then
   exit 1
 fi
 npm run --silent agents:sync
-git add workers/custom-blocks/*/.agents
+git add 'workers/*/.agents/*' 'workers/*/AGENTS.md' 'workers/*/CLAUDE.md'
 npx lint-staged
