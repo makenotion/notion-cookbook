@@ -107,6 +107,12 @@ managed Notion database, a **tool** gives a Notion Agent a callable capability,
 and a **webhook** handles events from another service. See the complete
 [Workers guide](workers/) for setup and deployment.
 
+### Default template
+
+| Task                                         | Worker                                                |
+| -------------------------------------------- | ----------------------------------------------------- |
+| Scaffold a new Worker from the base template | [Default Worker template](workers/templates/default/) |
+
 ### Sync external data into Notion
 
 | Task                                                                 | Worker                                                                | Source      |
