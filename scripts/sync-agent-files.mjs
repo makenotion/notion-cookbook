@@ -21,7 +21,8 @@ import { fileURLToPath } from "node:url"
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const isDryRun = process.argv.includes("--dryRun")
 
-const CANONICAL_ROOT = "workers/agents"
+const AGENTS_ROOT = "workers/agents"
+const INSTRUCTIONS_ROOT = `${AGENTS_ROOT}/instructions`
 
 // This script deletes each template's `.agents/` before rewriting it, and the
 // directory it deletes comes from `catalog.json`. A path such as `../../..`
@@ -29,16 +30,32 @@ const CANONICAL_ROOT = "workers/agents"
 // this root before anything is removed.
 const TEMPLATES_ROOT = "workers/templates"
 
+// Skills live in one shared pool. A group names the ones it ships, so an
+// override can spread the defaults instead of repeating them.
+const SKILLS_ROOT = `${AGENTS_ROOT}/skills`
+const DEFAULT_SKILLS = [
+  "auth-guide",
+  "sync",
+  "sync-debug",
+  "sync-guide",
+  "sync-validate",
+]
+
 const DEFAULT_GROUP = {
-  instructions: `${CANONICAL_ROOT}/default`,
+  instructions: `${INSTRUCTIONS_ROOT}/default`,
+  skills: DEFAULT_SKILLS,
 }
 
 // A catalog kind listed here takes its agent files from this group instead of
 // DEFAULT_GROUP. Custom blocks are a private alpha capability, so their
-// templates document what the default set tells agents not to use. An override
-// replaces the default set; the two are never merged.
+// templates document what the default set tells agents not to use. `instructions`
+// replaces the default set and is never merged; `skills` spreads the defaults
+// because a custom-block template can still declare a sync.
 const OVERRIDE_GROUPS = {
-  "worker-custom-block": { instructions: `${CANONICAL_ROOT}/custom-blocks` },
+  "worker-custom-block": {
+    instructions: `${INSTRUCTIONS_ROOT}/custom-blocks`,
+    skills: [...DEFAULT_SKILLS, "custom-blocks"],
+  },
 }
 
 const AGENT_SYMLINKS = [
@@ -138,9 +155,21 @@ for (const group of groups.values()) {
     fail(`No canonical files found in ${instructionsDir}`)
   }
 
+  // Every file this group's templates should hold, keyed by its path inside
+  // `.agents/`. Instructions land at the root; each skill lands under `skills/`.
   const contents = new Map()
   for (const file of files) {
     contents.set(file, await readFile(join(canonicalPath, file), "utf8"))
+  }
+  for (const skill of group.config.skills ?? []) {
+    const skillPath = resolve(repoRoot, SKILLS_ROOT, skill)
+    const skillFiles = await collectFiles(skillPath)
+    for (const file of skillFiles) {
+      contents.set(
+        join("skills", skill, file),
+        await readFile(join(skillPath, file), "utf8")
+      )
+    }
   }
 
   for (const recipe of group.recipes) {
@@ -150,7 +179,7 @@ for (const group of groups.values()) {
       for (const file of await collectFiles(agentsRoot)) {
         if (!contents.has(file)) {
           drifted.push(
-            `${relative(repoRoot, join(agentsRoot, file))} (not in ${instructionsDir})`
+            `${relative(repoRoot, join(agentsRoot, file))} (not in this group's config)`
           )
         }
       }
@@ -190,14 +219,14 @@ for (const group of groups.values()) {
 
 if (isDryRun) {
   if (drifted.length > 0) {
-    console.error(`Template agent files drifted from ${CANONICAL_ROOT}/:`)
+    console.error(`Template agent files drifted from ${INSTRUCTIONS_ROOT}/ and ${SKILLS_ROOT}/:`)
     for (const file of drifted) {
       console.error(`  ${file}`)
     }
     console.error("Run `npm run agents:sync` and commit the result.")
     process.exit(1)
   }
-  console.log(`Template agent files match ${CANONICAL_ROOT}/.`)
+  console.log(`Template agent files match ${INSTRUCTIONS_ROOT}/ and ${SKILLS_ROOT}/.`)
 } else {
   console.log(`Rewrote .agents/ for ${rewritten} template(s).`)
 }
