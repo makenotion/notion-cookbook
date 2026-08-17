@@ -8,7 +8,7 @@ verify without relying on another project in this repository.
 
 - Add a local Notion API or SDK program at `examples/<task-name>/`.
 - Add a deployed Notion Worker at
-  `workers/<integration>-<capability>/`, such as `linear-sync`,
+  `workers/templates/<integration>-<capability>/`, such as `linear-sync`,
   `snowflake-query`, or `zendesk-webhook`.
 - Add reusable AI workflows under the appropriate provider in `skills/`.
 - Add longer conceptual or integration guides to `docs/`.
@@ -52,7 +52,7 @@ the example independent so a user can copy its directory into another project.
 
 ## Adding a Worker
 
-Create `workers/<integration>-<capability>/`, with the integration or domain
+Create `workers/templates/<integration>-<capability>/`, with the integration or domain
 first so related capabilities sort together. Use one of these catalog kinds:
 
 - `worker-sync` for an external-data sync into a managed Notion database.

@@ -13,7 +13,7 @@ Before changing code:
 The current layout is flat:
 
 - `examples/<task>/` contains local Notion API examples.
-- `workers/<integration>-<capability>/` contains Worker syncs, agent tools, and
+- `workers/templates/<integration>-<capability>/` contains Worker syncs, agent tools, and
   webhooks.
 - `skills/` and `docs/` are not runnable catalog recipes.
 

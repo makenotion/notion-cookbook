@@ -29,7 +29,11 @@ async function isFile(path) {
 async function findProjects() {
   const projects = new Map()
 
-  for (const root of ["examples", "workers", "workers/custom-blocks"]) {
+  for (const root of [
+    "examples",
+    "workers/templates",
+    "workers/templates/custom-blocks",
+  ]) {
     const rootPath = resolve(repoRoot, root)
     let entries
     try {
@@ -83,7 +87,8 @@ function requireString(recipe, field, label) {
 
 function expectedKind(path, id) {
   if (path.startsWith("examples/")) return "api-example"
-  if (path.startsWith("workers/custom-blocks/")) return "worker-custom-block"
+  if (path.startsWith("workers/templates/custom-blocks/"))
+    return "worker-custom-block"
   if (id.endsWith("-sync")) return "worker-sync"
   if (id.endsWith("-webhook")) return "worker-webhook"
   return "worker-tool"
@@ -138,12 +143,12 @@ async function validateRecipe(recipe, index, projects, readme, ids, paths) {
 
   const validPaths = [
     `examples/${id}`,
-    `workers/${id}`,
-    `workers/custom-blocks/${id}`,
+    `workers/templates/${id}`,
+    `workers/templates/custom-blocks/${id}`,
   ]
   if (!validPaths.includes(path)) {
     report(
-      `${label}.path must be examples/${id}, workers/${id}, or workers/custom-blocks/${id}`
+      `${label}.path must be ${validPaths.slice(0, -1).join(", ")}, or ${validPaths.at(-1)}`
     )
   }
 
