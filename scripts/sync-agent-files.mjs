@@ -58,8 +58,6 @@ const OVERRIDE_GROUPS = {
   },
 }
 
-// A link target resolves against the directory holding the link, not the
-// template root, so a nested link climbs out before naming `.agents/`.
 const AGENT_SYMLINKS = [
   { name: "AGENTS.md", target: ".agents/INSTRUCTIONS.md" },
   { name: "CLAUDE.md", target: ".agents/INSTRUCTIONS.md" },
