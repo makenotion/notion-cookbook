@@ -3,6 +3,8 @@ import { dirname, resolve, sep } from "node:path"
 import { fileURLToPath } from "node:url"
 
 const DEFAULT_WORKER_TEMPLATE_ID = "worker-default"
+const DEFAULT_WORKER_TEMPLATE_PATH = "workers/templates/default"
+const DEFAULT_WORKER_TEMPLATE_PACKAGE = "@notion-cookbook/workers-default"
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const errors = []
@@ -60,7 +62,13 @@ async function findProjects() {
       )
       projects.set(projectPath, packageJson)
 
-      const expectedName = `@notion-cookbook/${entry.name}`
+      // Check that all packages are named after their directory
+      // we are making an exception for the default worker template, whose directory
+      // name alone would produce the ambiguous "@notion-cookbook/default"
+      const expectedName =
+        projectPath === DEFAULT_WORKER_TEMPLATE_PATH
+          ? DEFAULT_WORKER_TEMPLATE_PACKAGE
+          : `@notion-cookbook/${entry.name}`
       if (packageJson && packageJson.name !== expectedName) {
         report(
           `${projectPath}/package.json: name must be ${JSON.stringify(expectedName)}`
@@ -91,7 +99,7 @@ function expectedKind(path, id) {
   if (path.startsWith("examples/")) return "api-example"
   if (path.startsWith("workers/templates/custom-blocks/"))
     return "worker-custom-block"
-  if (path === "workers/templates/default") return "worker-default"
+  if (path === DEFAULT_WORKER_TEMPLATE_PATH) return "worker-default"
   if (id.endsWith("-sync")) return "worker-sync"
   if (id.endsWith("-webhook")) return "worker-webhook"
   return "worker-tool"
