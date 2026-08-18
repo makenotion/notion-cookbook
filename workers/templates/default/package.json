@@ -1,5 +1,5 @@
 {
-  "name": "@notion-cookbook/default",
+  "name": "@notion-cookbook/workers-default",
   "version": "0.0.0",
   "private": true,
   "type": "module",
