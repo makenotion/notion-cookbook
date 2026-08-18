@@ -15,6 +15,9 @@
  *   fully consistent yet, and since the cursor never resets, skipping = permanent loss)
  * - Events can map to both upserts and deletes
  *
+ * Run the first delta initialization before triggering the backfill so the
+ * event cursor covers changes made while the backfill is running.
+ *
  * For the backfill half, use a replace-mode sync targeting the same database —
  * see replace-paginated.ts for the pattern. Trigger it via CLI:
  *   ntn workers sync state reset customersBackfill && ntn workers sync trigger customersBackfill
@@ -64,6 +67,14 @@ worker.sync("customersDelta", {
       await apiPacer.wait()
       const anchorResponse = await apiCall("/v1/events?limit=1")
       const eventCursor = anchorResponse.data[0]?.id ?? ""
+      if (!eventCursor) {
+        // Leave state unset so the next cycle retries anchor acquisition.
+        return {
+          changes: [],
+          hasMore: false,
+          nextState: undefined,
+        }
+      }
       return {
         changes: [],
         hasMore: false,
@@ -93,17 +104,22 @@ worker.sync("customersDelta", {
     const safeEvents = events.filter((e) => e.created < cutoff)
 
     // Map events to changes (upserts or deletes)
-    const changes = safeEvents.map((event) => {
+    const changes = [...safeEvents].reverse().map((event) => {
       if (event.type.endsWith(".deleted")) {
         return { type: "delete" as const, key: event.data.object.id }
       }
-      return toUpsert(event.data.object)
+      return toUpsert(
+        event.data.object,
+        new Date(event.created * 1000).toISOString()
+      )
     })
 
     // Only advance cursor if we have safe events to process.
     // If all events are too recent, cursor stays put — we'll re-check next cycle.
-    const lastSafe = safeEvents[safeEvents.length - 1]
-    const nextCursor = lastSafe?.id ?? state.eventCursor
+    // For ending_before pagination, the first returned safe event is the
+    // boundary for the next page. Using the last event would overlap pages.
+    const firstSafe = safeEvents[0]
+    const nextCursor = firstSafe?.id ?? state.eventCursor
 
     return {
       changes,
@@ -113,10 +129,14 @@ worker.sync("customersDelta", {
   },
 })
 
-function toUpsert(customer: { id: string; name: string }) {
+function toUpsert(
+  customer: { id: string; name: string },
+  upstreamUpdatedAt: string
+) {
   return {
     type: "upsert" as const,
     key: customer.id,
+    upstreamUpdatedAt,
     properties: {
       Name: Builder.title(customer.name),
       "Customer ID": Builder.richText(customer.id),

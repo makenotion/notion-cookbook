@@ -15,6 +15,9 @@
  * - Backfill and delta run independently — re-backfill anytime without disrupting delta
  * - Easier to reason about and debug
  *
+ * Initialize the delta sync once before triggering the backfill so updates made
+ * during the backfill remain inside the delta cursor's range.
+ *
  * This is the Salesforce/HubSpot pattern:
  * - Backfill: keyset pagination on (created_at, id)
  * - Delta: keyset pagination on (updated_at, id) with consistency buffer
@@ -53,12 +56,15 @@ const BATCH_SIZE = 100
 const CONSISTENCY_BUFFER_MS = 15_000 // 15 seconds
 
 // ---------------------------------------------------------------------------
-// Shared helper — maps a contact record to a sync upsert change
+// Shared helper — maps a contact record to a sync upsert change.
+// upstreamUpdatedAt lets the runtime resolve races between the backfill and
+// delta syncs when they write different versions of the same record.
 // ---------------------------------------------------------------------------
-function toUpsert(record: { id: string; name: string }) {
+function toUpsert(record: { id: string; name: string; updated_at: string }) {
   return {
     type: "upsert" as const,
     key: record.id,
+    upstreamUpdatedAt: record.updated_at,
     properties: {
       Name: Builder.title(record.name),
       "Contact ID": Builder.richText(record.id),
@@ -102,6 +108,7 @@ worker.sync("contactsBackfill", {
       id: string
       name: string
       created_at: string
+      updated_at: string
     }> = data.contacts
     const done = records.length < BATCH_SIZE
 
@@ -144,6 +151,7 @@ worker.sync("contactsDelta", {
     // On first run, start from "now" minus the consistency buffer.
     // This means the first delta cycle won't fetch any historical data —
     // that's the backfill sync's job.
+    // Run this initialization before triggering the backfill.
     if (!state) {
       const startTs = new Date(Date.now() - CONSISTENCY_BUFFER_MS).toISOString()
       return {
@@ -153,11 +161,13 @@ worker.sync("contactsDelta", {
       }
     }
 
+    const bufferTs = new Date(Date.now() - CONSISTENCY_BUFFER_MS).toISOString()
     const params = new URLSearchParams({
       limit: String(BATCH_SIZE),
       order_by: "updated_at,id",
       updated_after: state.cursorTimestamp,
       updated_after_id: state.cursorId,
+      updated_before: bufferTs,
     })
 
     await apiPacer.wait()
@@ -172,22 +182,17 @@ worker.sync("contactsDelta", {
     }> = data.contacts
     const done = records.length < BATCH_SIZE
 
-    // Consistency buffer: never advance the cursor closer than 15s to "now".
-    // In incremental mode the cursor never resets, so if we advance past a record
-    // that hasn't been indexed yet, it's lost permanently.
-    const bufferTs = new Date(Date.now() - CONSISTENCY_BUFFER_MS).toISOString()
+    // The upstream query is bounded by bufferTs, so every returned record is
+    // safe to process and every cursor branch stays behind the frontier.
     const last = records[records.length - 1]
 
     let nextCursorTs: string
     let nextCursorId: string
     if (done) {
-      // Caught up — cap the cursor at the buffer boundary
-      nextCursorTs =
-        last && last.updated_at < bufferTs
-          ? last.updated_at
-          : state.cursorTimestamp < bufferTs
-            ? bufferTs
-            : state.cursorTimestamp
+      // Caught up — the query's upper bound guarantees this timestamp is
+      // already behind the consistency frontier. Preserve the ID as well
+      // so records sharing the timestamp are not skipped.
+      nextCursorTs = last?.updated_at ?? state.cursorTimestamp
       nextCursorId = last?.id ?? state.cursorId
     } else {
       // More pages — advance cursor to last record on this page

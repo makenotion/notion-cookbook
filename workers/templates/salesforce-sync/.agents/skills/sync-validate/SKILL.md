@@ -22,7 +22,7 @@ Before starting, read `.agents/skills/sync-guide/SKILL.md` for the full sync con
 
 4. **Batch too large**: Is the sync returning thousands of changes in one execution? Recommend batches of ~100. Large batches will fail.
 
-5. **Replace mode when API supports change tracking**: If mode is `replace` (or unset — it defaults to `replace`), does the source API support `updated_at` filters, event feeds, or similar change tracking? If so, recommend switching to `incremental` to avoid re-fetching everything each cycle.
+5. **Replace mode when API supports change tracking**: If mode is `replace` (or unset — it defaults to `replace`), does the source API support `updated_at` filters, event feeds, or similar change tracking? If so, recommend a replace-mode backfill plus a separate incremental delta sync sharing the same database. Do not recommend switching the existing sync directly to incremental, because that loses initial-load and mark-and-sweep behavior.
 
 6. **State persistence misunderstanding**: In incremental mode, the cursor never resets between cycles. The next cycle starts exactly where the last one left off. Check for code that assumes a fresh start each cycle — this will cause records to be re-fetched or skipped permanently.
 

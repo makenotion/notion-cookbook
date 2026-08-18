@@ -22,6 +22,19 @@ The cursor lives in `nextState`. The runtime calls `execute` again with that sta
 
 In replace mode, the runtime handles deletion detection. Each cycle must return the complete dataset. State is only used for within-cycle pagination and is effectively reset between cycles.
 
+For ISO timestamp cursors, compare timestamps while preserving their string
+representation:
+
+```ts
+function minTimestamp(a: string, b: string): string {
+  return Date.parse(a) <= Date.parse(b) ? a : b
+}
+```
+
+Declare a pacer for each upstream API and call `await pacer.wait()` before
+every request. If a helper follows a query locator or nested page, it must
+wait before each request it makes.
+
 ---
 
 ## Source 1: Salesforce
@@ -60,14 +73,29 @@ Since the backfill is a replace-mode sync, its state is only used for within-cyc
 
 ### Gotcha: Unreliable `done` Flag
 
-Salesforce returns a `done` boolean in query results. It lies. The production code requires _both_ `done == true` AND `records.length < limit` before treating a page as the last one. Neither signal alone is trustworthy.
+Salesforce returns a `done` boolean in query results. A response can contain fewer than `limit` records while `done` is still `false`, so the production code requires _both_ `done == true` AND `records.length < limit` before treating a page as the last one. A non-terminal empty page must use the API's query locator or be retried. Never derive a cursor from an absent record.
 
 ### Workers Mapping
 
 With the v2 SDK, this is modeled as two syncs: a manual backfill (replace) and a scheduled delta (incremental).
 
 ```ts
-const db = worker.database("salesforce_accounts")
+const db = worker.database("salesforce_accounts", {
+  type: "managed",
+  initialTitle: "Salesforce Accounts",
+  primaryKeyProperty: "Account ID",
+  schema: {
+    properties: {
+      Name: Schema.title(),
+      "Account ID": Schema.richText(),
+    },
+  },
+})
+const salesforceApi = worker.pacer("salesforce", {
+  allowedRequests: 10,
+  intervalMs: 1000,
+})
+const BATCH_SIZE = 100
 
 // Backfill: keyset pagination on CreatedDate — run manually to seed data
 worker.sync("salesforceBackfill", {
@@ -79,9 +107,16 @@ worker.sync("salesforceBackfill", {
   ) => {
     // Keyset query: WHERE CreatedDate > X OR (CreatedDate = X AND Id > Y)
     // ORDER BY CreatedDate, Id LIMIT 100
-    const records = await querySOQL(state?.cursorTimestamp, state?.cursorId)
-    const last = records[records.length - 1]
-    const done = records.length < 100
+    await salesforceApi.wait()
+    const { records, done: apiDone } = await querySOQL(
+      state?.cursorTimestamp,
+      state?.cursorId
+    )
+    const done = apiDone && records.length < BATCH_SIZE
+    const last = records.at(-1)
+    if (!done && !last) {
+      throw new Error("Salesforce returned a non-terminal empty page")
+    }
 
     return {
       changes: records.map(toUpsert),
@@ -97,27 +132,36 @@ worker.sync("salesforceBackfill", {
 worker.sync("salesforceDelta", {
   database: db,
   mode: "incremental",
-  schedule: { cron: "*/5 * * * *" },
+  schedule: "5m",
   execute: async (
     state: { cursorTimestamp: string; cursorId: string } | undefined
   ) => {
     const bufferTs = new Date(Date.now() - 15_000).toISOString()
-    const records = await querySOQL(
-      state?.cursorTimestamp,
-      state?.cursorId,
-      "SystemModstamp"
+    const previousTimestamp = state?.cursorTimestamp ?? bufferTs
+    const previousId = state?.cursorId ?? ""
+    await salesforceApi.wait()
+    // querySOQL must enforce SystemModstamp <= bufferTs so every returned
+    // record is safe to process.
+    const { records, done: apiDone } = await querySOQL(
+      previousTimestamp,
+      previousId,
+      "SystemModstamp",
+      bufferTs
     )
-    const last = records[records.length - 1]
-    const done = records.length < 100
+    const done = apiDone && records.length < BATCH_SIZE
+    const last = records.at(-1)
+    if (!done && !last) {
+      throw new Error("Salesforce returned a non-terminal empty page")
+    }
 
     return {
       changes: records.map(toUpsert),
       hasMore: !done,
       nextState: {
         cursorTimestamp: done
-          ? min(last?.SystemModstamp ?? state?.cursorTimestamp, bufferTs)
-          : last.SystemModstamp,
-        cursorId: last?.Id ?? state?.cursorId,
+          ? minTimestamp(last?.SystemModstamp ?? previousTimestamp, bufferTs)
+          : (last?.SystemModstamp ?? previousTimestamp),
+        cursorId: last?.Id ?? previousId,
       },
     }
   },
@@ -135,7 +179,10 @@ worker.sync("salesforceDelta", {
 
 Standard Stripe list pagination: `GET /v1/customers?starting_after=cus_xyz&limit=100`. The cursor is the `id` of the last object on the page. Stripe's `has_more` boolean is reliable.
 
-**Critical pre-step:** Before fetching any data page, the backfill captures the ID of the most recent event from `GET /v1/events?limit=1`. This "event anchor" is saved in the cursor so the delta phase knows exactly where to start.
+**Critical pre-step:** Initialize the delta sync before fetching any backfill
+data. Its first execution captures the ID of the most recent event from
+`GET /v1/events?limit=1`; the two syncs do not automatically share the
+backfill's state.
 
 ### Delta (Event-Based)
 
@@ -144,6 +191,8 @@ Reads from `GET /v1/events` in reverse-chronological order. The cursor is an eve
 ### Nested Object Extraction
 
 Stripe objects contain nested sub-objects (e.g., a `PaymentIntent` contains `payment_method`). The sync recursively walks payloads and extracts sub-objects. If a list field has `has_more: true`, it paginates that sub-list inline. This means one "page" of the sync may trigger many HTTP requests.
+Every nested request must also be preceded by `await stripeApi.wait()`; the
+outer page's pacing wait does not cover inline pagination.
 
 ### Cursor Design
 
@@ -160,16 +209,34 @@ type StripeDeltaState = { cursor: string }
 ### Workers Mapping
 
 Two syncs: a manual backfill and a scheduled delta reading from the events endpoint.
+Initialize the delta cursor before triggering the backfill; the two syncs do not
+share execution state automatically.
 
 ```ts
-const db = worker.database("stripe_customers")
+const db = worker.database("stripe_customers", {
+  type: "managed",
+  initialTitle: "Stripe Customers",
+  primaryKeyProperty: "Customer ID",
+  schema: {
+    properties: {
+      Name: Schema.title(),
+      "Customer ID": Schema.richText(),
+    },
+  },
+})
+const stripeApi = worker.pacer("stripe", {
+  allowedRequests: 10,
+  intervalMs: 1000,
+})
 
-// Backfill: paginate all customers, capture event anchor for delta handoff
+// Backfill: paginate all customers. Initialize stripeDelta before this sync
+// so its first run captures the event anchor for the handoff.
 worker.sync("stripeBackfill", {
   database: db,
   mode: "replace",
   schedule: "manual",
   execute: async (state: { cursor: string | null } | undefined) => {
+    await stripeApi.wait()
     const { data, has_more } = await stripe.customers.list({
       starting_after: state?.cursor ?? undefined,
       limit: 100,
@@ -188,20 +255,40 @@ worker.sync("stripeBackfill", {
 worker.sync("stripeDelta", {
   database: db,
   mode: "incremental",
-  schedule: { cron: "*/5 * * * *" },
+  schedule: "5m",
   execute: async (state: { cursor: string } | undefined) => {
+    const cursor = state?.cursor
+    if (!cursor) {
+      await stripeApi.wait()
+      const { data: anchorEvents } = await stripe.events.list({ limit: 1 })
+      const anchor = anchorEvents[0]?.id
+      if (!anchor) {
+        // Retry anchor acquisition on the next cycle; never send an empty ID.
+        return { changes: [], hasMore: false, nextState: undefined }
+      }
+      return {
+        changes: [],
+        hasMore: false,
+        nextState: { cursor: anchor },
+      }
+    }
+
+    await stripeApi.wait()
     const { data: events, has_more } = await stripe.events.list({
-      ending_before: state?.cursor,
+      ending_before: cursor,
       limit: 100,
     })
     const safeEvents = events.filter((e) => e.created < Date.now() / 1000 - 10)
-    const changes = safeEvents.map(eventToChange) // map to upsert or delete
-    const lastSafe = safeEvents[safeEvents.length - 1]
+    // Stripe returns reverse-chronological pages. Apply changes oldest first
+    // so multiple events for one object cannot regress its final state.
+    const changes = [...safeEvents].reverse().map(eventToChange)
+    // For ending_before pagination, the first safe event is the next boundary.
+    const firstSafe = safeEvents[0]
 
     return {
       changes,
       hasMore: has_more && safeEvents.length > 0,
-      nextState: { cursor: lastSafe?.id ?? state?.cursor },
+      nextState: { cursor: firstSafe?.id ?? cursor },
     }
   },
 })
@@ -254,7 +341,21 @@ type HubSpotDeltaState =
 Two syncs: a manual backfill using the List endpoint, and a delta sync using the Search endpoint with deadlock handling.
 
 ```ts
-const db = worker.database("hubspot_contacts")
+const db = worker.database("hubspot_contacts", {
+  type: "managed",
+  initialTitle: "HubSpot Contacts",
+  primaryKeyProperty: "Contact ID",
+  schema: {
+    properties: {
+      Name: Schema.title(),
+      "Contact ID": Schema.richText(),
+    },
+  },
+})
+const hubspotApi = worker.pacer("hubspot", {
+  allowedRequests: 5,
+  intervalMs: 1000,
+})
 
 // Backfill: paginate using opaque after token
 worker.sync("hubspotBackfill", {
@@ -262,6 +363,7 @@ worker.sync("hubspotBackfill", {
   mode: "replace",
   schedule: "manual",
   execute: async (state: { afterToken: string | null } | undefined) => {
+    await hubspotApi.wait()
     const { results, paging } = await hubspotList(state?.afterToken)
     const hasMore = Boolean(paging?.next?.after)
 
@@ -286,13 +388,18 @@ type HubSpotDeltaState =
 worker.sync("hubspotDelta", {
   database: db,
   mode: "incremental",
-  schedule: { cron: "*/5 * * * *" },
+  schedule: "5m",
   execute: async (state: HubSpotDeltaState | undefined) => {
     if (state?.phase === "deadlock") {
       // Page through records at the stuck timestamp by ID
+      await hubspotApi.wait()
       const results = await hubspotSearch({
-        filter: { lastmodifieddate: { eq: state.deadlockMs } },
-        after: state.lastId, // hs_object_id > lastId
+        filter: {
+          lastmodifieddate: { eq: state.deadlockMs },
+          hs_object_id: { gt: state.lastId },
+        },
+        sort: { propertyName: "hs_object_id", direction: "ASCENDING" },
+        limit: 100,
       })
 
       if (results.length === 0) {
@@ -320,8 +427,12 @@ worker.sync("hubspotDelta", {
     // Normal delta: search by lastmodifieddate >= cursorMs
     const bufferMs = Date.now() - 10_000
     const cursorMs = state?.cursorMs ?? Date.now() - 5 * 60 * 1000
+    await hubspotApi.wait()
     const results = await hubspotSearch({
-      filter: { lastmodifieddate: { gte: cursorMs } },
+      filter: {
+        lastmodifieddate: { gte: cursorMs, lte: bufferMs },
+      },
+      sort: { propertyName: "lastmodifieddate", direction: "ASCENDING" },
       limit: 100,
     })
 
@@ -343,6 +454,14 @@ worker.sync("hubspotDelta", {
       }
     }
 
+    if (results.length === 0) {
+      return {
+        changes: [],
+        hasMore: false,
+        nextState: { phase: "delta", cursorMs },
+      }
+    }
+
     const maxTs = Math.max(...results.map((r) => r.lastmodifieddate))
     const nextCursor = Math.min(maxTs, bufferMs)
     const done = results.length < 100
@@ -350,7 +469,7 @@ worker.sync("hubspotDelta", {
     return {
       changes: results.map(toUpsert),
       hasMore: !done,
-      nextState: { phase: "delta", cursorMs: done ? nextCursor : maxTs },
+      nextState: { phase: "delta", cursorMs: nextCursor },
     }
   },
 })
@@ -394,14 +513,29 @@ type GitHubState = {
 ### Workers Mapping
 
 ```ts
-const db = worker.database("github_repos")
+const db = worker.database("github_repos", {
+  type: "managed",
+  initialTitle: "GitHub Repositories",
+  primaryKeyProperty: "Repository ID",
+  schema: {
+    properties: {
+      Name: Schema.title(),
+      "Repository ID": Schema.richText(),
+    },
+  },
+})
+const githubApi = worker.pacer("github", {
+  allowedRequests: 5,
+  intervalMs: 1000,
+})
 
 worker.sync("githubSync", {
   database: db,
   mode: "replace",
-  schedule: { cron: "0 * * * *" }, // GitHub GraphQL has no good incremental signal without webhooks
+  schedule: "1h", // GitHub GraphQL has no good incremental signal without webhooks
   execute: async (state: GitHubState | undefined) => {
     // For flat collections (e.g., repos): simple Relay pagination
+    await githubApi.wait()
     const { data, pageInfo } = await graphql(query, { after: state?.cursor })
 
     return {
@@ -536,7 +670,7 @@ The buffer ensures the cursor stays behind the API's consistency frontier.
 const bufferMs = 15_000 // 15 seconds
 const maxCursor = new Date(Date.now() - bufferMs).toISOString()
 const nextCursor =
-  records.length > 0 ? min(lastRecord.updatedAt, maxCursor) : maxCursor
+  records.length > 0 ? minTimestamp(lastRecord.updatedAt, maxCursor) : maxCursor
 ```
 
 ### Pattern 3: Event Anchor (Backfill-to-Delta Transition)
@@ -571,7 +705,12 @@ Model the state as a discriminated union when a single sync needs multiple phase
 ```ts
 type State =
   | { phase: "delta"; cursor: string }
-  | { phase: "deadlock"; stuckAt: number; lastId: string; resumeCursor: string }
+  | {
+      phase: "deadlock"
+      stuckAt: number
+      lastId: string
+      resumeCursor: string
+    }
 ```
 
 Each `execute` call checks `state.phase` and runs the appropriate logic. In the v2 SDK, backfill and delta are typically **separate syncs** (backfill as `replace` + `manual`, delta as `incremental`), so the state machine within a single sync is simpler. Multi-phase state machines are still useful for edge cases within a delta sync (deadlock handling, flip-flop deletes).
@@ -594,6 +733,20 @@ type State =
   | { phase: "deletes"; deltaCursor: string; deletesCursor: string }
 
 // In execute:
+if (!state) {
+  // Initialize the delta cursor before reading state.phase. In a real sync,
+  // obtain this anchor through a paced API request.
+  return {
+    changes: [],
+    hasMore: false,
+    nextState: {
+      phase: "delta",
+      deltaCursor: initialDeltaCursor,
+      deletesCursor: "",
+    },
+  }
+}
+
 if (state.phase === "delta") {
   const { records, hasMore } = await fetchChanges(state.deltaCursor)
   if (!hasMore) {

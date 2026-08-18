@@ -119,10 +119,12 @@ const myAuth = worker.oauth("myAuth", {
   scope: "read write",
   clientId: process.env.MY_OAUTH_CLIENT_ID ?? "",
   clientSecret: process.env.MY_OAUTH_CLIENT_SECRET ?? "",
-  // Optional: extra params the provider needs on the auth URL
-  authorizationParams: { ... },
-});
+})
 ```
+
+If the provider requires extra authorization parameters, add a concrete
+string-valued object, for example
+`authorizationParams: { access_type: "offline" }`.
 
 Setup steps:
 

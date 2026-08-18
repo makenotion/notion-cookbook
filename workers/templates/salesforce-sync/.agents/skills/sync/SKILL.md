@@ -82,14 +82,18 @@ const issuesDb = worker.database("issuesDb", {
   primaryKeyProperty: "Issue Key",
   schema: {
     properties: {
-      "Issue Key": Schema.richText(),    // primaryKeyProperty — the unique ID
-      "Summary": Schema.title(),         // the main display field
-      "Status": Schema.select([...]),    // mapped from Jira statuses
-      "Assignee": Schema.richText(),     // or Schema.people() if email available
-      "Updated": Schema.date(),
+      "Issue Key": Schema.richText(), // primaryKeyProperty — the unique ID
+      Summary: Schema.title(), // the main display field
+      Status: Schema.select([
+        { name: "To Do" },
+        { name: "In Progress", color: "yellow" },
+        { name: "Done", color: "green" },
+      ]), // mapped from Jira statuses
+      Assignee: Schema.richText(), // or Schema.people() if email available
+      Updated: Schema.date(),
     },
   },
-});
+})
 ```
 
 Guidelines:
@@ -235,9 +239,10 @@ const myAuth = worker.oauth("myAuth", {
 Then use `await myAuth.accessToken()` in the execute function instead of
 reading a static token from `process.env`.
 
-Note: OAuth syncs can't be fully tested locally since the OAuth flow requires
-a deployed worker. Local testing will fail at the `.accessToken()` call. This
-is fine — proceed to deploy and test via preview (Step 8).
+Note: the OAuth flow itself requires a deployed worker, but local execution works
+after the first authorization completes and `ntn workers env pull` copies the
+access token into `.env`. Before that bootstrap, `.accessToken()` fails because
+the local token is missing. Proceed to Step 8 for the initial authorization.
 
 ### Step 6: Generate the Code
 
@@ -354,9 +359,10 @@ from `process.env`, test locally:
    backfill and delta syncs for backfill+delta pairs, etc.
 
 **For syncs using OAuth (Pattern B):**
-Local execution won't work because `.accessToken()` requires a deployed worker
-with a completed OAuth flow. Skip to Step 8 (deploy + preview) instead.
-You can still run `npm run check` to verify types compile.
+Before the first authorization, local execution won't work because
+`.accessToken()` requires a token from a completed OAuth flow. After deploying,
+completing the flow, and running `ntn workers env pull`, local execution works.
+You can always run `npm run check` for type validation.
 
 ### Step 8: Deploy and Validate with Preview
 
@@ -374,11 +380,13 @@ Otherwise, the simpler flow:
 
 1. `ntn workers deploy` — build and publish
 2. `ntn workers env push` — push `.env` secrets to remote
-3. If the sync uses OAuth, complete the OAuth flow before previewing.
+
+3. Then, if the sync uses OAuth, complete the OAuth flow before previewing.
    **Important:** `env push` must happen before `oauth start` — the deployed worker needs the client secret to exchange the authorization code for tokens.
    - `ntn workers oauth show-redirect-url` — get the redirect URL
    - Tell the user to configure this URL in their OAuth provider's app settings
    - `ntn workers oauth start <oauthKey>` — opens browser to complete the OAuth flow
+
 4. `ntn workers sync trigger <syncKey> --preview` — execute remotely without writing to Notion
    - Inspect the output: record count, property values, hasMore status
    - If `hasMore: true`, continue: `ntn workers sync trigger <syncKey> --preview --context '<nextState>'`
@@ -398,15 +406,17 @@ When the preview looks good:
 3. `ntn workers runs list` then `ntn workers runs logs <runId>` — check for errors
 4. Run `ntn workers sync status` again to confirm progress (record count increasing, no errors)
 
-For backfill+delta pairs, trigger the backfill first to load all data, then
-let the delta sync's schedule handle ongoing changes:
+For backfill+delta pairs, initialize the delta cursor before loading all data,
+so changes made during the backfill are not skipped:
 
-1. `ntn workers sync trigger <backfillKey>` — start the full dataset load
-2. Monitor with `ntn workers sync status` until the backfill completes
-3. The delta sync will run automatically on its configured schedule
+1. `ntn workers sync trigger <deltaKey>` — initialize the delta cursor
+2. `ntn workers sync trigger <backfillKey>` — start the full dataset load
+3. Monitor with `ntn workers sync status` until the backfill completes
+4. The delta sync will continue automatically on its configured schedule
 
-Tell the user: the first sync run is the backfill, which may take a while
-depending on dataset size. They should periodically run `ntn workers sync status`
-to monitor progress until the initial backfill completes. After that, the delta
-sync runs automatically on its configured schedule. To re-backfill later:
+Tell the user: initialize the delta cursor before starting the backfill. The
+backfill may take a while depending on dataset size. They should periodically
+run `ntn workers sync status` to monitor progress until the initial backfill
+completes. After that, the delta sync runs automatically on its configured
+schedule. To re-backfill later:
 `ntn workers sync state reset <backfillKey> && ntn workers sync trigger <backfillKey>`
