@@ -58,9 +58,12 @@ const OVERRIDE_GROUPS = {
   },
 }
 
+// A link target resolves against the directory holding the link, not the
+// template root, so a nested link climbs out before naming `.agents/`.
 const AGENT_SYMLINKS = [
   { name: "AGENTS.md", target: ".agents/INSTRUCTIONS.md" },
   { name: "CLAUDE.md", target: ".agents/INSTRUCTIONS.md" },
+  { name: ".claude/skills", target: "../.agents/skills" },
 ]
 
 // Returns [] when the directory is absent, so a template with no `.agents/`
@@ -211,7 +214,8 @@ for (const group of groups.values()) {
         }
         continue
       }
-      await rm(linkPath, { force: true })
+      await rm(linkPath, { recursive: true, force: true })
+      await mkdir(dirname(linkPath), { recursive: true })
       await symlink(link.target, linkPath)
     }
   }
