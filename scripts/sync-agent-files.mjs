@@ -98,6 +98,28 @@ function fail(message) {
   process.exit(1)
 }
 
+// Recipe paths are resolved lexically, so the confinement check below cannot
+// see a symlink standing in for a real directory. A recursive delete follows
+// such a parent outside the repository, so refuse to remove through one. The
+// canonical root is passed in, never a recipe path, so a symlinked recipe
+// directory cannot redefine the boundary.
+async function assertNoSymlinkParents(root, target) {
+  const rootPath = resolve(root)
+  let current = dirname(target)
+  while (current.startsWith(rootPath + sep)) {
+    let stat
+    try {
+      stat = await lstat(current)
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error
+    }
+    if (stat?.isSymbolicLink()) {
+      fail(`Refusing to remove through symlinked parent: ${current}`)
+    }
+    current = dirname(current)
+  }
+}
+
 const catalog = JSON.parse(
   await readFile(resolve(repoRoot, "catalog.json"), "utf8")
 )
@@ -191,6 +213,7 @@ for (const group of groups.values()) {
         }
       }
     } else {
+      await assertNoSymlinkParents(templatesRoot, agentsRoot)
       await rm(agentsRoot, { recursive: true, force: true })
       for (const [file, expected] of contents) {
         const target = join(agentsRoot, file)
@@ -212,6 +235,7 @@ for (const group of groups.values()) {
         }
         continue
       }
+      await assertNoSymlinkParents(templatesRoot, linkPath)
       await rm(linkPath, { recursive: true, force: true })
       await mkdir(dirname(linkPath), { recursive: true })
       await symlink(link.target, linkPath)
