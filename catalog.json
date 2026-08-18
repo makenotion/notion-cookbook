@@ -273,10 +273,10 @@
       }
     },
     {
-      "id": "worker-default",
+      "id": "workers-default",
       "title": "Default Worker template",
       "summary": "The base Worker scaffold with an example agent tool.",
-      "path": "workers/templates/default",
+      "path": "workers/templates/workers-default",
       "kind": "worker-default",
       "status": "ready",
       "language": "typescript",

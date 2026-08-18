@@ -109,9 +109,9 @@ and a **webhook** handles events from another service. See the complete
 
 ### Default template
 
-| Task                                         | Worker                                                |
-| -------------------------------------------- | ----------------------------------------------------- |
-| Scaffold a new Worker from the base template | [Default Worker template](workers/templates/default/) |
+| Task                                         | Worker                                                        |
+| -------------------------------------------- | ------------------------------------------------------------- |
+| Scaffold a new Worker from the base template | [Default Worker template](workers/templates/workers-default/) |
 
 ### Sync external data into Notion
 

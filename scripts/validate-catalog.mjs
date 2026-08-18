@@ -2,10 +2,6 @@ import { access, readFile, readdir, stat } from "node:fs/promises"
 import { dirname, resolve, sep } from "node:path"
 import { fileURLToPath } from "node:url"
 
-const DEFAULT_WORKER_TEMPLATE_ID = "worker-default"
-const DEFAULT_WORKER_TEMPLATE_PATH = "workers/templates/default"
-const DEFAULT_WORKER_TEMPLATE_PACKAGE = "@notion-cookbook/workers-default"
-
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const errors = []
 
@@ -62,13 +58,7 @@ async function findProjects() {
       )
       projects.set(projectPath, packageJson)
 
-      // Check that all packages are named after their directory
-      // we are making an exception for the default worker template, whose directory
-      // name alone would produce the ambiguous "@notion-cookbook/default"
-      const expectedName =
-        projectPath === DEFAULT_WORKER_TEMPLATE_PATH
-          ? DEFAULT_WORKER_TEMPLATE_PACKAGE
-          : `@notion-cookbook/${entry.name}`
+      const expectedName = `@notion-cookbook/${entry.name}`
       if (packageJson && packageJson.name !== expectedName) {
         report(
           `${projectPath}/package.json: name must be ${JSON.stringify(expectedName)}`
@@ -99,7 +89,7 @@ function expectedKind(path, id) {
   if (path.startsWith("examples/")) return "api-example"
   if (path.startsWith("workers/templates/custom-blocks/"))
     return "worker-custom-block"
-  if (path === DEFAULT_WORKER_TEMPLATE_PATH) return "worker-default"
+  if (id.endsWith("-default")) return "worker-default"
   if (id.endsWith("-sync")) return "worker-sync"
   if (id.endsWith("-webhook")) return "worker-webhook"
   return "worker-tool"
@@ -157,10 +147,7 @@ async function validateRecipe(recipe, index, projects, readme, ids, paths) {
     `workers/templates/${id}`,
     `workers/templates/custom-blocks/${id}`,
   ]
-
-  // Check that all templates' path match the id
-  // we are making an exception for the default worker template to allow workers/templates/default
-  if (!validPaths.includes(path) && id !== DEFAULT_WORKER_TEMPLATE_ID) {
+  if (!validPaths.includes(path)) {
     report(
       `${label}.path must be ${validPaths.slice(0, -1).join(", ")}, or ${validPaths.at(-1)}`
     )
