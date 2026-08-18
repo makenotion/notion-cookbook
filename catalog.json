@@ -273,6 +273,24 @@
       }
     },
     {
+      "id": "workers-default",
+      "title": "Default Worker template",
+      "summary": "The base Worker scaffold with an example agent tool.",
+      "path": "workers/templates/workers-default",
+      "kind": "worker-default",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy"
+      }
+    },
+    {
       "id": "duckdb-query",
       "title": "DuckDB query agent tool",
       "summary": "Learn the Worker tool pattern by querying a seeded, in-memory DuckDB sales database with no credentials.",

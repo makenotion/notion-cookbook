@@ -89,6 +89,7 @@ function expectedKind(path, id) {
   if (path.startsWith("examples/")) return "api-example"
   if (path.startsWith("workers/templates/custom-blocks/"))
     return "worker-custom-block"
+  if (id.endsWith("-default")) return "worker-default"
   if (id.endsWith("-sync")) return "worker-sync"
   if (id.endsWith("-webhook")) return "worker-webhook"
   return "worker-tool"
@@ -158,6 +159,7 @@ async function validateRecipe(recipe, index, projects, readme, ids, paths) {
     "worker-tool",
     "worker-webhook",
     "worker-custom-block",
+    "worker-default",
   ])
   if (!allowedKinds.has(kind)) {
     report(`${label}.kind is invalid: ${JSON.stringify(kind)}`)
