@@ -3,7 +3,7 @@
 // listed in OVERRIDE_GROUPS, so a new kind inherits the default instead of
 // being silently skipped. Sync deletes `.agents/` and copies the set back, so a
 // renamed or removed canonical file needs no special handling. `--dryRun` writes
-// nothing and exits non-zero when a template's `.agents/` differs from its set.
+// nothing and exits non-zero when a template's copies differ from its set.
 
 import {
   lstat,
@@ -62,6 +62,12 @@ const AGENT_SYMLINKS = [
   { name: "AGENTS.md", target: ".agents/INSTRUCTIONS.md" },
   { name: "CLAUDE.md", target: ".agents/INSTRUCTIONS.md" },
 ]
+
+// Copied to every worker template root, whatever the recipe's group, so no
+// group can drop one. Unlike `.agents/`, the template root is never deleted, so
+// removing a file here leaves the stale per-template copies behind for a
+// follow-up commit to clean up.
+const ROOT_FILES_ROOT = `${AGENTS_ROOT}/root-files`
 
 // Returns [] when the directory is absent, so a template with no `.agents/`
 // reads as empty rather than throwing.
@@ -144,6 +150,15 @@ for (const recipe of workerRecipes) {
   else groups.set(config, { config, recipes: [recipe] })
 }
 
+const rootFilesPath = resolve(repoRoot, ROOT_FILES_ROOT)
+const rootFiles = new Map()
+for (const file of await collectFiles(rootFilesPath)) {
+  rootFiles.set(file, await readFile(join(rootFilesPath, file), "utf8"))
+}
+if (rootFiles.size === 0) {
+  fail(`No canonical files found in ${ROOT_FILES_ROOT}`)
+}
+
 const drifted = []
 let rewritten = 0
 
@@ -214,19 +229,31 @@ for (const group of groups.values()) {
       await rm(linkPath, { force: true })
       await symlink(link.target, linkPath)
     }
+
+    for (const [file, expected] of rootFiles) {
+      const target = join(recipeRoots.get(recipe), file)
+      if (isDryRun) {
+        if ((await readIfExists(target)) !== expected) {
+          drifted.push(relative(repoRoot, target))
+        }
+        continue
+      }
+      await mkdir(dirname(target), { recursive: true })
+      await writeFile(target, expected)
+    }
   }
 }
 
 if (isDryRun) {
   if (drifted.length > 0) {
-    console.error(`Template agent files drifted from ${INSTRUCTIONS_ROOT}/ and ${SKILLS_ROOT}/:`)
+    console.error(`Template agent files drifted from ${AGENTS_ROOT}/:`)
     for (const file of drifted) {
       console.error(`  ${file}`)
     }
     console.error("Run `npm run agents:sync` and commit the result.")
     process.exit(1)
   }
-  console.log(`Template agent files match ${INSTRUCTIONS_ROOT}/ and ${SKILLS_ROOT}/.`)
+  console.log(`Template agent files match ${AGENTS_ROOT}/.`)
 } else {
   console.log(`Rewrote .agents/ for ${rewritten} template(s).`)
 }

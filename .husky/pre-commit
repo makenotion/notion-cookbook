@@ -5,4 +5,9 @@ if ! git diff --quiet -- workers/agents/; then
 fi
 npm run --silent agents:sync
 git add 'workers/*/.agents/*' 'workers/*/AGENTS.md' 'workers/*/CLAUDE.md'
+# Read from root-files/ rather than naming the files, so a new one is staged
+# without editing this hook.
+for name in $(ls -A workers/agents/root-files); do
+  git add "workers/templates/*/$name"
+done
 npx lint-staged

@@ -1,13 +1,15 @@
 # Canonical worker agent files
 
 This directory is the single source of truth for the agent files that worker
-templates ship in their `.agents/` directory.
+templates ship. Most land in a template's `.agents/` directory. The files in
+`root-files/` land at the template root instead.
 
 | Path                          | Holds                                                    |
 | ----------------------------- | -------------------------------------------------------- |
 | `instructions/default/`       | instructions for every `worker-` recipe with no override |
 | `instructions/custom-blocks/` | instructions for `kind: "worker-custom-block"`           |
 | `skills/`                     | every skill, whether or not a given template ships it    |
+| `root-files/`                 | files copied to every template root, whatever its group  |
 
 ## Groups
 
@@ -35,6 +37,24 @@ lists. Spread `DEFAULT_SKILLS` to add to them instead of repeating them.
 
 Each template also gets an `AGENTS.md` and a `CLAUDE.md` symlink pointing at
 `.agents/INSTRUCTIONS.md`, so both discovery conventions resolve to one file.
+
+## Root files
+
+`root-files/` holds files that land at the template root, not in `.agents/`.
+Every worker template gets all of them. A group cannot opt out.
+
+Today the directory holds `.claudeignore` and `.codexignore`. Both are copied
+byte for byte from `makenotion/workers-template`, so a template scaffolded from
+either source looks the same.
+
+Neither file is enforced today. Claude Code has no `.claudeignore` feature, and
+Codex has no `.codexignore` feature. Both tools gate file reads through their
+permission settings instead. Treat these two files as a statement of intent, not
+as protection for a developer's `.env`.
+
+The sync never deletes the template root. A file removed from `root-files/`
+therefore leaves its per-template copies behind. Delete those copies in the
+same commit.
 
 ## Editing agent files
 
