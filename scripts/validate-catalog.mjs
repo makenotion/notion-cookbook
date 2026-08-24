@@ -33,6 +33,7 @@ async function findProjects() {
     "examples",
     "workers/templates",
     "workers/templates/custom-blocks",
+    "workers/templates/workflows",
   ]) {
     const rootPath = resolve(repoRoot, root)
     let entries
@@ -147,6 +148,7 @@ async function validateRecipe(recipe, index, projects, readme, ids, paths) {
     `examples/${id}`,
     `workers/templates/${id}`,
     `workers/templates/custom-blocks/${id}`,
+    `workers/templates/workflows/${id}`,
   ]
   if (!validPaths.includes(path)) {
     report(

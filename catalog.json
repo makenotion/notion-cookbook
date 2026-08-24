@@ -294,7 +294,7 @@
       "id": "workflow",
       "title": "Notion Workflow template",
       "summary": "Start a durable Notion Workflow with a recurring trigger and replay-safe step guidance.",
-      "path": "workers/templates/workflow",
+      "path": "workers/templates/workflows/workflow",
       "kind": "worker-workflow",
       "status": "ready",
       "language": "typescript",
