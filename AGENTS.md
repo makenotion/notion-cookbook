@@ -9,7 +9,7 @@ should point here instead of restating these rules.
 | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | `catalog.json`                                  | Machine-readable index of every runnable recipe, including paths, entrypoints, integrations, and supported commands. |
 | `examples/<task>/`                              | Self-contained TypeScript programs that call the Notion API and run locally with Node.js.                            |
-| `workers/templates/<integration>-<capability>/` | Self-contained Notion Worker syncs, agent tools, and webhooks.                                                       |
+| `workers/templates/<integration>-<capability>/` | Self-contained Notion Worker syncs, agent tools, webhooks, and Workflows.                                            |
 | `skills/`                                       | Reusable instructions and evaluations for AI-assisted Notion workflows.                                              |
 | `docs/`                                         | Longer developer guides that are not standalone runnable projects.                                                   |
 | `scripts/`                                      | Repository-wide installation, validation, and maintenance commands.                                                  |
@@ -78,6 +78,8 @@ Worker-specific safety rules:
   and explain the real security boundary; a prompt instruction is not one.
 - Webhooks must authenticate deliveries and defend against replay where the
   provider supports timestamps or delivery IDs.
+- Workflows must isolate non-deterministic work in durable steps, preserve
+  stable step order, and make retry-sensitive writes idempotent.
 - Use the Notion client supplied by the Worker context when the platform owns
   authentication. Do not introduce a Notion token unnecessarily.
 

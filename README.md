@@ -29,6 +29,8 @@ directory.
   [Postgres](workers/templates/postgres-query/), [Snowflake query](workers/templates/snowflake-query/), [PowerPoint creator](workers/templates/powerpoint-creator/), [Vercel](workers/templates/vercel-production-deployment-tools/), and more.
 - **React to external events:** receive and verify
   [Zendesk webhooks](workers/templates/zendesk-webhook/).
+- **Automate recurring work:** start from the alpha
+  [Workflows template](workers/templates/workflows/).
 
 ## Quickstarts
 
@@ -112,6 +114,7 @@ and a **webhook** handles events from another service. See the complete
 | Task                                         | Worker                                                        |
 | -------------------------------------------- | ------------------------------------------------------------- |
 | Scaffold a new Worker from the base template | [Default Worker template](workers/templates/workers-default/) |
+| Start a durable Workflow automation          | [Workflows template](workers/templates/workflows/)            |
 
 ### Sync external data into Notion
 
