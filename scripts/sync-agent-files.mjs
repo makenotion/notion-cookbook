@@ -47,8 +47,8 @@ const DEFAULT_GROUP = {
 }
 
 // A catalog kind listed here takes its agent files from this group instead of
-// DEFAULT_GROUP. Certain templates have private alpha capabilities, so their
-// templates document what the default set tells agents not to use.
+// DEFAULT_GROUP. For features that have not been fully rolled out, you can
+// define overrides with custom instructions and/or skills.
 const OVERRIDE_GROUPS = {
   "worker-custom-block": {
     instructions: `${INSTRUCTIONS_ROOT}/custom-blocks`,
