@@ -47,17 +47,15 @@ const DEFAULT_GROUP = {
 }
 
 // A catalog kind listed here takes its agent files from this group instead of
-// DEFAULT_GROUP. Custom blocks are a private alpha capability, so their
-// templates document what the default set tells agents not to use. `instructions`
-// replaces the default set and is never merged; `skills` spreads the defaults
-// because a custom-block template can still declare a sync.
+// DEFAULT_GROUP. Certain templates have private alpha capabilities, so their
+// templates document what the default set tells agents not to use.
 const OVERRIDE_GROUPS = {
   "worker-custom-block": {
     instructions: `${INSTRUCTIONS_ROOT}/custom-blocks`,
     skills: [...DEFAULT_SKILLS, "custom-blocks"],
   },
   "worker-workflow": {
-    instructions: `${INSTRUCTIONS_ROOT}/workflows`,
+    instructions: `${INSTRUCTIONS_ROOT}/workflow`,
     skills: ["workflow", "workflow-guide", "workflow-validate"],
   },
 }

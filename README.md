@@ -24,13 +24,11 @@ directory.
   [Salesforce](workers/templates/salesforce-sync/), [Sentry](workers/templates/sentry-sync/),
   [Todoist](workers/templates/todoist-sync/), [Zendesk](workers/templates/zendesk-sync/) and more.
 - **Give a Notion Agent a reliable new capability:** execute a repeatable API
-  workflow in one tool call, or connect to [Airflow](workers/templates/airflow/), [Vega-lite charts](workers/templates/chart-generator/),
+  operation in one tool call, or connect to [Airflow](workers/templates/airflow/), [Vega-lite charts](workers/templates/chart-generator/),
   [CloudWatch Logs](workers/templates/cloudwatch-logs/),
   [Postgres](workers/templates/postgres-query/), [Snowflake query](workers/templates/snowflake-query/), [PowerPoint creator](workers/templates/powerpoint-creator/), [Vercel](workers/templates/vercel-production-deployment-tools/), and more.
 - **React to external events:** receive and verify
   [Zendesk webhooks](workers/templates/zendesk-webhook/).
-- **Automate recurring work:** start from the alpha
-  [Workflows template](workers/templates/workflows/).
 
 ## Quickstarts
 
@@ -114,7 +112,6 @@ and a **webhook** handles events from another service. See the complete
 | Task                                         | Worker                                                        |
 | -------------------------------------------- | ------------------------------------------------------------- |
 | Scaffold a new Worker from the base template | [Default Worker template](workers/templates/workers-default/) |
-| Start a durable Workflow automation          | [Workflows template](workers/templates/workflows/)            |
 
 ### Sync external data into Notion
 
@@ -139,7 +136,7 @@ and a **webhook** handles events from another service. See the complete
 
 ### Add tools to a Notion Agent
 
-An agent tool can coordinate a workflow across multiple apps. For example, the
+An agent tool can coordinate work across multiple apps. For example, the
 [Sentry to PagerDuty incident tools](workers/templates/sentry-pagerduty-incident-tools/)
 find and inspect an issue in Sentry, then declare an incident in PagerDuty.
 
@@ -167,7 +164,7 @@ find and inspect an issue in Sentry, then declare an incident in PagerDuty.
 
 - [Developer guides](docs/) — including the
   [Notion MCP client integration guide](docs/mcp-client-integration.md)
-- [Agent skills](skills/) — reusable workflows for working with Notion
+- [Agent skills](skills/) — reusable instructions for working with Notion
 - [Notion developer documentation](https://developers.notion.com)
 - [Notion API reference](https://developers.notion.com/reference)
 - [Contributing](CONTRIBUTING.md) — add or improve an example, Worker, skill, or

@@ -90,7 +90,7 @@ function expectedKind(path, id) {
   if (path.startsWith("workers/templates/custom-blocks/"))
     return "worker-custom-block"
   if (id.endsWith("-default")) return "worker-default"
-  if (id === "workflows") return "worker-workflow"
+  if (id === "workflow") return "worker-workflow"
   if (id.endsWith("-sync")) return "worker-sync"
   if (id.endsWith("-webhook")) return "worker-webhook"
   return "worker-tool"
@@ -255,7 +255,10 @@ async function validateRecipe(recipe, index, projects, readme, ids, paths) {
     }
   }
 
-  if (kind !== "worker-custom-block" && !readme.includes(`(${path}/)`)) {
+  // Private alpha capabilities ship templates without advertising them in the
+  // public README.
+  const UNLISTED_KINDS = new Set(["worker-custom-block", "worker-workflow"])
+  if (!UNLISTED_KINDS.has(kind) && !readme.includes(`(${path}/)`)) {
     report(`README.md must link directly to ${path}/`)
   }
 }

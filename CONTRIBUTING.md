@@ -58,7 +58,6 @@ first so related capabilities sort together. Use one of these catalog kinds:
 - `worker-sync` for an external-data sync into a managed Notion database.
 - `worker-tool` for a capability callable by a Notion Agent.
 - `worker-webhook` for an externally triggered event handler.
-- `worker-workflow` for a durable Workflow that runs from a configured trigger.
 
 New Workers should:
 
@@ -81,8 +80,6 @@ Additional expectations by kind:
   read-only.
 - **Webhooks:** verify the provider's signature or token, add replay protection
   where possible, and test malformed and unauthenticated deliveries.
-- **Workflows:** put non-deterministic work in durable steps, use stable step
-  order, and make retry-sensitive side effects idempotent.
 
 Use the pre-authenticated Notion client supplied by the Worker context when the
 platform owns authentication. Do not ask users for a separate Notion token
@@ -97,8 +94,7 @@ supports.
 Required fields are:
 
 - `id`, `title`, `summary`, and `path`.
-- `kind`: `api-example`, `worker-sync`, `worker-tool`, `worker-webhook`, or
-  `worker-workflow`.
+- `kind`: `api-example`, `worker-sync`, `worker-tool`, or `worker-webhook`.
 - `status`, `language`, and `runtime`.
 - Lowercase integration slugs and project-relative entrypoints.
 - `commands.install` plus supported run, check, test, build, or deploy commands.

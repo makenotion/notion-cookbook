@@ -13,9 +13,9 @@ There are 4 Worker capability types:
 
 ## Workflows
 
-| Worker                                    | What it does                                                |
-| ----------------------------------------- | ----------------------------------------------------------- |
-| [Workflow template](templates/workflows/) | Starts a durable Workflow with a recurring example trigger. |
+| Worker                                   | What it does                                                |
+| ---------------------------------------- | ----------------------------------------------------------- |
+| [Workflow template](templates/workflow/) | Starts a durable Workflow with a recurring example trigger. |
 
 For self-hosted integrations built directly with the Notion API, see the [API examples](../examples/).
 
