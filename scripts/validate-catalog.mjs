@@ -5,6 +5,16 @@ import { fileURLToPath } from "node:url"
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const errors = []
 
+const PROJECT_VALIDATION_OVERRIDES = {
+  // TODO(workflow-v2): Remove this exemption after the archived v2 template
+  // adopts the Cookbook package name and README contracts.
+  workflow: {
+    packageName: "worker",
+    allowsMissingReadme: true,
+    allowsMissingRootReadmeLink: true,
+  },
+}
+
 function report(message) {
   errors.push(message)
 }
@@ -58,7 +68,8 @@ async function findProjects() {
       )
       projects.set(projectPath, packageJson)
 
-      const expectedName = `@notion-cookbook/${entry.name}`
+      const override = PROJECT_VALIDATION_OVERRIDES[entry.name]
+      const expectedName = override?.packageName ?? `@notion-cookbook/${entry.name}`
       if (packageJson && packageJson.name !== expectedName) {
         report(
           `${projectPath}/package.json: name must be ${JSON.stringify(expectedName)}`
@@ -68,7 +79,10 @@ async function findProjects() {
         report(`${projectPath}/package.json: private must be true`)
       }
 
-      if (!(await isFile(resolve(rootPath, entry.name, "README.md")))) {
+      if (
+        !override?.allowsMissingReadme &&
+        !(await isFile(resolve(rootPath, entry.name, "README.md")))
+      ) {
         report(`${projectPath}: missing README.md`)
       }
     }
@@ -89,6 +103,7 @@ function expectedKind(path, id) {
   if (path.startsWith("examples/")) return "api-example"
   if (path.startsWith("workers/templates/custom-blocks/"))
     return "worker-custom-block"
+  if (id === "workflow") return "worker-workflow"
   if (id.endsWith("-default")) return "worker-default"
   if (id.endsWith("-sync")) return "worker-sync"
   if (id.endsWith("-webhook")) return "worker-webhook"
@@ -160,6 +175,7 @@ async function validateRecipe(recipe, index, projects, readme, ids, paths) {
     "worker-webhook",
     "worker-custom-block",
     "worker-default",
+    "worker-workflow",
   ])
   if (!allowedKinds.has(kind)) {
     report(`${label}.kind is invalid: ${JSON.stringify(kind)}`)
@@ -253,7 +269,12 @@ async function validateRecipe(recipe, index, projects, readme, ids, paths) {
     }
   }
 
-  if (kind !== "worker-custom-block" && !readme.includes(`(${path}/)`)) {
+  const override = PROJECT_VALIDATION_OVERRIDES[id]
+  if (
+    kind !== "worker-custom-block" &&
+    !override?.allowsMissingRootReadmeLink &&
+    !readme.includes(`(${path}/)`)
+  ) {
     report(`README.md must link directly to ${path}/`)
   }
 }

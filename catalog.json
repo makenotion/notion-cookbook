@@ -291,6 +291,24 @@
       }
     },
     {
+      "id": "workflow",
+      "title": "Legacy Workflow v2 template",
+      "summary": "Archive the v2 Workflow template for users who need the former scaffold.",
+      "path": "workers/templates/workflow",
+      "kind": "worker-workflow",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "notion-workflows"],
+      "entrypoints": ["src/workflows/sayHello.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy"
+      }
+    },
+    {
       "id": "duckdb-query",
       "title": "DuckDB query agent tool",
       "summary": "Learn the Worker tool pattern by querying a seeded, in-memory DuckDB sales database with no credentials.",

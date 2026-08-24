@@ -14,6 +14,13 @@ for dir in examples/* workers/templates/* workers/templates/custom-blocks/*; do
     continue
   fi
 
+  # TODO(workflow-v2): Remove this skip when the archived v2 template builds
+  # with the current Workers SDK.
+  if [[ "$dir" == "workers/templates/workflow" ]]; then
+    printf '%sSkipping %s (legacy v2 SDK API).%s\n' "$CYAN" "$dir" "$RESET"
+    continue
+  fi
+
   printf '%sTypechecking %s...%s\n' "$CYAN" "$dir" "$RESET"
   if (cd "$dir" && node -e 'const p = require("./package.json"); process.exit(p.scripts?.check ? 0 : 1)'); then
     (cd "$dir" && npm run check)

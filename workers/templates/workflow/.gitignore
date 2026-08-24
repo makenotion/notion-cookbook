@@ -1,0 +1,4 @@
+.notion/
+dist/
+
+package-lock.json

@@ -27,11 +27,15 @@ const OVERRIDE_GROUPS = {
     instructions: `${INSTRUCTIONS_ROOT}/custom-blocks`,
     skills: [...DEFAULT_SKILLS, "custom-blocks"],
   },
+  "worker-workflow": {},
 }
 ```
 
 `skills` names entries in `skills/`, so a template ships only the ones its group
 lists. Spread `DEFAULT_SKILLS` to add to them instead of repeating them.
+
+An empty override preserves source-owned agent files. The legacy Workflow v2
+template uses this exception.
 
 Each template also gets an `AGENTS.md` and a `CLAUDE.md` symlink pointing at
 `.agents/INSTRUCTIONS.md`, so both discovery conventions resolve to one file.

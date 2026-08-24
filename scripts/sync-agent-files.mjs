@@ -1,9 +1,10 @@
 // Rewrites every worker template's `.agents/` from a canonical file set. Each
 // `worker-*` recipe in `catalog.json` gets DEFAULT_GROUP unless its kind is
-// listed in OVERRIDE_GROUPS, so a new kind inherits the default instead of
-// being silently skipped. Sync deletes `.agents/` and copies the set back, so a
-// renamed or removed canonical file needs no special handling. `--dryRun` writes
-// nothing and exits non-zero when a template's `.agents/` differs from its set.
+// listed in OVERRIDE_GROUPS, so a new kind inherits the default unless an empty
+// override preserves source-owned agent files. Sync deletes `.agents/` and copies
+// the set back, so a renamed or removed canonical file needs no special handling.
+// `--dryRun` writes nothing and exits non-zero when a template's `.agents/`
+// differs from its set.
 
 import {
   lstat,
@@ -56,6 +57,13 @@ const OVERRIDE_GROUPS = {
     instructions: `${INSTRUCTIONS_ROOT}/custom-blocks`,
     skills: [...DEFAULT_SKILLS, "custom-blocks"],
   },
+  // TODO(workflow-v2): Remove this exemption after the archived v2 template
+  // adopts the Cookbook agent-file layout.
+  "worker-workflow": {},
+}
+
+function skipsAgentSync(config) {
+  return !config.instructions && (!config.skills || config.skills.length === 0)
 }
 
 const AGENT_SYMLINKS = [
@@ -152,7 +160,7 @@ for (const [kind, group] of Object.entries(OVERRIDE_GROUPS)) {
       `OVERRIDE_GROUPS lists kind ${JSON.stringify(kind)}, which no recipe uses`
     )
   }
-  if (!group.instructions) {
+  if (!skipsAgentSync(group) && !group.instructions) {
     fail(`OVERRIDE_GROUPS entry ${JSON.stringify(kind)} has no instructions`)
   }
 }
@@ -171,6 +179,8 @@ const drifted = []
 let rewritten = 0
 
 for (const group of groups.values()) {
+  if (skipsAgentSync(group.config)) continue
+
   const instructionsDir = group.config.instructions
   const canonicalPath = resolve(repoRoot, instructionsDir)
   const files = await collectFiles(canonicalPath)

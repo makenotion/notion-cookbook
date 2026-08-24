@@ -1,0 +1,3 @@
+# TODO(workflow-v2): Remove this exemption after the archived v2 template
+# adopts the Cookbook formatting contract.
+workers/templates/workflow/**
