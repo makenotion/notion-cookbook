@@ -19,7 +19,7 @@ schedule.
 Create the Worker from this template:
 
 ```shell
-ntn workers new my-workflow --template workflows
+ntn workers new my-workflow --template workflow
 cd my-workflow
 npm run check
 npm run build
