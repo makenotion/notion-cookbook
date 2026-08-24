@@ -56,7 +56,12 @@ const OVERRIDE_GROUPS = {
   },
   "worker-workflow": {
     instructions: `${INSTRUCTIONS_ROOT}/workflow`,
-    skills: ["workflow", "workflow-guide", "workflow-validate"],
+    skills: [
+      ...DEFAULT_SKILLS,
+      "workflow",
+      "workflow-guide",
+      "workflow-validate",
+    ],
   },
 }
 
