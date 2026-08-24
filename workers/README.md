@@ -2,20 +2,13 @@
 
 [Notion Workers](https://developers.notion.com/docs/workers) are server-side extensions deployed to Notion. Each direct child of [`templates/`](templates/) is an independently executable and deployable Worker. [`agents/`](agents/) holds the canonical agent files every template ships.
 
-There are 4 Worker capability types:
+There are 3 different type of Worker capabilties:
 
 - A **sync** imports external records into a managed Notion database on a
   schedule or on demand.
 - An **agent tool** lets a Notion Agent query context or execute a repeatable API workflow
   in one step.
 - A **webhook** handles events sent by another app to trigger workflows in Notion or other places.
-- A **Workflow** runs durable automation steps after a configured trigger fires.
-
-## Workflows
-
-| Worker                                   | What it does                                                |
-| ---------------------------------------- | ----------------------------------------------------------- |
-| [Workflow template](templates/workflow/) | Starts a durable Workflow with a recurring example trigger. |
 
 For self-hosted integrations built directly with the Notion API, see the [API examples](../examples/).
 
