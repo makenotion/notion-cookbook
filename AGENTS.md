@@ -15,8 +15,12 @@ should point here instead of restating these rules.
 | `scripts/`                                      | Repository-wide installation, validation, and maintenance commands.                                                  |
 
 Do not infer a recipe's category from a path segment that no longer exists.
-`examples/` and `workers/templates/` are both flat collections; `kind` in
+`examples/` and `workers/templates/` are flat collections; `kind` in
 `catalog.json` is the authoritative classification.
+
+Apps are a private alpha. Do not add, advertise, or modify Apps unless the task
+explicitly calls for private-alpha Apps work; follow the guidance local to the
+selected App when it does.
 
 ## Find the right recipe
 

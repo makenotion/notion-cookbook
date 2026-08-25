@@ -1,13 +1,13 @@
 ---
 name: workflow-guide
-description: Reference for typed triggers, durable steps, replay-safe data flow, and idempotent Workflow effects.
+description: Reference for typed triggers, durable steps, replay-safe data flow, and idempotent workflow effects.
 user-invocable: false
 ---
 
 # Workflow guide
 
 Each direct `src/workflows/*.ts` file must default-export `createWorkflow(...)`.
-The file name becomes its Workflow key.
+The file name becomes its workflow key.
 
 Use a step for every result that can change and every external effect. This
 includes network and Notion API calls, mutable state reads, timestamps, random

@@ -15,9 +15,12 @@ Use this skill to add a Workflow to this template.
 4. Create one camelCase file directly in `src/workflows/`.
 5. Default-export `createWorkflow(...)` and use typed trigger creators.
 6. Put all non-deterministic work in awaited `context.step(...)` calls.
-7. Give each step a unique, stable name and return JSON-safe later inputs.
-8. Use the step `id` as an idempotency key when supported.
-9. Run `npm run check` and `npm run build`.
+7. Give each step a stable display name. For repeated steps, keep the name
+   constant and pass a stable, unique composite `key`, such as
+   `{ key: ["process-page", page.id] }`.
+8. Return JSON-safe values needed by later steps.
+9. Use the step `id` as an idempotency key when supported.
+10. Run `npm run check` and `npm run build`.
 
 Do not write credentials. Add only environment variable names and safe
 placeholders to `.env.example` when configuration is required.

@@ -309,6 +309,24 @@
       }
     },
     {
+      "id": "apps-default",
+      "title": "Default Notion App template",
+      "summary": "Start a durable Notion App with a recurring trigger and a replay-safe step.",
+      "path": "apps/templates/apps-default",
+      "kind": "app-workflow",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-apps", "notion-workflow"],
+      "entrypoints": ["src/workflows/sayHello.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "build": "npm run build",
+        "deploy": "ntn apps deploy --name my-workflow-app"
+      }
+    },
+    {
       "id": "duckdb-query",
       "title": "DuckDB query agent tool",
       "summary": "Learn the Worker tool pattern by querying a seeded, in-memory DuckDB sales database with no credentials.",
