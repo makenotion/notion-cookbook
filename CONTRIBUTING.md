@@ -7,7 +7,6 @@ verify without relying on another project in this repository.
 ## Choose the right destination
 
 - Add a local Notion API or SDK program at `examples/<task-name>/`.
-- Add a workflow App at `apps/templates/<name>/`.
 - Add a deployed Notion Worker at
   `workers/templates/<integration>-<capability>/`, such as `linear-sync`,
   `snowflake-query`, or `zendesk-webhook`.
@@ -19,7 +18,7 @@ kind belong in `catalog.json`; they do not need extra directory levels.
 
 ## Recipe contract
 
-Every API example, App, or Worker must be self-contained and include:
+Every API example or Worker must be self-contained and include:
 
 - `README.md` with prerequisites, setup, exact commands, expected result, code
   map, extension points, and verification instructions.
@@ -31,8 +30,8 @@ Every API example, App, or Worker must be self-contained and include:
 - Offline tests or checks for meaningful transformation, pagination,
   validation, authentication, or safety logic.
 - A complete entry in the root `catalog.json`.
-- Direct links from the relevant landing page (`examples/README.md`,
-  `apps/README.md`, or `workers/README.md`) and the root `README.md`.
+- Direct links from the relevant landing page (`examples/README.md` or
+  `workers/README.md`) and the root `README.md`.
 
 Recipes should be working, focused, and documented. Do not commit placeholder
 directories, secrets, `.env` files, `node_modules`, build output, or generated
@@ -51,22 +50,7 @@ example mutates a workspace, describe the expected changes before the command.
 Use the official `@notionhq/client` when a JavaScript SDK is appropriate. Keep
 the example independent so a user can copy its directory into another project.
 
-## Adding an App
-
-Create `apps/templates/<name>/`. Apps currently support workflow capabilities
-only.
-
-New Apps should:
-
-- Require Node.js 26 or newer.
-- Depend on `@notionhq/apps` and expose `build` and `check` scripts.
-- Put workflows directly under `src/workflows/` and default-export
-  `createWorkflow(...)` from each file.
-- Import typed trigger creators from `@notionhq/apps/triggers`.
-- Put non-deterministic reads and external effects inside awaited
-  `context.step(...)` calls with stable names.
-- Document the experimental `ntn apps deploy` flow and the generated
-  `dist/manifest.json` and `dist/worker.js` artifacts.
+Apps are a private alpha and are not currently open for general contribution.
 
 ## Adding a Worker
 
@@ -112,8 +96,7 @@ supports.
 Required fields are:
 
 - `id`, `title`, `summary`, and `path`.
-- `kind`: `api-example`, `app-workflow`, `worker-sync`, `worker-tool`, or
-  `worker-webhook`.
+- `kind`: `api-example`, `worker-sync`, `worker-tool`, or `worker-webhook`.
 - `status`, `language`, and `runtime`.
 - Lowercase integration slugs and project-relative entrypoints.
 - `commands.install` plus supported run, check, test, build, or deploy commands.
