@@ -9,14 +9,15 @@ should point here instead of restating these rules.
 | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | `catalog.json`                                  | Machine-readable index of every runnable recipe, including paths, entrypoints, integrations, and supported commands. |
 | `examples/<task>/`                              | Self-contained TypeScript programs that call the Notion API and run locally with Node.js.                            |
+| `apps/templates/<name>/`                        | Self-contained workflow Apps built with the `@notionhq/apps` SDK.                                                    |
 | `workers/templates/<integration>-<capability>/` | Self-contained Notion Worker syncs, agent tools, and webhooks.                                                       |
 | `skills/`                                       | Reusable instructions and evaluations for AI-assisted Notion workflows.                                              |
 | `docs/`                                         | Longer developer guides that are not standalone runnable projects.                                                   |
 | `scripts/`                                      | Repository-wide installation, validation, and maintenance commands.                                                  |
 
 Do not infer a recipe's category from a path segment that no longer exists.
-`examples/` and `workers/templates/` are both flat collections; `kind` in
-`catalog.json` is the authoritative classification.
+`examples/`, `apps/templates/`, and `workers/templates/` are flat collections;
+`kind` in `catalog.json` is the authoritative classification.
 
 ## Find the right recipe
 
@@ -56,11 +57,17 @@ deploy only when the user asks for a live deployment. Treat generated
 `workers.json` files as local state unless a tracked fixture explicitly says
 otherwise.
 
+For Apps, Node.js 26 or newer is required. Apps currently support workflow
+capabilities only. Treat `.notion/` and `dist/` as generated local state, and
+enable the `apps` experiment before using `ntn apps deploy`.
+
 ## Adapt an existing recipe
 
 - Preserve the recipe's standalone install and run flow.
 - Keep the change inside one recipe unless shared documentation or repository
   tooling genuinely needs to change.
+- Keep Apps workflow-only and import from `@notionhq/apps` rather than the
+  legacy `@notionhq/workers/alpha` paths.
 - Follow the existing registration and data-flow patterns in `src/index.ts` or
   the listed entrypoint.
 - Document new prerequisites, environment variables, external permissions,
@@ -86,6 +93,7 @@ Worker-specific safety rules:
 Choose one project root:
 
 - `examples/<task-name>/` for a local Notion API/SDK program.
+- `apps/templates/<name>/` for a workflow App.
 - `workers/templates/<integration>-<capability>/` for a deployed Worker. Put the
   integration first so related projects sort together, such as
   `zendesk-sync` and `zendesk-webhook`.
@@ -107,6 +115,16 @@ Every new recipe must include:
 
 Do not add placeholder projects or catalog entries. Add a recipe only when its
 code, setup instructions, and checks are runnable.
+
+App-specific rules:
+
+- Apps require Node.js 26 or newer and depend on `@notionhq/apps`.
+- Put each workflow in a direct `src/workflows/*.ts` file that default-exports
+  `createWorkflow(...)`; the filename becomes the workflow key.
+- Use typed trigger creators from `@notionhq/apps/triggers`.
+- Put non-deterministic work and external effects in awaited
+  `context.step(...)` calls with stable names and idempotent writes.
+- New Apps should expose `build` and `check` scripts.
 
 ## Validate changes
 
@@ -131,6 +149,15 @@ npm test
 npm run build
 ```
 
+For an App:
+
+```sh
+cd apps/templates/<name>
+npm install
+npm run check
+npm run build
+```
+
 Run only scripts that exist in that project's `package.json`. Then, from the
 repository root, install the repository tooling and run:
 
@@ -142,8 +169,8 @@ npm run verify:all
 Before finishing, confirm that:
 
 - Documentation links and commands use the current flat paths.
-- `catalog.json` matches every package-backed direct child of `examples/` and
-  `workers/templates/`, with no placeholder entries.
+- `catalog.json` matches every package-backed direct child of `examples/`,
+  `apps/templates/`, and `workers/templates/`, with no placeholder entries.
 - No secrets, build output, dependency directories, or local Worker state were
   added.
 - A recipe README still describes the behavior implemented by its entrypoint.

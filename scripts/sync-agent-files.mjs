@@ -54,15 +54,6 @@ const OVERRIDE_GROUPS = {
     instructions: `${INSTRUCTIONS_ROOT}/custom-blocks`,
     skills: [...DEFAULT_SKILLS, "custom-blocks"],
   },
-  "worker-workflow": {
-    instructions: `${INSTRUCTIONS_ROOT}/workflow`,
-    skills: [
-      ...DEFAULT_SKILLS,
-      "workflow",
-      "workflow-guide",
-      "workflow-validate",
-    ],
-  },
 }
 
 const AGENT_SYMLINKS = [

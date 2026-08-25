@@ -292,20 +292,20 @@
     },
     {
       "id": "workflow",
-      "title": "Notion Workflow template",
-      "summary": "Start a durable Notion Workflow with a recurring trigger and replay-safe step guidance.",
-      "path": "workers/templates/workflows/workflow",
-      "kind": "worker-workflow",
+      "title": "Notion workflow app template",
+      "summary": "Start a durable Notion workflow app with a recurring trigger and a replay-safe step.",
+      "path": "apps/templates/workflow",
+      "kind": "app-workflow",
       "status": "ready",
       "language": "typescript",
       "runtime": "node",
-      "integrations": ["notion-workers", "notion-workflow"],
+      "integrations": ["notion-apps", "notion-workflow"],
       "entrypoints": ["src/workflows/sayHello.ts"],
       "commands": {
         "install": "npm install",
         "check": "npm run check",
         "build": "npm run build",
-        "deploy": "ntn workers deploy"
+        "deploy": "ntn apps deploy --name my-workflow-app"
       }
     },
     {

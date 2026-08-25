@@ -31,9 +31,9 @@ async function findProjects() {
 
   for (const root of [
     "examples",
+    "apps/templates",
     "workers/templates",
     "workers/templates/custom-blocks",
-    "workers/templates/workflows",
   ]) {
     const rootPath = resolve(repoRoot, root)
     let entries
@@ -88,10 +88,10 @@ function requireString(recipe, field, label) {
 
 function expectedKind(path, id) {
   if (path.startsWith("examples/")) return "api-example"
+  if (path.startsWith("apps/templates/")) return "app-workflow"
   if (path.startsWith("workers/templates/custom-blocks/"))
     return "worker-custom-block"
   if (id.endsWith("-default")) return "worker-default"
-  if (id === "workflow") return "worker-workflow"
   if (id.endsWith("-sync")) return "worker-sync"
   if (id.endsWith("-webhook")) return "worker-webhook"
   return "worker-tool"
@@ -146,9 +146,9 @@ async function validateRecipe(recipe, index, projects, readme, ids, paths) {
 
   const validPaths = [
     `examples/${id}`,
+    `apps/templates/${id}`,
     `workers/templates/${id}`,
     `workers/templates/custom-blocks/${id}`,
-    `workers/templates/workflows/${id}`,
   ]
   if (!validPaths.includes(path)) {
     report(
@@ -158,12 +158,12 @@ async function validateRecipe(recipe, index, projects, readme, ids, paths) {
 
   const allowedKinds = new Set([
     "api-example",
+    "app-workflow",
     "worker-sync",
     "worker-tool",
     "worker-webhook",
     "worker-custom-block",
     "worker-default",
-    "worker-workflow",
   ])
   if (!allowedKinds.has(kind)) {
     report(`${label}.kind is invalid: ${JSON.stringify(kind)}`)
@@ -259,7 +259,7 @@ async function validateRecipe(recipe, index, projects, readme, ids, paths) {
 
   // Private alpha capabilities ship templates without advertising them in the
   // public README.
-  const UNLISTED_KINDS = new Set(["worker-custom-block", "worker-workflow"])
+  const UNLISTED_KINDS = new Set(["worker-custom-block"])
   if (!UNLISTED_KINDS.has(kind) && !readme.includes(`(${path}/)`)) {
     report(`README.md must link directly to ${path}/`)
   }

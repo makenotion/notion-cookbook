@@ -1,9 +1,9 @@
 # Notion cookbook
 
-Working examples, guides, and agent skills for building with the Notion API
-and [Notion Workers](https://developers.notion.com/docs/workers). Every example
-is self-contained: choose a task, open its README, and run it from its own
-directory.
+Working examples, guides, and agent skills for building with the Notion API,
+Notion Apps, and [Notion Workers](https://developers.notion.com/docs/workers).
+Every example is self-contained: choose a task, open its README, and run it
+from its own directory.
 
 ## What do you want to build?
 
@@ -15,6 +15,9 @@ directory.
   [web form](examples/web-form-with-express/), connect
   [GitHub issues](examples/notion-github-sync/), or send
   [email notifications](examples/database-email-update/).
+- **Build a durable workflow App:** start from the
+  [workflow App template](apps/templates/workflow/) and add typed triggers and
+  replay-safe steps.
 - **Bring external data into Notion:** use a Worker sync for
   [GitHub issues and pull requests](workers/templates/github-sync/),
   [GitHub stars](workers/templates/github-stars-sync/), [HubSpot](workers/templates/hubspot-sync/),
@@ -65,6 +68,21 @@ Other API examples use different scripts and may require additional services.
 Use the command in the selected example's README rather than assuming
 `npm start`.
 
+### Build a workflow App
+
+The workflow template builds without credentials:
+
+```sh
+git clone https://github.com/makenotion/notion-cookbook.git
+cd notion-cookbook/apps/templates/workflow
+npm install
+npm run check
+npm run build
+```
+
+Apps require Node.js 26 or newer. Follow the template README to enable the
+experimental Apps CLI and deploy it.
+
 ### Deploy a Worker
 
 The DuckDB query Worker is self-contained and needs no secrets:
@@ -99,6 +117,15 @@ See the [API examples guide](examples/) for shared setup information.
 | Extract plain text from Notion blocks                        | [Parse text from any block type](examples/parse-text-from-any-block-type/) | Notion API           |
 | Read beyond the 10,000-row query limit                       | [Query large data sources](examples/query-large-data-sources/)             | Notion API           |
 | Create databases, pages, blocks, and comments from a web UI  | [Web form with Express](examples/web-form-with-express/)                   | Notion API, Express  |
+
+## App templates
+
+Apps are server-side extensions built with the workflow-only `@notionhq/apps`
+SDK. See the [Apps guide](apps/) for setup and deployment.
+
+| Task                                | App                                      |
+| ----------------------------------- | ---------------------------------------- |
+| Start a durable, recurring workflow | [Workflow App](apps/templates/workflow/) |
 
 ## Worker examples
 
