@@ -42,6 +42,22 @@ export default createWorkflow({
 - Put writes, messages, API calls, time reads, and random IDs inside a step.
 - Keep only deterministic transforms outside steps.
 - Keep step order and names stable across retries.
+- Treat the step name as a stable display label, not a place to interpolate an
+  item ID or loop index.
+- For repeated steps, pass a stable composite key as the second argument so
+  each invocation has a unique replay identity:
+
+  ```ts
+  for (const page of pages) {
+    await context.step(
+      "Process page",
+      { key: ["process-page", page.id] },
+      async ({ id }) => processPage(page, { idempotencyKey: id })
+    )
+  }
+  ```
+
+- Keep every key stable across retries and unique within one workflow run.
 - Return JSON-serializable values that later code needs.
 - Pass the callback `id` to services that accept idempotency keys.
 - Let unexpected failures throw so Notion can retry the workflow.

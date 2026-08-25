@@ -51,8 +51,10 @@ export `createWorkflow(...)`.
 2. Set a descriptive `name`, `description`, and trigger list.
 3. Put each read, write, API request, time value, random value, or external
    effect inside an awaited `context.step(...)` call.
-4. Give every step a stable, unique name and return any value needed by later
-   steps.
+4. Give every step a stable display name. For a repeated step, keep the name
+   constant and pass a stable composite key such as
+   `{ key: ["process-page", page.id] }` instead of interpolating the item into
+   the name. Return any value needed by later steps.
 5. Pass the step `id` as an idempotency key when the downstream service
    supports one.
 6. Run `npm run check` and `npm run build`.

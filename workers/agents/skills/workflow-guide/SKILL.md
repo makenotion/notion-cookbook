@@ -16,7 +16,19 @@ transforms of the event and completed step results outside a step.
 
 Completed steps can replay saved results. Do not rely on in-memory mutations
 inside a step. Return the values required by later code. Keep calls in a stable
-order and give every step a stable, unique name.
+order and give every step a stable display name. The name is also the replay
+key by default. For a repeated step, do not interpolate an item ID or loop
+index into the name; pass a stable composite key instead:
+
+```ts
+await context.step(
+  "Process page",
+  { key: ["process-page", page.id] },
+  async ({ id }) => processPage(page, { idempotencyKey: id })
+)
+```
+
+Keys must be stable across retries and unique within one workflow run.
 
 Retries can repeat an external effect when it succeeds before its step result
 is saved. Pass the callback `id` as an idempotency key. Use a stable external

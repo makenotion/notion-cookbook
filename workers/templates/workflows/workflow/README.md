@@ -46,7 +46,10 @@ Its camelCase filename becomes its Workflow key.
 2. Set a descriptive `name`, description, and trigger list.
 3. Put each read, write, API request, time value, random value, or external
    effect inside an awaited `context.step(...)` call.
-4. Give every step a stable, unique name and return any later input from it.
+4. Give every step a stable display name. For a repeated step, keep the name
+   constant and pass a stable composite key such as
+   `{ key: ["process-page", page.id] }` instead of interpolating the item into
+   the name. Return any later input from the step.
 5. Pass the step `id` as an idempotency key when the downstream service
    supports one.
 6. Run `npm run check` and `npm run build` before deployment.
