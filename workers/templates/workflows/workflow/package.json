@@ -2,20 +2,21 @@
   "name": "@notion-cookbook/workflow",
   "version": "0.0.0",
   "private": true,
-  "description": "A minimal workflow app built with the Notion Apps SDK",
   "type": "module",
   "scripts": {
-    "build": "notion-apps build",
+    "build": "notion-workers build",
     "check": "tsc --noEmit"
   },
   "engines": {
-    "node": ">=26.0.0"
+    "node": ">=22.0.0",
+    "npm": ">=10.9.2"
   },
   "dependencies": {
-    "@notionhq/apps": "^0.0.3"
+    "@notionhq/workers": ">=0.8.0"
   },
   "devDependencies": {
-    "@types/node": "^26.0.0",
-    "typescript": "^5.9.3"
+    "@types/node": "^22.9.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.8.0"
   }
 }

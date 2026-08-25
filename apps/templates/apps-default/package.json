@@ -1,0 +1,21 @@
+{
+  "name": "@notion-cookbook/apps-default",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A minimal workflow app built with the Notion Apps SDK",
+  "type": "module",
+  "scripts": {
+    "build": "notion-apps build",
+    "check": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=26.0.0"
+  },
+  "dependencies": {
+    "@notionhq/apps": "^0.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.0",
+    "typescript": "^5.9.3"
+  }
+}

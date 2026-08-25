@@ -1,4 +1,4 @@
-# Notion workflow app template
+# Default Notion App template
 
 > [!WARNING]
 >
@@ -19,7 +19,7 @@ replay-safe durable step.
 ## Quick start
 
 ```shell
-cd apps/templates/workflow
+cd apps/templates/apps-default
 npm install
 npm run check
 npm run build
@@ -92,4 +92,3 @@ The example needs no credentials for these offline checks.
 ## Learn more
 
 - [`@notionhq/apps` on npm](https://www.npmjs.com/package/@notionhq/apps)
-- [Contribute to this cookbook](../../../CONTRIBUTING.md)
