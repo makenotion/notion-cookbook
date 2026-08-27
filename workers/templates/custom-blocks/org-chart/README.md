@@ -49,13 +49,20 @@ otherwise.
 
 ## Interactions
 
-- **Collapse** a subtree with the count pill under a card.
+- **Collapse** a subtree with the count pill under a card; the toggled card
+  stays anchored while the rest of the layout reflows.
 - **Hover or select** a card to highlight its reporting chain to the root;
   selection adds a quiet footer line ("3 direct · 11 total").
 - **Search** with the floating input (`/` focuses, `Esc` clears). Choosing a
   match expands collapsed ancestors and pans to the person.
-- **Pan** by dragging, **zoom** with the wheel or the controls in six readable
-  steps (75–140%), and **zoom-to-fit** with the fit control.
+- **Overview navigation:** below 90% zoom, clicking a card selects it and
+  animates to 100% zoom centered on that person. At 90% and above, clicking a
+  card toggles its selection.
+- **Pan** by dragging, **zoom** with the wheel or the controls in ten steps
+  (25–140%), and **zoom-to-fit** with the fit control.
+
+The hosted block is full-bleed: its canvas fills the height supplied by the
+host instead of reporting a fixed 520px height.
 
 ## Local development
 

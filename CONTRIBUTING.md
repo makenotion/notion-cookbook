@@ -50,6 +50,8 @@ example mutates a workspace, describe the expected changes before the command.
 Use the official `@notionhq/client` when a JavaScript SDK is appropriate. Keep
 the example independent so a user can copy its directory into another project.
 
+Apps are a private alpha and are not currently open for general contribution.
+
 ## Adding a Worker
 
 Create `workers/templates/<integration>-<capability>/`, with the integration or domain

@@ -47,14 +47,21 @@ const DEFAULT_GROUP = {
 }
 
 // A catalog kind listed here takes its agent files from this group instead of
-// DEFAULT_GROUP. Custom blocks are a private alpha capability, so their
-// templates document what the default set tells agents not to use. `instructions`
-// replaces the default set and is never merged; `skills` spreads the defaults
-// because a custom-block template can still declare a sync.
+// DEFAULT_GROUP. For features that have not been fully rolled out, you can
+// define overrides with custom instructions and/or skills.
 const OVERRIDE_GROUPS = {
   "worker-custom-block": {
     instructions: `${INSTRUCTIONS_ROOT}/custom-blocks`,
     skills: [...DEFAULT_SKILLS, "custom-blocks"],
+  },
+  "worker-workflow": {
+    instructions: `${INSTRUCTIONS_ROOT}/workflow`,
+    skills: [
+      ...DEFAULT_SKILLS,
+      "workflow",
+      "workflow-guide",
+      "workflow-validate",
+    ],
   },
 }
 
@@ -245,14 +252,18 @@ for (const group of groups.values()) {
 
 if (isDryRun) {
   if (drifted.length > 0) {
-    console.error(`Template agent files drifted from ${INSTRUCTIONS_ROOT}/ and ${SKILLS_ROOT}/:`)
+    console.error(
+      `Template agent files drifted from ${INSTRUCTIONS_ROOT}/ and ${SKILLS_ROOT}/:`
+    )
     for (const file of drifted) {
       console.error(`  ${file}`)
     }
     console.error("Run `npm run agents:sync` and commit the result.")
     process.exit(1)
   }
-  console.log(`Template agent files match ${INSTRUCTIONS_ROOT}/ and ${SKILLS_ROOT}/.`)
+  console.log(
+    `Template agent files match ${INSTRUCTIONS_ROOT}/ and ${SKILLS_ROOT}/.`
+  )
 } else {
   console.log(`Rewrote .agents/ for ${rewritten} template(s).`)
 }
