@@ -1,8 +1,9 @@
 # Notion cookbook
 
-Working examples, guides, and agent skills for building with the Notion API
-and [Notion Workers](https://developers.notion.com/docs/workers). Every example
-is self-contained: choose a task, open its README, and run it from its own
+Working examples, templates, guides, and agent skills for building with the
+Notion API, Notion-as-Code, and
+[Notion Workers](https://developers.notion.com/docs/workers). Each project is
+self-contained: choose a task, open its README, and run it from its own
 directory.
 
 ## What do you want to build?
@@ -15,6 +16,8 @@ directory.
   [web form](examples/web-form-with-express/), connect
   [GitHub issues](examples/notion-github-sync/), or send
   [email notifications](examples/database-email-update/).
+- **Manage a workspace as code:** start with the
+  [Notion-as-Code template](notion-as-code/templates/notion-as-code-default/).
 - **Bring external data into Notion:** use a Worker sync for
   [GitHub issues and pull requests](workers/templates/github-sync/),
   [GitHub stars](workers/templates/github-stars-sync/), [HubSpot](workers/templates/hubspot-sync/),

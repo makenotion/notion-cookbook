@@ -1,0 +1,17 @@
+{
+  "name": "@notion-cookbook/notion-as-code-default",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "npm run typecheck && esbuild src/lib/entry.ts --bundle --platform=node --format=esm --outfile=dist/build.mjs && node dist/build.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.0"
+  }
+}

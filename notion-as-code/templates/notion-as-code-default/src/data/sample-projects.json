@@ -1,0 +1,26 @@
+[
+  {
+    "resourceId": "review-generated-workspace",
+    "name": "Review generated workspace",
+    "status": "Done",
+    "priority": "High",
+    "target": "2026-07-08",
+    "notes": "Confirm the Notion as Code teamspace and hello page exist."
+  },
+  {
+    "resourceId": "invite-teammates",
+    "name": "Invite teammates",
+    "status": "In Progress",
+    "priority": "Medium",
+    "target": "2026-07-15",
+    "notes": "Share the generated workspace with collaborators."
+  },
+  {
+    "resourceId": "customize-sample-database",
+    "name": "Customize sample database",
+    "status": "Not Started",
+    "priority": "Low",
+    "target": "2026-07-22",
+    "notes": "Adjust properties, views, and seed entries."
+  }
+]
