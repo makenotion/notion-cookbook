@@ -7,6 +7,7 @@ templates ship in their `.agents/` directory.
 | ----------------------------- | -------------------------------------------------------- |
 | `instructions/default/`       | instructions for every `worker-` recipe with no override |
 | `instructions/custom-blocks/` | instructions for `kind: "worker-custom-block"`           |
+| `instructions/workflow/`      | instructions for `kind: "worker-workflow"`               |
 | `skills/`                     | every skill, whether or not a given template ships it    |
 
 ## Groups
@@ -26,6 +27,10 @@ const OVERRIDE_GROUPS = {
   "worker-custom-block": {
     instructions: `${INSTRUCTIONS_ROOT}/custom-blocks`,
     skills: [...DEFAULT_SKILLS, "custom-blocks"],
+  },
+  "worker-workflow": {
+    instructions: `${INSTRUCTIONS_ROOT}/workflow`,
+    skills: ["workflow", "workflow-guide", "workflow-validate"],
   },
 }
 ```
