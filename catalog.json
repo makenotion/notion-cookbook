@@ -60,11 +60,11 @@
       }
     },
     {
-      "id": "notion-as-code",
-      "title": "Notion-as-Code project",
+      "id": "notion-as-code-default",
+      "title": "Default Notion-as-Code template",
       "summary": "Describe Notion workspace structure as TypeScript and apply it with the Notion CLI.",
-      "path": "examples/notion-as-code",
-      "kind": "api-example",
+      "path": "notion-as-code/templates/notion-as-code-default",
+      "kind": "notion-as-code-template",
       "status": "ready",
       "language": "typescript",
       "runtime": "node",

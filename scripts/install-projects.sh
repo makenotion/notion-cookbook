@@ -9,7 +9,7 @@ cd "$REPO_ROOT"
 CYAN=$'\033[36m'
 RESET=$'\033[0m'
 
-for dir in examples/* apps/templates/* workers/templates/* workers/templates/custom-blocks/* workers/templates/workflows/*; do
+for dir in examples/* apps/templates/* notion-as-code/templates/* workers/templates/* workers/templates/custom-blocks/* workers/templates/workflows/*; do
   if [[ -f "$dir/package.json" ]]; then
     printf '%sInstalling %s...%s\n' "$CYAN" "$dir" "$RESET"
     (cd "$dir" && npm install)

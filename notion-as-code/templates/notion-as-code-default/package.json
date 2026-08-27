@@ -1,5 +1,5 @@
 {
-  "name": "@notion-cookbook/notion-as-code",
+  "name": "@notion-cookbook/notion-as-code-default",
   "private": true,
   "type": "module",
   "engines": {

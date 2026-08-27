@@ -32,6 +32,7 @@ async function findProjects() {
   for (const root of [
     "examples",
     "apps/templates",
+    "notion-as-code/templates",
     "workers/templates",
     "workers/templates/custom-blocks",
     "workers/templates/workflows",
@@ -90,6 +91,8 @@ function requireString(recipe, field, label) {
 function expectedKind(path, id) {
   if (path.startsWith("examples/")) return "api-example"
   if (path.startsWith("apps/templates/")) return "app-workflow"
+  if (path.startsWith("notion-as-code/templates/"))
+    return "notion-as-code-template"
   if (path.startsWith("workers/templates/custom-blocks/"))
     return "worker-custom-block"
   if (id.endsWith("-default")) return "worker-default"
@@ -149,6 +152,7 @@ async function validateRecipe(recipe, index, projects, readme, ids, paths) {
   const validPaths = [
     `examples/${id}`,
     `apps/templates/${id}`,
+    `notion-as-code/templates/${id}`,
     `workers/templates/${id}`,
     `workers/templates/custom-blocks/${id}`,
     `workers/templates/workflows/${id}`,
@@ -162,6 +166,7 @@ async function validateRecipe(recipe, index, projects, readme, ids, paths) {
   const allowedKinds = new Set([
     "api-example",
     "app-workflow",
+    "notion-as-code-template",
     "worker-sync",
     "worker-tool",
     "worker-webhook",
