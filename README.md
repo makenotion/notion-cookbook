@@ -15,6 +15,8 @@ directory.
   [web form](examples/web-form-with-express/), connect
   [GitHub issues](examples/notion-github-sync/), or send
   [email notifications](examples/database-email-update/).
+- **Manage a workspace as code:** start with the
+  [Notion-as-Code template](examples/notion-as-code/).
 - **Bring external data into Notion:** use a Worker sync for
   [GitHub issues and pull requests](workers/templates/github-sync/),
   [GitHub stars](workers/templates/github-stars-sync/), [HubSpot](workers/templates/hubspot-sync/),

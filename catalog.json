@@ -60,6 +60,24 @@
       }
     },
     {
+      "id": "notion-as-code",
+      "title": "Notion-as-Code project",
+      "summary": "Describe Notion workspace structure as TypeScript and apply it with the Notion CLI.",
+      "path": "examples/notion-as-code",
+      "kind": "api-example",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-as-code"],
+      "entrypoints": ["src/main.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run typecheck",
+        "build": "npm run build",
+        "run": "ntn notion-as-code apply ."
+      }
+    },
+    {
       "id": "notion-github-sync",
       "title": "Notion\u2013GitHub issue sync",
       "summary": "Copy issues from a GitHub repository into a Notion database in a one-way local sync.",
