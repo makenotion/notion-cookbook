@@ -10,7 +10,7 @@ CYAN=$'\033[36m'
 DIM=$'\033[2m'
 RESET=$'\033[0m'
 
-for dir in examples/* workers/templates/* workers/templates/custom-blocks/*; do
+for dir in examples/* apps/templates/* workers/templates/* workers/templates/custom-blocks/* workers/templates/workflows/*; do
   if [[ ! -f "$dir/package.json" ]]; then
     continue
   fi

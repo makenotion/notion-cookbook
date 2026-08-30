@@ -1,6 +1,5 @@
 import { Worker } from "@notionhq/workers"
 import * as Schema from "@notionhq/workers/schema"
-import { j } from "@notionhq/workers/schema-builder"
 
 const worker = new Worker()
 export default worker
@@ -17,24 +16,15 @@ export default worker
  * environment variable and `accessToken()` reads it for you.
  */
 
-// Option 1: Notion-managed provider (recommended when available).
-// Notion owns the OAuth app credentials and the backend has pre-configured provider settings.
-// Notion-managed providers are only available in a private alpha.
+// User-managed provider: you create the OAuth app and own its credentials.
+// Keep client credentials in worker secrets and read them from `process.env`.
 const googleAuth = worker.oauth("googleAuth", {
   name: "google-calendar",
-  provider: "google",
-})
-
-// Option 2: User-managed provider (you own the OAuth app credentials).
-// Keep client credentials in worker secrets and read them from `process.env`.
-// Generally available.
-const myCustomAuth = worker.oauth("myCustomAuth", {
-  name: "my-custom-provider",
-  authorizationEndpoint: "https://provider.example.com/oauth/authorize",
-  tokenEndpoint: "https://provider.example.com/oauth/token",
-  scope: "read write",
-  clientId: "1234567890",
-  clientSecret: process.env.MY_CUSTOM_OAUTH_CLIENT_SECRET ?? "",
+  authorizationEndpoint: "https://accounts.google.com/o/oauth2/v2/auth",
+  tokenEndpoint: "https://oauth2.googleapis.com/token",
+  scope: "https://www.googleapis.com/auth/calendar.readonly",
+  clientId: process.env.GOOGLE_OAUTH_CLIENT_ID ?? "",
+  clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? "",
   authorizationParams: {
     access_type: "offline",
     prompt: "consent",
@@ -64,16 +54,5 @@ worker.sync("googleCalendarSync", {
     console.log("Using Google token:", `${token.slice(0, 10)}...`)
 
     return { changes: [], hasMore: false }
-  },
-})
-
-worker.tool("customApiTool", {
-  title: "Custom API Tool",
-  description: "Calls a custom API using OAuth",
-  schema: j.object({}),
-  execute: async () => {
-    const token = await myCustomAuth.accessToken()
-    console.log("Using custom provider token:", `${token.slice(0, 10)}...`)
-    return { success: true }
   },
 })
