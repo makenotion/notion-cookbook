@@ -66,9 +66,13 @@ keys, an upsert, or a duplicate check when retries could cause harm.
 
 ## Notion API access
 
-`context.notion` provides the Notion SDK client. Set `NOTION_API_TOKEN` in
-`.env` before a Workflow makes a Notion API request. Push environment values
-after deployment with `ntn workers env push`. Never commit or log credentials.
+`context.notion` provides the Notion SDK client. Deployed Workflows receive
+Notion API credentials automatically. Do not ask for, configure, or push a
+`NOTION_API_TOKEN` for a deployed Workflow.
+
+Local Workflow execution needs `NOTION_API_TOKEN` in `.env` before making a
+Notion API request. Never ask the user to paste the token into chat, and never
+commit or log credentials.
 
 ## Commands
 
