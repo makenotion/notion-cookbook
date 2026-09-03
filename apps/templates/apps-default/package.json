@@ -12,7 +12,7 @@
     "node": ">=26.0.0"
   },
   "dependencies": {
-    "@notionhq/apps": "^0.0.4"
+    "@notionhq/apps": "latest"
   },
   "devDependencies": {
     "@types/node": "^26.0.0",
