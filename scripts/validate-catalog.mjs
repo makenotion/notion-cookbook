@@ -29,7 +29,13 @@ async function isFile(path) {
 async function findProjects() {
   const projects = new Map()
 
-  for (const root of ["examples", "workers", "workers/custom-blocks"]) {
+  for (const root of [
+    "examples",
+    "apps/templates",
+    "workers/templates",
+    "workers/templates/custom-blocks",
+    "workers/templates/workflows",
+  ]) {
     const rootPath = resolve(repoRoot, root)
     let entries
     try {
@@ -83,7 +89,11 @@ function requireString(recipe, field, label) {
 
 function expectedKind(path, id) {
   if (path.startsWith("examples/")) return "api-example"
-  if (path.startsWith("workers/custom-blocks/")) return "worker-custom-block"
+  if (path.startsWith("apps/templates/")) return "app-workflow"
+  if (path.startsWith("workers/templates/custom-blocks/"))
+    return "worker-custom-block"
+  if (id.endsWith("-default")) return "worker-default"
+  if (id === "workflow") return "worker-workflow"
   if (id.endsWith("-sync")) return "worker-sync"
   if (id.endsWith("-webhook")) return "worker-webhook"
   return "worker-tool"
@@ -138,21 +148,26 @@ async function validateRecipe(recipe, index, projects, readme, ids, paths) {
 
   const validPaths = [
     `examples/${id}`,
-    `workers/${id}`,
-    `workers/custom-blocks/${id}`,
+    `apps/templates/${id}`,
+    `workers/templates/${id}`,
+    `workers/templates/custom-blocks/${id}`,
+    `workers/templates/workflows/${id}`,
   ]
   if (!validPaths.includes(path)) {
     report(
-      `${label}.path must be examples/${id}, workers/${id}, or workers/custom-blocks/${id}`
+      `${label}.path must be ${validPaths.slice(0, -1).join(", ")}, or ${validPaths.at(-1)}`
     )
   }
 
   const allowedKinds = new Set([
     "api-example",
+    "app-workflow",
     "worker-sync",
     "worker-tool",
     "worker-webhook",
     "worker-custom-block",
+    "worker-default",
+    "worker-workflow",
   ])
   if (!allowedKinds.has(kind)) {
     report(`${label}.kind is invalid: ${JSON.stringify(kind)}`)
@@ -246,7 +261,14 @@ async function validateRecipe(recipe, index, projects, readme, ids, paths) {
     }
   }
 
-  if (kind !== "worker-custom-block" && !readme.includes(`(${path}/)`)) {
+  // Private alpha capabilities ship templates without advertising them in the
+  // public README.
+  const UNLISTED_KINDS = new Set([
+    "app-workflow",
+    "worker-custom-block",
+    "worker-workflow",
+  ])
+  if (!UNLISTED_KINDS.has(kind) && !readme.includes(`(${path}/)`)) {
     report(`README.md must link directly to ${path}/`)
   }
 }

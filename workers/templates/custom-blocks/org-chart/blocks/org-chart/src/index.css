@@ -1,0 +1,17 @@
+html,
+body {
+	height: 100%;
+	margin: 0;
+}
+
+/* Full-bleed: the host owns the iframe height (autoResize is off), and the
+ * chart fills whatever it's given. */
+#root {
+	height: 100%;
+}
+
+.nds {
+	color: var(--content-primary);
+	background: var(--bg-base);
+	font-family: var(--font-sans);
+}

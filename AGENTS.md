@@ -5,18 +5,22 @@ should point here instead of restating these rules.
 
 ## Repository map
 
-| Path                                  | Purpose                                                                                                              |
-| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `catalog.json`                        | Machine-readable index of every runnable recipe, including paths, entrypoints, integrations, and supported commands. |
-| `examples/<task>/`                    | Self-contained TypeScript programs that call the Notion API and run locally with Node.js.                            |
-| `workers/<integration>-<capability>/` | Self-contained Notion Worker syncs, agent tools, and webhooks.                                                       |
-| `skills/`                             | Reusable instructions and evaluations for AI-assisted Notion workflows.                                              |
-| `docs/`                               | Longer developer guides that are not standalone runnable projects.                                                   |
-| `scripts/`                            | Repository-wide installation, validation, and maintenance commands.                                                  |
+| Path                                            | Purpose                                                                                                              |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `catalog.json`                                  | Machine-readable index of every runnable recipe, including paths, entrypoints, integrations, and supported commands. |
+| `examples/<task>/`                              | Self-contained TypeScript programs that call the Notion API and run locally with Node.js.                            |
+| `workers/templates/<integration>-<capability>/` | Self-contained Notion Worker syncs, agent tools, and webhooks.                                                       |
+| `skills/`                                       | Reusable instructions and evaluations for AI-assisted Notion workflows.                                              |
+| `docs/`                                         | Longer developer guides that are not standalone runnable projects.                                                   |
+| `scripts/`                                      | Repository-wide installation, validation, and maintenance commands.                                                  |
 
 Do not infer a recipe's category from a path segment that no longer exists.
-`examples/` and `workers/` are both flat collections; `kind` in `catalog.json`
-is the authoritative classification.
+`examples/` and `workers/templates/` are flat collections; `kind` in
+`catalog.json` is the authoritative classification.
+
+Apps are a private alpha. Do not add, advertise, or modify Apps unless the task
+explicitly calls for private-alpha Apps work; follow the guidance local to the
+selected App when it does.
 
 ## Find the right recipe
 
@@ -86,7 +90,7 @@ Worker-specific safety rules:
 Choose one project root:
 
 - `examples/<task-name>/` for a local Notion API/SDK program.
-- `workers/<integration>-<capability>/` for a deployed Worker. Put the
+- `workers/templates/<integration>-<capability>/` for a deployed Worker. Put the
   integration first so related projects sort together, such as
   `zendesk-sync` and `zendesk-webhook`.
 
@@ -124,7 +128,7 @@ npx tsc --noEmit
 For a Worker:
 
 ```sh
-cd workers/<integration>-<capability>
+cd workers/templates/<integration>-<capability>
 npm install
 npm run check
 npm test
@@ -143,7 +147,7 @@ Before finishing, confirm that:
 
 - Documentation links and commands use the current flat paths.
 - `catalog.json` matches every package-backed direct child of `examples/` and
-  `workers/`, with no placeholder entries.
+  `workers/templates/`, with no placeholder entries.
 - No secrets, build output, dependency directories, or local Worker state were
   added.
 - A recipe README still describes the behavior implemented by its entrypoint.

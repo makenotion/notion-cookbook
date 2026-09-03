@@ -191,6 +191,8 @@ function extractPropertyItemValueToString(
             new Date(property.formula.date.start).toISOString()) ||
           "???"
         )
+      } else if (property.formula.type === "unsupported") {
+        return "???"
       } else {
         return assertUnreachable(property.formula)
       }

@@ -1,6 +1,6 @@
 # Notion Worker examples
 
-[Notion Workers](https://developers.notion.com/docs/workers) are server-side extensions deployed to Notion. Each direct child of this directory is an independently executable and deployable Worker.
+[Notion Workers](https://developers.notion.com/docs/workers) are server-side extensions deployed to Notion. Each direct child of [`templates/`](templates/) is an independently executable and deployable Worker. [`agents/`](agents/) holds the canonical agent files every template ships.
 
 There are 3 different type of Worker capabilties:
 
@@ -62,7 +62,7 @@ tests and requires no external credentials:
 
 ```sh
 npm install --global ntn
-cd workers/duckdb-query
+cd workers/templates/duckdb-query
 npm install
 npm run check
 npm test
@@ -97,6 +97,6 @@ entrypoint, and supported commands for reliable agent discovery.
 
 ## Contributing
 
-New Workers belong directly under `workers/<integration>-<capability>/`. Follow
+New Workers belong directly under `workers/templates/<integration>-<capability>/`. Follow
 the Worker project contract and validation steps in
 [`CONTRIBUTING.md`](../CONTRIBUTING.md).
