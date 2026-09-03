@@ -517,6 +517,25 @@
       }
     },
     {
+      "id": "patent-portfolio-sync",
+      "title": "Patent portfolio sync",
+      "summary": "Sync US (USPTO) and European (EPO) patent filings into managed Notion databases, grouped into families, with last-known-good source resilience.",
+      "path": "workers/templates/patent-portfolio-sync",
+      "kind": "worker-sync",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "uspto", "epo"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name patent-portfolio-sync"
+      }
+    },
+    {
       "id": "postgres-query",
       "title": "Postgres query agent tool",
       "summary": "Let a Notion Agent discover PostgreSQL tables and execute bounded, read-only SQL queries.",
