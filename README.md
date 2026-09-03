@@ -115,24 +115,25 @@ and a **webhook** handles events from another service. See the complete
 
 ### Sync external data into Notion
 
-| Task                                                                 | Worker                                                                | Source      |
-| -------------------------------------------------------------------- | --------------------------------------------------------------------- | ----------- |
-| Learn the sync pattern with seeded, in-memory data                   | [DuckDB sync](workers/templates/duckdb-sync/)                         | DuckDB      |
-| Turn starred repositories into a research library                    | [GitHub stars sync](workers/templates/github-stars-sync/)             | GitHub      |
-| Sync issues and pull requests                                        | [GitHub sync](workers/templates/github-sync/)                         | GitHub      |
-| Sync contacts, deals, and companies                                  | [HubSpot sync](workers/templates/hubspot-sync/)                       | HubSpot     |
-| Sync companies, contacts, conversations, and tickets                 | [Intercom sync](workers/templates/intercom-sync/)                     | Intercom    |
-| Sync issues, sprints, analytics, and projects                        | [Jira sync](workers/templates/jira-sync/)                             | Jira Cloud  |
-| Sync projects, issues, and initiatives                               | [Linear sync](workers/templates/linear-sync/)                         | Linear      |
-| Monitor PagerDuty incidents and service readiness in Notion          | [PagerDuty sync](workers/templates/pagerduty-sync/)                   | PagerDuty   |
-| Turn saved sources and highlights into project evidence              | [Raindrop.io research library sync](workers/templates/raindrop-sync/) | Raindrop.io |
-| Build a related reading library and highlight knowledge base         | [Readwise and Reader sync](workers/templates/readwise-sync/)          | Readwise    |
-| Sync accounts and opportunities                                      | [Salesforce sync](workers/templates/salesforce-sync/)                 | Salesforce  |
-| Coordinate issue triage, service risk, and rollout health            | [Sentry sync](workers/templates/sentry-sync/)                         | Sentry      |
-| Sync the result of a warehouse query                                 | [Snowflake sync](workers/templates/snowflake-sync/)                   | Snowflake   |
-| Sync open tasks and project summaries with recent completion context | [Todoist sync](workers/templates/todoist-sync/)                       | Todoist     |
-| Sync an employee-facing directory                                    | [Workday employee directory sync](workers/templates/workday-sync/)    | Workday     |
-| Sync related tickets, users, organizations, and metrics              | [Zendesk sync](workers/templates/zendesk-sync/)                       | Zendesk     |
+| Task                                                                 | Worker                                                                  | Source        |
+| -------------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------- |
+| Learn the sync pattern with seeded, in-memory data                   | [DuckDB sync](workers/templates/duckdb-sync/)                           | DuckDB        |
+| Turn starred repositories into a research library                    | [GitHub stars sync](workers/templates/github-stars-sync/)               | GitHub        |
+| Sync issues and pull requests                                        | [GitHub sync](workers/templates/github-sync/)                           | GitHub        |
+| Sync contacts, deals, and companies                                  | [HubSpot sync](workers/templates/hubspot-sync/)                         | HubSpot       |
+| Sync companies, contacts, conversations, and tickets                 | [Intercom sync](workers/templates/intercom-sync/)                       | Intercom      |
+| Sync issues, sprints, analytics, and projects                        | [Jira sync](workers/templates/jira-sync/)                               | Jira Cloud    |
+| Sync projects, issues, and initiatives                               | [Linear sync](workers/templates/linear-sync/)                           | Linear        |
+| Monitor PagerDuty incidents and service readiness in Notion          | [PagerDuty sync](workers/templates/pagerduty-sync/)                     | PagerDuty     |
+| Turn saved sources and highlights into project evidence              | [Raindrop.io research library sync](workers/templates/raindrop-sync/)   | Raindrop.io   |
+| Build a related reading library and highlight knowledge base         | [Readwise and Reader sync](workers/templates/readwise-sync/)            | Readwise      |
+| Sync accounts and opportunities                                      | [Salesforce sync](workers/templates/salesforce-sync/)                   | Salesforce    |
+| Coordinate issue triage, service risk, and rollout health            | [Sentry sync](workers/templates/sentry-sync/)                           | Sentry        |
+| Sync the result of a warehouse query                                 | [Snowflake sync](workers/templates/snowflake-sync/)                     | Snowflake     |
+| Sync open tasks and project summaries with recent completion context | [Todoist sync](workers/templates/todoist-sync/)                         | Todoist       |
+| Track a global trademark portfolio with computed deadlines           | [Trademark portfolio sync](workers/templates/trademark-portfolio-sync/) | USPTO, TMview |
+| Sync an employee-facing directory                                    | [Workday employee directory sync](workers/templates/workday-sync/)      | Workday       |
+| Sync related tickets, users, organizations, and metrics              | [Zendesk sync](workers/templates/zendesk-sync/)                         | Zendesk       |
 
 ### Add tools to a Notion Agent
 
