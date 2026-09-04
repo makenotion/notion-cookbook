@@ -130,8 +130,7 @@ export default createWorkflow({
 
 ## Verify
 
-Run `npm run check` and `npm run build` from the App directory. Walk through
-[the evaluation cases](evaluations/scenarios.md), including DST, missing access,
-partial failures, and retries. Do not make live calendar writes just to test a
-skill. Run a scoped live read only with approved setup, and report separately
-which offline checks and live checks actually ran.
+Run `npm run check` and `npm run build` from the App directory. Do not make
+live calendar writes just to test a skill. Run a scoped live read only with
+approved setup, and report separately which offline checks and live checks
+actually ran.
