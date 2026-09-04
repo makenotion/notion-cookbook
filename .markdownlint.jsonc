@@ -21,6 +21,12 @@
   // Disabled: Tightly packed content in skills and examples for conciseness
   "MD022": false,
 
+  // MD024/no-duplicate-heading - Multiple headings with the same content
+  // Relaxed to siblings only: reference docs repeat the same subsection names
+  // under each pattern they document, which is not ambiguous across parents
+  "MD024": { "siblings_only": true },
+
+
   // MD031/blanks-around-fences - Fenced code blocks should be surrounded by blank lines
   // Disabled: Skills documentation uses inline code blocks in workflows
   "MD031": false,
