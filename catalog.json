@@ -311,14 +311,14 @@
     {
       "id": "apps-default",
       "title": "Default Notion App template",
-      "summary": "Start a durable Notion App with a recurring trigger and a replay-safe step.",
+      "summary": "Build a Notion app with a recurring workflow and an interactive custom block.",
       "path": "apps/templates/apps-default",
       "kind": "app-workflow",
       "status": "ready",
       "language": "typescript",
       "runtime": "node",
       "integrations": ["notion-apps", "notion-workflow"],
-      "entrypoints": ["src/workflows/sayHello.ts"],
+      "entrypoints": ["src/workflows/sayHello.ts", "src/customBlocks/hello.ts"],
       "commands": {
         "install": "npm install",
         "check": "npm run check",

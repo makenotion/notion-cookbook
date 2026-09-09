@@ -1,4 +1,4 @@
-# Apps workflow template guidance
+# Apps template guidance
 
 ## Project structure
 
@@ -92,3 +92,11 @@ Enable the Apps experiment and deploy with:
 ntn experiments enable apps
 ntn apps deploy
 ```
+
+## Custom blocks
+
+- Declare blocks in `src/customBlocks/<key>.ts` with `createCustomBlock` from `@notionhq/apps/custom-block`.
+- Keep browser source in `blocks/<key>/` with its own Vite config and browser tsconfig.
+- Import React components from `@notionhq/apps/react` and Notion CSS variables from `@notionhq/apps/nds.css`.
+- The root project owns React, React DOM, and Vite dependencies.
+- `ntn apps deploy` builds and uploads declared blocks before reconciliation.
