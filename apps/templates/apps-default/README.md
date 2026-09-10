@@ -100,21 +100,3 @@ The example needs no credentials for these offline checks.
 ## Learn more
 
 - [`@notionhq/apps` on npm](https://www.npmjs.com/package/@notionhq/apps)
-
-## Custom blocks
-
-Each file under `src/customBlocks/` default-exports `createCustomBlock(...)`.
-Its filename supplies the block key; `path` points to a browser project relative
-to the app root. Keep browser source under `blocks/` so the server TypeScript
-configuration does not include DOM code. React, React DOM, and Vite belong in
-this project's root install; blocks need no separate `package.json`.
-
-`notion-apps build` emits declarations only. `ntn apps deploy` builds and uploads
-the browser bundles before reconciling capabilities. Enable `custom_blocks` for
-the target workspace, deploy, and insert the block with `/app-hello`.
-For local preview, run `ntn workers customblocks dev` from this directory.
-
-To add a block, copy `blocks/hello/` and its declaration, then change the path and
-slash command. Use `@notionhq/apps/react` for React components and hooks, and
-`@notionhq/apps/nds.css` for Notion CSS variables. Existing Workers SDK templates
-continue to use `@notionhq/custom-blocks` directly.
