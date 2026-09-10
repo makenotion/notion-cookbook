@@ -2,7 +2,7 @@
   "name": "@notion-cookbook/apps-default",
   "version": "0.0.0",
   "private": true,
-  "description": "A workflow and custom block app built with the Notion Apps SDK",
+  "description": "A minimal app built with the Notion Apps SDK",
   "type": "module",
   "scripts": {
     "build": "notion-apps build",
