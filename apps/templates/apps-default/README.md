@@ -66,8 +66,9 @@ recorded, so make writes idempotent or add a duplicate guard.
 Use `context.notion` for Notion API calls. Set `NOTION_API_TOKEN` in `.env` for
 local execution and never commit credentials.
 
-For calendar workflows, read the [calendar skill](.agents/skills/calendar/SKILL.md).
-It covers connection setup, all supported calendar tools, and safe retries.
+For external services, read the [connections skill](.agents/skills/connections/SKILL.md).
+It covers typed provider methods, workflow setup, connection-bound triggers,
+OAuth access, and safe retries.
 
 ## Deploy the app
 
