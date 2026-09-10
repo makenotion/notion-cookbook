@@ -71,11 +71,11 @@ keys, an upsert, or a duplicate check when retries could cause harm.
 `.env` for local execution before a workflow makes a Notion API request. Never
 commit or log credentials.
 
-## Calendar workflows
+## Workflow connections
 
-For calendar reads, meeting times, rooms, event writes, or scheduling links,
-read `.agents/skills/calendar/SKILL.md` from the App root before writing the
-workflow.
+For external services such as Calendar or Slack, OAuth access, or triggers
+bound to a connection, read `.agents/skills/connections/SKILL.md` from the App
+root before writing the workflow.
 
 ## Commands
 
