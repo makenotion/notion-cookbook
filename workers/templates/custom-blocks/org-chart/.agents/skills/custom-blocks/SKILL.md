@@ -220,6 +220,8 @@ ReactDOM.createRoot(root).render(
 ```
 
 `NotionCustomBlock` connects the frontend to Notion and resizes the iframe automatically.
+`NotionCustomBlock` renders its children after initialization succeeds. Every declared
+data source must have a binding before initialization can complete.
 Use `initCustomBlock` to initialize a frontend without React.
 
 Initialization failures happen before the block's children render. Pass
@@ -239,8 +241,7 @@ Use hooks from `@notionhq/custom-blocks/react` inside the wrapper. Do not call
 
 The custom blocks SDK provides APIs to:
 
-- Read block and app context.
-- Get information about the current user.
+- Read context about the custom block, including its containing page, parent, and current user.
 - Create, read, update, and delete pages.
 - Query data sources.
 - Query users.
@@ -432,6 +433,10 @@ Restart the dev shell after you change those files. Blocks start without binding
 2. Map every declared property.
 3. Check that the block renders.
 4. Check that the block's main interaction works.
+
+Test through the dev shell instead of opening the block's URL directly.
+In React blocks, press `\` to show the SDK debug console.
+Press `\` again to return to the block.
 
 Report which checks you completed. State whether you tested the block in the dev shell
 or in Notion.
