@@ -237,6 +237,14 @@ In the Worker's root `package.json`, extend `check` to type-check each frontend:
 
 Add one `tsc -p blocks/<key>/tsconfig.json --noEmit` command for each block.
 
+Run the available check, test, and build scripts from the Worker root:
+
+```shell
+npm run check
+npm test
+npm run build
+```
+
 ## SDK APIs
 
 The custom blocks SDK provides APIs to:
@@ -299,49 +307,24 @@ See [Security](https://developers.notion.com/custom-blocks/guides/security).
 
 ## Verify with the dev shell
 
-### Check the code and bundle
-
-Run the available check, test, and build scripts from the Worker root:
-
-```shell
-npm run check
-npm test
-npm run build
-```
-
-Build each frontend separately. The Worker build does not check the frontend bundle.
-Run this command from the Worker root. The subshell preserves the current directory:
-
-```shell
-(cd blocks/<key> && npx vite build)
-```
-
-### Start the local preview
-
-The [dev shell](https://developers.notion.com/custom-blocks/guides/preview) (`@notionhq/custom-blocks-dev-shell`) tests the declaration and frontend together.
-It supports sample data, including data sampled from production.
+The [dev shell](https://developers.notion.com/custom-blocks/guides/preview) provides a local preview of your custom block with sample Notion data.
+Use `@notionhq/custom-blocks-dev-shell` to test the declaration and frontend together before deployment.
+Run it from the Worker root:
 
 ```shell
 ntn workers customblocks dev
 ```
 
-See the dev shell package documentation for details.
 Test through the dev shell instead of opening the block's URL directly.
+For Worker data, the dev shell creates and binds an empty database.
+Add rows manually or sample a production database with `ntn workers customblocks sample`.
+Check that the block renders the expected data and its main interaction works.
 
-### Add sample data and check behavior
+In React blocks, press `\` to toggle the SDK debug console.
+See the dev shell package documentation for details.
 
-For Worker data, the dev shell automatically creates and binds a database. The database starts without rows.
-
-1. Add sample rows manually or sample a production database with `ntn workers customblocks sample`.
-2. Check that the block renders the expected data.
-3. Check that the main interaction works.
-
-In React blocks, press `\` to show the SDK debug console.
-Press `\` again to return to the block.
-
-Report which checks you completed. Identify any checks you could not complete.
-State whether you tested in the dev shell or Notion.
-Local checks do not establish that production permissions and sandbox behavior work.
+Report what you tested and any checks you could not complete.
+Dev shell tests do not verify production permissions or sandbox behavior.
 
 ## Deploy and share
 
