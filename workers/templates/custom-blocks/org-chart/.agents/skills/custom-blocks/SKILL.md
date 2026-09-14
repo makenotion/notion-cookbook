@@ -131,27 +131,34 @@ Add one `tsc -p blocks/<key>/tsconfig.json --noEmit` command for each block.
 
 Declare the block in `src/index.ts`:
 
+<!-- prettier-ignore -->
 ```ts
-worker.customBlock("issueBoard", {
-  name: "Issue board",
-  description: "View and update issues",
-  icon: { type: "emoji", emoji: "📋" },
-  path: "./blocks/issue-board",
-  command: "npx vite build",
-  output: "dist",
-  slashCommand: "issues",
-  version: 1,
-  dataSources: {
-    issues: {
-      name: "Issues",
-      description: "Rows shown by the issue board",
-      properties: {
-        title: { name: "Title", type: "title" },
-        status: { name: "Status", type: "status" },
+worker.customBlock(
+  "issueBoard", // Declaration key: identifies this block within the worker.
+  {
+    name: "Issue board",
+    description: "View and update issues",
+    icon: { type: "emoji", emoji: "📋" },
+    path: "./blocks/issue-board",
+    command: "npx vite build",
+    output: "dist",
+    slashCommand: "issues",
+    version: 1,
+    dataSources: {
+      issues: { // Data source key: use in useDataSource("issues").
+        name: "Issues",
+        description: "Rows shown by the issue board",
+        properties: {
+          title: { name: "Title", type: "title" },
+          status: { // Property key: read with item.propertiesByKey.status.
+            name: "Status",
+            type: "status",
+          },
+        },
       },
     },
-  },
-})
+  }
+)
 ```
 
 ### Display & appearance
