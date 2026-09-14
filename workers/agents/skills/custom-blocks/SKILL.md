@@ -6,6 +6,10 @@ user-invocable: false
 
 # Custom blocks
 
+Use this skill to build or modify custom blocks in a Notion Worker.
+
+## Purpose and prerequisites
+
 A custom block is a frontend web app that Notion serves in an iframe. The
 `worker.customBlock()` declaration defines the block's build and data source
 schema. The block has no `execute` handler, so `ntn workers exec` cannot run it.
@@ -15,11 +19,10 @@ The block uses two SDK surfaces:
 - `@notionhq/workers` declares the block's build and data source schemas.
 - `@notionhq/custom-blocks` lets the iframe frontend communicate with Notion.
 
-## Access and source of truth
+### Access and package references
 
-Read the project's root `AGENTS.md` before you change code. Continue only when
-the instructions allow custom blocks and the target workspace has custom-block
-alpha access. Ask the user to confirm access when it is unknown. The `ntn
+Read the project's root `AGENTS.md` before you change code.
+Continue only if those instructions permit custom blocks and the target workspace has custom block alpha access. Ask the user to confirm access when it is unknown. The `ntn
 workers new <directory> --template custom` command, the installed SDK, and this
 skill do not grant access.
 
@@ -42,7 +45,11 @@ The cookbook stores frontend source in `blocks/<key>/`. Do not copy the older
 `views/<key>/`, `custom_blocks.json`, or `ncblock` workflow. Use that workflow
 only when the installed package documentation requires it.
 
-## Architecture and package layout
+## Create or modify the block
+
+Read the existing declaration, frontend, and package scripts before changing a block.
+Preserve the existing structure unless the task requires a change.
+Use the setup below when creating a new block.
 
 A custom block has two code halves:
 
@@ -77,7 +84,7 @@ npm install @notionhq/custom-blocks react react-dom
 npm install --save-dev @notionhq/custom-blocks-dev-shell @types/react @types/react-dom @vitejs/plugin-react vite
 ```
 
-## TypeScript and Vite setup
+### TypeScript and Vite setup
 
 The worker's root TypeScript configuration does not cover browser files. Add a
 `tsconfig.json` inside each block:
@@ -131,7 +138,7 @@ Extend the worker root `check` script to type-check every block frontend:
 
 Add one `tsc -p blocks/<key>/tsconfig.json --noEmit` command for each block.
 
-## Declare the block
+## Declare the block and its data sources
 
 Set `path` relative to the worker root. The build command runs inside this
 directory. Set `command` explicitly when the block has no nested `package.json`:
@@ -163,9 +170,9 @@ block.
 
 Keep `version: 1`. The current custom block manifest requires version 1.
 
-The `dataSources` value declares a schema. It does not bind the block to a
-specific database. Data-source keys and property keys are author-defined. The
-block instance receives concrete bindings when a user configures it.
+The `dataSources` field declares the required schema. You define the data source
+keys and property keys. A binding connects a declared key to an actual data source
+or property. The user configures these bindings for each block instance.
 
 Property types use Notion Public API names. Common types include:
 
@@ -231,26 +238,39 @@ and other handshake failures:
 Use hooks from `@notionhq/custom-blocks/react` inside the wrapper. Do not call
 `window.parent.postMessage` directly.
 
-## Read and write Notion data
+## Read and update data
 
 Call `useDataSource("<data-source-key>")` for a declared data source. Read
 `items`, `isLoading`, `hasMore`, and `error` from the result. The default limit
 is 20 rows. The maximum limit is 999. Set `limit` explicitly when the block
 needs more rows. Handle `hasMore`. Do not assume that the result is complete.
-Read property values from each item's `propertiesByKey` object.
+The hook does not provide cursor pagination. Read property values from each
+item's `propertiesByKey` object.
 
-Use the declared data source key in the hook:
+Use `filter` to select matching rows. Use `sorts` to order the rows.
+The `key` fields below refer to property keys in the declaration above:
 
 ```tsx
 import { useDataSource } from "@notionhq/custom-blocks/react"
 
 function IssueBoard() {
-  const { items, isLoading, error } = useDataSource("issues")
+  const { items, isLoading, hasMore, error } = useDataSource("issues", {
+    limit: 50,
+    filter: { key: "status", status: { does_not_equal: "Done" } },
+    sorts: [{ key: "title", direction: "ascending" }],
+  })
 
   if (error) return <div role="alert">{error.message}</div>
-  if (isLoading) return <div>Loading…</div>
+  if (isLoading) return <div role="status">Loading issues…</div>
+  if (items.length === 0) return <div>No matching issues.</div>
 
-  return <div>{items.length} issues</div>
+  return (
+    <div>
+      {hasMore
+        ? `Showing the first ${items.length} matching issues.`
+        : `${items.length} matching issues.`}
+    </div>
+  )
 }
 ```
 
@@ -307,14 +327,14 @@ if (result.status === "error") {
 
 Do not call the Notion API or the host bridge directly from the iframe.
 
-## Sandbox and layout constraints
+## Follow sandbox and layout constraints
 
-Treat bundled block code as public. Do not put secrets, tokens, or private URLs
-in the frontend bundle.
+Treat bundled block code as public. Do not include secrets, tokens, or private
+URLs in the frontend bundle.
 
 The block reads and writes with the viewer's permissions. A malicious block can
-copy private data that the viewer can read to a page or data source that the
-block author can read. Use custom blocks only from trusted authors. Treat
+copy private data that the viewer can read. The destination can be a page or
+data source that the block author can read. Use custom blocks only from trusted authors. Treat
 sensitive data source bindings with care.
 
 Do not make external network requests from block code. Do not use top-level
@@ -328,9 +348,9 @@ queries.
 All interactive controls must be keyboard-reachable. Expose loading and failure
 states to assistive technology.
 
-## Develop, verify, and deploy
+## Verify with DevShell
 
-Run the worker checks from the worker root:
+Run the available check, test, and build scripts from the worker root:
 
 ```shell
 npm run check
@@ -353,9 +373,18 @@ ntn customblocks dev
 The dev shell builds the worker. It serves each block with Vite. It renders the
 block in a mock Notion host with sample data.
 
-The dev shell reads `src/data/*.json` once at startup. Restart it after you
-change those files. It starts blocks unbound. Bind every declared data source.
-Map every declared property before you debug the block.
+The dev shell reads `data/*.json` from the worker root at startup.
+Restart the dev shell after you change those files. Blocks start without bindings.
+
+1. Connect each declared data source to sample data.
+2. Map every declared property.
+3. Check that the block renders.
+4. Check that the block's main interaction works.
+
+Report which checks you completed. State whether you tested the block in DevShell
+or in Notion.
+
+## Deploy and share
 
 Deploy the block with its worker only when the user asks for a live deployment:
 
@@ -373,17 +402,18 @@ instance is not fully verified.
 Share the worker with **Can connect** access when another workspace member must
 insert the block. **Full access** also permits worker management and deployment.
 
-## Reference links
+## References
 
-Use these links for surrounding Workers and data source concepts:
+Use these links for Workers and custom block guidance:
 
 - [Workers quickstart](https://developers.notion.com/workers/get-started/quickstart)
 - [Workers SDK reference](https://developers.notion.com/workers/reference/sdk)
 - [Sharing Workers](https://developers.notion.com/workers/guides/sharing-workers)
-- [Working with databases](https://developers.notion.com/guides/data-apis/working-with-databases)
-- [Data source reference](https://developers.notion.com/reference/data-source)
+- [Custom block data sources](https://developers.notion.com/custom-blocks/guides/data-sources)
+- [How a block initializes](https://developers.notion.com/custom-blocks/guides/lifecycle)
+- [Security](https://developers.notion.com/custom-blocks/guides/security)
 - [Custom blocks SDK](https://www.npmjs.com/package/@notionhq/custom-blocks)
-- [Custom blocks dev shell](https://www.npmjs.com/package/@notionhq/custom-blocks-dev-shell)
+- [Preview custom blocks](https://developers.notion.com/custom-blocks/guides/preview)
 
-The public Workers pages do not define the private-alpha custom-block API. Use
-the installed custom-block package documentation for that API.
+The public Workers pages do not define the private-alpha custom block API. Use
+the installed custom block package documentation for that API.
