@@ -332,21 +332,49 @@ if (result.status === "error") {
 
 Do not call the Notion API or the host bridge directly from the iframe.
 
-## Follow sandbox and layout constraints
+## Security
 
-Treat bundled block code as public. Do not include secrets, tokens, or private
-URLs in the frontend bundle.
+### Sandbox
 
-The block reads and writes with the viewer's permissions. A malicious block can
-copy private data that the viewer can read. The destination can be a page or
-data source that the block author can read.
+Each block runs in a separate iframe on its own origin. It cannot access
+Notion's DOM, cookies, storage, session, or API credentials. Use the custom blocks
+SDK to read or change Notion data.
 
-Use custom blocks only from trusted authors. Treat sensitive data source bindings
-with care.
+- Bundle scripts, styles, fonts, and other runtime dependencies. Do not load dependencies from a CDN.
+- Network requests and navigation can reach only the block's own origin.
+- Images can use bundled files, `data:` URLs, or Notion-hosted images.
+- Fonts can use bundled files or `data:` URLs.
+- `localStorage` and `sessionStorage` belong to the block's origin. Separate blocks do not share them, even within one worker.
+- Forms and `<base>` elements are not allowed.
 
-Do not make external network requests from block code. Do not use top-level
-navigation, `window.open`, or authentication redirects. Bundle all runtime
-dependencies.
+### Permissions
+
+The block reads and writes with the viewer's permissions. Row permissions still
+apply, so viewers can see different results from the same block.
+
+The viewer must have read access to every bound data source before the block
+can initialize. Access to the containing page does not grant access to those
+data sources. Writes can still fail after the block loads. Handle access errors
+in the UI.
+
+A block instance inherits its page's permissions. Users with edit access can
+change its bindings. Page guests cannot view custom blocks. Custom blocks do not
+render on pages published with Notion Sites.
+
+Use blocks only from trusted authors. A malicious block can copy a viewer's
+private data to a page or data source that its author can read.
+
+### Secrets and dependencies
+
+Viewers can inspect the frontend bundle. Keep secrets, tokens, and private URLs
+out of it. Store secrets in the worker, where they remain on the server.
+
+Review third-party dependencies and pin trusted versions. Build tools can access
+the worker project, so blocked network access at runtime does not remove build risks.
+
+See [Security](https://developers.notion.com/custom-blocks/guides/security).
+
+## Layout and accessibility
 
 All interactive controls must be keyboard-reachable. Expose loading and failure
 states to assistive technology.
@@ -372,7 +400,7 @@ Automatic sizing resumes when the viewer selects **Fit content**.
 
 See [Sizing](https://developers.notion.com/custom-blocks/sdk/appearance#sizing).
 
-## Verify with DevShell
+## Verify with the dev shell
 
 Run the available check, test, and build scripts from the worker root:
 
@@ -388,24 +416,24 @@ Build the frontend separately when you need to verify its bundle:
 cd blocks/<key> && npx vite build
 ```
 
-Use DevShell to test the block locally:
+Use the [dev shell](https://developers.notion.com/custom-blocks/guides/preview) to test the block locally:
 
 ```shell
-ntn customblocks dev
+ntn workers customblocks dev
 ```
 
-DevShell builds the worker. It serves each block with Vite. It renders the
+The dev shell builds the worker. It serves each block with Vite. It renders the
 block in a mock Notion host with sample data.
 
-DevShell reads `data/*.json` from the worker root at startup.
-Restart DevShell after you change those files. Blocks start without bindings.
+The dev shell reads `data/*.json` from the worker root at startup.
+Restart the dev shell after you change those files. Blocks start without bindings.
 
 1. Connect each declared data source to sample data.
 2. Map every declared property.
 3. Check that the block renders.
 4. Check that the block's main interaction works.
 
-Report which checks you completed. State whether you tested the block in DevShell
+Report which checks you completed. State whether you tested the block in the dev shell
 or in Notion.
 
 ## Deploy and share
@@ -417,13 +445,21 @@ ntn workers deploy
 ```
 
 Do not use `ntn workers exec` for a custom block. It has no `execute` handler.
-Do not use a separate custom block deploy command.
 
-After deployment, insert the block from the slash menu. Bind each declared data
-source to a real data source. A deployed definition without a configured block
-instance is not fully verified.
+After deployment, insert a block instance from Notion's slash menu or use the CLI
+from the worker root:
 
-Share the worker with **Can connect** access when another workspace member must
+```shell
+ntn workers customblocks make --key issueBoard --target <page-id-or-url>
+```
+
+`--key` identifies the deployed block. `--target` identifies the page or block
+that receives the instance.
+
+In Notion, connect each declared data source and map its properties. Check that
+the configured block renders and its main interaction works.
+
+[Share the worker](https://developers.notion.com/workers/guides/sharing-workers) with **Can connect** access when another workspace member must
 insert the block. **Full access** also permits worker management and deployment.
 
 ## References
