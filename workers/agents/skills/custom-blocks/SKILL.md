@@ -161,6 +161,11 @@ worker.customBlock(
 )
 ```
 
+Data source and property keys are names you choose. The property keys match their
+types in the example above, but they do not need to. For example, the first
+property key could be `name` or `Title`. The `type` field defines the kind of data
+the property holds and uses Notion Public API type names.
+
 ### Display & appearance
 
 `name` sets the block's display name. If omitted, Notion uses the declaration key.
