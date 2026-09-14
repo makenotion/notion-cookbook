@@ -24,25 +24,18 @@ The block uses two packages:
 - `@notionhq/workers` declares the block's build and data source schemas.
 - `@notionhq/custom-blocks` lets the iframe frontend communicate with Notion.
 
-### Package references
-
 The `@notionhq/custom-blocks` and `@notionhq/custom-blocks-dev-shell` packages
 include documentation. Read the relevant documentation and TypeScript declarations
 before writing block code. Use these references for the installed package version.
 
 ## Create or modify the block
 
-For a new worker, choose one of these custom block templates:
-
-- `custom`: A minimal custom block.
-- `whiteboard`: A whiteboard.
-- `habit-tracker`: A habit tracker.
-- `org-chart`: An organization chart.
+Available templates: `custom` (minimal), `whiteboard`, `habit-tracker`, and `org-chart`.
 
 Create the worker with the selected template:
 
 ```shell
-ntn workers new <directory> --template <template>
+ntn workers new my-worker-name --template <template>
 ```
 
 A custom block has two parts:
@@ -52,8 +45,8 @@ A custom block has two parts:
 - The block directory uses `@notionhq/custom-blocks` to communicate with the
   Notion host from its sandboxed iframe.
 
-Keep one package at the worker root. Add frontend dependencies to that package.
-Do not create a second `package.json` inside the block directory.
+Use the worker's root `package.json` for all dependencies, including frontend dependencies.
+Do not add a `package.json` inside the block directory.
 
 A minimal layout for a block's code looks like:
 
@@ -134,13 +127,15 @@ Extend the worker root `check` script to type-check every block frontend:
 
 Add one `tsc -p blocks/<key>/tsconfig.json --noEmit` command for each block.
 
-## Declare the block and its data sources
+## Declare the block
 
-Set `path` relative to the worker root. The build command runs inside this
-directory. Set `command` explicitly when the block has no nested `package.json`:
+Declare the block in `src/index.ts`:
 
 ```ts
 worker.customBlock("issueBoard", {
+  name: "Issue board",
+  description: "View and update issues",
+  icon: { type: "emoji", emoji: "📋" },
   path: "./blocks/issue-board",
   command: "npx vite build",
   output: "dist",
@@ -159,24 +154,36 @@ worker.customBlock("issueBoard", {
 })
 ```
 
-The default project build command is `npm run build`. A block without its own
-package can invoke the worker's root build. That build does not produce a
-browser bundle. Set `command: "npx vite build"` and `output: "dist"` for a Vite
-block.
+### Display & appearance
 
-Set `version: 1` in the custom block manifest.
+`name` sets the block's display name. If omitted, Notion uses the declaration key.
+`description` appears when the user selects a block. `icon` currently supports
+only a single emoji.
+
+### Data sources
 
 The `dataSources` field declares the required schema. You define the data source
 keys and property keys. A binding connects a declared key to an actual data source
 or property. The user configures these bindings for each block instance.
 
-Property types use Notion Public API names. Common types include:
+Property types use Notion Public API names. Property support varies by API and
+is currently limited, especially for formulas, rollups, and relations.
 
-- `title`, `rich_text`, `number`, `select`, `multi_select`, and `status`
-- `date`, `people`, `files`, `checkbox`, `url`, `email`, and `phone_number`
-- `formula`, `relation`, and `rollup`
+### Slash command
 
-Use a static source only when `path` already contains built browser assets:
+`slashCommand` adds an optional command to Notion's slash menu. Use a stable name
+that is unique within the worker. Write the name without the leading `/`.
+
+### Build and static files
+
+`path` points to the block directory, relative to the worker root. `command`
+runs in that directory. `output` names the directory with the built browser assets.
+For Vite, use `command: "npx vite build"` and `output: "dist"`.
+
+Set `command` explicitly. The default is `npm run build`, which can run the
+worker's build instead of building the frontend.
+
+Use `type: "static"` when `path` already contains built browser assets:
 
 ```ts
 worker.customBlock("issueBoard", {
@@ -184,10 +191,6 @@ worker.customBlock("issueBoard", {
   path: "./blocks/issue-board/dist",
 })
 ```
-
-`slashCommand` is optional. It adds a dedicated command to Notion's slash menu.
-Do not include the leading `/`. Use a stable command that is unique within the
-worker. Omit the field when the block does not need a dedicated command.
 
 ## Initialize the frontend
 
@@ -208,7 +211,7 @@ const root = document.getElementById("root")
 if (!root) throw new Error("Missing #root element")
 
 ReactDOM.createRoot(root).render(
-  <NotionCustomBlock autoResize>
+  <NotionCustomBlock>
     <NotionTokenScope>
       <App />
     </NotionTokenScope>
@@ -216,10 +219,8 @@ ReactDOM.createRoot(root).render(
 )
 ```
 
-`NotionCustomBlock` performs the host handshake and auto-resizes the iframe by
-default. Pass `autoResize={false}` for full-bleed views or when you call
-`useCustomBlockAutoResize` yourself. Use `initCustomBlock` for a
-framework-neutral frontend.
+`NotionCustomBlock` connects the frontend to Notion and resizes the iframe automatically.
+Use `initCustomBlock` to initialize a frontend without React.
 
 Initialization failures happen before the block's children render. Pass
 `errorFallback` to show a useful message for missing bindings, protocol errors,
@@ -234,12 +235,22 @@ and other handshake failures:
 Use hooks from `@notionhq/custom-blocks/react` inside the wrapper. Do not call
 `window.parent.postMessage` directly.
 
-## Read and update data
+## SDK APIs
+
+The custom blocks SDK provides APIs to:
+
+- Read block and app context.
+- Get information about the current user.
+- Create, read, update, and delete pages.
+- Query data sources.
+- Query users.
+
+### Query data sources
 
 Call `useDataSource("<data-source-key>")` for a declared data source. Read
 `items`, `isLoading`, `hasMore`, and `error` from the result. The default limit
-is 20 rows. The maximum limit is 999. Set `limit` explicitly when the block
-needs more rows. Handle `hasMore`. Do not assume that the result is complete.
+is 20 rows. The maximum limit is 999. Use `limit` to control how many rows the query returns.
+If `hasMore` is true, more rows match the query than the result includes.
 The hook does not provide cursor pagination. Read property values from each
 item's `propertiesByKey` object.
 
@@ -273,14 +284,12 @@ function IssueBoard() {
 Use `useManifest()` when the frontend needs the declared data-source keys or
 schema metadata. It does not return resolved bindings or rows.
 
-Relation values use record-pointer arrays. Formula and rollup values currently
-return as text instead of structured values. Check the installed declarations
-before relying on these shapes.
-
 Validate property values before using them. Handle loading, empty, and query
 error states in the UI. Binding errors occur during initialization. Show them
 through the `errorFallback` path above. Read the installed SDK documentation
 for the current result and value shapes.
+
+### Update pages
 
 Use an item's `update` method to update a row from a bound data source:
 
@@ -339,12 +348,29 @@ Do not make external network requests from block code. Do not use top-level
 navigation, `window.open`, or authentication redirects. Bundle all runtime
 dependencies.
 
-The host owns the iframe width. Avoid fixed widths and `100vh` unless the
-layout intentionally fills the viewport. Prefer intrinsic height and container
-queries.
-
 All interactive controls must be keyboard-reachable. Expose loading and failure
 states to assistive technology.
+
+### Sizing
+
+`NotionCustomBlock` automatically resizes React blocks to fit their content.
+For a frontend without React, wait for `initCustomBlock()` to resolve.
+Then call `customBlock.autoResize({ target })` with the element that determines the iframe height.
+
+Notion limits automatic heights to between 100 and 10,000 pixels.
+To limit the content height further, set `max-height` and `overflow-y` on `#root`:
+
+```css
+#root {
+  max-height: 600px;
+  overflow-y: auto;
+}
+```
+
+When a viewer drags the resize handle, the selected height overrides automatic sizing.
+Automatic sizing resumes when the viewer selects **Fit content**.
+
+See [Sizing](https://developers.notion.com/custom-blocks/sdk/appearance#sizing).
 
 ## Verify with DevShell
 
