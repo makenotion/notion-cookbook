@@ -13,20 +13,16 @@ Custom blocks are in private alpha. The user's workspace might not have custom
 blocks enabled. If Notion reports that the feature is disabled, the workspace
 needs access before the user can use the block.
 
-## How custom blocks work
+A custom block has two parts:
 
-Custom blocks have two parts: a Worker declaration and a frontend.
+- A Worker declaration uses `@notionhq/workers` to define the build and required data.
+- A frontend uses `@notionhq/custom-blocks` to communicate with Notion from a sandboxed iframe.
 
-- `@notionhq/workers` provides `worker.customBlock()` to define how the block builds and what data it needs.
-- `@notionhq/custom-blocks` lets the frontend communicate with Notion from a sandboxed iframe.
-
-Test the Worker declaration and frontend together in the custom block dev shell (`@notionhq/custom-blocks-dev-shell`).
-
-Each package includes documentation. Read the relevant documentation before writing or updating code.
+Read the relevant package documentation before changing either part.
 
 ## Current limitations
 
-Check these limits before implementing the block.
+Take into account these limits when building a custom block:
 
 - **Network access:** The custom block frontend cannot call external APIs or load dependencies from CDNs.
   Bundle scripts, styles, fonts, and other required assets with the deployed artifact.
@@ -49,20 +45,23 @@ Check these limits before implementing the block.
 - **Availability:** Custom blocks require private-alpha access.
   Page guests cannot view custom blocks. Notion Sites does not render them.
 
-## Create or modify the block
+## Build the block
 
-Custom blocks are a Workers capability. To create a custom block, create a Worker from a custom block template:
+React with Vite is recommended. The examples use TypeScript.
+You can use any framework that builds an `index.html` file and its browser assets.
+The frontend must use the custom blocks SDK to connect to Notion and follow the sandbox constraints.
+
+### 1. Prepare the project
+
+For a new project, create a Worker from a custom block template:
 
 ```shell
 ntn workers new my-worker-name --template <template>
 ```
 
-Available templates: `custom` (minimal), `whiteboard`, `habit-tracker`, and `org-chart`.
+Choose `custom` (minimal), `whiteboard`, `habit-tracker`, or `org-chart`.
 
-Use the Worker's root `package.json` for all dependencies, including frontend dependencies.
-Do not add a `package.json` inside the block directory.
-
-A minimal layout for the declaration and frontend:
+Keep the declaration in `src/index.ts` and frontend files in `blocks/<key>/`:
 
 ```text
 src/index.ts
@@ -74,77 +73,18 @@ blocks/<key>/
     └── index.tsx
 ```
 
-The HTML file must contain a `<div id="root"></div>` element. Its module script
-must point to the frontend entrypoint.
+In `index.html`, include `<div id="root"></div>` and a module script for the frontend entrypoint.
 
-Install dependencies from the Worker root. Use the React commands only when
-the block uses React:
+Keep all dependencies in the Worker's root `package.json`.
+Do not create a `package.json` inside the block directory.
+For React with Vite, run these commands from the Worker root:
 
 ```shell
 npm install @notionhq/custom-blocks react react-dom
 npm install --save-dev @notionhq/custom-blocks-dev-shell @types/react @types/react-dom @vitejs/plugin-react vite
 ```
 
-### Recommended setup: React and Vite
-
-React with Vite is the recommended setup. The examples below use TypeScript.
-Other frameworks must build an `index.html` file and its browser assets.
-The app must use the custom blocks SDK to connect to Notion.
-It must follow the sandbox constraints below.
-
-Data source queries currently require React's `useDataSource` hook.
-Framework-neutral initialization does not provide an equivalent query API.
-
-The Worker's root TypeScript configuration does not cover browser files. Add a
-`tsconfig.json` inside each block:
-
-```json
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "types": ["vite/client"],
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "skipLibCheck": true,
-    "esModuleInterop": true,
-    "isolatedModules": true,
-    "jsx": "react-jsx"
-  },
-  "include": ["src", "vite.config.ts"]
-}
-```
-
-Use a Vite configuration like this for a React block:
-
-```ts
-import { defineConfig } from "vite"
-import react from "@vitejs/plugin-react"
-
-export default defineConfig({
-  plugins: [react()],
-  server: {
-    host: "127.0.0.1",
-  },
-})
-```
-
-Extend the Worker root `check` script to type-check every block frontend:
-
-```json
-{
-  "scripts": {
-    "check": "tsc --noEmit && tsc -p blocks/issue-board/tsconfig.json --noEmit"
-  }
-}
-```
-
-Add one `tsc -p blocks/<key>/tsconfig.json --noEmit` command for each block.
-
-## Declare the block
+### 2. Declare the block
 
 Declare the block in `src/index.ts`:
 
@@ -178,36 +118,21 @@ worker.customBlock(
 )
 ```
 
-Data source and property keys are names you choose. Property keys do not need to match their types.
-For example, the first property key could be `name` or `Title`.
-The `type` field defines the property's data type with Notion Public API names.
+The `dataSources` field defines the required schema. Users bind its keys to actual data sources and properties for each block instance.
+Choose descriptive keys. They do not need to match property types.
+The `type` field uses Notion Public API type names.
 
-### Display & appearance
+| Field          | Meaning                                                                                    |
+| -------------- | ------------------------------------------------------------------------------------------ |
+| `name`         | Display name. Defaults to the declaration key.                                             |
+| `description`  | Description shown when the user selects a block.                                           |
+| `icon`         | One emoji.                                                                                 |
+| `slashCommand` | Optional slash command. Use a stable name unique within the Worker, without a leading `/`. |
+| `path`         | Block directory relative to the Worker root.                                               |
+| `command`      | Build command, run inside `path`.                                                          |
+| `output`       | Directory containing the built browser assets.                                             |
 
-`name` sets the block's display name. If omitted, Notion uses the declaration key.
-`description` appears when the user selects a block. `icon` currently supports
-only a single emoji.
-
-### Data sources
-
-The `dataSources` field declares the required schema.
-A binding connects a declared key to an actual data source or property. The user configures these bindings for each block instance.
-
-Property support varies by API. Support is currently limited, especially for formulas, rollups, and relations.
-
-### Slash command
-
-`slashCommand` adds an optional command to Notion's slash menu. Use a stable name
-that is unique within the Worker. Write the name without the leading `/`.
-
-### Build and static files
-
-`path` points to the block directory, relative to the Worker root. `command`
-runs in that directory. `output` names the directory with the built browser assets.
-For Vite, use `command: "npx vite build"` and `output: "dist"`.
-
-Set `command` explicitly. The default is `npm run build`, which can run the
-Worker's build instead of building the frontend.
+Set `command` explicitly. Its default, `npm run build`, can build the Worker instead of the frontend.
 
 Use `type: "static"` when `path` already contains built browser assets:
 
@@ -218,10 +143,11 @@ worker.customBlock("issueBoard", {
 })
 ```
 
-## Initialize the frontend
+### 3. Connect the frontend to Notion
 
-Wrap a React block in `NotionCustomBlock`. Add `NotionTokenScope` and the NDS
-stylesheet when the UI uses Notion design tokens:
+In `blocks/<key>/src/index.tsx`, wrap the React app in `NotionCustomBlock`.
+Use `errorFallback` to display initialization errors before the app renders.
+Include `NotionTokenScope` and the NDS stylesheet when the UI uses Notion design tokens:
 
 ```tsx
 import "@notionhq/custom-blocks/nds.css"
@@ -237,7 +163,9 @@ const root = document.getElementById("root")
 if (!root) throw new Error("Missing #root element")
 
 ReactDOM.createRoot(root).render(
-  <NotionCustomBlock>
+  <NotionCustomBlock
+    errorFallback={(error) => <div role="alert">{error.message}</div>}
+  >
     <NotionTokenScope>
       <App />
     </NotionTokenScope>
@@ -245,22 +173,61 @@ ReactDOM.createRoot(root).render(
 )
 ```
 
-`NotionCustomBlock` connects the frontend to Notion. It renders its children after initialization succeeds. Every declared
-data source must have a binding before initialization can complete.
-Use `initCustomBlock` to initialize a frontend without React.
+`NotionCustomBlock` renders its children after initialization succeeds. Every declared data source requires a binding before initialization can complete.
+Call React SDK hooks inside this wrapper.
+For other frameworks, initialize with `initCustomBlock`.
+Do not call `window.parent.postMessage` directly.
 
-Initialization failures happen before the block's children render. Pass
-`errorFallback` to show a useful message for missing bindings, protocol errors,
-and other handshake failures:
+### 4. Configure the build and type checks
 
-```tsx
-<NotionCustomBlock errorFallback={(error) => <BlockError error={error} />}>
-  <App />
-</NotionCustomBlock>
+The Worker's root TypeScript configuration does not cover browser files.
+Add `blocks/<key>/tsconfig.json`:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "types": ["vite/client"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx"
+  },
+  "include": ["src", "vite.config.ts"]
+}
 ```
 
-Use hooks from `@notionhq/custom-blocks/react` inside the wrapper. Do not call
-`window.parent.postMessage` directly.
+For React, use this `blocks/<key>/vite.config.ts`:
+
+```ts
+import { defineConfig } from "vite"
+import react from "@vitejs/plugin-react"
+
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    host: "127.0.0.1",
+  },
+})
+```
+
+In the Worker's root `package.json`, extend `check` to type-check each frontend:
+
+```json
+{
+  "scripts": {
+    "check": "tsc --noEmit && tsc -p blocks/issue-board/tsconfig.json --noEmit"
+  }
+}
+```
+
+Add one `tsc -p blocks/<key>/tsconfig.json --noEmit` command for each block.
 
 ## SDK APIs
 
@@ -453,7 +420,8 @@ Run this command from the Worker root. The subshell preserves the current direct
 
 ### Start the local preview
 
-The [dev shell](https://developers.notion.com/custom-blocks/guides/preview) lets you test blocks locally with sample data, including data sampled from production.
+The [dev shell](https://developers.notion.com/custom-blocks/guides/preview) (`@notionhq/custom-blocks-dev-shell`) tests the declaration and frontend together.
+It supports sample data, including data sampled from production.
 
 ```shell
 ntn workers customblocks dev
