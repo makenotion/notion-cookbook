@@ -17,7 +17,7 @@ needs access before the user can use the block.
 
 A custom block is a frontend web app that Notion serves in an iframe. The
 `worker.customBlock()` declaration defines the block's build and data source
-schema. The block has no `execute` handler, so `ntn workers exec` cannot run it.
+schema.
 
 The block uses two packages:
 
@@ -26,7 +26,7 @@ The block uses two packages:
 
 The `@notionhq/custom-blocks` and `@notionhq/custom-blocks-dev-shell` packages
 include documentation. Read the relevant documentation and TypeScript declarations
-before writing block code. Use these references for the installed package version.
+before writing block code.
 
 ## Create or modify the block
 
