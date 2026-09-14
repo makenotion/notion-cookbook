@@ -58,9 +58,10 @@ Completed steps replay their saved results after a retry. A side effect can
 still run more than once if it succeeds before its result is recorded. Make
 writes idempotent or use an equivalent duplicate guard.
 
-Use `context.notion` for Notion API calls. Add `NOTION_API_TOKEN` to `.env`
-for local development, then run `ntn workers env push` after deployment. Do
-not commit `.env` or credentials.
+Use `context.notion` for Notion API calls. Deployed Workflows receive Notion
+API credentials automatically, so do not configure or push
+`NOTION_API_TOKEN`. Local Workflow execution needs the token in `.env` before
+making a Notion API request. Do not commit `.env` or credentials.
 
 ## Verification
 
