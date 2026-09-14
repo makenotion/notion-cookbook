@@ -24,6 +24,31 @@ Test the Worker declaration and frontend together in the custom block dev shell 
 
 Each package includes documentation. Read the relevant documentation before writing or updating code.
 
+## Current limitations
+
+Check these limits before implementing the block.
+
+- **Network access:** The custom block frontend cannot call external APIs or load dependencies from CDNs.
+  Bundle scripts, styles, fonts, and other required assets with the deployed artifact.
+  Use the custom blocks SDK to access Notion data.
+  Images can also use `data:` URLs and permitted Notion-hosted sources.
+- **Query size:** `useDataSource` returns at most 999 rows per query. The default limit is 20.
+  The hook does not provide cursor pagination.
+  If `hasMore` is true, show that the results are incomplete.
+  Do not present calculations over incomplete results as totals for the entire data source.
+- **Property support:** Custom blocks do not support every Notion property type or operation.
+  Support varies between reading, writing, filtering, and sorting.
+  Check the installed SDK documentation and types for each required operation.
+- **Query filters:** Filters do not support `or` groups or nested groups.
+  Use one property condition or one `and` group.
+- **Links and navigation:** Custom blocks cannot open external links.
+  They also provide no supported way to open internal Notion links.
+  Do not implement link navigation or authentication redirects with `window.open` or `window.location`.
+- **Page creation:** `pages.create` cannot set an icon or cover.
+  Create the page first. Then use `pages.update` to set its icon or cover.
+- **Availability:** Custom blocks require private-alpha access.
+  Page guests cannot view custom blocks. Notion Sites does not render them.
+
 ## Create or modify the block
 
 Custom blocks are a Workers capability. To create a custom block, create a Worker from a custom block template:
