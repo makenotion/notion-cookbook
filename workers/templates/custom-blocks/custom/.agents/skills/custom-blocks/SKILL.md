@@ -29,7 +29,8 @@ Take into account these limits when building a custom block:
   Use the custom blocks SDK to access Notion data.
   Images can also use `data:` URLs and permitted Notion-hosted sources.
 - **Query size:** `useDataSource` returns at most 999 rows per query. The default limit is 20.
-  The hook does not provide cursor pagination.
+  Use filters to select relevant rows and sorts to order them.
+  Load rows progressively by increasing `limit` as needed, up to 999.
   If `hasMore` is true, show that the results are incomplete.
   Do not present calculations over incomplete results as totals for the entire data source.
 - **Property support:** Custom blocks do not support every Notion property type or operation.
@@ -47,9 +48,9 @@ Take into account these limits when building a custom block:
 
 ## Build the block
 
-React with Vite is recommended. The examples use TypeScript.
-You can use any framework that builds an `index.html` file and its browser assets.
 The frontend must use the custom blocks SDK to connect to Notion and follow the sandbox constraints.
+You can use any framework that builds an `index.html` file and its browser assets.
+We recommend React with Vite. The examples below use React, Vite, and TypeScript.
 
 ### 1. Prepare the project
 
@@ -59,7 +60,7 @@ For a new project, create a Worker from a custom block template:
 ntn workers new my-worker-name --template <template>
 ```
 
-Choose `custom` (minimal), `whiteboard`, `habit-tracker`, or `org-chart`.
+There are 4 templates to choose from: `custom` (minimal), `whiteboard`, `habit-tracker`, and `org-chart`.
 
 Keep the declaration in `src/index.ts` and frontend files in `blocks/<key>/`:
 
@@ -122,15 +123,15 @@ The `dataSources` field defines the required schema. Users bind its keys to actu
 Choose descriptive keys. They do not need to match property types.
 The `type` field uses Notion Public API type names.
 
-| Field          | Meaning                                                                                    |
-| -------------- | ------------------------------------------------------------------------------------------ |
-| `name`         | Display name. Defaults to the declaration key.                                             |
-| `description`  | Description shown when the user selects a block.                                           |
-| `icon`         | One emoji.                                                                                 |
-| `slashCommand` | Optional slash command. Use a stable name unique within the Worker, without a leading `/`. |
-| `path`         | Block directory relative to the Worker root.                                               |
-| `command`      | Build command, run inside `path`.                                                          |
-| `output`       | Directory containing the built browser assets.                                             |
+| Field          | Meaning                                                                                                                            | Default                       |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| `name`         | Display name shown for the block.                                                                                                  | Falls back to declaration key |
+| `description`  | Description shown when the user selects a block.                                                                                   | —                             |
+| `icon`         | Icon shown for the block in Notion. Only `type: "emoji"` is currently supported.                                                   | —                             |
+| `slashCommand` | Adds a command that inserts the block from Notion's slash menu. Use a stable name unique within the Worker, without a leading `/`. | —                             |
+| `path`         | Path to the block directory, relative to the Worker root. Required.                                                                | —                             |
+| `command`      | Command that builds the frontend. Runs inside `path`.                                                                              | `npm run build`               |
+| `output`       | Directory containing the built browser assets, relative to `path`.                                                                 | `dist`                        |
 
 Set `command` explicitly. Its default, `npm run build`, can build the Worker instead of the frontend.
 
@@ -146,8 +147,6 @@ worker.customBlock("issueBoard", {
 ### 3. Connect the frontend to Notion
 
 In `blocks/<key>/src/index.tsx`, wrap the React app in `NotionCustomBlock`.
-Use `errorFallback` to display initialization errors before the app renders.
-Include `NotionTokenScope` and the NDS stylesheet when the UI uses Notion design tokens:
 
 ```tsx
 import "@notionhq/custom-blocks/nds.css"
@@ -173,10 +172,19 @@ ReactDOM.createRoot(root).render(
 )
 ```
 
+Include `NotionTokenScope` and the NDS stylesheet when the UI uses Notion design tokens.
+
 `NotionCustomBlock` renders its children after initialization succeeds. Every declared data source requires a binding before initialization can complete.
 Call React SDK hooks inside this wrapper.
+
 For other frameworks, initialize with `initCustomBlock`.
+
 Do not call `window.parent.postMessage` directly.
+
+`NotionCustomBlock` automatically resizes to fit content. Other frameworks can call `customBlock.autoResize({ target })` after initialization.
+See [Sizing](https://developers.notion.com/custom-blocks/sdk/appearance#sizing) for height limits and manual resizing.
+
+Make interactive controls keyboard-accessible. Expose loading and error states to assistive technology.
 
 ### 4. Configure the build and type checks
 
@@ -233,98 +241,14 @@ Add one `tsc -p blocks/<key>/tsconfig.json --noEmit` command for each block.
 
 The custom blocks SDK provides APIs to:
 
-- Read context about the custom block, including its containing page, parent, and current user.
-- Create, read, update, and delete pages.
-- Query data sources.
-- Query users.
+- Read block context, including the containing page, parent, and current user.
+- Read app context, including theme and contrast settings.
+- Read declared data sources and schema metadata.
+- Query, filter, and sort data source rows.
+- Create, read, update, and archive pages.
+- Read and list users.
 
-### Query data sources
-
-Call `useDataSource("<data-source-key>")` for a declared data source. Read
-`items`, `isLoading`, `hasMore`, and `error` from the result. The default limit
-is 20 rows. The maximum limit is 999. Set `limit` to control the number of returned rows.
-If `hasMore` is true, more rows match the query than the result includes.
-The hook does not provide cursor pagination. Read property values from each
-item's `propertiesByKey` object.
-
-Check the installed SDK types before using `filter` or `sorts`. Older versions accept only `limit`.
-Upgrade the SDK if the installed version does not support the required options.
-
-Use `filter` to select matching rows. Use `sorts` to order the rows.
-The `key` fields below refer to property keys in the declaration above:
-
-```tsx
-import { useDataSource } from "@notionhq/custom-blocks/react"
-
-function IssueBoard() {
-  const { items, isLoading, hasMore, error } = useDataSource("issues", {
-    limit: 50,
-    filter: { key: "status", status: { does_not_equal: "Done" } },
-    sorts: [{ key: "title", direction: "ascending" }],
-  })
-
-  if (error) return <div role="alert">{error.message}</div>
-  if (isLoading) return <div role="status">Loading issues…</div>
-  if (items.length === 0) return <div>No matching issues.</div>
-
-  return (
-    <div>
-      {hasMore
-        ? `Showing the first ${items.length} matching issues.`
-        : `${items.length} matching issues.`}
-    </div>
-  )
-}
-```
-
-Use `useManifest()` when the frontend needs the declared data-source keys or
-schema metadata. It does not return resolved bindings or rows.
-
-Validate property values before using them. Handle loading, empty, and query
-error states in the UI. Use `errorFallback` for initialization errors, as described above.
-Read the installed SDK documentation
-for the current result and value shapes.
-
-### Update pages
-
-Use an item's `update` method to update a row from a bound data source:
-
-```tsx
-const updateResult = await item.update({
-  properties: {
-    status: { type: "status", status: { name: "Done" } },
-  },
-})
-
-if (updateResult.status === "error") {
-  // Handle updateResult.error.
-}
-```
-
-Use `pages.create` with a `data_source_key` parent to add a row to a bound
-source. Use `pages.delete` to archive a page. Use raw property IDs with
-`pages.update`. Data and page operations return result objects instead of
-throwing:
-
-```ts
-const result = await pages.update({
-  pageId,
-  properties: {
-    "status-property-id": {
-      id: "status-property-id",
-      type: "status",
-      status: { name: "Done" },
-    },
-  },
-})
-
-if (result.status === "error") {
-  if (result.error.isRetryable) {
-    // Retry only when the SDK marks the error as retryable.
-  }
-  // Branch on result.error.code. Use message for display only.
-}
-```
+Read the installed `@notionhq/custom-blocks` documentation and exported types for current methods, API signatures, and error handling.
 
 ## Security
 
@@ -359,7 +283,7 @@ Handle write-access errors even after initialization succeeds.
 Block instances inherit page permissions. Users with edit access can change bindings.
 Page guests cannot view custom blocks. Notion Sites does not render them.
 
-Use trusted authors. Malicious blocks can copy private viewer data
+Only trust custom blocks from trusted authors. Malicious blocks can copy private viewer data
 to pages or data sources their authors can read.
 
 ### Secrets and dependencies
@@ -372,32 +296,6 @@ Review third-party dependencies. Pin trusted versions.
 Build tools can access the Worker project despite runtime network restrictions.
 
 See [Security](https://developers.notion.com/custom-blocks/guides/security).
-
-## Layout and accessibility
-
-All interactive controls must be keyboard-reachable. Expose loading and failure
-states to assistive technology.
-
-### Sizing
-
-`NotionCustomBlock` automatically resizes React blocks to fit their content.
-For a frontend without React, wait for `initCustomBlock()` to resolve.
-Then call `customBlock.autoResize({ target })` with the element that determines the iframe height.
-
-Notion limits automatic heights to between 100 and 10,000 pixels.
-To restrict content height further, configure `#root` as follows:
-
-```css
-#root {
-  max-height: 600px;
-  overflow-y: auto;
-}
-```
-
-When a viewer drags the resize handle, the selected height overrides automatic sizing.
-Automatic sizing resumes when the viewer selects **Fit content**.
-
-See [Sizing](https://developers.notion.com/custom-blocks/sdk/appearance#sizing).
 
 ## Verify with the dev shell
 
