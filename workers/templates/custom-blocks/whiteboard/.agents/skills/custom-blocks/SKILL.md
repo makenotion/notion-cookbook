@@ -15,40 +15,29 @@ needs access before the user can use the block.
 
 ## How custom blocks work
 
-A custom block is a frontend web app that Notion serves in an iframe. The
-`worker.customBlock()` declaration defines the block's build and data source
-schema.
+Custom blocks have two parts: a Worker declaration and a frontend.
 
-The block uses two packages:
+- `@notionhq/workers` provides `worker.customBlock()` to define how the block builds and what data it needs.
+- `@notionhq/custom-blocks` lets the frontend communicate with Notion from a sandboxed iframe.
 
-- `@notionhq/workers` declares the block's build and data source schemas.
-- `@notionhq/custom-blocks` lets the iframe frontend communicate with Notion.
+Test the Worker declaration and frontend together in the custom block dev shell (`@notionhq/custom-blocks-dev-shell`).
 
-The `@notionhq/custom-blocks` and `@notionhq/custom-blocks-dev-shell` packages
-include documentation. Read the relevant documentation and TypeScript declarations
-before writing block code.
+Each package includes documentation. Read the relevant documentation before writing or updating code.
 
 ## Create or modify the block
 
-Available templates: `custom` (minimal), `whiteboard`, `habit-tracker`, and `org-chart`.
-
-Create the worker with the selected template:
+Custom blocks are a Workers capability. To create a custom block, create a Worker from a custom block template:
 
 ```shell
 ntn workers new my-worker-name --template <template>
 ```
 
-A custom block has two parts:
+Available templates: `custom` (minimal), `whiteboard`, `habit-tracker`, and `org-chart`.
 
-- `src/index.ts` uses `@notionhq/workers` to declare the block's source, build
-  command, and data source schemas.
-- The block directory uses `@notionhq/custom-blocks` to communicate with the
-  Notion host from its sandboxed iframe.
-
-Use the worker's root `package.json` for all dependencies, including frontend dependencies.
+Use the Worker's root `package.json` for all dependencies, including frontend dependencies.
 Do not add a `package.json` inside the block directory.
 
-A minimal layout for a block's code looks like:
+A minimal layout for the declaration and frontend:
 
 ```text
 src/index.ts
@@ -63,7 +52,7 @@ blocks/<key>/
 The HTML file must contain a `<div id="root"></div>` element. Its module script
 must point to the frontend entrypoint.
 
-Install dependencies from the worker root. Use the React commands only when
+Install dependencies from the Worker root. Use the React commands only when
 the block uses React:
 
 ```shell
@@ -73,12 +62,15 @@ npm install --save-dev @notionhq/custom-blocks-dev-shell @types/react @types/rea
 
 ### Recommended setup: React and Vite
 
-You can use any web framework that builds an `index.html` file and the browser
-assets it needs. The app must use the custom blocks SDK to connect to Notion
-and follow the sandbox constraints below. React with Vite is the recommended
-setup. The examples below use TypeScript.
+React with Vite is the recommended setup. The examples below use TypeScript.
+Other frameworks must build an `index.html` file and its browser assets.
+The app must use the custom blocks SDK to connect to Notion.
+It must follow the sandbox constraints below.
 
-The worker's root TypeScript configuration does not cover browser files. Add a
+Data source queries currently require React's `useDataSource` hook.
+Framework-neutral initialization does not provide an equivalent query API.
+
+The Worker's root TypeScript configuration does not cover browser files. Add a
 `tsconfig.json` inside each block:
 
 ```json
@@ -115,7 +107,7 @@ export default defineConfig({
 })
 ```
 
-Extend the worker root `check` script to type-check every block frontend:
+Extend the Worker root `check` script to type-check every block frontend:
 
 ```json
 {
@@ -134,7 +126,7 @@ Declare the block in `src/index.ts`:
 <!-- prettier-ignore -->
 ```ts
 worker.customBlock(
-  "issueBoard", // Declaration key: identifies this block within the worker.
+  "issueBoard", // Declaration key: identifies this block within the Worker.
   {
     name: "Issue board",
     description: "View and update issues",
@@ -161,10 +153,9 @@ worker.customBlock(
 )
 ```
 
-Data source and property keys are names you choose. The property keys match their
-types in the example above, but they do not need to. For example, the first
-property key could be `name` or `Title`. The `type` field defines the kind of data
-the property holds and uses Notion Public API type names.
+Data source and property keys are names you choose. Property keys do not need to match their types.
+For example, the first property key could be `name` or `Title`.
+The `type` field defines the property's data type with Notion Public API names.
 
 ### Display & appearance
 
@@ -174,26 +165,24 @@ only a single emoji.
 
 ### Data sources
 
-The `dataSources` field declares the required schema. You define the data source
-keys and property keys. A binding connects a declared key to an actual data source
-or property. The user configures these bindings for each block instance.
+The `dataSources` field declares the required schema.
+A binding connects a declared key to an actual data source or property. The user configures these bindings for each block instance.
 
-Property types use Notion Public API names. Property support varies by API and
-is currently limited, especially for formulas, rollups, and relations.
+Property support varies by API. Support is currently limited, especially for formulas, rollups, and relations.
 
 ### Slash command
 
 `slashCommand` adds an optional command to Notion's slash menu. Use a stable name
-that is unique within the worker. Write the name without the leading `/`.
+that is unique within the Worker. Write the name without the leading `/`.
 
 ### Build and static files
 
-`path` points to the block directory, relative to the worker root. `command`
+`path` points to the block directory, relative to the Worker root. `command`
 runs in that directory. `output` names the directory with the built browser assets.
 For Vite, use `command: "npx vite build"` and `output: "dist"`.
 
 Set `command` explicitly. The default is `npm run build`, which can run the
-worker's build instead of building the frontend.
+Worker's build instead of building the frontend.
 
 Use `type: "static"` when `path` already contains built browser assets:
 
@@ -231,8 +220,7 @@ ReactDOM.createRoot(root).render(
 )
 ```
 
-`NotionCustomBlock` connects the frontend to Notion and resizes the iframe automatically.
-`NotionCustomBlock` renders its children after initialization succeeds. Every declared
+`NotionCustomBlock` connects the frontend to Notion. It renders its children after initialization succeeds. Every declared
 data source must have a binding before initialization can complete.
 Use `initCustomBlock` to initialize a frontend without React.
 
@@ -262,10 +250,13 @@ The custom blocks SDK provides APIs to:
 
 Call `useDataSource("<data-source-key>")` for a declared data source. Read
 `items`, `isLoading`, `hasMore`, and `error` from the result. The default limit
-is 20 rows. The maximum limit is 999. Use `limit` to control how many rows the query returns.
+is 20 rows. The maximum limit is 999. Set `limit` to control the number of returned rows.
 If `hasMore` is true, more rows match the query than the result includes.
 The hook does not provide cursor pagination. Read property values from each
 item's `propertiesByKey` object.
+
+Check the installed SDK types before using `filter` or `sorts`. Older versions accept only `limit`.
+Upgrade the SDK if the installed version does not support the required options.
 
 Use `filter` to select matching rows. Use `sorts` to order the rows.
 The `key` fields below refer to property keys in the declaration above:
@@ -298,8 +289,8 @@ Use `useManifest()` when the frontend needs the declared data-source keys or
 schema metadata. It does not return resolved bindings or rows.
 
 Validate property values before using them. Handle loading, empty, and query
-error states in the UI. Binding errors occur during initialization. Show them
-through the `errorFallback` path above. Read the installed SDK documentation
+error states in the UI. Use `errorFallback` for initialization errors, as described above.
+Read the installed SDK documentation
 for the current result and value shapes.
 
 ### Update pages
@@ -357,7 +348,7 @@ SDK to read or change Notion data.
 - Network requests and navigation can reach only the block's own origin.
 - Images can use bundled files, `data:` URLs, or Notion-hosted images.
 - Fonts can use bundled files or `data:` URLs.
-- `localStorage` and `sessionStorage` belong to the block's origin. Separate blocks do not share them, even within one worker.
+- `localStorage` and `sessionStorage` belong to the block's origin. Separate blocks do not share them, even within one Worker.
 - Forms and `<base>` elements are not allowed.
 
 ### Permissions
@@ -380,10 +371,10 @@ private data to a page or data source that its author can read.
 ### Secrets and dependencies
 
 Viewers can inspect the frontend bundle. Keep secrets, tokens, and private URLs
-out of it. Store secrets in the worker, where they remain on the server.
+out of it. Store secrets in the Worker, where they remain on the server.
 
-Review third-party dependencies and pin trusted versions. Build tools can access
-the worker project, so blocked network access at runtime does not remove build risks.
+Review third-party dependencies. Pin trusted versions.
+Build tools can access the Worker project. Runtime network restrictions do not remove build risks.
 
 See [Security](https://developers.notion.com/custom-blocks/guides/security).
 
@@ -399,7 +390,7 @@ For a frontend without React, wait for `initCustomBlock()` to resolve.
 Then call `customBlock.autoResize({ target })` with the element that determines the iframe height.
 
 Notion limits automatic heights to between 100 and 10,000 pixels.
-To limit the content height further, set `max-height` and `overflow-y` on `#root`:
+To restrict content height further, configure `#root` as follows:
 
 ```css
 #root {
@@ -415,7 +406,7 @@ See [Sizing](https://developers.notion.com/custom-blocks/sdk/appearance#sizing).
 
 ## Verify with the dev shell
 
-Run the available check, test, and build scripts from the worker root:
+Run the available check, test, and build scripts from the Worker root:
 
 ```shell
 npm run check
@@ -435,10 +426,10 @@ Use the [dev shell](https://developers.notion.com/custom-blocks/guides/preview) 
 ntn workers customblocks dev
 ```
 
-The dev shell builds the worker. It serves each block with Vite. It renders the
-block in a mock Notion host with sample data.
+The dev shell builds the Worker and serves each block with Vite.
+It renders the block in a mock Notion host with sample data.
 
-The dev shell reads `data/*.json` from the worker root at startup.
+The dev shell reads `data/*.json` from the Worker root at startup.
 Restart the dev shell after you change those files. Blocks start without bindings.
 
 1. Connect each declared data source to sample data.
@@ -455,7 +446,7 @@ or in Notion.
 
 ## Deploy and share
 
-Deploy the block with its worker only when the user asks for a live deployment:
+Deploy the block with its Worker only when the user asks for a live deployment:
 
 ```shell
 ntn workers deploy
@@ -464,7 +455,7 @@ ntn workers deploy
 Do not use `ntn workers exec` for a custom block. It has no `execute` handler.
 
 After deployment, insert a block instance from Notion's slash menu or use the CLI
-from the worker root:
+from the Worker root:
 
 ```shell
 ntn workers customblocks make --key issueBoard --target <page-id-or-url>
@@ -476,8 +467,8 @@ that receives the instance.
 In Notion, connect each declared data source and map its properties. Check that
 the configured block renders and its main interaction works.
 
-[Share the worker](https://developers.notion.com/workers/guides/sharing-workers) with **Can connect** access when another workspace member must
-insert the block. **Full access** also permits worker management and deployment.
+[Share the Worker](https://developers.notion.com/workers/guides/sharing-workers) with **Can connect** access when another workspace member must
+insert the block. **Full access** also permits Worker management and deployment.
 
 ## References
 
