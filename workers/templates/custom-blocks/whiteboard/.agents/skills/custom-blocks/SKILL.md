@@ -334,47 +334,50 @@ if (result.status === "error") {
 }
 ```
 
-Do not call the Notion API or the host bridge directly from the iframe.
-
 ## Security
+
+Use the custom blocks SDK for Notion data access.
+Do not call the Notion API or host bridge directly from the iframe.
 
 ### Sandbox
 
-Each block runs in a separate iframe on its own origin. It cannot access
-Notion's DOM, cookies, storage, session, or API credentials. Use the custom blocks
-SDK to read or change Notion data.
+Each block runs in a sandboxed iframe. It cannot access Notion's DOM,
+cookies, storage, session, or API credentials.
 
-- Bundle scripts, styles, fonts, and other runtime dependencies. Do not load dependencies from a CDN.
-- Network requests and navigation can reach only the block's own origin.
-- Images can use bundled files, `data:` URLs, or Notion-hosted images.
-- Fonts can use bundled files or `data:` URLs.
-- `localStorage` and `sessionStorage` belong to the block's origin. Separate blocks do not share them, even within one Worker.
+- The sandbox blocks external API requests and CDN dependencies.
+  Bundle scripts, styles, fonts, and other runtime dependencies.
+  Network requests are restricted to the block's bundle endpoints.
+  Navigation can reach only the block's origin.
+- Images support bundled files, `data:` URLs, and permitted Notion-hosted images.
+- Fonts support bundled files and `data:` URLs.
+- Within a workspace, instances of the same Worker capability share an origin and `localStorage`.
+  `sessionStorage` is also scoped to the browser tab.
+  Different capability keys or Workers have separate origins and storage.
 - Forms and `<base>` elements are not allowed.
 
 ### Permissions
 
-The block reads and writes with the viewer's permissions. Row permissions still
-apply, so viewers can see different results from the same block.
+Reads and writes use the viewer's permissions, including row permissions.
+Results can differ between viewers.
 
-The viewer must have read access to every bound data source before the block
-can initialize. Access to the containing page does not grant access to those
-data sources. Writes can still fail after the block loads. Handle access errors
-in the UI.
+Initialization requires viewer read access to every bound data source.
+Containing-page access does not grant this access.
+Handle write-access errors even after initialization succeeds.
 
-A block instance inherits its page's permissions. Users with edit access can
-change its bindings. Page guests cannot view custom blocks. Custom blocks do not
-render on pages published with Notion Sites.
+Block instances inherit page permissions. Users with edit access can change bindings.
+Page guests cannot view custom blocks. Notion Sites does not render them.
 
-Use blocks only from trusted authors. A malicious block can copy a viewer's
-private data to a page or data source that its author can read.
+Use trusted authors. Malicious blocks can copy private viewer data
+to pages or data sources their authors can read.
 
 ### Secrets and dependencies
 
-Viewers can inspect the frontend bundle. Keep secrets, tokens, and private URLs
-out of it. Store secrets in the Worker, where they remain on the server.
+Viewers can inspect the frontend bundle.
+Exclude secrets, tokens, and private URLs from the bundle.
+Store secrets in the Worker on the server.
 
 Review third-party dependencies. Pin trusted versions.
-Build tools can access the Worker project. Runtime network restrictions do not remove build risks.
+Build tools can access the Worker project despite runtime network restrictions.
 
 See [Security](https://developers.notion.com/custom-blocks/guides/security).
 
@@ -406,6 +409,8 @@ See [Sizing](https://developers.notion.com/custom-blocks/sdk/appearance#sizing).
 
 ## Verify with the dev shell
 
+### Check the code and bundle
+
 Run the available check, test, and build scripts from the Worker root:
 
 ```shell
@@ -414,35 +419,38 @@ npm test
 npm run build
 ```
 
-Build the frontend separately when you need to verify its bundle:
+Build each frontend separately. The Worker build does not check the frontend bundle.
+Run this command from the Worker root. The subshell preserves the current directory:
 
 ```shell
-cd blocks/<key> && npx vite build
+(cd blocks/<key> && npx vite build)
 ```
 
-Use the [dev shell](https://developers.notion.com/custom-blocks/guides/preview) to test the block locally:
+### Start the local preview
+
+The [dev shell](https://developers.notion.com/custom-blocks/guides/preview) lets you test blocks locally with sample data, including data sampled from production.
 
 ```shell
 ntn workers customblocks dev
 ```
 
-The dev shell builds the Worker and serves each block with Vite.
-It renders the block in a mock Notion host with sample data.
-
-The dev shell reads `data/*.json` from the Worker root at startup.
-Restart the dev shell after you change those files. Blocks start without bindings.
-
-1. Connect each declared data source to sample data.
-2. Map every declared property.
-3. Check that the block renders.
-4. Check that the block's main interaction works.
-
+See the dev shell package documentation for details.
 Test through the dev shell instead of opening the block's URL directly.
+
+### Add sample data and check behavior
+
+For Worker data, the dev shell automatically creates and binds a database. The database starts without rows.
+
+1. Add sample rows manually or sample a production database with `ntn workers customblocks sample`.
+2. Check that the block renders the expected data.
+3. Check that the main interaction works.
+
 In React blocks, press `\` to show the SDK debug console.
 Press `\` again to return to the block.
 
-Report which checks you completed. State whether you tested the block in the dev shell
-or in Notion.
+Report which checks you completed. Identify any checks you could not complete.
+State whether you tested in the dev shell or Notion.
+Local checks do not establish that production permissions and sandbox behavior work.
 
 ## Deploy and share
 
