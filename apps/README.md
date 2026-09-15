@@ -32,6 +32,7 @@ must be enabled before deployment.
 
 Apps are a private alpha and are not currently open for general contribution.
 
-The SDK supports workflows, database syncs, and custom blocks. Canonical coding
-guidance lives in [agents/](agents/); run `npm run agents:sync` from the repository
-root after changing it.
+The SDK supports workflows, database syncs, and custom blocks. The full coding
+guidance ships with `@notionhq/apps`. Template skill loaders live in
+[agents/](agents/); run `npm run agents:sync` from the repository root after
+changing them.
