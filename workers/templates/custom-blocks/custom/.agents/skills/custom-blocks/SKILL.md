@@ -15,8 +15,8 @@ needs access before the user can use the block.
 
 A custom block has two parts:
 
-- A Worker declaration uses `@notionhq/workers` to define the build and required data.
-- A frontend uses `@notionhq/custom-blocks` to communicate with Notion from a sandboxed iframe.
+- A Worker declaration that uses `@notionhq/workers` to define the build and required data.
+- A frontend that uses `@notionhq/custom-blocks` to communicate with Notion from a sandboxed iframe.
 
 Read the relevant package documentation before changing either part.
 
