@@ -14,6 +14,7 @@ replay-safe durable step. The hello block demonstrates an interactive browser UI
 
 - Access to the Notion Apps alpha.
 - Node.js 26 or newer.
+- An Apps SDK release with the short, creation-only root exports below.
 - A version of the Notion CLI with the experimental `apps` command.
 
 ## Quick start
@@ -46,7 +47,28 @@ blocks/hello/  Browser source, Vite config, and separate browser tsconfig
 
 Every TypeScript file directly inside `src/workflows/` defines one workflow.
 The camelCase filename becomes its workflow key, and the file must default
-export `createWorkflow(...)`.
+export `Notion.workflow(...)`.
+
+## SDK imports
+
+Use the package root for resource and capability creation:
+
+```ts
+import * as Notion from "@notionhq/apps"
+```
+
+Use `Notion.workflow`, `Notion.sync`, `Notion.customBlock`, `Notion.page`,
+`Notion.database`, `Notion.teamspace`, and `Notion.customAgent`. Syncs use Notion
+as Code data sources declared inside `Notion.database`; there is no standalone
+`Notion.dataSource` creator.
+
+Keep utilities and types on their existing subpaths. For example, import
+`Builder` from `@notionhq/apps/builder`, `connections` from
+`@notionhq/apps/workflow`, and `triggers` from `@notionhq/apps/triggers`.
+Browser runtime APIs stay on `@notionhq/apps/custom-blocks` and React integration
+stays on `@notionhq/apps/react`. Do not use the old `create*` capability names.
+If the installed SDK lacks the new root exports, update to a release that has
+them before building.
 
 ## Extend the template
 

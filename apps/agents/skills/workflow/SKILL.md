@@ -15,7 +15,7 @@ Use this skill to add or review a workflow in this template.
 2. Inspect the installed workflow and trigger declarations.
 3. Choose the trigger, outcome, step boundaries, and required configuration.
 4. Create one camelCase file directly in `src/workflows/`.
-5. Default-export `createWorkflow(...)` and use typed trigger creators.
+5. Default-export `Notion.workflow(...)` and use typed trigger creators.
 6. Put all non-deterministic work in awaited `context.step(...)` calls.
 7. Give each step a stable display name. For repeated steps, keep the name
    constant and pass a stable, unique composite `key`, such as
@@ -24,7 +24,7 @@ Use this skill to add or review a workflow in this template.
 9. Use the step `id` as an idempotency key when supported.
 10. Run `npm run check` and `npm run build`.
 
-Each direct `src/workflows/*.ts` file must default-export `createWorkflow(...)`.
+Each direct `src/workflows/*.ts` file must default-export `Notion.workflow(...)`.
 The camelCase file name becomes its workflow key.
 Keep workflow-specific helpers in `src/workflows/lib/` and shared helpers in
 `src/lib/`; direct children of `src/workflows/` are discovered as workflows.
@@ -73,9 +73,9 @@ Keep declarations at module scope in
 an imported helper. For example, declare a guide page in `src/lib/resources.ts`:
 
 ```ts
-import { notion } from "@notionhq/apps/notion-as-code"
+import * as Notion from "@notionhq/apps"
 
-export const guide = notion.page({
+export const guide = Notion.page({
   resourceId: "workflow-guide",
   content: "# Workflow guide\nThis App runs a scheduled workflow.",
 })
@@ -85,10 +85,10 @@ Import the module from `src/workflows/sayHello.ts` so the build records it:
 
 ```ts
 import "../lib/resources"
+import * as Notion from "@notionhq/apps"
 import { triggers } from "@notionhq/apps/triggers"
-import { createWorkflow } from "@notionhq/apps/workflow"
 
-export default createWorkflow({
+export default Notion.workflow({
   name: "Say Hello",
   description: "Says hello on a recurring schedule.",
   triggers: [triggers.scheduled()],
@@ -112,7 +112,7 @@ durable steps and need actual resolved Notion IDs.
 Review every file in `src/workflows/` and the modules it calls. Report each
 finding with its file, line, impact, and fix. Treat these as errors:
 
-1. A workflow is not a direct file or does not default-export `createWorkflow`.
+1. A workflow is not a direct file or does not default-export `Notion.workflow`.
 2. Trigger-specific event fields are used without type narrowing.
 3. Non-deterministic work occurs outside an awaited step.
 4. Step order or names can change between retries.
