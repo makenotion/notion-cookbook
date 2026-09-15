@@ -19,8 +19,7 @@ are not treated as capabilities.
 | `src/customBlocks/` | `createCustomBlock` from `@notionhq/apps/custom-block`            | `.agents/skills/custom-blocks/SKILL.md` |
 
 Read the matching skill before implementing a capability. Workflows that use
-connections also need `.agents/skills/connections/SKILL.md`, which includes
-calendar operations.
+connections also need `.agents/skills/connections/SKILL.md`.
 
 Apps do not expose Worker-style tool or webhook registration, Worker fetch
 interceptors, or Worker managed-database configuration. Do not translate those

@@ -70,7 +70,7 @@ Use `context.notion` for Notion API calls. Set `NOTION_API_TOKEN` in `.env` for
 local execution and never commit credentials.
 
 For workflows using providers, read the [connections skill](.agents/skills/connections/SKILL.md).
-It covers typed connection clients, calendar time handling, and safe retries.
+It covers typed provider clients, trigger connection keys, and safe retries.
 
 Agent guidance is generated from [apps/agents](../../agents/). Edit that
 canonical source and run `npm run agents:sync` from the repository root.

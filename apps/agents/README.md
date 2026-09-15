@@ -12,12 +12,12 @@ the SDK exports, implementation, and runtime context for the intended capability
 
 ## Supported guidance
 
-| Skill                                          | SDK surface                                                          |
-| ---------------------------------------------- | -------------------------------------------------------------------- |
-| [Workflow](skills/workflow/SKILL.md)           | Typed triggers and durable steps                                     |
-| [Connections](skills/connections/SKILL.md)     | Workflow provider clients, including calendar operations and retries |
-| [Sync](skills/sync/SKILL.md)                   | Standalone sync declarations, attached databases, and pagination     |
-| [Custom blocks](skills/custom-blocks/SKILL.md) | Browser project declarations and host integration                    |
+| Skill                                          | SDK surface                                                      |
+| ---------------------------------------------- | ---------------------------------------------------------------- |
+| [Workflow](skills/workflow/SKILL.md)           | Typed triggers and durable steps                                 |
+| [Connections](skills/connections/SKILL.md)     | Workflow provider clients, trigger connection keys, and retries  |
+| [Sync](skills/sync/SKILL.md)                   | Standalone sync declarations, attached databases, and pagination |
+| [Custom blocks](skills/custom-blocks/SKILL.md) | Browser project declarations and host integration                |
 
 These instructions were checked against the Apps SDK 0.0.14 source. They replace
 Worker registration, auth interception, and database assumptions with Apps APIs.
