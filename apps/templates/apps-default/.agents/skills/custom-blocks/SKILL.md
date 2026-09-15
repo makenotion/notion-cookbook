@@ -6,13 +6,13 @@ user-invocable: false
 
 # App custom blocks
 
-Default-export `createCustomBlock` from `@notionhq/apps/custom-block` in
+Import `Notion` from the package root and default-export `Notion.customBlock(...)` in
 `src/customBlocks/<key>.ts`. Copy the existing hello block's browser setup:
 
 ```ts
-import { createCustomBlock } from "@notionhq/apps/custom-block"
+import * as Notion from "@notionhq/apps"
 
-export default createCustomBlock({
+export default Notion.customBlock({
   path: "./blocks/issueBoard",
   slashCommand: "issue-board",
   dataSources: {},
@@ -29,12 +29,14 @@ cannot be combined with `command` or `output`.
 Import React integration from `@notionhq/apps/react` and styles from
 `@notionhq/apps/nds.css`. Wrap the UI in `NotionCustomBlock`. Read the installed
 custom-block client documentation before adding hooks or host interactions.
+Browser runtime APIs stay on `@notionhq/apps/custom-blocks`; the root
+`Notion.customBlock` creates a capability, not a browser runtime client.
 Never put server credentials in browser source.
 
 `dataSources` declares expected host schemas; it does not bind a concrete
 database. Inspect `ManifestDataSource` from the installed custom-blocks package.
-These schemas use Notion API property names such as `rich_text`; Apps sync
-`Schema` objects use a different representation.
+These schemas use Notion API property names such as `rich_text`; Notion as Code
+data source properties use a different representation, such as `text`.
 
 Blocks are build-time declarations, not executable workflow handlers. Do not
 port `worker.customBlock()`, Worker source options, or Worker execution commands.

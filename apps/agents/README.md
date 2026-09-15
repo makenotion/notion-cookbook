@@ -16,14 +16,17 @@ Notion as Code resource declarations can also supply databases for syncs.
 See the [Notion as Code skill](skills/notion-as-code/SKILL.md) for declarations,
 typed data source handles, and deployment behavior.
 
-| Skill                                          | SDK surface                                                                     |
-| ---------------------------------------------- | ------------------------------------------------------------------------------- |
-| [Workflow](skills/workflow/SKILL.md)           | Typed triggers and durable steps                                                |
-| [Connections](skills/connections/SKILL.md)     | Workflow provider clients, trigger connection keys, and retries                 |
-| [Sync](skills/sync/SKILL.md)                   | Notion as Code data source syncs, existing database attachments, and pagination |
-| [Custom blocks](skills/custom-blocks/SKILL.md) | Browser project declarations and host integration                               |
+| Skill                                          | SDK surface                                                     |
+| ---------------------------------------------- | --------------------------------------------------------------- |
+| [Workflow](skills/workflow/SKILL.md)           | Typed triggers and durable steps                                |
+| [Connections](skills/connections/SKILL.md)     | Workflow provider clients, trigger connection keys, and retries |
+| [Sync](skills/sync/SKILL.md)                   | Notion as Code data source syncs and pagination                 |
+| [Custom blocks](skills/custom-blocks/SKILL.md) | Browser project declarations and host integration               |
 
-These instructions were checked against the Apps SDK 0.0.14 source. They replace
+These instructions require an Apps SDK release with the creation-only root
+exports: `page`, `database`, `teamspace`, `customAgent`, `sync`, `workflow`, and
+`customBlock`. Examples use `import * as Notion from "@notionhq/apps"`; utilities
+and types keep their existing subpaths. They replace
 Worker registration, auth interception, and database assumptions with Apps APIs.
 Worker tools and webhooks are not registered by the Apps capability discovery
 implementation. Provider declarations do not guarantee server availability.

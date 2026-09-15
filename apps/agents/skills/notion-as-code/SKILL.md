@@ -12,7 +12,7 @@ manual setup or runtime creation calls. Respect explicit user choices and
 existing resource attachments; use other methods for unsupported operations
 or runtime data changes.
 
-Import `notion` from `@notionhq/apps/notion-as-code`. Its methods declare
+Use `import * as Notion from "@notionhq/apps"`. Its resource creators declare
 resources for deployment; they do not make Notion API requests when called.
 Use `context.notion` for runtime API operations instead.
 
@@ -43,7 +43,7 @@ src/
 ```
 
 For example, export a database handle from `src/lib/resources.ts` and import it
-in `src/syncs/issues.ts` for `createDataSourceSync`. A page-only declaration
+in `src/syncs/issues.ts` for `Notion.sync`. A page-only declaration
 module can be loaded with a side-effect import such as
 `import "../lib/pages"` from a workflow or sync. Keep those imports at module
 scope so build evaluation runs the declarations.
@@ -59,16 +59,16 @@ standalone Notion as Code project and has no discovered capabilities.
 ## Declare resources
 
 Read the installed Notion as Code types before choosing fields. The Apps
-facade supports:
+root exports support:
 
-- `notion.teamspace({ resourceId, name, accessLevel })`, with `addPage` and
+- `Notion.teamspace({ resourceId, name, accessLevel })`, with `addPage` and
   `addDatabase` on the returned handle.
-- `notion.page({ resourceId, parent?, properties?, content? })`, with
+- `Notion.page({ resourceId, parent?, properties?, content? })`, with
   `addPage` and `addDatabase` for children.
-- `notion.database({ resourceId, parent?, name?, dataSources? })`, returning
+- `Notion.database({ resourceId, parent?, name?, dataSources? })`, returning
   data source handles indexed by their resource IDs. A data source's
   `addPage` declares a row; the database handle also exposes `addView`.
-- `notion.customAgent({ resourceId, name, instructions?, sharedResources? })`.
+- `Notion.customAgent({ resourceId, name, instructions?, sharedResources? })`.
   Shared resources are declared resource IDs; inspect the installed types
   before specifying models or triggers.
 
@@ -83,12 +83,15 @@ triggers, still have incomplete types. A field typed as `unknown` is not proof
 that any payload is supported. Check implementation and examples before using
 it; do not assume parity with other Notion as Code packages.
 
-The Apps facade exposes a subset of Notion as Code. Data sources are nested inside
-`notion.database({ dataSources: [...] })`, not declared by a separate
-`notion.dataSource` function. It has no `notion.space` workspace declaration:
+The Apps SDK exposes a subset of Notion as Code. Data sources are nested inside
+`Notion.database({ dataSources: [...] })`, not declared by a separate
+`Notion.dataSource` function. It has no `Notion.space` workspace declaration:
 Apps deployment rejects workspace creation or changes and supplies the App's
-workspace binding itself. `notion.file(resourceId)` creates a reference to a
-file resource; it is not an upload or file declaration API. CLI acceptance of
+workspace binding itself. Value helpers and types stay on their existing
+subpaths. For example, import `{ notion }` from `@notionhq/apps/notion-as-code`
+for `notion.text(...)` or `notion.file(resourceId)`. The latter creates a file
+reference, not an upload or file declaration. These helpers are not root exports.
+CLI acceptance of
 an intent envelope alone does not establish server support for its contents.
 
 ## Use a declared data source in a sync
@@ -97,11 +100,10 @@ This example can live directly in `src/syncs/issues.ts`. Move the resource
 declaration into an imported helper when sharing it with other capabilities.
 
 ```ts
+import * as Notion from "@notionhq/apps"
 import { Builder } from "@notionhq/apps/builder"
-import { notion } from "@notionhq/apps/notion-as-code"
-import { createDataSourceSync } from "@notionhq/apps/sync"
 
-const issues = notion.database({
+const issues = Notion.database({
   resourceId: "issues-db",
   name: "Issues",
   dataSources: [
@@ -116,7 +118,7 @@ const issues = notion.database({
   ],
 })
 
-export default createDataSourceSync({
+export default Notion.sync({
   dataSource: issues.dataSources["issues-source"],
   primaryKey: "External ID",
   mode: "incremental",
@@ -139,8 +141,8 @@ property by its display name, not its resource ID. Omit that property from
 upsert values; the SDK fills it from `key`. Use Apps `Builder` for sync values.
 Follow the [sync skill](../sync/SKILL.md) for pagination and reconciliation.
 
-Notion as Code properties are an array with resource IDs and names, unlike the property
-map used by `createDatabase`. Each data source needs exactly one title property
+Notion as Code properties are an array with resource IDs and names.
+Each data source needs exactly one title property
 and unique property names and IDs. The current adapter supports title, text,
 number, select, multi-select, status, date, checkbox, URL, email, phone, and file
 properties. It rejects other kinds, including relation, formula, rollup, and
@@ -167,7 +169,7 @@ CLI builds the App, reads `dist/provisioning.json` and `dist/manifest.json`,
 deploys code, applies Notion as Code intents, and reconciles sync attachments. It matches
 each sync's manifest `databaseKey` to a declared data source's `resourceId`,
 then resolves the resulting live data source from provisioning state.
-`createDataSourceSync` supplies this matching key from the handle. An existing
+`Notion.sync` supplies this matching key from the handle. An existing
 binding to a different database causes an error instead of silent rebinding.
 
 The standalone command `ntn notion-as-code apply <dir>` is a different

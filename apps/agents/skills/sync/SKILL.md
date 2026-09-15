@@ -18,18 +18,17 @@ Do not choose manual database setup or a separate attached-database declaration
 when Notion as Code can provide the same resource.
 
 For a database the App creates, declare and provision it with
-`notion.database(...)` and `createDataSourceSync({ dataSource, ... })`.
+`Notion.database(...)` and `Notion.sync({ dataSource, ... })`.
 Read the [Notion as Code skill](../notion-as-code/SKILL.md) for that path,
 including declaration discovery and the supported schema types.
 
 This example declares an Issues database and syncs into its data source:
 
 ```ts
+import * as Notion from "@notionhq/apps"
 import { Builder } from "@notionhq/apps/builder"
-import { notion } from "@notionhq/apps/notion-as-code"
-import { createDataSourceSync } from "@notionhq/apps/sync"
 
-const issues = notion.database({
+const issues = Notion.database({
   resourceId: "issues-db",
   name: "Issues",
   dataSources: [
@@ -44,7 +43,7 @@ const issues = notion.database({
   ],
 })
 
-export default createDataSourceSync({
+export default Notion.sync({
   dataSource: issues.dataSources["issues-source"],
   primaryKey: "External ID",
   mode: "incremental",
@@ -67,11 +66,10 @@ Use Apps `Builder` values for sync results. Keep resource IDs stable and reuse
 the declared data source handle. Shared declarations can live in
 `src/lib/resources.ts`, imported by the sync.
 
-When the user wants to attach an existing database instead, use
-`createDatabase` from `@notionhq/apps/database` and
-`createSync({ database, ... })`. That API takes a direct property map built
-with Apps `Schema` helpers, rather than the Notion as Code property array shown above.
-Do not add a Worker managed-database option.
+This skill covers only syncs backed by Notion as Code data sources. If the user
+asks to attach an existing database, explain that this recipe does not cover
+that setup and clarify the next step. Do not silently create a replacement
+database.
 
 ## Pagination and reconciliation
 
