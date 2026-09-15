@@ -70,3 +70,15 @@ group's `skills`.
 
 Add a directory under `instructions/`, then map a `catalog.json` kind to it in
 `OVERRIDE_GROUPS`.
+
+## SDK-owned custom blocks skill
+
+The Workers SDK owns the full custom blocks skill.
+The template includes a loader at `skills/custom-blocks/SKILL.md`.
+The loader directs agents to `node_modules/@notionhq/workers/skills/custom-blocks/SKILL.md` in the Worker project.
+Keep the loader metadata here for skill discovery.
+Change the full instructions in the Workers SDK repository.
+
+For existing projects, update `@notionhq/workers` to a release that includes the skill.
+Replace the project’s `.agents/skills/custom-blocks/SKILL.md` with this repository’s loader.
+Later SDK updates also update the full skill.
