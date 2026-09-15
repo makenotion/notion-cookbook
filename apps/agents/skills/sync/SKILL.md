@@ -6,23 +6,46 @@ user-invocable: false
 
 # App database syncs
 
-Read the installed `@notionhq/apps/sync`, `database`, `schema`, and `builder`
+Read the installed `@notionhq/apps/sync`, `notion-as-code`, and `builder`
 declarations before adapting a Worker sync. Default-export one sync directly in
 `src/syncs/<key>.ts`. Apps use standalone declarations, not `worker.sync()`.
 Put sync-specific helpers in `src/syncs/lib/` and shared helpers in `src/lib/`.
 
+## Choose the database source
+
+Prefer Notion as Code for the sync's database when Apps Notion as Code supports the required schema.
+Do not choose manual database setup or a separate attached-database declaration
+when Notion as Code can provide the same resource.
+
+For a database the App creates, declare and provision it with
+`notion.database(...)` and `createDataSourceSync({ dataSource, ... })`.
+Read the [Notion as Code skill](../notion-as-code/SKILL.md) for that path,
+including declaration discovery and the supported schema types.
+
+This example declares an Issues database and syncs into its data source:
+
 ```ts
 import { Builder } from "@notionhq/apps/builder"
-import { createDatabase } from "@notionhq/apps/database"
-import { Schema } from "@notionhq/apps/schema"
-import { createSync } from "@notionhq/apps/sync"
+import { notion } from "@notionhq/apps/notion-as-code"
+import { createDataSourceSync } from "@notionhq/apps/sync"
 
-const issues = createDatabase("issues", {
-  schema: { Name: Schema.title(), "External ID": Schema.richText() },
+const issues = notion.database({
+  resourceId: "issues-db",
+  name: "Issues",
+  dataSources: [
+    {
+      resourceId: "issues-source",
+      name: "Issues",
+      properties: [
+        { resourceId: "issue-name", name: "Name", type: "title" },
+        { resourceId: "issue-id", name: "External ID", type: "text" },
+      ],
+    },
+  ],
 })
 
-export default createSync({
-  database: issues,
+export default createDataSourceSync({
+  dataSource: issues.dataSources["issues-source"],
   primaryKey: "External ID",
   mode: "incremental",
   handler: async () => ({
@@ -38,13 +61,17 @@ export default createSync({
 })
 ```
 
-Users attach a real database to an Apps database declaration. Do not add a
-Worker managed-database option. The schema is the property map directly, not
-`schema.properties`. Set `primaryKey` on the sync; it must name a title or
-rich-text property. Omit it from upsert properties: the SDK supplies it from
-`change.key`. Use Apps `Schema` and `Builder` values, not Notion REST property
-objects. If the app already uses Notion-as-Code data sources, inspect
-`createDataSourceSync` and reuse its typed data source handle.
+Set `primaryKey` on the sync; it names a title or text property by its display
+name. Omit it from upsert properties: the SDK supplies it from `change.key`.
+Use Apps `Builder` values for sync results. Keep resource IDs stable and reuse
+the declared data source handle. Shared declarations can live in
+`src/lib/resources.ts`, imported by the sync.
+
+When the user wants to attach an existing database instead, use
+`createDatabase` from `@notionhq/apps/database` and
+`createSync({ database, ... })`. That API takes a direct property map built
+with Apps `Schema` helpers, rather than the Notion as Code property array shown above.
+Do not add a Worker managed-database option.
 
 ## Pagination and reconciliation
 

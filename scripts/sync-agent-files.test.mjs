@@ -58,6 +58,7 @@ async function fixture(t) {
       "workflow-validate",
       "custom-blocks",
       "connections",
+      "notion-as-code",
     ]) {
       await put(
         family + "/agents/skills/" + skill + "/SKILL.md",

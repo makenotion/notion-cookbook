@@ -21,6 +21,16 @@ are not treated as capabilities.
 Read the matching skill before implementing a capability. Workflows that use
 connections also need `.agents/skills/connections/SKILL.md`.
 
+For resources declared with the App, read
+`.agents/skills/notion-as-code/SKILL.md`. Notion as Code declarations belong in
+modules imported by workflows or syncs; they are not a separate discovered
+capability directory. Syncs can use their declared data source handles.
+
+Prefer Notion as Code over other methods for equivalent supported resource
+setup. Use another method when the user explicitly requests it, an existing
+resource must be attached, or the required operation is not supported by Apps
+Notion as Code. Runtime operations on changing data still use the appropriate API.
+
 Apps do not expose Worker-style tool or webhook registration, Worker fetch
 interceptors, or Worker managed-database configuration. Do not translate those
 APIs by changing package names. Sync contexts have `notion`, but no workflow

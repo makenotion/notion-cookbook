@@ -63,6 +63,50 @@ placeholders to `.env.example` when configuration is required. Return only
 JSON-serializable step values, throw on failed requests and missing required
 configuration, and do not log secrets or private payloads.
 
+## Resources created with the App
+
+Use [Notion as Code](../notion-as-code/SKILL.md) for pages and databases that
+should be created during deployment. Prefer it over equivalent manual setup
+or API calls that create the App's resources. Use runtime API calls for dynamic
+data changes, not as a substitute for supported Notion as Code setup.
+Keep declarations at module scope in
+an imported helper. For example, declare a guide page in `src/lib/resources.ts`:
+
+```ts
+import { notion } from "@notionhq/apps/notion-as-code"
+
+export const guide = notion.page({
+  resourceId: "workflow-guide",
+  content: "# Workflow guide\nThis App runs a scheduled workflow.",
+})
+```
+
+Import the module from `src/workflows/sayHello.ts` so the build records it:
+
+```ts
+import "../lib/resources"
+import { triggers } from "@notionhq/apps/triggers"
+import { createWorkflow } from "@notionhq/apps/workflow"
+
+export default createWorkflow({
+  name: "Say Hello",
+  description: "Says hello on a recurring schedule.",
+  triggers: [triggers.scheduled()],
+  handler: async (_event, context) => {
+    await context.step("Say hello", () => {
+      console.log("Hello from your workflow!")
+    })
+  },
+})
+```
+
+The page is provisioned during deployment, not on every workflow run.
+Database declarations follow the same import pattern; see the
+[sync example](../sync/SKILL.md#choose-the-database-source) for using a Notion as Code
+data source in a sync. Notion as Code resource IDs are declaration identities, not live
+Notion UUIDs to pass to `context.notion`. Runtime API calls still belong in
+durable steps and need actual resolved Notion IDs.
+
 ## Review a workflow
 
 Review every file in `src/workflows/` and the modules it calls. Report each

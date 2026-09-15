@@ -72,7 +72,13 @@ const OVERRIDE_GROUPS = {
 const APP_GROUP = {
   instructions: "apps/agents/instructions/default",
   skillsRoot: APP_SKILLS_ROOT,
-  skills: ["workflow", "connections", "sync", "custom-blocks"],
+  skills: [
+    "workflow",
+    "connections",
+    "sync",
+    "custom-blocks",
+    "notion-as-code",
+  ],
 }
 
 const AGENT_SYMLINKS = [
