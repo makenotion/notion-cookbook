@@ -69,8 +69,13 @@ recorded, so make writes idempotent or add a duplicate guard.
 Use `context.notion` for Notion API calls. Set `NOTION_API_TOKEN` in `.env` for
 local execution and never commit credentials.
 
-For calendar workflows, read the [calendar skill](.agents/skills/calendar/SKILL.md).
-It covers connection setup, all supported calendar tools, and safe retries.
+For workflows using providers, read the [connections skill](.agents/skills/connections/SKILL.md).
+It covers typed connection clients, calendar time handling, and safe retries.
+
+Agent guidance is generated from [apps/agents](../../agents/). Edit that
+canonical source and run `npm run agents:sync` from the repository root.
+Keep workflow-specific helpers in `src/workflows/lib/` and shared helpers in
+`src/lib/`.
 
 ## Deploy the app
 

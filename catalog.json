@@ -313,7 +313,7 @@
       "title": "Default Notion App template",
       "summary": "Build a Notion app with a recurring workflow and an interactive custom block.",
       "path": "apps/templates/apps-default",
-      "kind": "app-workflow",
+      "kind": "app-default",
       "status": "ready",
       "language": "typescript",
       "runtime": "node",

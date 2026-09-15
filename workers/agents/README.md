@@ -19,16 +19,19 @@ gets a different set instead.
 
 ```js
 const DEFAULT_GROUP = {
+  skillsRoot: WORKER_SKILLS_ROOT,
   instructions: `${INSTRUCTIONS_ROOT}/default`,
   skills: DEFAULT_SKILLS,
 }
 
 const OVERRIDE_GROUPS = {
   "worker-custom-block": {
+    skillsRoot: WORKER_SKILLS_ROOT,
     instructions: `${INSTRUCTIONS_ROOT}/custom-blocks`,
     skills: [...DEFAULT_SKILLS, "custom-blocks"],
   },
   "worker-workflow": {
+    skillsRoot: WORKER_SKILLS_ROOT,
     instructions: `${INSTRUCTIONS_ROOT}/workflow`,
     skills: ["workflow", "workflow-guide", "workflow-validate"],
   },
@@ -37,6 +40,9 @@ const OVERRIDE_GROUPS = {
 
 `skills` names entries in `skills/`, so a template ships only the ones its group
 lists. Spread `DEFAULT_SKILLS` to add to them instead of repeating them.
+
+App recipes use their own group and [canonical App guidance](../../apps/agents/).
+`skillsRoot` keeps each group's skill names scoped to its SDK family.
 
 Each template also gets an `AGENTS.md` and a `CLAUDE.md` symlink pointing at
 `.agents/INSTRUCTIONS.md`, so both discovery conventions resolve to one file.

@@ -1,4 +1,4 @@
-// Rewrites every worker template's `.agents/` from a canonical file set. Each
+// Rewrites worker and app templates' `.agents/` from canonical file sets. Each
 // `worker-*` recipe in `catalog.json` gets DEFAULT_GROUP unless its kind is
 // listed in OVERRIDE_GROUPS, so a new kind inherits the default instead of
 // being silently skipped. Sync deletes `.agents/` and copies the set back, so a
@@ -32,7 +32,8 @@ const TEMPLATES_ROOT = "workers/templates"
 
 // Skills live in one shared pool. A group names the ones it ships, so an
 // override can spread the defaults instead of repeating them.
-const SKILLS_ROOT = `${AGENTS_ROOT}/skills`
+const WORKER_SKILLS_ROOT = `${AGENTS_ROOT}/skills`
+const APP_SKILLS_ROOT = "apps/agents/skills"
 const DEFAULT_SKILLS = [
   "auth-guide",
   "sync",
@@ -42,6 +43,7 @@ const DEFAULT_SKILLS = [
 ]
 
 const DEFAULT_GROUP = {
+  skillsRoot: WORKER_SKILLS_ROOT,
   instructions: `${INSTRUCTIONS_ROOT}/default`,
   skills: DEFAULT_SKILLS,
 }
@@ -51,10 +53,12 @@ const DEFAULT_GROUP = {
 // define overrides with custom instructions and/or skills.
 const OVERRIDE_GROUPS = {
   "worker-custom-block": {
+    skillsRoot: WORKER_SKILLS_ROOT,
     instructions: `${INSTRUCTIONS_ROOT}/custom-blocks`,
     skills: [...DEFAULT_SKILLS, "custom-blocks"],
   },
   "worker-workflow": {
+    skillsRoot: WORKER_SKILLS_ROOT,
     instructions: `${INSTRUCTIONS_ROOT}/workflow`,
     skills: [
       ...DEFAULT_SKILLS,
@@ -63,6 +67,12 @@ const OVERRIDE_GROUPS = {
       "workflow-validate",
     ],
   },
+}
+
+const APP_GROUP = {
+  instructions: "apps/agents/instructions/default",
+  skillsRoot: APP_SKILLS_ROOT,
+  skills: ["workflow", "connections", "sync", "custom-blocks"],
 }
 
 const AGENT_SYMLINKS = [
@@ -131,28 +141,32 @@ const catalog = JSON.parse(
   await readFile(resolve(repoRoot, "catalog.json"), "utf8")
 )
 
-const workerRecipes = catalog.recipes.filter((recipe) =>
-  recipe.kind.startsWith("worker-")
+const agentRecipes = catalog.recipes.filter(
+  (recipe) =>
+    recipe.kind.startsWith("worker-") || recipe.kind.startsWith("app-")
 )
-if (workerRecipes.length === 0) {
-  fail("No catalog recipes with a worker- kind")
+if (agentRecipes.length === 0) {
+  fail("No catalog recipes with a worker- or app- kind")
 }
 
 // Resolve and confine every recipe path up front, so a path that escapes the
 // templates root fails before the first delete rather than partway through.
-const templatesRoot = resolve(repoRoot, TEMPLATES_ROOT)
 const recipeRoots = new Map()
-for (const recipe of workerRecipes) {
+for (const recipe of agentRecipes) {
+  const templatesDirectory = recipe.kind.startsWith("app-")
+    ? "apps/templates"
+    : TEMPLATES_ROOT
+  const templatesRoot = resolve(repoRoot, templatesDirectory)
   const recipeRoot = resolve(repoRoot, recipe.path)
   if (!recipeRoot.startsWith(templatesRoot + sep)) {
     fail(
-      `Recipe ${JSON.stringify(recipe.id)} has path ${JSON.stringify(recipe.path)}, which resolves outside ${TEMPLATES_ROOT}/`
+      `Recipe ${JSON.stringify(recipe.id)} has path ${JSON.stringify(recipe.path)}, which resolves outside ${templatesDirectory}/`
     )
   }
   recipeRoots.set(recipe, recipeRoot)
 }
 
-const kinds = new Set(workerRecipes.map((recipe) => recipe.kind))
+const kinds = new Set(agentRecipes.map((recipe) => recipe.kind))
 for (const [kind, group] of Object.entries(OVERRIDE_GROUPS)) {
   if (!kinds.has(kind)) {
     fail(
@@ -167,8 +181,10 @@ for (const [kind, group] of Object.entries(OVERRIDE_GROUPS)) {
 // Keyed by the group object, so two kinds sharing one instruction set still
 // get separate entries once groups differ in other fields.
 const groups = new Map()
-for (const recipe of workerRecipes) {
-  const config = OVERRIDE_GROUPS[recipe.kind] ?? DEFAULT_GROUP
+for (const recipe of agentRecipes) {
+  const config = recipe.kind.startsWith("app-")
+    ? APP_GROUP
+    : (OVERRIDE_GROUPS[recipe.kind] ?? DEFAULT_GROUP)
   const group = groups.get(config)
   if (group) group.recipes.push(recipe)
   else groups.set(config, { config, recipes: [recipe] })
@@ -192,8 +208,10 @@ for (const group of groups.values()) {
     contents.set(file, await readFile(join(canonicalPath, file), "utf8"))
   }
   for (const skill of group.config.skills ?? []) {
-    const skillPath = resolve(repoRoot, SKILLS_ROOT, skill)
+    const skillPath = resolve(repoRoot, group.config.skillsRoot, skill)
     const skillFiles = await collectFiles(skillPath)
+    if (!skillFiles.includes("SKILL.md"))
+      fail(`Missing SKILL.md in ${skillPath}`)
     for (const file of skillFiles) {
       contents.set(
         join("skills", skill, file),
@@ -203,6 +221,10 @@ for (const group of groups.values()) {
   }
 
   for (const recipe of group.recipes) {
+    const templatesRoot = resolve(
+      repoRoot,
+      recipe.kind.startsWith("app-") ? "apps/templates" : TEMPLATES_ROOT
+    )
     const agentsRoot = join(recipeRoots.get(recipe), ".agents")
 
     if (isDryRun) {
@@ -253,7 +275,7 @@ for (const group of groups.values()) {
 if (isDryRun) {
   if (drifted.length > 0) {
     console.error(
-      `Template agent files drifted from ${INSTRUCTIONS_ROOT}/ and ${SKILLS_ROOT}/:`
+      "Template agent files drifted from workers/agents/ or apps/agents/:"
     )
     for (const file of drifted) {
       console.error(`  ${file}`)
@@ -261,9 +283,7 @@ if (isDryRun) {
     console.error("Run `npm run agents:sync` and commit the result.")
     process.exit(1)
   }
-  console.log(
-    `Template agent files match ${INSTRUCTIONS_ROOT}/ and ${SKILLS_ROOT}/.`
-  )
+  console.log("Template agent files match workers/agents/ and apps/agents/.")
 } else {
   console.log(`Rewrote .agents/ for ${rewritten} template(s).`)
 }

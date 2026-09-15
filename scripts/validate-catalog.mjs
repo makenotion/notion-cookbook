@@ -89,7 +89,7 @@ function requireString(recipe, field, label) {
 
 function expectedKind(path, id) {
   if (path.startsWith("examples/")) return "api-example"
-  if (path.startsWith("apps/templates/")) return "app-workflow"
+  if (path.startsWith("apps/templates/")) return "app-default"
   if (path.startsWith("workers/templates/custom-blocks/"))
     return "worker-custom-block"
   if (id.endsWith("-default")) return "worker-default"
@@ -161,7 +161,7 @@ async function validateRecipe(recipe, index, projects, readme, ids, paths) {
 
   const allowedKinds = new Set([
     "api-example",
-    "app-workflow",
+    "app-default",
     "worker-sync",
     "worker-tool",
     "worker-webhook",
@@ -264,7 +264,7 @@ async function validateRecipe(recipe, index, projects, readme, ids, paths) {
   // Private alpha capabilities ship templates without advertising them in the
   // public README.
   const UNLISTED_KINDS = new Set([
-    "app-workflow",
+    "app-default",
     "worker-custom-block",
     "worker-workflow",
   ])
