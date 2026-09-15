@@ -69,8 +69,7 @@ the declared data source handle. Shared declarations can live in
 This skill covers only syncs backed by Notion as Code data sources. If the user
 asks to attach an existing database, explain that this recipe does not cover
 that setup and clarify the next step. Do not silently create a replacement
-database or switch to the legacy sync API. Do not add a Worker managed-database
-option.
+database.
 
 ## Pagination and reconciliation
 

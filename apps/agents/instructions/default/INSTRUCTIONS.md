@@ -14,8 +14,7 @@ import * as Notion from "@notionhq/apps"
 
 The root exports only `Notion.page`, `Notion.database`, `Notion.teamspace`,
 `Notion.customAgent`, `Notion.sync`, `Notion.workflow`, and `Notion.customBlock`.
-Use these short names, not the old `create*` capability names. `Notion.sync`
-takes a Notion as Code data source handle. There is no standalone
+`Notion.sync` takes a Notion as Code data source handle. There is no standalone
 `Notion.dataSource`; declare data sources inside `Notion.database`.
 
 Keep all other imports on their existing subpaths: `Builder` from
@@ -25,8 +24,7 @@ Keep all other imports on their existing subpaths: `Builder` from
 Browser runtime and React APIs also keep their subpaths. Do not expect these
 utilities or types on `Notion`.
 
-Use an SDK release that includes these root exports. If the installed version
-lacks them, resolve the version mismatch; do not fall back to old factory names.
+Check that the installed SDK supports these exports before building.
 
 ## Capability layout
 

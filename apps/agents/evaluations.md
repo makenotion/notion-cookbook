@@ -5,13 +5,11 @@ Inspect code and compile against the intended SDK version. Do not deploy or
 use live credentials.
 
 Ask for a workflow, a Notion as Code resource, a sync, and a custom block.
-Verify examples use `import * as Notion from "@notionhq/apps"` and the short
-creation names. The root has only `page`, `database`, `teamspace`, `customAgent`,
-`sync`, `workflow`, and `customBlock`. Reject old `create*` capability calls,
-a standalone `Notion.dataSource`, and root imports of builders, types,
-connections, triggers, or browser runtime clients. Keep these helpers on their
-existing subpaths. Compile the examples against an SDK release with these
-exports; report a version mismatch rather than falling back to old names.
+Verify examples use `import * as Notion from "@notionhq/apps"` for creation. The root has only `page`, `database`, `teamspace`, `customAgent`,
+`sync`, `workflow`, and `customBlock`. Data sources belong inside
+`Notion.database`. Builders, types, connections, triggers, and browser runtime
+clients use their own subpaths. Compile the examples against an SDK release
+with these exports; report any version mismatch.
 
 For Notion as Code, ask the agent to declare an Issues database and sync records
 into it. Verify that the sync uses a data source handle with
@@ -24,7 +22,7 @@ When both Notion as Code and other setup can meet a request, verify the agent ch
 Notion as Code by default. An explicit request to attach an existing database should
 retain that database rather than provision a replacement. The sync skill should
 explain that existing-database attachment is outside its Notion as Code recipe
-and clarify the next step, not switch to legacy sync guidance.
+and clarify the next step.
 
 Also place a page declaration in an imported `src/lib/` module and another
 in an unimported module. Verify only the imported page appears in provisioning
