@@ -6,23 +6,23 @@ provider is enabled on the server.
 
 ## SDK imports
 
-Use the package root for creation helpers:
+Import the creation helpers you use directly from the package root:
 
 ```ts
-import * as Notion from "@notionhq/apps"
+import { database, sync } from "@notionhq/apps"
 ```
 
-The root exports only `Notion.page`, `Notion.database`, `Notion.teamspace`,
-`Notion.customAgent`, `Notion.sync`, `Notion.workflow`, and `Notion.customBlock`.
-`Notion.sync` takes a Notion as Code data source handle. There is no standalone
-`Notion.dataSource`; declare data sources inside `Notion.database`.
+The root exports only `page`, `database`, `teamspace`,
+`customAgent`, `sync`, `workflow`, and `customBlock`.
+`sync` takes a Notion as Code data source handle. There is no standalone
+`dataSource`; declare data sources inside `database`.
 
 Keep all other imports on their existing subpaths: `Builder` from
 `@notionhq/apps/builder`, value helpers and types from their own modules,
 `connections` from `@notionhq/apps/workflow`, and `triggers` from
 `@notionhq/apps/triggers` (or use the workflow's typed trigger callback).
-Browser runtime and React APIs also keep their subpaths. Do not expect these
-utilities or types on `Notion`.
+Browser runtime and React APIs also keep their subpaths. The package root does not export these
+utilities or types.
 
 Check that the installed SDK supports these exports before building.
 
@@ -34,11 +34,11 @@ Its filename supplies the capability key. Put capability-specific helpers in
 helpers in `src/lib/`. Discovery only reads direct children, so these helpers
 are not treated as capabilities.
 
-| Directory           | Declaration               | Guidance                                |
-| ------------------- | ------------------------- | --------------------------------------- |
-| `src/workflows/`    | `Notion.workflow(...)`    | `.agents/skills/workflow/SKILL.md`      |
-| `src/syncs/`        | `Notion.sync(...)`        | `.agents/skills/sync/SKILL.md`          |
-| `src/customBlocks/` | `Notion.customBlock(...)` | `.agents/skills/custom-blocks/SKILL.md` |
+| Directory           | Declaration        | Guidance                                |
+| ------------------- | ------------------ | --------------------------------------- |
+| `src/workflows/`    | `workflow(...)`    | `.agents/skills/workflow/SKILL.md`      |
+| `src/syncs/`        | `sync(...)`        | `.agents/skills/sync/SKILL.md`          |
+| `src/customBlocks/` | `customBlock(...)` | `.agents/skills/custom-blocks/SKILL.md` |
 
 Read the matching skill before implementing a capability. Workflows that use
 connections also need `.agents/skills/connections/SKILL.md`.

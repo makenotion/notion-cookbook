@@ -6,13 +6,13 @@ user-invocable: false
 
 # App custom blocks
 
-Import `Notion` from the package root and default-export `Notion.customBlock(...)` in
+Import `{ customBlock }` from `@notionhq/apps` and default-export `customBlock(...)` in
 `src/customBlocks/<key>.ts`. Copy the existing hello block's browser setup:
 
 ```ts
-import * as Notion from "@notionhq/apps"
+import { customBlock } from "@notionhq/apps"
 
-export default Notion.customBlock({
+export default customBlock({
   path: "./blocks/issueBoard",
   slashCommand: "issue-board",
   dataSources: {},
@@ -30,7 +30,7 @@ Import React integration from `@notionhq/apps/react` and styles from
 `@notionhq/apps/nds.css`. Wrap the UI in `NotionCustomBlock`. Read the installed
 custom-block client documentation before adding hooks or host interactions.
 Browser runtime APIs stay on `@notionhq/apps/custom-blocks`; the root
-`Notion.customBlock` creates a capability, not a browser runtime client.
+`customBlock` creates a capability, not a browser runtime client.
 Never put server credentials in browser source.
 
 `dataSources` declares expected host schemas; it does not bind a concrete

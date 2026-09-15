@@ -18,17 +18,17 @@ Do not choose manual database setup or a separate attached-database declaration
 when Notion as Code can provide the same resource.
 
 For a database the App creates, declare and provision it with
-`Notion.database(...)` and `Notion.sync({ dataSource, ... })`.
+`database(...)` and `sync({ dataSource, ... })`.
 Read the [Notion as Code skill](../notion-as-code/SKILL.md) for that path,
 including declaration discovery and the supported schema types.
 
 This example declares an Issues database and syncs into its data source:
 
 ```ts
-import * as Notion from "@notionhq/apps"
+import { database, sync } from "@notionhq/apps"
 import { Builder } from "@notionhq/apps/builder"
 
-const issues = Notion.database({
+const issues = database({
   resourceId: "issues-db",
   name: "Issues",
   dataSources: [
@@ -43,7 +43,7 @@ const issues = Notion.database({
   ],
 })
 
-export default Notion.sync({
+export default sync({
   dataSource: issues.dataSources["issues-source"],
   primaryKey: "External ID",
   mode: "incremental",

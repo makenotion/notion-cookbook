@@ -47,20 +47,20 @@ blocks/hello/  Browser source, Vite config, and separate browser tsconfig
 
 Every TypeScript file directly inside `src/workflows/` defines one workflow.
 The camelCase filename becomes its workflow key, and the file must default
-export `Notion.workflow(...)`.
+export `workflow(...)`.
 
 ## SDK imports
 
-Use the package root for resource and capability creation:
+Import the resource and capability creators you use from the package root:
 
 ```ts
-import * as Notion from "@notionhq/apps"
+import { database, sync } from "@notionhq/apps"
 ```
 
-Use `Notion.workflow`, `Notion.sync`, `Notion.customBlock`, `Notion.page`,
-`Notion.database`, `Notion.teamspace`, and `Notion.customAgent`. Syncs use Notion
-as Code data sources declared inside `Notion.database`; there is no standalone
-`Notion.dataSource` creator.
+Use `workflow`, `sync`, `customBlock`, `page`,
+`database`, `teamspace`, and `customAgent`. Syncs use Notion
+as Code data sources declared inside `database`; there is no standalone
+`dataSource` creator.
 
 Keep utilities and types on their existing subpaths. For example, import
 `Builder` from `@notionhq/apps/builder`, `connections` from

@@ -1,7 +1,7 @@
-import * as Notion from "@notionhq/apps"
+import { workflow } from "@notionhq/apps"
 import { triggers } from "@notionhq/apps/triggers"
 
-export default Notion.workflow({
+export default workflow({
   name: "Say Hello",
   description: "Says hello on a recurring schedule.",
   triggers: [triggers.scheduled()],

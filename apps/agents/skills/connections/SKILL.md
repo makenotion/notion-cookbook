@@ -6,7 +6,7 @@ user-invocable: false
 
 # Workflow connections
 
-Import `Notion` with `import * as Notion from "@notionhq/apps"` and
+Import `{ workflow }` from `@notionhq/apps` and
 `connections` from `@notionhq/apps/workflow`. Connections are not root exports.
 Declare requirements on the workflow, then use the corresponding typed client
 inside an awaited durable step. Access a named connection through its provider
@@ -39,14 +39,14 @@ capability context with `notion`; do not assume they have provider clients.
 ## Bind triggers to connections
 
 For provider triggers, use the `triggers: ({ triggers }) => [...]` callback
-on `Notion.workflow`. Its trigger creators infer valid connection keys from
+on `workflow`. Its trigger creators infer valid connection keys from
 the workflow's declarations:
 
 ```ts
-import * as Notion from "@notionhq/apps"
+import { workflow } from "@notionhq/apps"
 import { connections } from "@notionhq/apps/workflow"
 
-export default Notion.workflow({
+export default workflow({
   name: "Watch support messages",
   description: "Runs when a message arrives through the support connection.",
   connections: [connections.slack({ key: "support" })],

@@ -25,7 +25,8 @@ typed data source handles, and deployment behavior.
 
 These instructions require an Apps SDK release with the creation-only root
 exports: `page`, `database`, `teamspace`, `customAgent`, `sync`, `workflow`, and
-`customBlock`. Examples use `import * as Notion from "@notionhq/apps"`; utilities
+`customBlock`. Examples import the helpers they use, such as
+`import { database, sync } from "@notionhq/apps"`; utilities
 and types keep their existing subpaths. They replace
 Worker registration, auth interception, and database assumptions with Apps APIs.
 Worker tools and webhooks are not registered by the Apps capability discovery

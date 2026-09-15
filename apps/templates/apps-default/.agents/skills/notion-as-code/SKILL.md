@@ -12,7 +12,8 @@ manual setup or runtime creation calls. Respect explicit user choices and
 existing resource attachments; use other methods for unsupported operations
 or runtime data changes.
 
-Use `import * as Notion from "@notionhq/apps"`. Its resource creators declare
+Import the resource creators you use, such as
+`import { database, page } from "@notionhq/apps"`. These functions declare
 resources for deployment; they do not make Notion API requests when called.
 Use `context.notion` for runtime API operations instead.
 
@@ -43,7 +44,7 @@ src/
 ```
 
 For example, export a database handle from `src/lib/resources.ts` and import it
-in `src/syncs/issues.ts` for `Notion.sync`. A page-only declaration
+in `src/syncs/issues.ts` for `sync`. A page-only declaration
 module can be loaded with a side-effect import such as
 `import "../lib/pages"` from a workflow or sync. Keep those imports at module
 scope so build evaluation runs the declarations.
@@ -61,14 +62,14 @@ standalone Notion as Code project and has no discovered capabilities.
 Read the installed Notion as Code types before choosing fields. The Apps
 root exports support:
 
-- `Notion.teamspace({ resourceId, name, accessLevel })`, with `addPage` and
+- `teamspace({ resourceId, name, accessLevel })`, with `addPage` and
   `addDatabase` on the returned handle.
-- `Notion.page({ resourceId, parent?, properties?, content? })`, with
+- `page({ resourceId, parent?, properties?, content? })`, with
   `addPage` and `addDatabase` for children.
-- `Notion.database({ resourceId, parent?, name?, dataSources? })`, returning
+- `database({ resourceId, parent?, name?, dataSources? })`, returning
   data source handles indexed by their resource IDs. A data source's
   `addPage` declares a row; the database handle also exposes `addView`.
-- `Notion.customAgent({ resourceId, name, instructions?, sharedResources? })`.
+- `customAgent({ resourceId, name, instructions?, sharedResources? })`.
   Shared resources are declared resource IDs; inspect the installed types
   before specifying models or triggers.
 
@@ -84,8 +85,8 @@ that any payload is supported. Check implementation and examples before using
 it; do not assume parity with other Notion as Code packages.
 
 The Apps SDK exposes a subset of Notion as Code. Data sources are nested inside
-`Notion.database({ dataSources: [...] })`, not declared by a separate
-`Notion.dataSource` function. It has no `Notion.space` workspace declaration:
+`database({ dataSources: [...] })`, not declared by a separate
+`dataSource` function. It has no `space` workspace declaration:
 Apps deployment rejects workspace creation or changes and supplies the App's
 workspace binding itself. Value helpers and types stay on their existing
 subpaths. For example, import `{ notion }` from `@notionhq/apps/notion-as-code`
@@ -100,10 +101,10 @@ This example can live directly in `src/syncs/issues.ts`. Move the resource
 declaration into an imported helper when sharing it with other capabilities.
 
 ```ts
-import * as Notion from "@notionhq/apps"
+import { database, sync } from "@notionhq/apps"
 import { Builder } from "@notionhq/apps/builder"
 
-const issues = Notion.database({
+const issues = database({
   resourceId: "issues-db",
   name: "Issues",
   dataSources: [
@@ -118,7 +119,7 @@ const issues = Notion.database({
   ],
 })
 
-export default Notion.sync({
+export default sync({
   dataSource: issues.dataSources["issues-source"],
   primaryKey: "External ID",
   mode: "incremental",
@@ -169,7 +170,7 @@ CLI builds the App, reads `dist/provisioning.json` and `dist/manifest.json`,
 deploys code, applies Notion as Code intents, and reconciles sync attachments. It matches
 each sync's manifest `databaseKey` to a declared data source's `resourceId`,
 then resolves the resulting live data source from provisioning state.
-`Notion.sync` supplies this matching key from the handle. An existing
+`sync` supplies this matching key from the handle. An existing
 binding to a different database causes an error instead of silent rebinding.
 
 The standalone command `ntn notion-as-code apply <dir>` is a different

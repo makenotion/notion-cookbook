@@ -1,6 +1,6 @@
-import * as Notion from "@notionhq/apps"
+import { customBlock } from "@notionhq/apps"
 
-export default Notion.customBlock({
+export default customBlock({
   path: "./blocks/hello",
   slashCommand: "app-hello",
   dataSources: {},
