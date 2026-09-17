@@ -38,9 +38,7 @@ Take into account these limits when building a custom block:
   Check the installed SDK documentation and types for each required operation.
 - **Query filters:** Filters do not support `or` groups or nested groups.
   Use one property condition or one `and` group.
-- **Links and navigation:** Custom blocks cannot open external links.
-  They also provide no supported way to open internal Notion links.
-  Do not implement link navigation or authentication redirects with `window.open` or `window.location`.
+- **External Links and navigation:** Do not implement external link navigation or authentication redirects with `window.open` or `window.location`.
 - **Page creation:** `pages.create` cannot set an icon or cover.
   Create the page first. Then use `pages.update` to set its icon or cover.
 - **Availability:** Custom blocks require private-alpha access.
