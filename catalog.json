@@ -725,6 +725,31 @@
       }
     },
     {
+      "id": "trademark-portfolio-sync",
+      "title": "Trademark portfolio sync",
+      "summary": "Sync a company's global trademark portfolio \u2014 USPTO and TMview registry data joined with outside counsel's docket reports \u2014 into managed Notion databases, keyless-first, with computed renewal and prosecution deadlines.",
+      "path": "workers/templates/trademark-portfolio-sync",
+      "kind": "worker-sync",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": [
+        "notion-workers",
+        "uspto",
+        "tmview",
+        "euipo",
+        "ip-australia"
+      ],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name trademark-portfolio-sync"
+      }
+    },
+    {
       "id": "vercel-production-deployment-tools",
       "title": "Vercel production deployment tools",
       "summary": "Inspect, promote, or roll back one Vercel project with live release checks.",

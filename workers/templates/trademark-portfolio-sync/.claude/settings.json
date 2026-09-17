@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install)",
+      "Bash(npm run check)",
+      "Bash(npm run build)",
+      "Bash(npm test)",
+      "Bash(ntn workers exec:*)",
+      "Bash(ntn workers sync status:*)",
+      "Bash(ntn workers runs:*)",
+      "Bash(ntn workers capabilities list)",
+      "Bash(ntn workers env list)"
+    ]
+  }
+}
