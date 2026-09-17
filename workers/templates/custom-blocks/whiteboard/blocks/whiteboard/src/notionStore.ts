@@ -341,7 +341,7 @@ export function useNotionStore(): WhiteboardStore {
               baselines.current.set(localId, { ...withTitle, id: localId })
             } else {
               // Item was deleted while the create was in flight.
-              void pages.delete(result.page.id)
+              void pages.archive(result.page.id)
             }
             endWrite(true)
           } else {
@@ -392,7 +392,7 @@ export function useNotionStore(): WhiteboardStore {
       if (pageId) {
         beginWrite()
         void pages
-          .delete(pageId as Parameters<typeof pages.get>[0])
+          .archive(pageId as Parameters<typeof pages.get>[0])
           .then((result) => {
             // A row already gone (deleted twice, or removed in Notion)
             // is fine — local state is already reconciled. Stay quiet.

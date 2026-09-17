@@ -175,7 +175,7 @@ export function useNotionStore(): HabitStore {
       if (ids.size === 0) return false
       setRemovedKeys((prev) => new Set(prev).add(key))
       const results = await Promise.all(
-        [...ids].map((id) => pages.delete(id as NotionPageId))
+        [...ids].map((id) => pages.archive(id as NotionPageId))
       )
       if (results.every((r) => r.status === "success")) return true
       // Revert.

@@ -81,7 +81,6 @@ function NotionRoot() {
 	const fallbackTheme = prefersDark() ? "dark" : "light";
 	return (
 		<NotionCustomBlock
-			autoResize
 			fallback={
 				<Shell theme={fallbackTheme}>
 					<App store={staticStore("loading")} />
