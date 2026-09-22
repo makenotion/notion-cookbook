@@ -11,12 +11,13 @@ triggers, external services, and every Notion resource it needs. Recommend a
 workflow for most automations; use a sync when the goal is to mirror an external
 collection into a Notion database. An App may contain both.
 
-Before proposing the design, use only this guidance and the top-level
-descriptions of the relevant capability skills (workflow, sync, connections,
-and Notion as Code) to describe concrete options for open decisions. Do not
-inspect generated declarations, full provider API surfaces, or other
-implementation details until the user agrees on a direction. Verify those
-details against the selected option during implementation.
+Before proposing the design, read only enough of this guidance and the
+top-level descriptions of the relevant capability skills (workflow, sync,
+connections, and Notion as Code) to describe concrete options for open
+decisions. Do not read full skill instructions, generated declarations
+(`*.generated.d.ts`), full provider API surfaces, or other implementation
+details until the user agrees on a direction. Verify those details against the
+selected option during implementation.
 
 Present the proposed design concisely and get the user's agreement before
 implementing. Always include an App home page that explains what the App does
