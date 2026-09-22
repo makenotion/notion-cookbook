@@ -4,6 +4,63 @@ Apps are a private alpha. Check the installed `@notionhq/apps` exports and
 declarations before using a capability; SDK support does not establish that a
 provider is enabled on the server.
 
+## Design the App before implementation
+
+First establish what the complete App should do: its outcome, source data,
+triggers, external services, and every Notion resource it needs. Recommend a
+workflow for most automations; use a sync when the goal is to mirror an external
+collection into a Notion database. An App may contain both.
+
+Before proposing the design, use only this guidance and the top-level
+descriptions of the relevant capability skills (workflow, sync, connections,
+and Notion as Code) to describe concrete options for open decisions. Do not
+inspect generated declarations, full provider API surfaces, or other
+implementation details until the user agrees on a direction. Verify those
+details against the selected option during implementation.
+
+Present the proposed design concisely and get the user's agreement before
+implementing. Always include an App home page that explains what the App does
+and links to all of its Notion resources. The proposal should include:
+
+- Every Notion resource the App will create, including the home page, databases,
+  other pages, and custom agents; state each resource's purpose and which
+  capabilities use it.
+- Every sync, including its external source, destination database, and
+  synchronization behavior.
+- Every workflow, including its trigger, main actions, resources it reads or
+  changes, and external connections.
+- Open decisions and required access.
+
+Adapt the format to the App. For example:
+
+### Example App design
+
+**Outcome:** Bring support tickets into Notion and escalate urgent tickets to
+the support team.
+
+**Notion resources**
+
+| Kind         | Name              | Purpose                                             | Used by                          |
+| ------------ | ----------------- | --------------------------------------------------- | -------------------------------- |
+| Page         | Support app home  | Explain the App and link to its resources           | Team members                     |
+| Database     | Support tickets   | Store synchronized tickets and triage status        | Ticket sync, escalation workflow |
+| Page         | Support dashboard | Give the team an operational home and database view | Team members                     |
+| Custom agent | Ticket triage     | Classify urgency and summarize a ticket             | Escalation workflow              |
+
+**Syncs and workflows**
+
+| Kind     | Name                   | Source or trigger                       | Behavior                                              | Dependencies                                                        |
+| -------- | ---------------------- | --------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------- |
+| Sync     | Ticket sync            | Support-system tickets                  | Upsert by stable external ID                          | Support-system connection, Support tickets database                 |
+| Workflow | Escalate urgent ticket | Support tickets page created or updated | Run triage, update status, and notify support channel | Ticket triage agent, Support tickets database, messaging connection |
+
+**Open questions:** Which support system and messaging channel should the App use?
+
+Ask the user to confirm or revise the design. Do not begin implementation
+until they agree. If implementation reveals a material resource or capability
+not covered by the agreed design, update the proposal and confirm the change
+before adding it.
+
 ## SDK imports
 
 Import the creation helpers you use directly from the package root:
@@ -27,6 +84,13 @@ utilities or types.
 Check that the installed SDK supports these exports before building.
 
 ## Capability layout
+
+After the user agrees on the design, compare it with the complete scaffold.
+Remove template workflows, syncs, custom blocks, Notion resource declarations,
+sample assets, and supporting code that the App does not need. Do not leave
+example or placeholder capabilities in discovered capability directories: the
+build can include and deploy them. Preserve shared configuration and
+infrastructure required by the selected capabilities.
 
 Each direct TypeScript file in these directories default-exports a declaration.
 Its filename supplies the capability key. Put capability-specific helpers in
@@ -73,5 +137,11 @@ Building does not verify server availability, published connection setup, or
 browser interactions. State separately which live checks actually ran.
 
 For a requested deployment, enable `ntn experiments enable apps`, authenticate,
-and use `ntn apps deploy --name <name>` on the first deployment; omit `--name`
-for updates. Read the installed CLI help for other commands.
+and use `ntn apps deploy --json` with any required arguments. On the first
+deployment, pass `--name <name>`; omit `--name` for updates. Use the JSON fields
+`worker_url`, `setup_url`, and `is_update` in the handoff. For a first
+deployment (`is_update` is false), show the `setup_url` and tell the user to
+open it to finish setup. For an update (`is_update` is true), show both URLs
+with clear labels: `worker_url` opens the deployed App and `setup_url` revisits
+onboarding. Use the URLs returned by the CLI; do not construct or guess them.
+Read the installed CLI help for other commands.
