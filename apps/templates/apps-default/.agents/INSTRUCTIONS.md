@@ -99,14 +99,14 @@ Its filename supplies the capability key. Put capability-specific helpers in
 helpers in `src/lib/`. Discovery only reads direct children, so these helpers
 are not treated as capabilities.
 
-The App template includes short capability guidance under `.agents/skills/`;
-the full SDK skills are installed under
-`./node_modules/@notionhq/apps/skills/`. For every area you implement, read
-both files listed in this table. If the installed SDK skill is missing, install
+The App template's `.agents/skills/` files point to the full SDK skills
+installed under `./node_modules/@notionhq/apps/skills/`. For every area you
+implement, follow the template pointer and read the corresponding installed
+SDK skill listed in this table. If the installed SDK skill is missing, install
 the App's dependencies; if it remains missing, update `@notionhq/apps` to a
 release that includes it. Do not continue without the full SDK guidance.
 
-| Area           | Where used                                                   | Template guidance                        | Installed SDK skill                                          |
+| Area           | Where used                                                   | Template pointer                         | Full SDK skill                                               |
 | -------------- | ------------------------------------------------------------ | ---------------------------------------- | ------------------------------------------------------------ |
 | Workflow       | `src/workflows/`                                             | `.agents/skills/workflow/SKILL.md`       | `node_modules/@notionhq/apps/skills/workflow/SKILL.md`       |
 | Connections    | Workflow provider clients and triggers                       | `.agents/skills/connections/SKILL.md`    | `node_modules/@notionhq/apps/skills/connections/SKILL.md`    |
