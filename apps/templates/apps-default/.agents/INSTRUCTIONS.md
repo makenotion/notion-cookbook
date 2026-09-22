@@ -99,19 +99,23 @@ Its filename supplies the capability key. Put capability-specific helpers in
 helpers in `src/lib/`. Discovery only reads direct children, so these helpers
 are not treated as capabilities.
 
-| Directory           | Declaration        | Guidance                                |
-| ------------------- | ------------------ | --------------------------------------- |
-| `src/workflows/`    | `workflow(...)`    | `.agents/skills/workflow/SKILL.md`      |
-| `src/syncs/`        | `sync(...)`        | `.agents/skills/sync/SKILL.md`          |
-| `src/customBlocks/` | `customBlock(...)` | `.agents/skills/custom-blocks/SKILL.md` |
+The App template includes short capability guidance under `.agents/skills/`;
+the full SDK skills are installed under
+`./node_modules/@notionhq/apps/skills/`. For every area you implement, read
+both files listed in this table. If the installed SDK skill is missing, install
+the App's dependencies; if it remains missing, update `@notionhq/apps` to a
+release that includes it. Do not continue without the full SDK guidance.
 
-Read the matching skill before implementing a capability. Workflows that use
-connections also need `.agents/skills/connections/SKILL.md`.
+| Area           | Where used                                                   | Template guidance                        | Installed SDK skill                                          |
+| -------------- | ------------------------------------------------------------ | ---------------------------------------- | ------------------------------------------------------------ |
+| Workflow       | `src/workflows/`                                             | `.agents/skills/workflow/SKILL.md`       | `node_modules/@notionhq/apps/skills/workflow/SKILL.md`       |
+| Connections    | Workflow provider clients and triggers                       | `.agents/skills/connections/SKILL.md`    | `node_modules/@notionhq/apps/skills/connections/SKILL.md`    |
+| Database sync  | `src/syncs/`                                                 | `.agents/skills/sync/SKILL.md`           | `node_modules/@notionhq/apps/skills/sync/SKILL.md`           |
+| Custom blocks  | `src/customBlocks/`                                          | `.agents/skills/custom-blocks/SKILL.md`  | `node_modules/@notionhq/apps/skills/custom-blocks/SKILL.md`  |
+| Notion as Code | Resources declared in modules imported by workflows or syncs | `.agents/skills/notion-as-code/SKILL.md` | `node_modules/@notionhq/apps/skills/notion-as-code/SKILL.md` |
 
-For resources declared with the App, read
-`.agents/skills/notion-as-code/SKILL.md`. Notion as Code declarations belong in
-modules imported by workflows or syncs; they are not a separate discovered
-capability directory. Syncs can use their declared data source handles.
+Notion as Code declarations are not a separate discovered capability
+directory. Syncs can use their declared data source handles.
 
 Prefer Notion as Code over other methods for equivalent supported resource
 setup. Use another method when the user explicitly requests it, an existing
