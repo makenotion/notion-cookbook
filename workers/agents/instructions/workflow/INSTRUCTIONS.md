@@ -9,12 +9,6 @@ them to confirm that they are in the Workflows alpha. Do not proceed until they
 confirm. If they do not have access, explain that there is no waitlist and do
 not use this template.
 
-When creating the project with `ntn workers new --template workflow`, answer
-the CLI's yes/no alpha-access prompt in an interactive terminal. In a
-non-interactive environment, pass `--user-is-in-workflows-alpha` only after the
-user has confirmed access. Do not treat the flag as a substitute for asking the
-user.
-
 ## Project structure
 
 - `src/workflows/` contains Workflow definitions.
