@@ -30,6 +30,10 @@ ntn login
 ntn workers deploy --name my-workflow
 ```
 
+The CLI asks you to confirm Workflows alpha access before creating the project.
+If you run the command non-interactively, confirm access with the user first,
+then pass `--user-is-in-workflows-alpha` to `ntn workers new`.
+
 Open the deployed Worker in the [Developer Portal](https://app.notion.com/developers/workers).
 Configure its trigger, then save the Workflow before testing it.
 
