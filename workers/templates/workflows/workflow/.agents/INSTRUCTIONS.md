@@ -1,5 +1,14 @@
 # Workflow template guidance
 
+## Private alpha: confirm access before proceeding
+
+Workflows are in an early, closed private alpha with no waitlist. This template
+will not work unless the user already has access to the alpha. Before using or
+changing this template for a user, verbally warn them about this limit and ask
+them to confirm that they are in the Workflows alpha. Do not proceed until they
+confirm. If they do not have access, explain that there is no waitlist and do
+not use this template.
+
 ## Project structure
 
 - `src/workflows/` contains Workflow definitions.

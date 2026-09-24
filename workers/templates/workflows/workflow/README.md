@@ -2,7 +2,10 @@
 
 > [!WARNING]
 >
-> Workflows are an early alpha feature. The SDK can make breaking changes.
+> Workflows are in an early, closed private alpha with no waitlist. This
+> template will not work unless you already have access to the alpha. If you
+> do not have access, do not use this template. The SDK can make breaking
+> changes.
 
 This template starts a Worker that runs durable automation steps after a
 configured trigger fires. The included `sayHello` Workflow runs on a recurring
@@ -10,7 +13,7 @@ schedule.
 
 ## Prerequisites
 
-- Access to the Workflows alpha.
+- Existing access to the Workflows private alpha (there is no waitlist).
 - Node.js 22 or newer and npm 10.9.2 or newer.
 - The Notion CLI.
 
