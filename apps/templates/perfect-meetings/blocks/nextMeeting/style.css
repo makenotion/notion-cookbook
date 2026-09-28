@@ -1,0 +1,135 @@
+body {
+  margin: 0;
+  background: transparent;
+}
+
+.card {
+  color: var(--content-primary);
+  background: var(--bg-base);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-12);
+  padding: var(--spacing-16);
+  font-family: inherit;
+}
+
+.muted {
+  color: var(--content-secondary);
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-12);
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.eyebrow {
+  color: var(--content-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.title {
+  margin: 2px 0 4px;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.actions {
+  display: flex;
+  gap: var(--spacing-8);
+  align-items: center;
+}
+
+.button {
+  border: 1px solid var(--border-primary);
+  background: var(--bg-elevated, var(--bg-base));
+  color: var(--content-primary);
+  border-radius: var(--radius-8);
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.button:hover {
+  background: var(--bg-hover, var(--bg-base));
+}
+
+.pill {
+  font-size: 12px;
+  border-radius: 999px;
+  padding: 2px 8px;
+  color: var(--content-secondary);
+  border: 1px solid var(--border-primary);
+}
+
+.pill-ready {
+  color: var(--content-green, green);
+}
+
+.pill-failed {
+  color: var(--content-red, red);
+}
+
+.people {
+  list-style: none;
+  margin: var(--spacing-16) 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--spacing-12);
+}
+
+.person {
+  display: flex;
+  gap: var(--spacing-12);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-8);
+  padding: var(--spacing-12);
+}
+
+.avatar {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bg-secondary, var(--border-primary));
+  color: var(--content-primary);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  overflow: hidden;
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.person-body {
+  min-width: 0;
+}
+
+.person-name {
+  font-weight: 600;
+}
+
+.person-role {
+  color: var(--content-secondary);
+  font-size: 14px;
+}
+
+.person-summary {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--content-secondary);
+}
