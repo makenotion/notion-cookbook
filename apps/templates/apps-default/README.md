@@ -64,7 +64,7 @@ as Code data sources declared inside `database`; there is no standalone
 
 Keep utilities and types on their existing subpaths. For example, import
 `Builder` from `@notionhq/apps/builder`, `connections` from
-`@notionhq/apps/workflow`, and `triggers` from `@notionhq/apps/triggers`.
+`@notionhq/apps/workflow`, and `events` from `@notionhq/apps/events`.
 Browser runtime APIs stay on `@notionhq/apps/custom-blocks` and React integration
 stays on `@notionhq/apps/react`. Check that the installed SDK supports these
 exports before building.

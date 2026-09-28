@@ -77,8 +77,8 @@ The root exports only `page`, `database`, `teamspace`,
 
 Keep all other imports on their existing subpaths: `Builder` from
 `@notionhq/apps/builder`, value helpers and types from their own modules,
-`connections` from `@notionhq/apps/workflow`, and `triggers` from
-`@notionhq/apps/triggers` (or use the workflow's typed trigger callback).
+`connections` from `@notionhq/apps/workflow`, and `events` from
+`@notionhq/apps/events` (or use the workflow's typed trigger callback).
 Browser runtime and React APIs also keep their subpaths. The package root does not export these
 utilities or types.
 
