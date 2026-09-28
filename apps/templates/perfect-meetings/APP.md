@@ -14,18 +14,9 @@ Open the **Next meeting** view on Meetings to see a prep card for your current o
 
 To run the calendar ingest immediately, add a row to **Run now**.
 
-## Meetings
+## Databases
 
-<database url="{{meetings-db}}">Meetings</database>
-
-## People
-
-<database url="{{people-db}}">People</database>
-
-## Companies
-
-<database url="{{companies-db}}">Companies</database>
-
-## Run now
-
-<database url="{{run-now-db}}">Run now</database>
+- [Meetings]({{meetings-db}})
+- [People]({{people-db}})
+- [Companies]({{companies-db}})
+- [Run now]({{run-now-db}})
