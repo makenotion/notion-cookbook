@@ -1,5 +1,3 @@
-# Meeting Prep
-
 Meeting Prep watches your Google Calendar for meetings with people outside your company, then writes a short brief for each one.
 
 ## How it works
@@ -16,7 +14,7 @@ To run the calendar ingest immediately, add a row to **Run now**.
 
 ## Databases
 
-- [Meetings]({{meetings-db}})
-- [People]({{people-db}})
-- [Companies]({{companies-db}})
-- [Run now]({{run-now-db}})
+- <mention-page url="{{meetings-db}}">Meetings</mention-page>
+- <mention-page url="{{people-db}}">People</mention-page>
+- <mention-page url="{{companies-db}}">Companies</mention-page>
+- <mention-page url="{{run-now-db}}">Run now</mention-page>
