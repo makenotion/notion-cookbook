@@ -34,7 +34,10 @@ import { contactsByEmail, type ContactInfo, type Contacts } from "./ingest.js"
 import { isRuntimeSignal } from "./runtime.js"
 
 export const prepConnections = {
-  calendar: connections.calendar(),
+  calendar: connections.calendar({
+    scope: "read",
+    readTeammatesCalendars: false,
+  }),
   mail: connections.mail(),
 }
 

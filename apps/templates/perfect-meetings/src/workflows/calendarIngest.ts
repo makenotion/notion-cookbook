@@ -40,7 +40,12 @@ export default workflow({
   name: "Calendar ingest",
   description:
     "Adds calendar meetings with outside attendees to Meetings, and their attendees and companies to People and Companies.",
-  connections: { calendar: connections.calendar() },
+  connections: {
+    calendar: connections.calendar({
+      scope: "read",
+      readTeammatesCalendars: false,
+    }),
+  },
   triggers: ({ events }) => [
     events.calendarEventCreated({ connectionKey: "calendar" }),
     events.calendarEventUpdated({ connectionKey: "calendar" }),

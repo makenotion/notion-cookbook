@@ -1,8 +1,9 @@
-import { customAgent, database, page } from "@notionhq/apps"
+import { customAgent, database } from "@notionhq/apps"
 import { notion } from "@notionhq/apps/notion-as-code"
 
 // Resource and property IDs are stable declaration identities. Do not rename
-// them after deploying; renaming creates new resources.
+// them after deploying; renaming creates new resources. The home page is
+// APP.md, which the build provisions and which links to these databases.
 //
 // Apps SDK 0.0.41 rejects relation properties in declarations, so the
 // databases join on text keys (Attendee emails, Company domain, Domain) and
@@ -24,36 +25,7 @@ export const MEETING_STATUS = {
   cancelled: "Cancelled",
 } as const
 
-export const home = page({
-  resourceId: "meeting-prep-home",
-  properties: { title: notion.text("Meeting Prep") },
-  content: `Meeting Prep watches your Google Calendar for meetings with people outside your company, then writes a short brief for each one.
-
-## How it works
-- **Calendar ingest** runs whenever an event is created, updated, or cancelled, and hourly as a backfill. Any event with an attendee whose email domain differs from yours becomes a row in **Meetings**. Each outside attendee becomes a row in **People**, and each outside domain becomes a row in **Companies**.
-- **Meeting prep** runs when a meeting first appears, when its attendees change, or when you tick **Regenerate prep**. It reads recent Gmail threads with each attendee and asks the **Meeting researcher** agent to write four short paragraphs: the company, each person's role, recent email interactions, and the likely objective.
-- **Morning prep** refreshes the brief for every meeting happening today at 7:45 am.
-
-The brief sits at the top of each meeting page under **Meeting prep**. Take your notes under **Notes**; refreshing the prep never touches them.
-
-Open the **Next meeting** view on Meetings to see a prep card for your current or upcoming meeting.
-
-To run the calendar ingest immediately, add a row to **Run now**.
-
-## Meetings
-<database url="{{meetings-db}}">Meetings</database>
-
-## People
-<database url="{{people-db}}">People</database>
-
-## Companies
-<database url="{{companies-db}}">Companies</database>
-
-## Run now
-<database url="{{run-now-db}}">Run now</database>`,
-})
-
-export const companies = home.addDatabase("companies-db", {
+export const companies = database("companies-db", {
   dataSourceResourceId: COMPANIES_SOURCE,
   name: "Companies",
   icon: { type: "emoji", emoji: "🏢" },
@@ -74,7 +46,7 @@ export const companies = home.addDatabase("companies-db", {
   ],
 })
 
-export const people = home.addDatabase("people-db", {
+export const people = database("people-db", {
   dataSourceResourceId: PEOPLE_SOURCE,
   name: "People",
   icon: { type: "emoji", emoji: "🧑‍💼" },
@@ -99,7 +71,7 @@ export const people = home.addDatabase("people-db", {
   ],
 })
 
-export const meetings = home.addDatabase("meetings-db", {
+export const meetings = database("meetings-db", {
   dataSourceResourceId: MEETINGS_SOURCE,
   name: "Meetings",
   icon: { type: "emoji", emoji: "🗓️" },
@@ -185,7 +157,7 @@ export const meetings = home.addDatabase("meetings-db", {
 
 // Adding a row here runs the calendar ingest and morning prep immediately,
 // without waiting for their schedules.
-export const runNow = home.addDatabase("run-now-db", {
+export const runNow = database("run-now-db", {
   dataSourceResourceId: "run-now-source",
   name: "Run now",
   icon: { type: "emoji", emoji: "▶️" },

@@ -11,7 +11,7 @@ Notion pages with a short research brief.
 
 | Kind         | Name               | Purpose                                                                 |
 | ------------ | ------------------ | ----------------------------------------------------------------------- |
-| Page         | Meeting Prep       | Home page; explains the App and contains every database                 |
+| Page         | APP.md             | Home page from `APP.md`; explains the App and links to every database   |
 | Database     | Meetings           | One row per external meeting; brief at the top of the page, notes below |
 | Database     | People             | One row per outside attendee, keyed by email                            |
 | Database     | Companies          | One row per outside company, keyed by email domain                      |
