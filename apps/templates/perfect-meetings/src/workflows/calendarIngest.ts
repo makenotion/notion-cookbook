@@ -42,7 +42,7 @@ export default workflow({
     "Adds calendar meetings with outside attendees to Meetings, and their attendees and companies to People and Companies.",
   connections: {
     calendar: connections.calendar({
-      scope: "read",
+      permissions: "read",
       readTeammatesCalendars: false,
     }),
   },
