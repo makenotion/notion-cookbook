@@ -35,7 +35,7 @@ import { isRuntimeSignal } from "./runtime.js"
 
 export const prepConnections = {
   calendar: connections.calendar({
-    scope: "read",
+    permissions: "read",
     readTeammatesCalendars: false,
   }),
   mail: connections.mail(),
