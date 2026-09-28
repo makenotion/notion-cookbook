@@ -327,6 +327,37 @@
       }
     },
     {
+      "id": "perfect-meetings",
+      "title": "Meeting prep App",
+      "summary": "Turn Google Calendar meetings with outside attendees into Notion pages with an AI research brief.",
+      "path": "apps/templates/perfect-meetings",
+      "kind": "app-default",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": [
+        "notion-apps",
+        "notion-workflow",
+        "notion-custom-blocks",
+        "google-calendar",
+        "gmail"
+      ],
+      "entrypoints": [
+        "src/workflows/calendarIngest.ts",
+        "src/workflows/meetingPrep.ts",
+        "src/workflows/morningPrep.ts",
+        "src/customBlocks/nextMeeting.ts",
+        "src/notion.ts"
+      ],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn apps deploy --name \"Meeting Prep\""
+      }
+    },
+    {
       "id": "duckdb-query",
       "title": "DuckDB query agent tool",
       "summary": "Learn the Worker tool pattern by querying a seeded, in-memory DuckDB sales database with no credentials.",
