@@ -1,4 +1,4 @@
 allowBuilds:
   esbuild: true
 minimumReleaseAgeExclude:
-  - "@notionhq/apps"
+- "@notionhq/apps"
