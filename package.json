@@ -10,7 +10,7 @@
     "catalog:validate": "node scripts/validate-catalog.mjs",
     "agents:sync": "node scripts/sync-agent-files.mjs",
     "agents:check": "node scripts/sync-agent-files.mjs --dryRun",
-    "agents:test": "node --test scripts/sync-agent-files.test.mjs",
+    "agents:test": "node --test scripts/*.test.mjs",
     "lint:markdown": "markdownlint \"**/*.md\" --ignore node_modules --ignore \"**/node_modules/**\" --config .markdownlint.jsonc",
     "format": "prettier --write \"**/*.{md,json,yml,yaml}\"",
     "format:check": "prettier --check \"**/*.{md,json,yml,yaml}\"",
