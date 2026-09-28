@@ -4,9 +4,9 @@
   "description": "A collection of guides, examples, and resources for building with Notion's developer platform",
   "private": true,
   "scripts": {
-    "projects:install": "./scripts/install-projects.sh",
-    "projects:typecheck": "./scripts/typecheck-projects.sh",
-    "projects:test": "./scripts/test-projects.sh",
+    "projects:install": "node scripts/run-projects.mjs install",
+    "projects:typecheck": "node scripts/run-projects.mjs typecheck",
+    "projects:test": "node scripts/run-projects.mjs test",
     "catalog:validate": "node scripts/validate-catalog.mjs",
     "agents:sync": "node scripts/sync-agent-files.mjs",
     "agents:check": "node scripts/sync-agent-files.mjs --dryRun",
