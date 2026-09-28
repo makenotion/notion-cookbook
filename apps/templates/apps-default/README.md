@@ -30,8 +30,9 @@ The build discovers workflow files by convention and produces:
 
 ```text
 dist/
-  manifest.json  App metadata, workflows, and block declarations
-  worker.js      Deployable workflow bundle
+  manifest.json    App metadata, workflows, and block declarations
+  provisioning.json  App home page from APP.md
+  worker.js        Deployable workflow bundle
 ```
 
 ## Project structure
@@ -43,7 +44,10 @@ src/workflows/
 src/customBlocks/
   hello.ts     Browser project declaration
 blocks/hello/  Browser source, Vite config, and separate browser tsconfig
+APP.md         App home page content created during deployment
 ```
+
+Edit `APP.md` to explain what your app does and link to any Notion resources it creates. The deployed page uses the app’s name as its title.
 
 Every TypeScript file directly inside `src/workflows/` defines one workflow.
 The camelCase filename becomes its workflow key, and the file must default
