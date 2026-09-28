@@ -10,7 +10,7 @@ if (!["install", "typecheck", "test"].includes(stage)) {
   process.exit(2)
 }
 
-const jobsText = process.env.PROJECT_VERIFY_JOBS ?? "4"
+const jobsText = process.env.PROJECT_VERIFY_JOBS ?? "5"
 const jobs = Number(jobsText)
 if (!/^[1-9][0-9]*$/.test(jobsText) || !Number.isSafeInteger(jobs)) {
   console.error("PROJECT_VERIFY_JOBS must be a positive integer")
@@ -83,12 +83,14 @@ function runProject(project) {
   })
 }
 
-for (let index = 0; index < projects.length; index += jobs) {
-  const results = await Promise.all(
-    projects.slice(index, index + jobs).map(runProject)
-  )
-  let failed = false
-  for (const { project, code, error, output } of results) {
+let nextIndex = 0
+let failed = false
+
+async function worker() {
+  while (!failed && nextIndex < projects.length) {
+    const { project, code, error, output } = await runProject(
+      projects[nextIndex++]
+    )
     if (code === 0) {
       console.log(`Passed ${stage}: ${project.name}`)
     } else {
@@ -97,8 +99,11 @@ for (let index = 0; index < projects.length; index += jobs) {
       failed = true
     }
   }
-  if (failed) {
-    process.exitCode = 1
-    break
-  }
+}
+
+await Promise.all(
+  Array.from({ length: Math.min(jobs, projects.length) }, worker)
+)
+if (failed) {
+  process.exitCode = 1
 }

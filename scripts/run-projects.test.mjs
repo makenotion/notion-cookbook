@@ -25,7 +25,7 @@ function fixture() {
     join(root, "bin/npm"),
     `#!/usr/bin/env bash
 printf 'start %s\\n' "\${PWD##*/}" >> "$EVENTS"
-sleep 0.1
+if [[ "\${PWD##*/}" == "three" ]]; then sleep 0.3; else sleep 0.1; fi
 printf 'end %s\\n' "\${PWD##*/}" >> "$EVENTS"
 if [[ "\${PWD##*/}" == "$FAIL_PROJECT" ]]; then
   echo 'expected failure output'
@@ -63,7 +63,7 @@ function run(root, events, stage, failProject = "") {
   )
 }
 
-test("runs two projects at once and waits for the batch before starting the next", () => {
+test("starts the next project when one worker finishes, without exceeding the limit", () => {
   const { root, events } = fixture()
   try {
     const result = run(root, events, "install")
@@ -74,13 +74,13 @@ test("runs two projects at once and waits for the batch before starting the next
       new Set(["start one", "start three"])
     )
     assert.ok(lines.indexOf("start two") > lines.indexOf("end one"))
-    assert.ok(lines.indexOf("start two") > lines.indexOf("end three"))
+    assert.ok(lines.indexOf("start two") < lines.indexOf("end three"))
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
 })
 
-test("reports a failing project and stops before the next batch", () => {
+test("reports a failing project and stops starting new work", () => {
   const { root, events } = fixture()
   try {
     const result = run(root, events, "typecheck", "one")
