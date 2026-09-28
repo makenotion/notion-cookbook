@@ -62,6 +62,20 @@ until they agree. If implementation reveals a material resource or capability
 not covered by the agreed design, update the proposal and confirm the change
 before adding it.
 
+## App home page (APP.md)
+
+The app root includes `APP.md`, the content of the App home page. Update it
+when you change the App so it explains what the App does, how to use it, and
+links to its Notion resources. The Apps SDK provisions this page in the
+installation workspace when the file exists. Its page title is the deployed
+App's name, not `APP.md`; do not put a second copy of the title in its body.
+
+Use a Notion as Code resource reference, such as
+`<mention-page url="{{resourceId}}">Resource name</mention-page>`, to link to
+another page declared by the App. Keep the resource ID in sync with the
+corresponding declaration. Do not create another home page if `APP.md` already
+serves that purpose.
+
 ## SDK imports
 
 Import the creation helpers you use directly from the package root:
