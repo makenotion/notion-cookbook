@@ -1,5 +1,14 @@
 # App skill evaluation scenarios
 
+Before installing dependencies in a copied App template, ask a coding agent:
+“Build a Monday morning meeting brief from Calendar and Mail, with a People
+database and an AI research agent.” It should find the local connections,
+Notion as Code, and workflow skills without scanning the whole repository or
+guessing which provider or agent API exists. After installing the SDK, verify
+that it reads the linked full skills, declares `connections.calendar()` and
+`connections.mail()`, declares `customAgent`, and binds it with `access.call`.
+Do not deploy or use live credentials for this check.
+
 Run these requests against a copied App template with the generated skills.
 Inspect code and compile against the intended SDK version. Do not deploy or
 use live credentials.

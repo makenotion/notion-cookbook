@@ -1,6 +1,6 @@
 ---
 name: workflow
-description: Build or review Notion App workflows for typed triggers, durable replay-safe steps, and idempotent effects.
+description: Use when an App adds a scheduled or event workflow, a provider connection, or a custom-agent call with durable steps.
 user-invocable: true
 disable-model-invocation: true
 ---

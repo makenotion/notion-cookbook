@@ -4,6 +4,18 @@ Apps are a private alpha. Check the installed `@notionhq/apps` exports and
 declarations before using a capability; SDK support does not establish that a
 provider is enabled on the server.
 
+## Find the App skills
+
+Before installing dependencies, use the local pointers:
+
+- Calendar, Mail (Gmail or Outlook), or Slack:
+  `.agents/skills/connections/SKILL.md`
+- Declare an AI research agent: `.agents/skills/notion-as-code/SKILL.md`;
+  call it from a workflow: `.agents/skills/workflow/SKILL.md`
+
+They lead to the installed SDK's detailed skills. For a complete example, see
+[Meeting Prep](https://github.com/makenotion/notion-cookbook/tree/main/apps/templates/perfect-meetings).
+
 ## Design the App before implementation
 
 First establish what the complete App should do: its outcome, source data,
@@ -111,8 +123,8 @@ Import the creation helpers you use directly from the package root:
 import { database, sync } from "@notionhq/apps"
 ```
 
-The root exports only `page`, `database`, `teamspace`,
-`customAgent`, `sync`, `workflow`, and `customBlock`.
+The root exports `page`, `database`, `teamspace`, `customAgent`, `sync`,
+`workflow`, `customBlock`, and `access` for workflow resource bindings.
 `sync` takes a Notion as Code data source handle. There is no standalone
 `dataSource`; declare data sources inside `database`.
 
