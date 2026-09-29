@@ -9,6 +9,10 @@
   // Disabled: Notion-flavored markdown uses HTML for mentions, spans, underlines
   "MD033": false,
 
+  // MD010/no-hard-tabs - Hard tabs
+  // Disabled: Notion-flavored markdown nests child blocks (columns, toggles) with tabs
+  "MD010": false,
+
   // MD041/first-line-heading - First line in file should be a top level heading
   // Disabled: Some files start with metadata or front matter
   "MD041": false,

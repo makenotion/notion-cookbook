@@ -3,7 +3,8 @@ import { notion } from "@notionhq/apps/notion-as-code"
 
 // Resource and property IDs are stable declaration identities. Do not rename
 // them after deploying; renaming creates new resources. The home page is
-// APP.md, which the build provisions and which links to these databases.
+// APP.md, which the build provisions and which embeds or links to these
+// databases.
 //
 // Apps SDK 0.0.41 rejects relation properties in declarations, so the
 // databases join on text keys (Attendee emails, Company domain, Domain) and
@@ -151,6 +152,72 @@ export const meetings = database("meetings-db", {
       type: "table",
       dataSourceResourceId: MEETINGS_SOURCE,
       sorts: [{ propertyId: "meeting-when", direction: "descending" }],
+    },
+  ],
+})
+
+export const RUN_STATUS = {
+  pending: "Pending",
+  success: "Success",
+  failed: "Failed",
+} as const
+
+export const RUN_TRIGGER = {
+  runNow: "Run now",
+  calendar: "Calendar event",
+  hourly: "Hourly",
+  manual: "Manual",
+} as const
+
+// One row per calendar ingest run. Adding a row yourself runs a calendar
+// catch-up, and the ingest fills in that row.
+export const syncRuns = database("sync-runs-db", {
+  dataSourceResourceId: "sync-runs-source",
+  name: "Workflow runs",
+  icon: { type: "emoji", emoji: "🔄" },
+  schema: {
+    Name: { resourceId: "run-name", type: "title" },
+    Started: { resourceId: "run-started", type: "date" },
+    Finished: { resourceId: "run-finished", type: "date" },
+    Status: {
+      resourceId: "run-status",
+      type: "select",
+      options: [
+        { name: RUN_STATUS.pending, color: "yellow" },
+        { name: RUN_STATUS.success, color: "green" },
+        { name: RUN_STATUS.failed, color: "red" },
+      ],
+    },
+    // Empty or "Run now" marks a row a person added; workflows use the rest.
+    Trigger: {
+      resourceId: "run-trigger",
+      type: "select",
+      options: [
+        { name: RUN_TRIGGER.runNow, color: "blue" },
+        { name: RUN_TRIGGER.calendar, color: "purple" },
+        { name: RUN_TRIGGER.hourly, color: "gray" },
+        { name: RUN_TRIGGER.manual, color: "orange" },
+      ],
+    },
+    Error: { resourceId: "run-error", type: "text" },
+    // For `ntn workers runs logs <run-id>`.
+    "Run ID": { resourceId: "run-id", type: "text" },
+  },
+  views: [
+    {
+      resourceId: "sync-runs-recent",
+      name: "Recent runs",
+      type: "table",
+      dataSourceResourceId: "sync-runs-source",
+      sorts: [{ propertyId: "run-started", direction: "descending" }],
+      properties: [
+        { property: "run-started", visible: true },
+        { property: "run-finished", visible: true },
+        { property: "run-status", visible: true },
+        { property: "run-trigger", visible: true },
+        { property: "run-error", visible: true },
+        { property: "run-id", visible: false },
+      ],
     },
   ],
 })

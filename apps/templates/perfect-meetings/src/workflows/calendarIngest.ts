@@ -9,11 +9,15 @@ import {
   TIME_ZONE,
   includeInternalAttendees,
 } from "../lib/config.js"
+import { pageIdFromEvent } from "../lib/notionIds.js"
 import {
   MEETING_STATUS,
+  RUN_STATUS,
+  RUN_TRIGGER,
   companies,
   meetings,
   people,
+  syncRuns,
 } from "../notion.js"
 import {
   allEventIds,
@@ -31,6 +35,13 @@ import {
   upsertMeetings,
 } from "./lib/ingest.js"
 import { ensureRelations } from "./lib/relations.js"
+import {
+  finishRun,
+  isRunRequest,
+  startRun,
+  type RunTrigger,
+} from "./lib/runs.js"
+import { isRuntimeSignal } from "./lib/runtime.js"
 
 const HOUR_MS = 60 * 60 * 1000
 const DAY_MS = 24 * HOUR_MS
@@ -56,6 +67,8 @@ export default workflow({
       start: "2026-09-28T00:05:00",
       timeZone: TIME_ZONE,
     }),
+    // Adding a row to Workflow runs runs a calendar catch-up.
+    events.notionPageCreated({ dataSource: syncRuns.dataSource }),
     // Run a calendar catch-up or replay an event on demand.
     events.manual({
       inputSchema: j.object({
@@ -90,160 +103,222 @@ export default workflow({
     meetings: access.fullAccess(meetings.dataSource),
     people: access.fullAccess(people.dataSource),
     companies: access.fullAccess(companies.dataSource),
+    runs: access.edit(syncRuns.dataSource),
   },
   handler: async (event, context) => {
-    const ids = {
-      meetings: context.access.meetings.id,
-      people: context.access.people.id,
-      companies: context.access.companies.id,
-    }
-
-    // Map every trigger, including the manual one, onto the three code paths.
-    const manual = event.type === "workflow.manual" ? event.input : null
-    if (manual?.mode === "event" && !manual.eventStartTime) {
-      throw new FatalError("Manual mode=event needs eventStartTime")
-    }
-    if (manual?.mode === "cancel" && !manual.eventId)
-      throw new FatalError("Manual mode=cancel needs eventId")
-
-    const cancelledEventId =
-      event.type === "calendar.event.canceled"
-        ? event.eventId
-        : manual?.mode === "cancel"
-          ? manual.eventId
-          : null
-    if (cancelledEventId) {
-      const pageId = await context.step("Find cancelled meeting", () =>
-        findMeetingByEventId(context.notion, ids.meetings, cancelledEventId)
-      )
-      if (pageId) {
-        await context.step("Mark meeting cancelled", () =>
-          cancelMeeting(context.notion, pageId)
+    // Every run is logged in Workflow runs. A row a person adds is the request
+    // itself; rows this workflow logs also fire the page trigger and are
+    // ignored here.
+    let requestPageId: string | null = null
+    if (event.type === "notion.page.created") {
+      requestPageId = pageIdFromEvent({ url: event.url, page: event.page })
+      if (!requestPageId)
+        throw new FatalError(
+          "The page event did not identify a Workflow runs row"
         )
-      }
-      return
+      const pageId = requestPageId
+      const requested = await context.step("Check run request", () =>
+        isRunRequest(context.notion, pageId)
+      )
+      if (!requested) return
     }
 
-    // Event triggers rescan a small window around the changed event, so the
-    // meeting is read in the same shape the backfill uses. Other triggers
-    // scan the full window and also reconcile meetings that disappeared.
-    const eventStart =
-      event.type === "calendar.event.created" ||
-      event.type === "calendar.event.updated"
-        ? event.startTime
-        : manual?.mode === "event"
-          ? manual.eventStartTime
-          : null
-    const isEventTrigger = eventStart !== null
-    const window = await context.step("Choose scan window", () => {
-      if (eventStart !== null) {
-        const start = Date.parse(eventStart)
+    const runPageId = await context.step("Log run started", () =>
+      startRun(context.notion, context.access.runs.id, {
+        requestPageId,
+        trigger: runTrigger(event.type),
+        runId: context.runId,
+        startedAt: new Date().toISOString(),
+      })
+    )
+    try {
+      await ingest()
+    } catch (error) {
+      if (isRuntimeSignal(error)) throw error
+      // Keyed per attempt: a retry that succeeds overwrites this with Success.
+      await context.step(
+        "Log run failed",
+        { key: ["log-run-failed", String(context.attemptNumber)] },
+        () =>
+          finishRun(
+            context.notion,
+            runPageId,
+            RUN_STATUS.failed,
+            (error as Error).message
+          )
+      )
+      throw error
+    }
+    await context.step("Log run finished", () =>
+      finishRun(context.notion, runPageId, RUN_STATUS.success)
+    )
+
+    async function ingest(): Promise<void> {
+      const ids = {
+        meetings: context.access.meetings.id,
+        people: context.access.people.id,
+        companies: context.access.companies.id,
+      }
+
+      // Map every trigger, including the manual one, onto the three code paths.
+      const manual = event.type === "workflow.manual" ? event.input : null
+      if (manual?.mode === "event" && !manual.eventStartTime) {
+        throw new FatalError("Manual mode=event needs eventStartTime")
+      }
+      if (manual?.mode === "cancel" && !manual.eventId)
+        throw new FatalError("Manual mode=cancel needs eventId")
+
+      const cancelledEventId =
+        event.type === "calendar.event.canceled"
+          ? event.eventId
+          : manual?.mode === "cancel"
+            ? manual.eventId
+            : null
+      if (cancelledEventId) {
+        const pageId = await context.step("Find cancelled meeting", () =>
+          findMeetingByEventId(context.notion, ids.meetings, cancelledEventId)
+        )
+        if (pageId) {
+          await context.step("Mark meeting cancelled", () =>
+            cancelMeeting(context.notion, pageId)
+          )
+        }
+        return
+      }
+
+      // Event triggers rescan a small window around the changed event, so the
+      // meeting is read in the same shape the backfill uses. Other triggers
+      // scan the full window and also reconcile meetings that disappeared.
+      const eventStart =
+        event.type === "calendar.event.created" ||
+        event.type === "calendar.event.updated"
+          ? event.startTime
+          : manual?.mode === "event"
+            ? manual.eventStartTime
+            : null
+      const isEventTrigger = eventStart !== null
+      const window = await context.step("Choose scan window", () => {
+        if (eventStart !== null) {
+          const start = Date.parse(eventStart)
+          return {
+            timeMin: new Date(start - HOUR_MS).toISOString(),
+            timeMax: new Date(start + HOUR_MS).toISOString(),
+          }
+        }
+        const now = Date.now()
         return {
-          timeMin: new Date(start - HOUR_MS).toISOString(),
-          timeMax: new Date(start + HOUR_MS).toISOString(),
+          timeMin: new Date(now - SCAN_DAYS_BACK * DAY_MS).toISOString(),
+          timeMax: new Date(now + SCAN_DAYS_AHEAD * DAY_MS).toISOString(),
+        }
+      })
+
+      const scan = await context.step("List calendar events", async () => {
+        const output = await context.connections.calendar.listEvents({
+          timeMin: window.timeMin,
+          timeMax: window.timeMax,
+          timeZone: TIME_ZONE,
+        })
+        const typed = output as ListEventsScriptOutput
+        const options = {
+          includeInternal:
+            manual?.includeInternal ?? includeInternalAttendees(),
+        }
+        const found = meetingsFromListEvents(typed, options)
+        const next =
+          manual?.mode === "next"
+            ? currentOrNextMeeting(found, Date.now())
+            : null
+        if (next)
+          console.log(
+            `Current or next meeting: "${next.title}" (${next.attendees.length} attendees)`
+          )
+        return {
+          meetings: manual?.mode === "next" ? (next ? [next] : []) : found,
+          complete: output.errors.length === 0,
+          eventIds: allEventIds(typed),
+          errors: output.errors.map((error) => error.error),
+          // Saved with the step so run logs explain an empty result.
+          diagnostics: diagnoseListEvents(typed, options),
+        }
+      })
+
+      await context.step("Ensure relations", () =>
+        ensureRelations(context.notion, ids)
+      )
+
+      const stored = await context.step("Load stored meetings", () =>
+        loadStoredMeetings(context.notion, ids.meetings, window.timeMin)
+      )
+
+      // Calendar events often omit attendee names; the account's contacts fill
+      // in names and photos. Best effort: ingest continues without them.
+      const emails = attendeesToWrite(scan.meetings, stored)
+      const contacts =
+        emails.length === 0
+          ? {}
+          : await context.step("Look up contacts", async () => {
+              try {
+                const output = await context.connections.calendar.listContacts({
+                  queries: emails,
+                })
+                const found = contactsByEmail(output, emails)
+                console.log(
+                  `Contacts matched ${Object.keys(found).length} of ${emails.length} attendees`
+                )
+                return found
+              } catch (error) {
+                console.warn(
+                  `Contact lookup failed: ${(error as Error).message}`
+                )
+                return {}
+              }
+            })
+
+      const result = await upsertMeetings(
+        context.step,
+        context.notion,
+        ids,
+        scan.meetings,
+        stored,
+        contacts
+      )
+
+      // A full, error-free scan that no longer returns a stored meeting's event
+      // at all means the event was deleted. Events that still exist but no longer
+      // pass the attendee filter (for example a debugging run that included
+      // coworkers) are left alone.
+      if (!isEventTrigger && manual?.mode !== "next" && scan.complete) {
+        const seen = new Set(scan.eventIds)
+        const missing = Object.entries(stored).filter(([eventId, meeting]) => {
+          const start = meeting.start ? Date.parse(meeting.start) : Number.NaN
+          return (
+            !seen.has(eventId) &&
+            meeting.status !== MEETING_STATUS.cancelled &&
+            start >= Date.parse(window.timeMin) &&
+            start <= Date.parse(window.timeMax)
+          )
+        })
+        for (const [eventId, meeting] of missing) {
+          await context.step(
+            "Mark meeting cancelled",
+            { key: ["cancel", eventId] },
+            () => cancelMeeting(context.notion, meeting.pageId)
+          )
         }
       }
-      const now = Date.now()
-      return {
-        timeMin: new Date(now - SCAN_DAYS_BACK * DAY_MS).toISOString(),
-        timeMax: new Date(now + SCAN_DAYS_AHEAD * DAY_MS).toISOString(),
-      }
-    })
 
-    const scan = await context.step("List calendar events", async () => {
-      const output = await context.connections.calendar.listEvents({
-        timeMin: window.timeMin,
-        timeMax: window.timeMax,
-        timeZone: TIME_ZONE,
-      })
-      const typed = output as ListEventsScriptOutput
-      const options = {
-        includeInternal: manual?.includeInternal ?? includeInternalAttendees(),
-      }
-      const found = meetingsFromListEvents(typed, options)
-      const next =
-        manual?.mode === "next" ? currentOrNextMeeting(found, Date.now()) : null
-      if (next)
+      await context.step("Report ingest", () => {
         console.log(
-          `Current or next meeting: "${next.title}" (${next.attendees.length} attendees)`
-        )
-      return {
-        meetings: manual?.mode === "next" ? (next ? [next] : []) : found,
-        complete: output.errors.length === 0,
-        eventIds: allEventIds(typed),
-        errors: output.errors.map((error) => error.error),
-        // Saved with the step so run logs explain an empty result.
-        diagnostics: diagnoseListEvents(typed, options),
-      }
-    })
-
-    await context.step("Ensure relations", () =>
-      ensureRelations(context.notion, ids)
-    )
-
-    const stored = await context.step("Load stored meetings", () =>
-      loadStoredMeetings(context.notion, ids.meetings, window.timeMin)
-    )
-
-    // Calendar events often omit attendee names; the account's contacts fill
-    // in names and photos. Best effort: ingest continues without them.
-    const emails = attendeesToWrite(scan.meetings, stored)
-    const contacts =
-      emails.length === 0
-        ? {}
-        : await context.step("Look up contacts", async () => {
-            try {
-              const output = await context.connections.calendar.listContacts({
-                queries: emails,
-              })
-              const found = contactsByEmail(output, emails)
-              console.log(
-                `Contacts matched ${Object.keys(found).length} of ${emails.length} attendees`
-              )
-              return found
-            } catch (error) {
-              console.warn(`Contact lookup failed: ${(error as Error).message}`)
-              return {}
-            }
-          })
-
-    const result = await upsertMeetings(
-      context.step,
-      context.notion,
-      ids,
-      scan.meetings,
-      stored,
-      contacts
-    )
-
-    // A full, error-free scan that no longer returns a stored meeting's event
-    // at all means the event was deleted. Events that still exist but no longer
-    // pass the attendee filter (for example a debugging run that included
-    // coworkers) are left alone.
-    if (!isEventTrigger && manual?.mode !== "next" && scan.complete) {
-      const seen = new Set(scan.eventIds)
-      const missing = Object.entries(stored).filter(([eventId, meeting]) => {
-        const start = meeting.start ? Date.parse(meeting.start) : Number.NaN
-        return (
-          !seen.has(eventId) &&
-          meeting.status !== MEETING_STATUS.cancelled &&
-          start >= Date.parse(window.timeMin) &&
-          start <= Date.parse(window.timeMax)
+          `Meetings created: ${result.created}, updated: ${result.updated}`
         )
       })
-      for (const [eventId, meeting] of missing) {
-        await context.step(
-          "Mark meeting cancelled",
-          { key: ["cancel", eventId] },
-          () => cancelMeeting(context.notion, meeting.pageId)
-        )
-      }
     }
-
-    await context.step("Report ingest", () => {
-      console.log(
-        `Meetings created: ${result.created}, updated: ${result.updated}`
-      )
-    })
   },
 })
+
+function runTrigger(type: string): RunTrigger {
+  if (type.startsWith("calendar.")) return RUN_TRIGGER.calendar
+  if (type === "recurrence") return RUN_TRIGGER.hourly
+  if (type === "notion.page.created") return RUN_TRIGGER.runNow
+  return RUN_TRIGGER.manual
+}
