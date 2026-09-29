@@ -11,8 +11,6 @@ triggers, external services, and every Notion resource it needs. Recommend a
 workflow for most automations; use a sync when the goal is to mirror an external
 collection into a Notion database. An App may contain both.
 
-For an on-demand workflow run, offer the `events.manual` trigger as an option.
-
 Before proposing the design, read only enough of this guidance and the
 top-level descriptions of the relevant capability skills (workflow, sync,
 connections, and Notion as Code) to describe concrete options for open
