@@ -1,20 +1,38 @@
-Meeting Prep watches your Google Calendar for meetings with people outside your company, then writes a short brief for each one.
+Perfect Meetings helps you prepare for meetings with people outside your
+company. It brings your Google Calendar meetings into Notion and writes a
+brief about the companies, attendees, recent Gmail conversations, and likely
+meeting objective.
 
-## How it works
+## Your next meeting
 
-- **Calendar ingest** runs whenever an event is created, updated, or cancelled, and hourly as a backfill. Any event with an attendee whose email domain differs from yours becomes a row in **Meetings**. Each outside attendee becomes a row in **People**, and each outside domain becomes a row in **Companies**.
-- **Meeting prep** runs when a meeting first appears, when its attendees change, or when you tick **Regenerate prep**. It reads recent Gmail threads with each attendee and asks the **Meeting researcher** agent to write four short paragraphs: the company, each person's role, recent email interactions, and the likely objective.
-- **Morning prep** refreshes the brief for every meeting happening today at 7:45 am.
+See who you are meeting with now or next. Choose **Open prep** to read the
+brief, or select a person's avatar to open their details.
 
-The brief sits at the top of each meeting page under **Meeting prep**. Take your notes under **Notes**; refreshing the prep never touches them.
+<database inline="true" data-source-url="{{meetings-next-view}}">Next meeting</database>
 
-Open the **Next meeting** view on Meetings to see a prep card for your current or upcoming meeting.
+## Upcoming meetings
 
-To run the calendar ingest immediately, add a row to **Run now**.
+Open a meeting to review its **Meeting prep** and take notes under **Notes**.
+Refreshing the prep leaves your notes untouched. Check **Prep status** to see
+whether a brief is queued, researching, ready, or failed. Tick
+**Regenerate prep** to request a fresh brief or retry a failed one.
 
-## Databases
+<database inline="true" data-source-url="{{meetings-upcoming}}">Upcoming meetings</database>
 
-- <mention-page url="{{meetings-db}}">Meetings</mention-page>
-- <mention-page url="{{people-db}}">People</mention-page>
-- <mention-page url="{{companies-db}}">Companies</mention-page>
-- <mention-page url="{{run-now-db}}">Run now</mention-page>
+Meetings update when calendar events change, with an hourly catch-up. Briefs
+are prepared for new meetings and refreshed when attendees change. Today's
+briefs also refresh each morning at 7:45 am in the app's configured time zone.
+
+## Refresh now
+
+Add a row below to request a calendar catch-up and refresh today's briefs.
+If your next meeting is missing, use this to check for new calendar events.
+Meetings with only coworkers do not appear by default.
+
+<database inline="true" data-source-url="{{run-now-source}}">Run now</database>
+
+## People, companies, and meeting history
+
+- <mention-page url="{{people-db}}">People</mention-page> — Look up outside attendees and their roles.
+- <mention-page url="{{companies-db}}">Companies</mention-page> — Browse company summaries and websites.
+- <mention-page url="{{meetings-db}}">Meetings</mention-page> — Switch to **Calendar** or **All meetings** to browse dates and past notes.

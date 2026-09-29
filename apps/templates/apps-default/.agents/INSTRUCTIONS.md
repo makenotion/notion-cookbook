@@ -20,11 +20,12 @@ details until the user agrees on a direction. Verify those details against the
 selected option during implementation.
 
 Present the proposed design concisely and get the user's agreement before
-implementing. Include `APP.md` as the App's home page. It should explain what
-the App does and link to all of its Notion resources. The proposal should
+implementing. Include `APP.md` as the App's home page and primary user
+interface. It should briefly explain the App, embed its most important views,
+and link to supporting Notion resources. The proposal should
 include:
 
-- `APP.md` and the resources it will link to.
+- `APP.md`, the primary views it will embed, and the resources it will link to.
 - Other Notion resources the App will create, including databases, pages, and
   custom agents; state each resource's purpose and which capabilities use it.
 - Every sync, including its external source, destination database, and
@@ -44,7 +45,7 @@ the support team.
 
 | Kind         | Name              | Purpose                                             | Used by                          |
 | ------------ | ----------------- | --------------------------------------------------- | -------------------------------- |
-| `APP.md`     | Support App       | Explain the App and link to its resources           | Team members                     |
+| `APP.md`     | Support App       | Explain the App and embed the ticket triage view    | Team members                     |
 | Database     | Support tickets   | Store synchronized tickets and triage status        | Ticket sync, escalation workflow |
 | Page         | Support dashboard | Give the team an operational home and database view | Team members                     |
 | Custom agent | Ticket triage     | Classify urgency and summarize a ticket             | Escalation workflow              |
@@ -65,16 +66,42 @@ before adding it.
 
 ## App home page (APP.md)
 
-The app root includes `APP.md`. This file is the App's home page; update it
-when you change the App so it explains what the App does, how to use it, and
-links to its Notion resources. The Apps SDK provisions the page in the
+The app root includes `APP.md`. This file is the App's home page and, as much
+as the App needs one, its user interface. Design it as the place people come
+to use the App. Update it when the App's behavior or resources change.
+The Apps SDK provisions the page in the
 installation workspace when the file exists. Its page title is the deployed
 App's name, not `APP.md`; do not put a second copy of the title in its body.
+
+Use this basic structure, adapting the sections to the App:
+
+1. **Brief description:** Explain what the App does and who it helps in a few
+   sentences.
+2. **Primary views:** Embed the most important databases or specific views,
+   including custom views, in the order people need them. For a CRM, this
+   might be Contacts and a pipeline view; for a meeting App, a next-meeting
+   card and upcoming meetings. Give each view a clear heading and only the
+   explanation needed to use it.
+3. **Common actions:** Explain what to open, add, or change and what happens
+   next. Include views or controls for those actions when available, along
+   with useful status indicators and automatic update behavior.
+4. **Supporting resources:** Link to other pages and databases people may
+   need without embedding every resource on the home page.
+
+Embed linked database views with declared data source or view resource IDs,
+including custom view resource IDs. For example, after declaring the view:
+
+```text
+<database inline="true" data-source-url="{{contacts-view}}">Contacts</database>
+```
 
 Use a Notion as Code resource reference, such as
 `<mention-page url="{{resourceId}}">Resource name</mention-page>`, to link to
 another page declared by the App. Keep the resource ID in sync with the
-corresponding declaration. Do not create a separate home page.
+corresponding declaration. Use only declared resources in actual embeds and
+links; keep illustrative placeholders in code fences. Do not create a separate
+home page. Keep developer setup, deployment commands, and implementation
+details in the README.
 
 ## SDK imports
 
