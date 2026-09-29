@@ -11,6 +11,8 @@ triggers, external services, and every Notion resource it needs. Recommend a
 workflow for most automations; use a sync when the goal is to mirror an external
 collection into a Notion database. An App may contain both.
 
+For an on-demand workflow run, offer the `events.manual` trigger as an option.
+
 Before proposing the design, read only enough of this guidance and the
 top-level descriptions of the relevant capability skills (workflow, sync,
 connections, and Notion as Code) to describe concrete options for open
@@ -20,12 +22,13 @@ details until the user agrees on a direction. Verify those details against the
 selected option during implementation.
 
 Present the proposed design concisely and get the user's agreement before
-implementing. Always include an App home page that explains what the App does
-and links to all of its Notion resources. The proposal should include:
+implementing. Include `APP.md` as the App's home page. It should explain what
+the App does and link to all of its Notion resources. The proposal should
+include:
 
-- Every Notion resource the App will create, including the home page, databases,
-  other pages, and custom agents; state each resource's purpose and which
-  capabilities use it.
+- `APP.md` and the resources it will link to.
+- Other Notion resources the App will create, including databases, pages, and
+  custom agents; state each resource's purpose and which capabilities use it.
 - Every sync, including its external source, destination database, and
   synchronization behavior.
 - Every workflow, including its trigger, main actions, resources it reads or
@@ -43,7 +46,7 @@ the support team.
 
 | Kind         | Name              | Purpose                                             | Used by                          |
 | ------------ | ----------------- | --------------------------------------------------- | -------------------------------- |
-| Page         | Support app home  | Explain the App and link to its resources           | Team members                     |
+| `APP.md`     | Support App       | Explain the App and link to its resources           | Team members                     |
 | Database     | Support tickets   | Store synchronized tickets and triage status        | Ticket sync, escalation workflow |
 | Page         | Support dashboard | Give the team an operational home and database view | Team members                     |
 | Custom agent | Ticket triage     | Classify urgency and summarize a ticket             | Escalation workflow              |
@@ -64,17 +67,16 @@ before adding it.
 
 ## App home page (APP.md)
 
-The app root includes `APP.md`, the content of the App home page. Update it
+The app root includes `APP.md`. This file is the App's home page; update it
 when you change the App so it explains what the App does, how to use it, and
-links to its Notion resources. The Apps SDK provisions this page in the
+links to its Notion resources. The Apps SDK provisions the page in the
 installation workspace when the file exists. Its page title is the deployed
 App's name, not `APP.md`; do not put a second copy of the title in its body.
 
 Use a Notion as Code resource reference, such as
 `<mention-page url="{{resourceId}}">Resource name</mention-page>`, to link to
 another page declared by the App. Keep the resource ID in sync with the
-corresponding declaration. Do not create another home page if `APP.md` already
-serves that purpose.
+corresponding declaration. Do not create a separate home page.
 
 ## SDK imports
 
