@@ -9,15 +9,14 @@ Notion pages with a short research brief.
 
 ## What it creates
 
-| Kind         | Name               | Purpose                                                                 |
-| ------------ | ------------------ | ----------------------------------------------------------------------- |
-| Page         | APP.md             | Home page from `APP.md`; explains the App and links to every database   |
-| Database     | Meetings           | One row per external meeting; brief at the top of the page, notes below |
-| Database     | People             | One row per outside attendee, keyed by email                            |
-| Database     | Companies          | One row per outside company, keyed by email domain                      |
-| Database     | Run now            | Add a row to run the ingest and morning prep immediately                |
-| Custom agent | Meeting researcher | Web research plus email summary, returned as JSON                       |
-| Custom view  | Next meeting       | Meetings view showing a prep card for the current or next meeting       |
+| Kind         | Name               | Purpose                                                                     |
+| ------------ | ------------------ | --------------------------------------------------------------------------- |
+| Page         | APP.md             | Home page with the next-meeting card, upcoming meetings, and usage guidance |
+| Database     | Meetings           | One row per external meeting; brief at the top of the page, notes below     |
+| Database     | People             | One row per outside attendee, keyed by email                                |
+| Database     | Companies          | One row per outside company, keyed by email domain                          |
+| Custom agent | Meeting researcher | Web research plus email summary, returned as JSON                           |
+| Custom view  | Next meeting       | Meetings view showing a prep card for the current or next meeting           |
 
 ## Workflows
 
@@ -51,10 +50,14 @@ npm test
 npm run build
 ```
 
-## Debugging
+## Run on demand and debug
 
 Every workflow has a manual trigger. Run it with `ntn workers exec` and read
 the result with `ntn workers runs list` and `ntn workers runs logs <run-id>`.
+You can also run the manual trigger from the workflow in Notion. For a calendar
+catch-up, run **Calendar ingest** with mode **backfill**, leaving the other
+inputs empty. To refresh today's briefs, run **Morning prep** with an empty
+date. Wait for the catch-up to finish before refreshing briefs for new meetings.
 
 ```shell
 # Ingest only your current or next meeting. includeInternal counts coworkers

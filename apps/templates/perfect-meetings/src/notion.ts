@@ -155,17 +155,6 @@ export const meetings = database("meetings-db", {
   ],
 })
 
-// Adding a row here runs the calendar ingest and morning prep immediately,
-// without waiting for their schedules.
-export const runNow = database("run-now-db", {
-  dataSourceResourceId: "run-now-source",
-  name: "Run now",
-  icon: { type: "emoji", emoji: "▶️" },
-  schema: {
-    Name: { resourceId: "run-now-name", type: "title" },
-  },
-})
-
 export const researcher = customAgent({
   resourceId: "meeting-researcher",
   name: "Meeting researcher",

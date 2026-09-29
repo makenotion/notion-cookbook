@@ -11,7 +11,6 @@ import {
   meetings,
   people,
   researcher,
-  runNow,
 } from "../notion.js"
 import { prepConnections, prepTargets, runPrep } from "./lib/prep.js"
 import { isRuntimeSignal } from "./lib/runtime.js"
@@ -30,8 +29,7 @@ export default workflow({
       start: `2026-09-29T${MORNING_PREP_TIME}:00`,
       timeZone: TIME_ZONE,
     }),
-    events.notionPageCreated({ dataSource: runNow.dataSource }),
-    // Debugging: runs the morning refresh now, optionally for another day.
+    // Refresh today's briefs on demand, optionally for another day.
     events.manual({
       inputSchema: j.object({
         date: j

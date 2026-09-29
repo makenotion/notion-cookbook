@@ -14,7 +14,6 @@ import {
   companies,
   meetings,
   people,
-  runNow,
 } from "../notion.js"
 import {
   allEventIds,
@@ -57,14 +56,13 @@ export default workflow({
       start: "2026-09-28T00:05:00",
       timeZone: TIME_ZONE,
     }),
-    events.notionPageCreated({ dataSource: runNow.dataSource }),
-    // Debugging: replays any of the triggers above on demand.
+    // Run a calendar catch-up or replay an event on demand.
     events.manual({
       inputSchema: j.object({
         mode: j
           .enum("backfill", "event", "cancel", "next")
           .describe(
-            "backfill = hourly/Run now scan; event = calendar created/updated; cancel = calendar cancelled; next = only your current or next meeting"
+            "backfill = calendar catch-up; event = calendar created/updated; cancel = calendar cancelled; next = only your current or next meeting"
           ),
         eventStartTime: j
           .datetime()

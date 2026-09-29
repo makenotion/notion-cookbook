@@ -25,11 +25,11 @@ briefs also refresh each morning at 7:45 am in the app's configured time zone.
 
 ## Refresh now
 
-Add a row below to request a calendar catch-up and refresh today's briefs.
-If your next meeting is missing, use this to check for new calendar events.
+To check for new calendar events, manually run **Calendar ingest** with mode
+**backfill**, leaving the other inputs empty. To refresh today's briefs,
+manually run **Morning prep**, leaving the date empty. These are separate runs;
+wait for the calendar catch-up to finish before refreshing the briefs.
 Meetings with only coworkers do not appear by default.
-
-<database inline="true" data-source-url="{{run-now-source}}">Run now</database>
 
 ## People, companies, and meeting history
 
