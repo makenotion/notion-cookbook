@@ -6,7 +6,7 @@ const nextMeeting = customBlock({
   path: "./blocks/nextMeeting",
   name: "Next meeting",
   description:
-    "A prep card for your current or next meeting, showing only the outside attendees.",
+    "Company and attendee cards for your current or next meeting, and a calendar of today's meetings.",
   slashCommand: "next-meeting",
   dataSources: { meetings, people, companies },
 })

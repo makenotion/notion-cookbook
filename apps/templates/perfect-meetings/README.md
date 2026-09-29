@@ -15,15 +15,19 @@ Notion pages with a short research brief.
 | Database     | Meetings           | One row per external meeting; brief at the top of the page, notes below     |
 | Database     | People             | One row per outside attendee, keyed by email                                |
 | Database     | Companies          | One row per outside company, keyed by email domain                          |
+| Database     | Workflow runs      | One row per calendar ingest run; add a row to run a catch-up now            |
 | Custom agent | Meeting researcher | Web research plus email summary, returned as JSON                           |
-| Custom view  | Next meeting       | Meetings view showing a prep card for the current or next meeting           |
+| Custom view  | Next meeting       | Company and people cards for the next meeting, plus a Today calendar view   |
 
 ## Workflows
 
 - `calendarIngest`: calendar event created, updated, or cancelled, plus an
   hourly backfill. Upserts Meetings by event ID, People by email, and
   Companies by domain. On first run it adds the two-way relations
-  (Attendees, Companies, Company), which the SDK cannot declare yet.
+  (Attendees, Companies, Company), which the SDK cannot declare yet. Each run
+  is logged in Workflow runs as Pending, then Success or Failed; adding a row there
+  runs a catch-up. A run that crashes or times out stays Pending, because the
+  SDK has no hook for that yet.
 - `meetingPrep`: a Meetings row is created, its attendees change, or
   **Regenerate prep** is ticked. Searches Gmail (last 90 days, 10 threads per
   attendee), calls the researcher agent, and rewrites the **Meeting prep**
@@ -50,13 +54,19 @@ npm test
 npm run build
 ```
 
+The App's name is the title of its home page. Set it on the first deploy:
+
+```shell
+ntn apps deploy --name "Perfect Meetings App"
+```
+
 ## Run on demand and debug
 
 Every workflow has a manual trigger. Run it with `ntn workers exec` and read
 the result with `ntn workers runs list` and `ntn workers runs logs <run-id>`.
 You can also run the manual trigger from the workflow in Notion. For a calendar
-catch-up, run **Calendar ingest** with mode **backfill**, leaving the other
-inputs empty. To refresh today's briefs, run **Morning prep** with an empty
+catch-up, add a row to **Workflow runs**, or run **Calendar ingest** with mode
+**backfill**, leaving the other inputs empty. To refresh today's briefs, run **Morning prep** with an empty
 date. Wait for the catch-up to finish before refreshing briefs for new meetings.
 
 ```shell

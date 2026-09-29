@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest"
 import type { NotionDataSourcePage } from "@notionhq/apps/custom-blocks"
 import {
   dateRange,
+  dayBounds,
   firstSentence,
+  groupByCompany,
+  layoutDay,
   pickMeeting,
   sortByStart,
   wallTimeToMs,
@@ -102,5 +105,74 @@ describe("multi-day events", () => {
     expect(merged.map((r) => r.id)).toEqual(["offsite", "later"])
     const noon = new Date(2026, 8, 29, 12).getTime()
     expect(pickMeeting(merged, noon)?.row.id).toBe("offsite")
+  })
+})
+
+describe("layoutDay", () => {
+  // Hours in the machine's zone, so the day boundaries line up.
+  const hhmm = (hours: number) =>
+    `${String(Math.floor(hours)).padStart(2, "0")}:${String((hours % 1) * 60).padStart(2, "0")}`
+  const at = (start: number, end: number) => ({
+    type: "datetimerange",
+    start_date: "2026-09-29",
+    start_time: hhmm(start),
+    end_date: "2026-09-29",
+    end_time: hhmm(end),
+    time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  })
+  const day = dayBounds(new Date(2026, 8, 29, 12).getTime())
+
+  it("splits overlapping meetings into columns", () => {
+    const { timed } = layoutDay(
+      [
+        row("a", at(9, 10)),
+        row("b", at(9.5, 11)),
+        row("c", at(10, 10.5)),
+        row("d", at(13, 14)),
+      ],
+      day
+    )
+    const byId = Object.fromEntries(
+      timed.map((e) => [e.row.id, [e.column, e.columns]])
+    )
+    expect(byId).toEqual({ a: [0, 2], b: [1, 2], c: [0, 2], d: [0, 1] })
+  })
+
+  it("puts all-day and whole-day events on the all-day strip and skips other days", () => {
+    const { allDay, timed } = layoutDay(
+      [
+        row("all-day", { type: "date", start_date: "2026-09-29" }),
+        row("offsite", {
+          type: "daterange",
+          start_date: "2026-09-28",
+          end_date: "2026-10-01",
+        }),
+        row("tomorrow", { type: "date", start_date: "2026-09-30" }),
+        row("meeting", at(9, 10)),
+      ],
+      day
+    )
+    expect(allDay.map((e) => e.row.id)).toEqual(["offsite", "all-day"])
+    expect(timed.map((e) => e.row.id)).toEqual(["meeting"])
+  })
+})
+
+describe("groupByCompany", () => {
+  it("keeps one entry per domain in attendee order and skips personal mailboxes", () => {
+    const people = [
+      { email: "a@acme.com", domain: "acme.com" },
+      { email: "b@globex.com", domain: "Globex.com" },
+      { email: "c@gmail.com", domain: "" },
+      { email: "d@acme.com", domain: "acme.com" },
+    ]
+    expect(
+      groupByCompany(people, (p) => p.domain).map((g) => [
+        g.domain,
+        g.attendees.map((p) => p.email),
+      ])
+    ).toEqual([
+      ["acme.com", ["a@acme.com", "d@acme.com"]],
+      ["globex.com", ["b@globex.com"]],
+    ])
   })
 })

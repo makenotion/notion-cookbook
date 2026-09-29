@@ -146,3 +146,119 @@ export function firstSentence(value: string): string {
   const match = value.match(/^.*?[.!?](\s|$)/)
   return (match ? match[0] : value).trim()
 }
+
+type Ranged = {
+  row: NotionDataSourcePage
+  startMs: number
+  endMs: number
+  allDay: boolean
+}
+
+/** Local midnight at the start of the day containing `now`, and the next one. */
+export function dayBounds(now: number): { startMs: number; endMs: number } {
+  const day = new Date(now)
+  const startMs = new Date(
+    day.getFullYear(),
+    day.getMonth(),
+    day.getDate()
+  ).getTime()
+  const endMs = new Date(
+    day.getFullYear(),
+    day.getMonth(),
+    day.getDate() + 1
+  ).getTime()
+  return { startMs, endMs }
+}
+
+/** A timed meeting placed in a day column, sharing width with overlaps. */
+export type DayEvent = Ranged & {
+  /** Visible start and end, clipped to the day. */
+  topMs: number
+  bottomMs: number
+  column: number
+  columns: number
+}
+
+const MIN_EVENT_MS = 15 * 60 * 1000
+
+/**
+ * Meetings that touch the day. All-day events, and timed events that span the
+ * whole day, go on the all-day strip. Timed events are laid out like a
+ * calendar day: overlapping events split the width into columns.
+ */
+export function layoutDay(
+  rows: readonly NotionDataSourcePage[],
+  day: { startMs: number; endMs: number }
+): { allDay: Ranged[]; timed: DayEvent[] } {
+  const allDay: Ranged[] = []
+  const timed: Omit<DayEvent, "column" | "columns">[] = []
+  for (const row of sortByStart(rows)) {
+    const range = dateRange(row.propertiesByKey.When)
+    if (!range || range.endMs <= day.startMs || range.startMs >= day.endMs)
+      continue
+    const candidate = { row, ...range }
+    if (
+      range.allDay ||
+      (range.startMs <= day.startMs && range.endMs >= day.endMs)
+    ) {
+      allDay.push(candidate)
+      continue
+    }
+    const topMs = Math.max(range.startMs, day.startMs)
+    const bottomMs = Math.max(
+      Math.min(range.endMs, day.endMs),
+      Math.min(topMs + MIN_EVENT_MS, day.endMs)
+    )
+    timed.push({ ...candidate, topMs, bottomMs })
+  }
+
+  // Group chains of overlapping events, then give each event the first free
+  // column in its group. Every event in a group shares the group's width.
+  const placed: DayEvent[] = []
+  let group: DayEvent[] = []
+  let groupEnd = -Infinity
+  const flush = () => {
+    const columns = Math.max(1, ...group.map((event) => event.column + 1))
+    for (const event of group) placed.push({ ...event, columns })
+    group = []
+  }
+  for (const event of timed.sort((a, b) => a.topMs - b.topMs)) {
+    if (event.topMs >= groupEnd) {
+      flush()
+      groupEnd = -Infinity
+    }
+    let column = 0
+    while (
+      group.some(
+        (other) => other.column === column && other.bottomMs > event.topMs
+      )
+    )
+      column++
+    group.push({ ...event, column, columns: 1 })
+    groupEnd = Math.max(groupEnd, event.bottomMs)
+  }
+  flush()
+  return { allDay, timed: placed }
+}
+
+/**
+ * The distinct companies of a meeting's attendees, in attendee order, each
+ * with the attendees who work there.
+ */
+export function groupByCompany<T>(
+  attendees: readonly T[],
+  domainOf: (attendee: T) => string
+): { domain: string; attendees: T[] }[] {
+  const groups = new Map<string, T[]>()
+  for (const attendee of attendees) {
+    const domain = domainOf(attendee).trim().toLowerCase()
+    if (!domain) continue
+    const members = groups.get(domain) ?? []
+    members.push(attendee)
+    groups.set(domain, members)
+  }
+  return [...groups].map(([domain, members]) => ({
+    domain,
+    attendees: members,
+  }))
+}

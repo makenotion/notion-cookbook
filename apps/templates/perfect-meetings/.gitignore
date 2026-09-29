@@ -8,3 +8,4 @@ package-lock.json
 
 # Local deployment and editor state; each installation creates its own.
 .claude/settings.local.json
+workers.json
