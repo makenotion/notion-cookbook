@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest"
 import { pageIdFromEvent } from "../src/lib/notionIds.js"
 import { localDay, startsOnDay } from "../src/lib/time.js"
 import {
+  PROFILE_HEADING,
+  profileMarkdown,
   briefMarkdown,
   NOTES_HEADING,
   parseBrief,
@@ -31,10 +33,82 @@ describe("parseBrief", () => {
       emails: "C",
       objective: "D",
       people: [
-        { email: "jane@acme.example", name: "", role: "CTO", roleSource: null },
+        {
+          email: "jane@acme.example",
+          name: "",
+          role: "CTO",
+          roleSource: null,
+          lowConfidence: false,
+          responsibilities: "",
+          interactions: "",
+          recentPost: null,
+        },
       ],
       companies: [{ domain: "acme.example", name: "Acme", summary: "Anvils." }],
     })
+  })
+
+  it("reads profile fields and keeps only an http post URL", () => {
+    const person = (recentPost: unknown) =>
+      parseBrief(
+        JSON.stringify({
+          company: "c",
+          people: [
+            {
+              email: "d@mintlify.example",
+              role: "Customer Success",
+              responsibilities: "Owns onboarding.",
+              interactions: "No recent email.",
+              recentPost,
+            },
+          ],
+        })
+      ).people[0]
+    expect(
+      person({
+        url: "[post](https://linkedin.com/posts/1)",
+        date: "2026-09-01",
+        summary: "Launch",
+      })
+    ).toMatchObject({
+      responsibilities: "Owns onboarding.",
+      interactions: "No recent email.",
+      recentPost: {
+        url: "https://linkedin.com/posts/1",
+        date: "2026-09-01",
+        summary: "Launch",
+      },
+    })
+    expect(person({ url: "LinkedIn" })?.recentPost).toBeNull()
+    expect(person(undefined)?.recentPost).toBeNull()
+  })
+
+  it("unwraps Markdown links around emails and domains", () => {
+    const brief = parseBrief(
+      JSON.stringify({
+        company: "c",
+        people: [
+          { email: "[d@mintlify.com](mailto:d@mintlify.com)", role: "" },
+        ],
+        companies: [{ domain: "[mintlify.com](http://mintlify.com)" }],
+      })
+    )
+    expect(brief.people[0]?.email).toBe("d@mintlify.com")
+    expect(brief.companies[0]?.domain).toBe("mintlify.com")
+  })
+
+  it("reads a person's confidence", () => {
+    const reply = (confidence: string) =>
+      parseBrief(
+        JSON.stringify({
+          company: "c",
+          people: [
+            { email: "d@mintlify.example", role: "Engineer", confidence },
+          ],
+        })
+      ).people[0]?.lowConfidence
+    expect(reply("low")).toBe(true)
+    expect(reply("high")).toBe(false)
   })
 
   it("rejects replies without a brief", () => {
@@ -194,5 +268,84 @@ describe("isRuntimeSignal", () => {
     expect(isRuntimeSignal(interrupt)).toBe(true)
     expect(isRuntimeSignal({ error: new Error("x") })).toBe(true)
     expect(isRuntimeSignal(new Error("real failure"))).toBe(false)
+  })
+})
+
+describe("profileMarkdown", () => {
+  const researched = {
+    email: "d@mintlify.example",
+    name: "Demarcus Lloyd",
+    role: "Customer Success",
+    roleSource: "https://linkedin.com/in/d",
+    lowConfidence: false,
+    responsibilities: "Owns onboarding.",
+    interactions: "You met twice about docs.",
+    recentPost: null,
+  }
+  const input = {
+    researched,
+    lowConfidence: false,
+    meetings: [
+      {
+        title: "Docs [review]",
+        start: "2026-09-12T17:00:00Z",
+        url: "https://notion.example/m1",
+      },
+      { title: "Offsite", start: "2026-09-01", url: null },
+    ],
+    lookbackDays: 90,
+    timeZone: "America/Los_Angeles",
+  }
+
+  it("lists sections, meetings, and the role source", () => {
+    const markdown = profileMarkdown(input, "Sep 30, 2026, 1:00 PM")
+    expect(markdown.startsWith(PROFILE_HEADING)).toBe(true)
+    expect(markdown).toContain(
+      "Owns onboarding. ([source](https://linkedin.com/in/d))"
+    )
+    expect(markdown).toContain(
+      "- Sep 12, 2026 · [Docs \\[review\\]](https://notion.example/m1)"
+    )
+    expect(markdown).toContain("- Sep 1, 2026 · Offsite")
+    expect(markdown).toContain("You met twice about docs.")
+    expect(markdown).not.toContain("Recent post")
+    expect(markdown).not.toContain("callout")
+  })
+
+  it("flags a low-confidence match and shows a recent post", () => {
+    const markdown = profileMarkdown(
+      {
+        ...input,
+        lowConfidence: true,
+        meetings: [],
+        researched: {
+          ...researched,
+          recentPost: {
+            url: "https://x.example/p/1",
+            date: "2026-09-20",
+            summary: "Shipped AI search",
+          },
+        },
+      },
+      "now"
+    )
+    expect(markdown).toContain("<callout")
+    expect(markdown).toContain("_No meetings in the last 90 days._")
+    expect(markdown).toContain(
+      "2026-09-20 · [Shipped AI search](https://x.example/p/1)"
+    )
+  })
+
+  it("replaces only the profile section, keeping notes", () => {
+    const existing = `${PROFILE_HEADING}\nold\n---\n## Notes\nmine`
+    expect(planBodyEdit(existing, "new", PROFILE_HEADING)).toEqual({
+      type: "replace",
+      oldStr: `${PROFILE_HEADING}\nold\n---`,
+      newStr: "new",
+    })
+    expect(planBodyEdit("", "new", PROFILE_HEADING)).toEqual({
+      type: "insert",
+      content: "new\n## Notes\n",
+    })
   })
 })

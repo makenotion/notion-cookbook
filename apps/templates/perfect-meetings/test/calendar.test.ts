@@ -13,6 +13,7 @@ import {
   currentOrNextMeeting,
   internalDomainsFor,
   meetingsFromListEvents,
+  pastMeetingsWith,
   pickBusinessAccount,
   stripHtml,
   type CalendarEvent,
@@ -254,5 +255,56 @@ describe("currentOrNextMeeting", () => {
     expect(
       currentOrNextMeeting(meetings, Date.parse("2026-10-02T00:00:00Z"))
     ).toBeNull()
+  })
+})
+
+describe("pastMeetingsWith", () => {
+  const at = (id: string, day: string, extra: Partial<CalendarEvent> = {}) =>
+    event({
+      eventId: id,
+      summary: `Meeting ${id}`,
+      period: {
+        type: "DATE_TIME",
+        start: { dateTime: `2026-09-${day}T17:00:00Z` },
+        end: { dateTime: `2026-09-${day}T17:30:00Z` },
+      },
+      ...extra,
+    })
+  const now = Date.parse("2026-09-29T12:00:00Z")
+
+  it("keeps meetings that happened, newest first, across listEvents calls", () => {
+    const result = pastMeetingsWith(
+      [
+        output([at("a", "10"), at("b", "20")]),
+        output([
+          at("b", "20"),
+          at("cancelled", "21", { eventStatus: "cancelled" }),
+          at("declined", "22", { responseStatus: "declined" }),
+          at("block", "23", { isAutoBlock: true }),
+          at("future", "30"),
+        ]),
+      ],
+      ["jane.doe@acme.example", "nobody@acme.example"],
+      now,
+      10
+    )
+    expect(result["jane.doe@acme.example"]?.map((m) => m.eventId)).toEqual([
+      "b",
+      "a",
+    ])
+    expect(result["nobody@acme.example"]).toEqual([])
+  })
+
+  it("limits each attendee's list", () => {
+    const result = pastMeetingsWith(
+      [output([at("a", "10"), at("b", "20"), at("c", "25")])],
+      ["jane.doe@acme.example"],
+      now,
+      2
+    )
+    expect(result["jane.doe@acme.example"]?.map((m) => m.title)).toEqual([
+      "Meeting c",
+      "Meeting b",
+    ])
   })
 })

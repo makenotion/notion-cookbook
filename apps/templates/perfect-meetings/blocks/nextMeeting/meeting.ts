@@ -142,6 +142,12 @@ export function pickMeeting(
   return allDayNow ?? upcoming
 }
 
+/** A person card's role line, marked when People Confidence is Low. */
+export function roleLabel(role: string, confidence: string): string {
+  if (!role) return "Role not found yet"
+  return confidence === "Low" ? `(low confidence) ${role}` : role
+}
+
 export function firstSentence(value: string): string {
   const match = value.match(/^.*?[.!?](\s|$)/)
   return (match ? match[0] : value).trim()

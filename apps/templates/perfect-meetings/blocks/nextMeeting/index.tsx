@@ -11,6 +11,7 @@ import {
   groupByCompany,
   layoutDay,
   pickMeeting,
+  roleLabel,
   sortByStart,
   splitEmails,
   text,
@@ -125,7 +126,7 @@ function PersonCard({ person }: { person: NotionDataSourcePage }) {
         <Avatar label={name || email} photo={text(person.propertiesByKey.Photo)} />
         <span className="tile-body">
           <span className="tile-title">{name || email}</span>
-          <span className="tile-subtitle">{role || "Role not found yet"}</span>
+          <span className="tile-subtitle">{roleLabel(role, text(person.propertiesByKey.Confidence))}</span>
           {name && <span className="tile-detail">{email}</span>}
           {source && <span className="tile-detail">Role from {source}</span>}
         </span>

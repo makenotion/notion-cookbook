@@ -19,6 +19,7 @@ const attendee: Attendee = {
   role: "",
   photo: null,
   companyDomain: "example.com",
+  confidence: null,
 }
 
 const brief = {
@@ -32,6 +33,10 @@ const brief = {
       name: "Jordan Lee (web)",
       role: "Product Designer",
       roleSource: null,
+      lowConfidence: false,
+      responsibilities: "",
+      interactions: "",
+      recentPost: null,
     },
   ],
   companies: [
@@ -121,6 +126,7 @@ describe("personUpdates", () => {
       Role: { rich_text: [{ text: { content: "Product Designer" } }] },
       Name: { title: [{ text: { content: "Jordan Lee" } }] },
       Photo: { url: "https://p/1" },
+      Confidence: { select: { name: "High" } },
     })
     expect(personUpdates(attendee, brief, threads).Name).toEqual({
       title: [{ text: { content: "Jordan L." } }],
@@ -128,6 +134,61 @@ describe("personUpdates", () => {
     expect(personUpdates(attendee, brief, []).Name).toEqual({
       title: [{ text: { content: "Jordan Lee (web)" } }],
     })
+  })
+
+  it("saves a low-confidence match as Low and lets a later match replace it", () => {
+    const low = {
+      ...brief,
+      people: [{ ...brief.people[0]!, lowConfidence: true }],
+    }
+    expect(personUpdates(attendee, low, [])).toEqual({
+      Role: { rich_text: [{ text: { content: "Product Designer" } }] },
+      Name: { title: [{ text: { content: "Jordan Lee (web)" } }] },
+      Confidence: { select: { name: "Low" } },
+    })
+    expect(personUpdates(attendee, brief, []).Confidence).toEqual({
+      select: { name: "High" },
+    })
+
+    const stored = {
+      ...attendee,
+      name: "Jordan Lee (web)",
+      role: "Product Designer",
+      confidence: "Low",
+    }
+    expect(personUpdates(stored, low, [])).toEqual({})
+    const better = {
+      ...brief,
+      people: [
+        { ...brief.people[0]!, name: "Jordan Lee", role: "Design Lead" },
+      ],
+    }
+    expect(personUpdates(stored, better, [])).toEqual({
+      Role: { rich_text: [{ text: { content: "Design Lead" } }] },
+      Name: { title: [{ text: { content: "Jordan Lee" } }] },
+      Confidence: { select: { name: "High" } },
+    })
+  })
+
+  it("marks a saved role High when a confident match confirms it", () => {
+    const saved = {
+      ...attendee,
+      name: "Jordan Lee",
+      role: "Product Designer",
+    }
+    expect(personUpdates(saved, brief, [])).toEqual({
+      Confidence: { select: { name: "High" } },
+    })
+  })
+
+  it("never lets a low-confidence match replace a High one", () => {
+    const low = {
+      ...brief,
+      people: [{ ...brief.people[0]!, lowConfidence: true }],
+    }
+    expect(personUpdates({ ...attendee, confidence: "High" }, low, [])).toEqual(
+      {}
+    )
   })
 
   it("never replaces a name someone typed", () => {
@@ -173,9 +234,51 @@ describe("research prompt names", () => {
       {}
     )
     expect(prompt).toContain(
-      "- Jordan Lee <jlee@example.com>, company at example.com (name unknown)"
+      '- Jordan Lee <jlee@example.com>, company at example.com (name unconfirmed, likely "Example")'
     )
-    expect(prompt).toContain("- (full name unknown) <mrivera@example.com>")
+    expect(prompt).toContain(
+      '- (full name unknown; email handle "mrivera") <mrivera@example.com>'
+    )
+  })
+
+  it("asks the researcher to recheck a low-confidence match", () => {
+    const prompt = researchPrompt(
+      { title: "Intro", start: null, end: null, agenda: "" },
+      [
+        {
+          ...attendee,
+          name: "Jordan Lee",
+          role: "Designer",
+          confidence: "Low",
+        },
+      ],
+      [],
+      {}
+    )
+    expect(prompt).toContain(
+      '- Jordan Lee (unconfirmed; email handle "jlee") <jlee@example.com>'
+    )
+    expect(prompt).toContain("low-confidence role: Designer")
+  })
+
+  it("lists past meetings with each attendee", () => {
+    const prompt = researchPrompt(
+      { title: "Intro", start: null, end: null, agenda: "" },
+      [attendee],
+      [],
+      {},
+      {
+        "jlee@example.com": [
+          {
+            eventId: "e1",
+            title: "Kickoff",
+            start: "2026-09-12T17:00:00Z",
+            calendarUrl: null,
+          },
+        ],
+      }
+    )
+    expect(prompt).toContain('  Past meetings: 2026-09-12 "Kickoff"')
   })
 
   it("keeps an http role source and drops anything else", () => {

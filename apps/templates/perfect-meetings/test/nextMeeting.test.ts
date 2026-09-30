@@ -5,6 +5,7 @@ import {
   dateRange,
   dayBounds,
   firstSentence,
+  roleLabel,
   groupByCompany,
   layoutDay,
   pickMeeting,
@@ -78,6 +79,15 @@ describe("pickMeeting", () => {
     expect(
       pickMeeting(rows.slice(1), Date.parse("2026-09-30T12:00:00Z"))
     ).toBeNull()
+  })
+})
+
+describe("roleLabel", () => {
+  it("marks a role from a low-confidence match", () => {
+    expect(roleLabel("Engineer", "Low")).toBe("(low confidence) Engineer")
+    expect(roleLabel("Engineer", "High")).toBe("Engineer")
+    expect(roleLabel("Engineer", "")).toBe("Engineer")
+    expect(roleLabel("", "Low")).toBe("Role not found yet")
   })
 })
 
