@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import { pageIdFromEvent } from "../src/lib/notionIds.js"
+import { asPage } from "../src/lib/props.js"
 import { localDay, startsOnDay } from "../src/lib/time.js"
 import {
   PROFILE_HEADING,
@@ -312,6 +313,21 @@ describe("profileMarkdown", () => {
     expect(markdown).not.toContain("callout")
   })
 
+  it("does not repeat a role source the text already cites", () => {
+    const markdown = profileMarkdown(
+      {
+        ...input,
+        researched: {
+          ...researched,
+          roleSource: "https://www.linkedin.com/in/d/",
+          responsibilities: "Owns onboarding. [1](https://linkedin.com/in/d)",
+        },
+      },
+      "now"
+    )
+    expect(markdown).not.toContain("[source]")
+  })
+
   it("flags a low-confidence match and shows a recent post", () => {
     const markdown = profileMarkdown(
       {
@@ -346,6 +362,18 @@ describe("profileMarkdown", () => {
     expect(planBodyEdit("", "new", PROFILE_HEADING)).toEqual({
       type: "insert",
       content: "new\n## Notes\n",
+    })
+  })
+})
+
+describe("asPage", () => {
+  it("keeps the page URL for links", () => {
+    expect(
+      asPage({ object: "page", id: "p1", properties: {}, url: "https://n/p1" })
+    ).toEqual({ id: "p1", properties: {}, url: "https://n/p1" })
+    expect(asPage({ id: "p1", properties: {} })).toEqual({
+      id: "p1",
+      properties: {},
     })
   })
 })

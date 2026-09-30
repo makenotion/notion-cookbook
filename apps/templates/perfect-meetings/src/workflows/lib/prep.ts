@@ -796,8 +796,7 @@ async function meetingPageUrls(
   const urls: Record<string, string> = {}
   for (const page of pages) {
     const eventId = read.text(page.properties, "Event ID")
-    if (wanted.has(eventId) && "url" in page && typeof page.url === "string")
-      urls[eventId] = page.url
+    if (wanted.has(eventId) && page.url) urls[eventId] = page.url
   }
   return urls
 }

@@ -185,6 +185,11 @@ function meetingDate(start: string, timeZone: string): string {
   })
 }
 
+/** A URL, or text containing URLs, without scheme, "www.", or trailing slash. */
+function bareUrl(value: string): string {
+  return value.replace(/https?:\/\/(www\.)?/g, "").replace(/\/(?=[)\s]|$)/g, "")
+}
+
 /** Escape text for a Markdown link label. */
 function label(value: string): string {
   return value.replace(/([[\]])/g, "\\$1")
@@ -202,9 +207,11 @@ export function profileMarkdown(
     )
   lines.push("### Role and responsibilities")
   const responsibilities = paragraph(researched?.responsibilities ?? "")
+  const source = researched?.roleSource
+  // The agent often cites the same page inline; link it only once.
   lines.push(
-    researched?.roleSource
-      ? `${responsibilities} ([source](${researched.roleSource}))`
+    source && !bareUrl(responsibilities).includes(bareUrl(source))
+      ? `${responsibilities} ([source](${source}))`
       : responsibilities
   )
   lines.push("### Recent meetings")
