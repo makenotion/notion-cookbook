@@ -2,6 +2,14 @@ export const PREP_HEADING = "## Meeting prep"
 export const NOTES_HEADING = "## Notes"
 export const PROFILE_HEADING = "## Profile"
 
+/** Public profile URLs, as found by the researcher. */
+export type Profiles = {
+  linkedin: string | null
+  x: string | null
+  instagram: string | null
+  website: string | null
+}
+
 export type Brief = {
   company: string
   role: string
@@ -18,7 +26,7 @@ export type Brief = {
     responsibilities: string
     /** Recent email and meetings with them, for the People page. */
     interactions: string
-    recentPost: { url: string; date: string; summary: string } | null
+    profiles: Profiles
   }>
   companies: Array<{ domain: string; name: string; summary: string }>
 }
@@ -42,11 +50,40 @@ function httpUrl(value: unknown): string | null {
   return /^https?:\/\//.test(url) ? url : null
 }
 
-function post(value: unknown): Brief["people"][number]["recentPost"] {
-  if (typeof value !== "object" || value === null) return null
-  const raw = value as Record<string, unknown>
-  const url = httpUrl(raw.url)
-  return url ? { url, date: str(raw.date), summary: str(raw.summary) } : null
+// Hosts each profile URL must be on, so a link is never filed under the wrong
+// network. A personal site may be anywhere except those networks.
+const PROFILE_HOSTS = {
+  linkedin: /(^|\.)linkedin\.com$/,
+  x: /(^|\.)(x|twitter)\.com$/,
+  instagram: /(^|\.)instagram\.com$/,
+} as const
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.toLowerCase()
+  } catch {
+    return ""
+  }
+}
+
+function profiles(value: unknown): Profiles {
+  const raw =
+    typeof value === "object" && value !== null
+      ? (value as Record<string, unknown>)
+      : {}
+  const on = (key: keyof typeof PROFILE_HOSTS) => {
+    const url = httpUrl(raw[key])
+    return url && PROFILE_HOSTS[key].test(hostOf(url)) ? url : null
+  }
+  const site = httpUrl(raw.website)
+  const social = Object.values(PROFILE_HOSTS)
+  return {
+    linkedin: on("linkedin"),
+    x: on("x"),
+    instagram: on("instagram"),
+    website:
+      site && !social.some((host) => host.test(hostOf(site))) ? site : null,
+  }
 }
 
 /** Parse the researcher's JSON reply, tolerating code fences or surrounding prose. */
@@ -80,7 +117,7 @@ export function parseBrief(reply: string): Brief {
               lowConfidence: person.confidence === "low",
               responsibilities: str(person.responsibilities),
               interactions: str(person.interactions),
-              recentPost: post(person.recentPost),
+              profiles: profiles(person.profiles),
             },
           ]
         : []
@@ -229,14 +266,6 @@ export function profileMarkdown(
     "### Recent communication",
     paragraph(researched?.interactions ?? "")
   )
-  const recent = researched?.recentPost
-  if (recent) {
-    lines.push("### Recent post")
-    const when = recent.date ? `${recent.date} · ` : ""
-    lines.push(
-      `${when}[${label(recent.summary || "View post")}](${recent.url})`
-    )
-  }
   lines.push("---")
   return lines.join("\n")
 }

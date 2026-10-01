@@ -67,6 +67,11 @@ export const people = database("people-db", {
     // Join key to Companies.Domain; empty for personal mailboxes.
     "Company domain": { resourceId: "person-company-domain", type: "text" },
     Photo: { resourceId: "person-photo", type: "url" },
+    // Public profiles. The researcher fills in only the ones that are empty.
+    LinkedIn: { resourceId: "person-linkedin", type: "url" },
+    X: { resourceId: "person-x", type: "url" },
+    Instagram: { resourceId: "person-instagram", type: "url" },
+    "Personal site": { resourceId: "person-site", type: "url" },
     // Low means the match was partial (such as a first name at the right
     // company) and may be replaced by a later match. Set it to High to keep
     // a name and role.
@@ -253,7 +258,7 @@ When an attendee's full name is unknown, their email handle is usually a first n
 
 Mark a person "high" confidence when the evidence ties their full name, or their email address, to the company. When the only match is on part of the name, such as a first name that matches the handle at the right company, still report that person, but mark them "low" confidence. An attendee listed with an unconfirmed name or a low-confidence role was matched that way before: check it again and mark it "high" only if you now find stronger evidence.
 
-For each attendee you identify, also run one search for a recent public post by them, such as a LinkedIn post, an X post, or a blog article, for example "Jane Doe Acme LinkedIn post". Report a post only when it is from the last 90 days and you can see its date; otherwise leave it out.
+For each attendee you identify, also find their public profiles: LinkedIn, X (Twitter), Instagram, and a personal website. An attendee line lists any profiles already known; do not search for those again. The email handle is often also their X or Instagram handle, so try it, for example "wustep site:x.com". Report a profile only when its name, photo caption, bio, or linked site ties it to this person and company.
 
 Base the email summaries only on the supplied thread summaries, and the meeting history only on the supplied past meetings; never invent correspondence or meetings. If there are none, say that there is no recent email or meeting history.
 
@@ -263,9 +268,9 @@ Reply with only one JSON object and no other text:
   "role": "One paragraph (3-4 sentences max) on each attendee's role and responsibilities and what they likely care about.",
   "emails": "One paragraph (3-4 sentences max) summarising recent email interactions: topics, commitments, open questions.",
   "objective": "One paragraph (3-4 sentences max) on the likely objective of the meeting and a suggested agenda.",
-  "people": [{ "email": "attendee email", "name": "Full name, e.g. Jane Doe", "role": "Short job title, e.g. VP Engineering", "roleSource": "URL of the page or search result the role came from", "confidence": "high or low", "responsibilities": "2-3 sentences on what this person is responsible for and what they likely care about", "interactions": "2-3 sentences summarising recent meetings and email with this person: topics, commitments, open questions", "recentPost": { "url": "URL of the post", "date": "YYYY-MM-DD", "summary": "One line on what the post says" } }],
+  "people": [{ "email": "attendee email", "name": "Full name, e.g. Jane Doe", "role": "Short job title, e.g. VP Engineering", "roleSource": "URL of the page or search result the role came from", "confidence": "high or low", "responsibilities": "2-3 sentences on what this person is responsible for and what they likely care about", "interactions": "2-3 sentences summarising recent meetings and email with this person: topics, commitments, open questions", "profiles": { "linkedin": "profile URL", "x": "profile URL", "instagram": "profile URL", "website": "personal site URL" } }],
   "companies": [{ "domain": "example.com", "name": "Proper company name", "summary": "One sentence on what the company does." }]
 }
 
-Include every attendee in "people". Give a full name when it is a high- or low-confidence match as described above, and use an empty string when you found no match. Use an empty string for an unknown role and its roleSource, and for responsibilities you could not find. Omit "recentPost" when you found none. In "companies", use each domain exactly as it appears in the attendee list, and omit a company you could not identify.`,
+Include every attendee in "people". Give a full name when it is a high- or low-confidence match as described above, and use an empty string when you found no match. Use an empty string for an unknown role and its roleSource, and for responsibilities you could not find. In "profiles", include only profiles you found, and leave out ones already known. In "companies", use each domain exactly as it appears in the attendee list, and omit a company you could not identify.`,
 })

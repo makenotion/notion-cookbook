@@ -20,6 +20,7 @@ const attendee: Attendee = {
   photo: null,
   companyDomain: "example.com",
   confidence: null,
+  profiles: { linkedin: null, x: null, instagram: null, website: null },
 }
 
 const brief = {
@@ -36,7 +37,7 @@ const brief = {
       lowConfidence: false,
       responsibilities: "",
       interactions: "",
-      recentPost: null,
+      profiles: { linkedin: null, x: null, instagram: null, website: null },
     },
   ],
   companies: [
@@ -181,6 +182,39 @@ describe("personUpdates", () => {
     })
   })
 
+  it("fills in only profiles that are not saved yet", () => {
+    const found = {
+      ...brief,
+      people: [
+        {
+          ...brief.people[0]!,
+          profiles: {
+            linkedin: "https://linkedin.com/in/new",
+            x: "https://x.com/jlee",
+            instagram: null,
+            website: null,
+          },
+        },
+      ],
+    }
+    const saved = {
+      ...attendee,
+      name: "Jordan Lee",
+      role: "Product Designer",
+      confidence: "High",
+      profiles: {
+        ...attendee.profiles,
+        linkedin: "https://linkedin.com/in/old",
+      },
+    }
+    expect(personUpdates(saved, found, [])).toEqual({
+      X: { url: "https://x.com/jlee" },
+    })
+    expect(
+      personUpdates({ ...saved, confidence: "Low" }, found, []).LinkedIn
+    ).toEqual({ url: "https://linkedin.com/in/new" })
+  })
+
   it("never lets a low-confidence match replace a High one", () => {
     const low = {
       ...brief,
@@ -259,6 +293,21 @@ describe("research prompt names", () => {
       '- Jordan Lee (unconfirmed; email handle "jlee") <jlee@example.com>'
     )
     expect(prompt).toContain("low-confidence role: Designer")
+  })
+
+  it("lists known profiles so the researcher skips them", () => {
+    const prompt = researchPrompt(
+      { title: "Intro", start: null, end: null, agenda: "" },
+      [
+        {
+          ...attendee,
+          profiles: { ...attendee.profiles, x: "https://x.com/jlee" },
+        },
+      ],
+      [],
+      {}
+    )
+    expect(prompt).toContain("  Known profiles: https://x.com/jlee")
   })
 
   it("lists past meetings with each attendee", () => {

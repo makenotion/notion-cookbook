@@ -29,9 +29,11 @@ you have checked a person to keep their name and role.
 
 Each brief also updates a **Profile** at the top of each attendee's page in
 **People**: their role and responsibilities, meetings with them in the last 90
-days, a summary of recent meetings and email, and a recent public post when
-one is found. Write your own notes under **Notes** on that page; refreshes
-leave them untouched.
+days, and a summary of recent meetings and email. Write your own notes under
+**Notes** on that page; refreshes leave them untouched. The researcher also
+fills in their **LinkedIn**, **X**, **Instagram**, and **Personal site** when
+it finds them, and the meeting card links to them. It only looks for profiles
+that are empty, so correct a wrong one by replacing it.
 
 Meetings update when calendar events change, with an hourly catch-up, and
 every catch-up is logged in **Workflow runs**. Briefs are prepared for new

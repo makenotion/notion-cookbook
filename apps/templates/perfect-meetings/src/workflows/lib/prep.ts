@@ -30,6 +30,7 @@ import {
   planBodyEdit,
   profileMarkdown,
   type Brief,
+  type Profiles,
 } from "./brief.js"
 import {
   emailLines,
@@ -95,7 +96,18 @@ export type Attendee = {
   companyDomain: string | null
   /** The People Confidence status, or null before research finds a match. */
   confidence: string | null
+  profiles: Profiles
 }
+
+/** The People property that stores each profile URL. */
+export const PROFILE_PROPERTIES = {
+  linkedin: "LinkedIn",
+  x: "X",
+  instagram: "Instagram",
+  website: "Personal site",
+} as const satisfies Record<keyof Profiles, string>
+
+const PROFILE_KEYS = Object.keys(PROFILE_PROPERTIES) as Array<keyof Profiles>
 export type Company = {
   id: string
   name: string
@@ -443,7 +455,11 @@ export function acceptedMatch(
   brief: Pick<Brief, "people">
 ): Brief["people"][number] | undefined {
   const found = brief.people.find((person) => person.email === attendee.email)
-  if (!found || !(found.role || found.name || found.responsibilities))
+  const hasProfile = Object.values(found?.profiles ?? {}).some(Boolean)
+  if (
+    !found ||
+    !(found.role || found.name || found.responsibilities || hasProfile)
+  )
     return undefined
   if (attendee.confidence === CONFIDENCE.high && found.lowConfidence)
     return undefined
@@ -480,6 +496,12 @@ export function personUpdates(
     if (researched.roleSource)
       properties["Role source"] = prop.url(researched.roleSource)
   }
+  for (const key of PROFILE_KEYS) {
+    const url = researched?.profiles[key]
+    const stored = attendee.profiles[key]
+    if (url && (!stored || replaceable) && url !== stored)
+      properties[PROFILE_PROPERTIES[key]] = prop.url(url)
+  }
   // Contacts and email sender names are not research; they win over it.
   const known = bestName(
     attendee.email,
@@ -494,6 +516,7 @@ export function personUpdates(
   // match's name or role is saved, or the match confirms the saved role.
   const usedMatch =
     properties.Role !== undefined ||
+    PROFILE_KEYS.some((key) => properties[PROFILE_PROPERTIES[key]]) ||
     (properties.Name !== undefined && !known) ||
     (researched?.role !== undefined && researched.role === attendee.role)
   if (usedMatch && attendee.confidence !== confidence)
@@ -543,6 +566,12 @@ async function loadAttendees(
       photo: read.url(page.properties, "Photo"),
       companyDomain: domain || null,
       confidence: read.select(page.properties, "Confidence"),
+      profiles: {
+        linkedin: read.url(page.properties, PROFILE_PROPERTIES.linkedin),
+        x: read.url(page.properties, PROFILE_PROPERTIES.x),
+        instagram: read.url(page.properties, PROFILE_PROPERTIES.instagram),
+        website: read.url(page.properties, PROFILE_PROPERTIES.website),
+      },
     })
   }
   const companies: Company[] = []
@@ -666,7 +695,10 @@ export function researchPrompt(
                   `${meeting.start.slice(0, 10)} "${truncate(meeting.title, 80)}"`
               )
               .join("; ")}`
-      return `- ${name} <${attendee.email}>, ${where}${role}${history}`
+      const known = PROFILE_KEYS.flatMap((key) => attendee.profiles[key] ?? [])
+      const profiles =
+        known.length === 0 ? "" : `\n  Known profiles: ${known.join(", ")}`
+      return `- ${name} <${attendee.email}>, ${where}${role}${profiles}${history}`
     })
     .join("\n")
   const head = `Write the pre-meeting brief for this meeting. Reply with the JSON object described in your instructions.

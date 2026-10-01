@@ -5,6 +5,7 @@ import {
   dateRange,
   dayBounds,
   firstSentence,
+  profileLinks,
   roleLabel,
   groupByCompany,
   layoutDay,
@@ -79,6 +80,22 @@ describe("pickMeeting", () => {
     expect(
       pickMeeting(rows.slice(1), Date.parse("2026-09-30T12:00:00Z"))
     ).toBeNull()
+  })
+})
+
+describe("profileLinks", () => {
+  it("lists set profile links in a fixed order", () => {
+    expect(
+      profileLinks({
+        "Personal site": "https://d.example",
+        LinkedIn: "https://linkedin.com/in/d",
+        X: "",
+        Instagram: "not a url",
+      })
+    ).toEqual([
+      { label: "LinkedIn", url: "https://linkedin.com/in/d" },
+      { label: "Website", url: "https://d.example" },
+    ])
   })
 })
 

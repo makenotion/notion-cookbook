@@ -86,6 +86,8 @@ describe("research prompt", () => {
       email: `p${i}@acme.example`,
       role: "",
       companyDomain: "acme.example",
+      confidence: null,
+      profiles: { linkedin: null, x: null, instagram: null, website: null },
     }))
     const threads = Object.fromEntries(
       attendees.map((a) => [

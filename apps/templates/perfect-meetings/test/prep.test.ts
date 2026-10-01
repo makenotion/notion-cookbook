@@ -15,6 +15,13 @@ import {
 import { isRuntimeSignal } from "../src/workflows/lib/runtime.js"
 import { shouldPrep, splitEmails } from "../src/workflows/lib/prep.js"
 
+const EMPTY_PROFILES = {
+  linkedin: null,
+  x: null,
+  instagram: null,
+  website: null,
+}
+
 const brief = {
   company: "Acme makes anvils.",
   role: "Jane runs engineering.",
@@ -42,15 +49,15 @@ describe("parseBrief", () => {
           lowConfidence: false,
           responsibilities: "",
           interactions: "",
-          recentPost: null,
+          profiles: { linkedin: null, x: null, instagram: null, website: null },
         },
       ],
       companies: [{ domain: "acme.example", name: "Acme", summary: "Anvils." }],
     })
   })
 
-  it("reads profile fields and keeps only an http post URL", () => {
-    const person = (recentPost: unknown) =>
+  it("reads profile fields and files each profile URL by its host", () => {
+    const person = (profiles: unknown) =>
       parseBrief(
         JSON.stringify({
           company: "c",
@@ -60,28 +67,36 @@ describe("parseBrief", () => {
               role: "Customer Success",
               responsibilities: "Owns onboarding.",
               interactions: "No recent email.",
-              recentPost,
+              profiles,
             },
           ],
         })
       ).people[0]
     expect(
       person({
-        url: "[post](https://linkedin.com/posts/1)",
-        date: "2026-09-01",
-        summary: "Launch",
+        linkedin: "[in](https://www.linkedin.com/in/d)",
+        x: "https://twitter.com/d",
+        instagram: "https://instagram.com/d",
+        website: "https://d.example",
       })
     ).toMatchObject({
       responsibilities: "Owns onboarding.",
       interactions: "No recent email.",
-      recentPost: {
-        url: "https://linkedin.com/posts/1",
-        date: "2026-09-01",
-        summary: "Launch",
+      profiles: {
+        linkedin: "https://www.linkedin.com/in/d",
+        x: "https://twitter.com/d",
+        instagram: "https://instagram.com/d",
+        website: "https://d.example",
       },
     })
-    expect(person({ url: "LinkedIn" })?.recentPost).toBeNull()
-    expect(person(undefined)?.recentPost).toBeNull()
+    expect(
+      person({
+        linkedin: "https://x.com/d",
+        x: "@d",
+        website: "https://linkedin.com/in/d",
+      })?.profiles
+    ).toEqual(EMPTY_PROFILES)
+    expect(person(undefined)?.profiles).toEqual(EMPTY_PROFILES)
   })
 
   it("unwraps Markdown links around emails and domains", () => {
@@ -281,7 +296,7 @@ describe("profileMarkdown", () => {
     lowConfidence: false,
     responsibilities: "Owns onboarding.",
     interactions: "You met twice about docs.",
-    recentPost: null,
+    profiles: { linkedin: null, x: null, instagram: null, website: null },
   }
   const input = {
     researched,
@@ -309,7 +324,6 @@ describe("profileMarkdown", () => {
     )
     expect(markdown).toContain("- Sep 1, 2026 · Offsite")
     expect(markdown).toContain("You met twice about docs.")
-    expect(markdown).not.toContain("Recent post")
     expect(markdown).not.toContain("callout")
   })
 
@@ -328,28 +342,13 @@ describe("profileMarkdown", () => {
     expect(markdown).not.toContain("[source]")
   })
 
-  it("flags a low-confidence match and shows a recent post", () => {
+  it("flags a low-confidence match", () => {
     const markdown = profileMarkdown(
-      {
-        ...input,
-        lowConfidence: true,
-        meetings: [],
-        researched: {
-          ...researched,
-          recentPost: {
-            url: "https://x.example/p/1",
-            date: "2026-09-20",
-            summary: "Shipped AI search",
-          },
-        },
-      },
+      { ...input, lowConfidence: true, meetings: [] },
       "now"
     )
     expect(markdown).toContain("<callout")
     expect(markdown).toContain("_No meetings in the last 90 days._")
-    expect(markdown).toContain(
-      "2026-09-20 · [Shipped AI search](https://x.example/p/1)"
-    )
   })
 
   it("replaces only the profile section, keeping notes", () => {
