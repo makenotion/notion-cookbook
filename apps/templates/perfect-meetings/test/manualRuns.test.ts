@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest"
 
 import {
   BACKLOG_MAX_MEETINGS,
-  personResearched,
+  FAILED_RETRY_MS,
+  STALE_RESEARCH_MS,
+  companyAttempted,
+  personAttempted,
   selectBacklog,
   type BacklogMeeting,
   type BacklogPerson,
@@ -25,23 +28,37 @@ function m(
   id: string,
   offsetHours: number,
   prepStatus: string | null,
-  attendees: string[]
+  attendees: string[],
+  lastEditedMs: number | null = NOW - 24 * HOUR
 ): BacklogMeeting {
   const startMs = NOW + offsetHours * HOUR
-  return { id, startMs, endMs: startMs + HOUR, prepStatus, attendees }
+  return {
+    id,
+    startMs,
+    endMs: startMs + HOUR,
+    prepStatus,
+    lastEditedMs,
+    attendees,
+  }
 }
 
 const person = (
   email: string,
-  researched: boolean,
+  attempted: boolean,
   companyDomain = email.split("@")[1]!
-): BacklogPerson => ({ email, researched, companyDomain })
+): BacklogPerson => ({ email, attempted, companyDomain })
 
-describe("personResearched", () => {
-  it("counts a role or a confidence as researched", () => {
-    expect(personResearched({ role: "CTO", confidence: null })).toBe(true)
-    expect(personResearched({ role: "", confidence: "Low" })).toBe(true)
-    expect(personResearched({ role: " ", confidence: null })).toBe(false)
+describe("personAttempted and companyAttempted", () => {
+  it("counts Researched at, or older research, as attempted", () => {
+    const blank = { researchedAt: null, role: "", confidence: null }
+    expect(personAttempted(blank)).toBe(false)
+    expect(personAttempted({ ...blank, researchedAt: "2026-09-29" })).toBe(true)
+    expect(personAttempted({ ...blank, role: "CTO" })).toBe(true)
+    expect(personAttempted({ ...blank, confidence: "Low" })).toBe(true)
+    expect(companyAttempted({ researchedAt: null, summary: " " })).toBe(false)
+    expect(companyAttempted({ researchedAt: null, summary: "Anvils" })).toBe(
+      true
+    )
   })
 })
 
@@ -52,9 +69,9 @@ describe("selectBacklog", () => {
     person("c@initech.com", true),
     person("d@gmail.com", false, ""),
   ]
-  const researched = new Set(["acme.com", "initech.com"])
+  const attempted = new Set(["acme.com", "initech.com"])
 
-  it("picks upcoming unfinished preps and unresearched people, soonest first", () => {
+  it("puts never-attempted people first, then unfinished upcoming preps", () => {
     const { picks, remaining } = selectBacklog(
       [
         m("ready-done", 2, "Ready", ["a@acme.com"]),
@@ -63,15 +80,15 @@ describe("selectBacklog", () => {
         m("new-person", 4, "Ready", ["b@globex.com"]),
       ],
       people,
-      researched,
+      attempted,
       NOW
     )
     expect(picks.map((pick) => pick.id)).toEqual([
+      "new-person",
       "empty",
       "failed",
-      "new-person",
     ])
-    expect(picks[2]!.reasons).toEqual([
+    expect(picks[0]!.reasons).toEqual([
       "1 unresearched attendee(s)",
       "1 unresearched company(ies)",
     ])
@@ -81,16 +98,45 @@ describe("selectBacklog", () => {
   it("skips meetings being researched, without attendees, or already covered", () => {
     const { picks } = selectBacklog(
       [
-        m("researching", 1, "Researching", ["b@globex.com"]),
+        m("researching", 1, "Researching", ["b@globex.com"], NOW - 60_000),
         m("no-attendees", 2, null, []),
         m("first", 3, "Ready", ["b@globex.com"]),
         m("same-person", 4, "Ready", ["b@globex.com"]),
       ],
       people,
-      researched,
+      attempted,
       NOW
     )
     expect(picks.map((pick) => pick.id)).toEqual(["first"])
+  })
+
+  it("retries a meeting stuck in Researching", () => {
+    const { picks } = selectBacklog(
+      [
+        m(
+          "stuck",
+          1,
+          "Researching",
+          ["a@acme.com"],
+          NOW - STALE_RESEARCH_MS - 1
+        ),
+      ],
+      people,
+      attempted,
+      NOW
+    )
+    expect(picks).toEqual([
+      { id: "stuck", reasons: ["prep stuck researching"] },
+    ])
+  })
+
+  it("waits FAILED_RETRY_MS before retrying a failed meeting", () => {
+    const fresh = m("failed", 1, "Failed", ["b@globex.com"], NOW - HOUR)
+    expect(selectBacklog([fresh], people, attempted, NOW).picks).toEqual([])
+    const old = { ...fresh, lastEditedMs: NOW - FAILED_RETRY_MS - 1 }
+    expect(
+      selectBacklog([old], people, attempted, NOW).picks.map((p) => p.id)
+    ).toEqual(["failed"])
   })
 
   it("uses past meetings only for unresearched people, most recent first", () => {
@@ -101,7 +147,7 @@ describe("selectBacklog", () => {
         m("recent", -24, "Ready", ["d@gmail.com"]),
       ],
       people,
-      researched,
+      attempted,
       NOW
     )
     expect(picks.map((pick) => pick.id)).toEqual(["recent"])
@@ -111,9 +157,49 @@ describe("selectBacklog", () => {
     const many = Array.from({ length: BACKLOG_MAX_MEETINGS + 3 }, (_, i) =>
       m(`m${i}`, i + 1, "Queued", ["a@acme.com"])
     )
-    const { picks, remaining } = selectBacklog(many, people, researched, NOW)
+    const { picks, remaining } = selectBacklog(many, people, attempted, NOW)
     expect(picks).toHaveLength(BACKLOG_MAX_MEETINGS)
     expect(picks[0]!.id).toBe("m0")
     expect(remaining).toBe(3)
+  })
+
+  it("makes progress across successive runs, even when research finds nothing or fails", () => {
+    // 25 upcoming meetings, each with its own never-researched person at a
+    // new company. Research returns nothing for most, and always fails for
+    // every fifth meeting.
+    let meetings = Array.from({ length: 25 }, (_, i) =>
+      m(`m${i}`, i + 1, "Queued", [`p${i}@co${i}.com`])
+    )
+    let folks = meetings.map((meeting) => person(meeting.attendees[0]!, false))
+    const companies = new Set<string>()
+    const counts: number[] = []
+    let clock = NOW
+    for (let run = 0; run < 10; run++) {
+      const { picks } = selectBacklog(meetings, folks, companies, clock)
+      counts.push(picks.length)
+      if (picks.length === 0) break
+      const ids = new Set(picks.map((pick) => pick.id))
+      meetings = meetings.map((meeting) => {
+        if (!ids.has(meeting.id)) return meeting
+        const fails = Number(meeting.id.slice(1)) % 5 === 0
+        if (!fails) {
+          // Research returned: stamp Researched at on the person and company.
+          const email = meeting.attendees[0]!
+          folks = folks.map((p) =>
+            p.email === email ? { ...p, attempted: true } : p
+          )
+          companies.add(email.split("@")[1]!)
+        }
+        return {
+          ...meeting,
+          prepStatus: fails ? "Failed" : "Ready",
+          lastEditedMs: clock,
+        }
+      })
+      clock += 10 * 60 * 1000
+    }
+    // 10, 10, then the 5 left; failed meetings wait out their cooldown.
+    expect(counts).toEqual([10, 10, 5, 0])
+    expect(meetings.filter((x) => x.prepStatus === "Ready")).toHaveLength(20)
   })
 })

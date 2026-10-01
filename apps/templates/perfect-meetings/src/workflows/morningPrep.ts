@@ -89,7 +89,7 @@ export default workflow({
     }
     if (failures.length > 0) {
       throw new Error(
-        `Morning prep failed for ${failures.length} meeting(s):\n${failures.join("\n")}`
+        `Refresh today's research failed for ${failures.length} meeting(s):\n${failures.join("\n")}`
       )
     }
   },

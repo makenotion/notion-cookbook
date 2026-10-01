@@ -12,7 +12,8 @@ import {
 } from "../notion.js"
 import {
   BACKLOG_LOOKBACK_DAYS,
-  personResearched,
+  companyAttempted,
+  personAttempted,
   selectBacklog,
   type BacklogMeeting,
 } from "./lib/backlog.js"
@@ -92,6 +93,9 @@ export default workflow({
                 startMs,
                 endMs: Number.isNaN(endMs) ? startMs + HOUR_MS : endMs,
                 prepStatus: read.select(page.properties, "Prep status"),
+                lastEditedMs: page.last_edited_time
+                  ? Date.parse(page.last_edited_time)
+                  : null,
                 attendees: splitEmails(
                   read.text(page.properties, "Attendee emails")
                 ),
@@ -109,16 +113,22 @@ export default workflow({
                 .text(page.properties, "Company domain")
                 .trim()
                 .toLowerCase(),
-              researched: personResearched({
+              attempted: personAttempted({
+                researchedAt:
+                  read.date(page.properties, "Researched at")?.start ?? null,
                 role: read.text(page.properties, "Role"),
                 confidence: read.select(page.properties, "Confidence"),
               }),
             },
           ]
         })
-        const researchedCompanies = new Set(
+        const attemptedCompanies = new Set(
           companyPages.flatMap((page) =>
-            read.text(page.properties, "Summary").trim()
+            companyAttempted({
+              researchedAt:
+                read.date(page.properties, "Researched at")?.start ?? null,
+              summary: read.text(page.properties, "Summary"),
+            })
               ? [read.text(page.properties, "Domain").trim().toLowerCase()]
               : []
           )
@@ -126,7 +136,7 @@ export default workflow({
         const backlog = selectBacklog(
           backlogMeetings,
           backlogPeople,
-          researchedCompanies,
+          attemptedCompanies,
           now
         )
         for (const pick of backlog.picks)

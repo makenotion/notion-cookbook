@@ -3,12 +3,19 @@ import { PREP_STATUS } from "../../notion.js"
 // Choosing which meetings a no-input "Research companies and people" run
 // preps. Research runs per meeting: one session covers the meeting's brief,
 // its attendees, and their companies. So the backlog is a list of meetings
-// chosen to cover every unresearched person and company.
+// chosen to cover every person and company research has not reached yet.
 
 /** At most this many meetings are prepped per manual run. */
 export const BACKLOG_MAX_MEETINGS = 10
 /** Meetings that started longer ago than this are not considered. */
 export const BACKLOG_LOOKBACK_DAYS = 30
+/** A Failed meeting is retried only once its last attempt is this old. */
+export const FAILED_RETRY_MS = 6 * 60 * 60 * 1000
+/**
+ * A meeting Researching for longer than this is treated as stuck (its run
+ * crashed or timed out) and retried. A prep polls for at most 10 minutes.
+ */
+export const STALE_RESEARCH_MS = 20 * 60 * 1000
 
 export type BacklogMeeting = {
   id: string
@@ -16,6 +23,8 @@ export type BacklogMeeting = {
   endMs: number
   /** Prep status, or null when empty. */
   prepStatus: string | null
+  /** When the meeting row last changed: its last prep attempt or later. */
+  lastEditedMs: number | null
   /** Outside attendee emails, lowercased. */
   attendees: readonly string[]
 }
@@ -24,8 +33,8 @@ export type BacklogPerson = {
   email: string
   /** Lowercased company domain; empty for personal mailboxes. */
   companyDomain: string
-  /** Whether research has filled in anything about this person. */
-  researched: boolean
+  /** Whether research has ever returned for this person. */
+  attempted: boolean
 }
 
 export type BacklogPick = {
@@ -35,33 +44,49 @@ export type BacklogPick = {
 }
 
 /**
- * A person counts as researched once research saved a role or a confidence
- * for them. A company counts as researched once it has a summary.
+ * Research has reached a person once a research session returned for one of
+ * their meetings (Researched at), even if it found nothing. People researched
+ * before Researched at existed count through their Role or Confidence.
  */
-export function personResearched(person: {
+export function personAttempted(person: {
+  researchedAt: string | null
   role: string
   confidence: string | null
 }): boolean {
-  return person.role.trim() !== "" || person.confidence !== null
+  return (
+    person.researchedAt !== null ||
+    person.role.trim() !== "" ||
+    person.confidence !== null
+  )
+}
+
+/** The same for a company, whose older research shows as a Summary. */
+export function companyAttempted(company: {
+  researchedAt: string | null
+  summary: string
+}): boolean {
+  return company.researchedAt !== null || company.summary.trim() !== ""
 }
 
 /**
  * The meetings to prep, in order, and how many more qualified beyond the cap.
  *
- * A meeting qualifies when either:
- * - it has not ended and its prep never finished (Prep status empty, Queued,
- *   or Failed), or
- * - it includes an attendee or company that is still unresearched and that
- *   no earlier pick already covers.
+ * Skipped: meetings without outside attendees, meetings Researching now
+ * (unless stuck for STALE_RESEARCH_MS), and Failed meetings whose last attempt
+ * is newer than FAILED_RETRY_MS. A failed session does not stamp Researched
+ * at, so the cooldown is what stops a persistent failure being retried on
+ * every run.
  *
- * Meetings being researched now are skipped, as are meetings without outside
- * attendees. Upcoming meetings come first, soonest first, then past meetings,
- * most recent first.
+ * Picked first: meetings with a person or company research has never reached
+ * that no earlier pick covers. Then: upcoming meetings whose prep never
+ * finished (empty, Queued, Failed, or stuck Researching). Within each group,
+ * upcoming meetings come first, soonest first, then past ones, most recent
+ * first.
  */
 export function selectBacklog(
   meetings: readonly BacklogMeeting[],
   people: readonly BacklogPerson[],
-  researchedCompanies: ReadonlySet<string>,
+  attemptedCompanies: ReadonlySet<string>,
   now: number,
   max = BACKLOG_MAX_MEETINGS
 ): { picks: BacklogPick[]; remaining: number } {
@@ -72,47 +97,81 @@ export function selectBacklog(
   const past = meetings
     .filter((meeting) => meeting.endMs <= now)
     .sort((a, b) => b.startMs - a.startMs)
+  const age = (meeting: BacklogMeeting) =>
+    meeting.lastEditedMs === null ? Infinity : now - meeting.lastEditedMs
+  const candidates = [...upcoming, ...past].filter((meeting) => {
+    if (meeting.attendees.length === 0) return false
+    if (meeting.prepStatus === PREP_STATUS.researching)
+      return age(meeting) > STALE_RESEARCH_MS
+    if (meeting.prepStatus === PREP_STATUS.failed)
+      return age(meeting) > FAILED_RETRY_MS
+    return true
+  })
 
   const coveredPeople = new Set<string>()
   const coveredCompanies = new Set<string>()
-  const qualified: BacklogPick[] = []
-  for (const meeting of [...upcoming, ...past]) {
-    if (meeting.attendees.length === 0) continue
-    if (meeting.prepStatus === PREP_STATUS.researching) continue
-    const reasons: string[] = []
-    const unfinished =
-      meeting.prepStatus === null ||
-      meeting.prepStatus === PREP_STATUS.queued ||
-      meeting.prepStatus === PREP_STATUS.failed
-    if (meeting.endMs > now && unfinished)
-      reasons.push(`prep ${(meeting.prepStatus ?? "empty").toLowerCase()}`)
-    const newPeople: string[] = []
-    const newCompanies = new Set<string>()
-    for (const email of meeting.attendees) {
-      const person = byEmail.get(email)
-      if (!person) continue
-      if (!person.researched && !coveredPeople.has(email)) newPeople.push(email)
-      const domain = person.companyDomain
-      if (
-        domain &&
-        !researchedCompanies.has(domain) &&
-        !coveredCompanies.has(domain)
-      )
-        newCompanies.add(domain)
-    }
-    if (newPeople.length > 0)
-      reasons.push(`${newPeople.length} unresearched attendee(s)`)
-    if (newCompanies.size > 0)
-      reasons.push(`${newCompanies.size} unresearched company(ies)`)
-    if (reasons.length === 0) continue
-    // Prepping this meeting researches all of its attendees and companies.
+  const cover = (meeting: BacklogMeeting) => {
     for (const email of meeting.attendees) {
       coveredPeople.add(email)
       const domain = byEmail.get(email)?.companyDomain
       if (domain) coveredCompanies.add(domain)
     }
-    qualified.push({ id: meeting.id, reasons })
   }
+  const statusReason = (meeting: BacklogMeeting): string | null => {
+    if (meeting.endMs <= now) return null
+    switch (meeting.prepStatus) {
+      case null:
+        return "prep empty"
+      case PREP_STATUS.queued:
+        return "prep queued"
+      case PREP_STATUS.failed:
+        return "prep failed"
+      case PREP_STATUS.researching:
+        return "prep stuck researching"
+      default:
+        return null
+    }
+  }
+
+  // First, meetings that reach people or companies research never reached.
+  const first: BacklogPick[] = []
+  const picked = new Set<string>()
+  for (const meeting of candidates) {
+    let newPeople = 0
+    const newCompanies = new Set<string>()
+    for (const email of meeting.attendees) {
+      const person = byEmail.get(email)
+      if (!person) continue
+      if (!person.attempted && !coveredPeople.has(email)) newPeople++
+      const domain = person.companyDomain
+      if (
+        domain &&
+        !attemptedCompanies.has(domain) &&
+        !coveredCompanies.has(domain)
+      )
+        newCompanies.add(domain)
+    }
+    if (newPeople === 0 && newCompanies.size === 0) continue
+    const reasons: string[] = []
+    if (newPeople > 0) reasons.push(`${newPeople} unresearched attendee(s)`)
+    if (newCompanies.size > 0)
+      reasons.push(`${newCompanies.size} unresearched company(ies)`)
+    const status = statusReason(meeting)
+    if (status) reasons.unshift(status)
+    cover(meeting)
+    picked.add(meeting.id)
+    first.push({ id: meeting.id, reasons })
+  }
+
+  // Then upcoming meetings whose prep never finished.
+  const second: BacklogPick[] = []
+  for (const meeting of candidates) {
+    if (picked.has(meeting.id)) continue
+    const status = statusReason(meeting)
+    if (status) second.push({ id: meeting.id, reasons: [status] })
+  }
+
+  const qualified = [...first, ...second]
   return {
     picks: qualified.slice(0, max),
     remaining: Math.max(0, qualified.length - max),

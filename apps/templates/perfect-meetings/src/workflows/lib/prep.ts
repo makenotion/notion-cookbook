@@ -337,6 +337,8 @@ export async function runPrep(
       )
     )
 
+    // Every attendee and company is stamped Researched at once research
+    // returns, even when it found nothing, so the backlog moves on.
     for (const attendee of attendees) {
       const properties = personUpdates(
         attendee,
@@ -344,13 +346,17 @@ export async function runPrep(
         excerpts[attendee.email] ?? [],
         contacts[attendee.email]
       )
-      if (Object.keys(properties).length > 0) {
-        await step("Save person", key("person", attendee.id), () =>
-          notion.pages
-            .update({ page_id: attendee.id, properties })
-            .then(() => null)
-        )
-      }
+      await step("Save person", key("person", attendee.id), () =>
+        notion.pages
+          .update({
+            page_id: attendee.id,
+            properties: {
+              ...properties,
+              "Researched at": prop.date(new Date().toISOString()),
+            },
+          })
+          .then(() => null)
+      )
     }
     const meetingUrls = await step(
       "Link past meetings",
@@ -408,13 +414,12 @@ export async function runPrep(
       ) {
         properties.Name = prop.title(found.name)
       }
-      if (Object.keys(properties).length > 0) {
-        await step("Save company", key("company", company.id), () =>
-          notion.pages
-            .update({ page_id: company.id, properties })
-            .then(() => null)
-        )
-      }
+      properties["Researched at"] = prop.date(new Date().toISOString())
+      await step("Save company", key("company", company.id), () =>
+        notion.pages
+          .update({ page_id: company.id, properties })
+          .then(() => null)
+      )
     }
 
     await step("Mark ready", key("mark-ready"), () =>

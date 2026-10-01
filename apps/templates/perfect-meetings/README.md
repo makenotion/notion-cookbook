@@ -52,17 +52,26 @@ Research runs per meeting: one session covers a meeting's brief, its
 attendees, and their companies. A manual **Research companies and people** run
 therefore picks meetings that together cover everyone not yet researched
 (`src/workflows/lib/backlog.ts`). Among meetings that are not cancelled and
-started in the last 30 days, a meeting qualifies when:
+started in the last 30 days:
 
-- it has not ended and its Prep status is empty, Queued, or Failed; or
-- it includes a person with no Role and no Confidence, or a company with no
-  Summary, that no earlier pick already covers.
+- **First**, meetings that include a person or company research has never
+  reached, and that no earlier pick already covers. Research stamps
+  **Researched at** on every attendee and company when a session returns,
+  even if it found nothing, so each record is researched once. (Records
+  researched before that property existed count through Role, Confidence, or
+  Summary.) A failed session stamps nothing, so its records stay in the
+  backlog.
+- **Then**, upcoming meetings whose prep never finished: Prep status empty,
+  Queued, or Failed.
 
-Meetings being researched now, and meetings without outside attendees, are
-skipped. Upcoming meetings go first, soonest first, then past meetings, most
-recent first. Each run preps at most 10 meetings (`BACKLOG_MAX_MEETINGS`) and
-logs how many are left; run it again to continue. A person research found
-nothing for stays unresearched, so a later run tries them again.
+Skipped: meetings without outside attendees; meetings Researching now, unless
+nothing has changed for 20 minutes, when they count as stuck and are retried;
+and Failed meetings whose last attempt was less than 6 hours ago
+(`FAILED_RETRY_MS`). That cooldown keeps a persistent failure from taking a
+slot on every run. Within each group, upcoming meetings go first, soonest
+first, then past meetings, most recent first. Each run preps at most 10
+meetings (`BACKLOG_MAX_MEETINGS`) and logs how many are left; run it again
+to continue.
 
 ## Block states
 

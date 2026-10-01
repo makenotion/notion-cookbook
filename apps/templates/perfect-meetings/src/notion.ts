@@ -42,6 +42,12 @@ export const companies = database("companies-db", {
     Domain: { resourceId: "company-domain", type: "text" },
     Website: { resourceId: "company-website", type: "url" },
     Summary: { resourceId: "company-summary", type: "text" },
+    "Researched at": {
+      resourceId: "company-researched-at",
+      type: "date",
+      description:
+        "When research last returned for a meeting with this company, even if it found nothing. Empty until then; research skips companies that have it.",
+    },
   },
   views: [
     {
@@ -109,6 +115,12 @@ export const people = database("people-db", {
         { name: CONFIDENCE.high, color: "green" },
         { name: CONFIDENCE.low, color: "orange" },
       ],
+    },
+    "Researched at": {
+      resourceId: "person-researched-at",
+      type: "date",
+      description:
+        "When research last returned for a meeting with this person, even if it found nothing. Empty until then; research skips people who have it.",
     },
   },
   views: [

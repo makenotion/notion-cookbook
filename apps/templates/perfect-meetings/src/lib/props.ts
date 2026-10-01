@@ -82,6 +82,7 @@ export type PageRecord = {
   id: string
   properties: RawProperties
   url?: string
+  last_edited_time?: string
 }
 
 export function asPage(value: unknown): PageRecord {
@@ -93,11 +94,15 @@ export function asPage(value: unknown): PageRecord {
   ) {
     throw new Error("Notion response was not a full page")
   }
-  const url = (value as { url?: unknown }).url
+  const { url, last_edited_time } = value as {
+    url?: unknown
+    last_edited_time?: unknown
+  }
   return {
     id: page.id,
     properties: page.properties as RawProperties,
     ...(typeof url === "string" ? { url } : {}),
+    ...(typeof last_edited_time === "string" ? { last_edited_time } : {}),
   }
 }
 
