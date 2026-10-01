@@ -437,24 +437,63 @@ describe("runStartedMs", () => {
 })
 
 describe("quietSync", () => {
-  it("is idle when the newest run finished", () => {
+  const none = { done: 0, total: 0, stalled: 0 }
+  const old = NOW - STALE_RUN_MS - 1
+
+  it("is idle with no status when the newest run finished", () => {
     for (const status of ["Success", "Failed"])
-      expect(quietSync(run(status), false, NOW)).toEqual({
+      expect(quietSync(run(status), false, none, NOW)).toEqual({
         inFlight: false,
         status: null,
       })
-    expect(quietSync(null, false, NOW).inFlight).toBe(false)
+    expect(quietSync(null, false, none, NOW)).toEqual({
+      inFlight: false,
+      status: null,
+    })
   })
 
-  it("shows Syncing while a click is pending or a run is waiting or Pending", () => {
-    const syncing = { inFlight: true, status: "Syncing…" }
-    expect(quietSync(run("Success"), true, NOW)).toEqual(syncing)
-    expect(quietSync(run(null), false, NOW)).toEqual(syncing)
-    expect(quietSync(run("Pending"), false, NOW)).toEqual(syncing)
+  it("walks through the same stages as the setup panel", () => {
+    expect(quietSync(run("Success"), true, none, NOW)).toEqual({
+      inFlight: true,
+      status: "Waiting for flow to start",
+    })
+    expect(quietSync(run(null), false, none, NOW)).toEqual({
+      inFlight: true,
+      status: "Waiting for flow to start",
+    })
+    expect(quietSync(run("Pending"), false, none, NOW)).toEqual({
+      inFlight: true,
+      status: "Reading latest calendar events",
+    })
+    expect(
+      quietSync(run("Success"), false, { done: 1, total: 3, stalled: 0 }, NOW)
+    ).toEqual({
+      inFlight: true,
+      status: "Researching companies and people (1 of 3 meetings ready)",
+    })
+    expect(
+      quietSync(run("Success"), false, { done: 3, total: 3, stalled: 0 }, NOW)
+    ).toEqual({ inFlight: false, status: null })
   })
 
-  it("comes back for a stuck run", () => {
-    const old = NOW - STALE_RUN_MS - 1
-    expect(quietSync(run("Pending", "", old), false, NOW).inFlight).toBe(false)
+  it("re-enables with a short note when a stage looks stuck", () => {
+    expect(quietSync(run(null, "", old), false, none, NOW)).toEqual({
+      inFlight: false,
+      status: "The flow hasn't started. Try again.",
+    })
+    expect(quietSync(run("Pending", "", old), false, none, NOW)).toEqual({
+      inFlight: false,
+      status: "The last sync didn't finish.",
+    })
+    expect(
+      quietSync(run("Success"), false, { done: 1, total: 2, stalled: 1 }, NOW)
+    ).toEqual({
+      inFlight: false,
+      status:
+        "Researching companies and people (1 of 2 meetings ready), 1 stuck",
+    })
+    expect(
+      quietSync(run("Success"), false, { done: 0, total: 0, stalled: 2 }, NOW)
+    ).toEqual({ inFlight: false, status: "2 meeting(s) look stuck." })
   })
 })

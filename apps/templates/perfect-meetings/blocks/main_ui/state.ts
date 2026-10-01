@@ -291,22 +291,54 @@ export function attendeeCopy(
 }
 
 /**
- * The quiet "Sync now" button shown in the ready UI's empty states. A sync
- * is in flight while a click is pending or the newest run is waiting or
- * Pending (and not stuck); the button is then disabled with a short status
- * instead of the setup panel, so a populated block never regresses.
+ * The quiet "Sync now" button shown in the ready UI's empty states, with the
+ * same stage copy as the setup panel: waiting for the flow, reading the
+ * calendar, then researching (k of n). The button is disabled while a stage
+ * is in progress and comes back when the sync is done or looks stuck (with a
+ * short note). The block stays on the ready UI throughout, so a populated
+ * block never regresses.
  */
 export function quietSync(
   latestRun: LatestRun | null,
   requestPending: boolean,
+  progress: Progress,
   now: number
 ): { inFlight: boolean; status: string | null } {
-  const running =
-    latestRun !== null &&
-    (latestRun.status === null ||
-      latestRun.status === "" ||
-      latestRun.status === RUN.pending) &&
-    !(latestRun.startedMs !== null && now - latestRun.startedMs > STALE_RUN_MS)
-  const inFlight = requestPending || running
-  return { inFlight, status: inFlight ? "Syncing…" : null }
+  const busy = (kind: BlockState) => ({
+    inFlight: true,
+    status: statusText(kind),
+  })
+  // A click whose run row has not shown up yet.
+  if (requestPending) return busy({ kind: "waiting", stale: false })
+  if (latestRun === null) return { inFlight: false, status: null }
+  const stale =
+    latestRun.startedMs !== null && now - latestRun.startedMs > STALE_RUN_MS
+  switch (latestRun.status) {
+    case null:
+    case "":
+      return stale
+        ? { inFlight: false, status: "The flow hasn't started. Try again." }
+        : busy({ kind: "waiting", stale: false })
+    case RUN.pending:
+      return stale
+        ? { inFlight: false, status: "The last sync didn't finish." }
+        : busy({ kind: "syncing", stale: false })
+    case RUN.success: {
+      if (progress.done < progress.total)
+        return {
+          inFlight: progress.stalled === 0,
+          status:
+            statusText({ kind: "researching", ...progress, stalled: 0 }) +
+            (progress.stalled > 0 ? `, ${progress.stalled} stuck` : ""),
+        }
+      if (progress.stalled > 0)
+        return {
+          inFlight: false,
+          status: `${progress.stalled} meeting(s) look stuck.`,
+        }
+      return { inFlight: false, status: null }
+    }
+    default:
+      return { inFlight: false, status: null }
+  }
 }

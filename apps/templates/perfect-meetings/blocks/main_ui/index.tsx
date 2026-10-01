@@ -49,6 +49,7 @@ import {
   type BlockState,
   type BlockStateInput,
   type LatestRun,
+  type Progress,
 } from "./state"
 
 const HOUR_MS = 60 * 60 * 1000
@@ -746,13 +747,15 @@ function SetupPanel({
 function SyncNow({
   sync,
   latestRun,
+  progress,
   now,
 }: {
   sync: ReturnType<typeof useSyncRequest>
   latestRun: LatestRun | null
+  progress: Progress
   now: number
 }) {
-  const { inFlight, status } = quietSync(latestRun, sync.pending, now)
+  const { inFlight, status } = quietSync(latestRun, sync.pending, progress, now)
   return (
     <div className="sync-now">
       <button
@@ -767,7 +770,7 @@ function SyncNow({
       </button>
       {status && (
         <span className="status-line" role="status">
-          <span className="spinner" aria-hidden="true" />
+          {inFlight && <span className="spinner" aria-hidden="true" />}
           {status}
         </span>
       )}
@@ -969,7 +972,12 @@ function MeetingsBlock() {
   )
 
   const syncNow = (
-    <SyncNow sync={sync} latestRun={input?.latestRun ?? null} now={now} />
+    <SyncNow
+      sync={sync}
+      latestRun={input?.latestRun ?? null}
+      progress={researchProgress(upcoming.items, now)}
+      now={now}
+    />
   )
 
   let content: React.ReactNode

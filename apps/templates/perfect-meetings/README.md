@@ -120,8 +120,10 @@ empty) is treated as stuck, and the button comes back.
 Every empty state in the ready UI (no outside meetings yet, nothing today,
 nothing upcoming) has a quiet **Sync now** button. It creates the same
 Workflow runs row with the same double-click guard. While a sync is in
-flight it is disabled with "Syncing…" beside it; the block stays on the
-ready UI.
+flight it is disabled and shows the same stage as the setup panel (waiting
+for the flow, reading calendar events, then researching k of n meetings),
+then clears and re-enables when done, or re-enables with a short note if a
+stage looks stuck. The block stays on the ready UI throughout.
 
 "External" means an attendee's email domain is not your account's domain or
 one of its coworker domains. Consumer mailboxes such as gmail.com get a People
