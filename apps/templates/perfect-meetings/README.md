@@ -87,22 +87,35 @@ no state of its own (`blocks/main_ui/state.ts`):
 | Failed      | The newest run failed                                        | The run's Error and a **Retry sync** button                |
 | Ready       | The App is populated, or nothing above applies               | The next meeting and Today views, or an empty state        |
 
-Once the App is populated it always shows Ready. Populated means a meeting
-has **Prep updated** set (written only when a brief is Ready, never cleared),
-or a sync succeeded and there are no outside meetings at all; the second case
-shows an empty state explaining that meetings sync hourly and coworker-only
-meetings are hidden. If outside meetings appear later, the block shows setup
-progress again until their first brief is ready.
+Once the App is populated it always shows Ready, never a setup, loading, or
+error state again. Populated means any of these, each of which only grows:
 
-In "k of n", n counts the meetings research will cover: not cancelled, with
-outside attendees, and not yet ended or being researched now (prep skips
-meetings that have ended). k counts those whose Prep status is Ready or
-Failed, so a failure does not stall the count.
+- a meeting has Prep status Ready or Failed, or **Prep updated** set;
+- a sync succeeded and there are no outside meetings at all, which shows an
+  empty state explaining that meetings sync hourly and coworker-only
+  meetings are hidden; or
+- two syncs have succeeded.
+
+The block also latches populated for the session. Queries report loaded
+only after their first real result, and keep their last rows while a
+changed query (such as the hourly date cutoff) reloads, so nothing flashes.
+After that, a query error is a small notice above the last good data.
+
+In "k of n", taken from the upcoming-meetings query, n counts the meetings
+research will cover: not cancelled, with outside attendees, and not yet
+ended or being researched now (prep skips meetings that have ended). k
+counts those whose Prep status is Ready or Failed, so a failure does not
+stall the count. A meeting Queued or Researching with no change (Prep
+updated or last edit) for 20 minutes counts as stuck: it leaves n, the
+status line suggests Regenerate prep, and the button comes back. A manual
+**Research companies and people** run also retries it.
 
 The button adds a Workflow runs row (Trigger "Run now", Started now), which
 starts **Sync calendar** like a row added by hand. It is disabled while a run
-is waiting, syncing, or researching. A run that has waited or stayed Pending
-for more than 15 minutes is treated as stuck, and the button comes back.
+is waiting, syncing, or researching, and after a click until a new run row
+appears or a minute passes. A run that has waited or stayed Pending for more
+than 20 minutes (timed from Started, or the row's creation when Started is
+empty) is treated as stuck, and the button comes back.
 
 "External" means an attendee's email domain is not your account's domain or
 one of its coworker domains. Consumer mailboxes such as gmail.com get a People
@@ -125,6 +138,8 @@ npm run build
 
 The custom block's key is `main_ui`: it comes from the file name
 `src/customBlocks/main_ui.ts`, and its browser source is in `blocks/main_ui/`.
+Its display name is **Perfect Meetings** and its slash command is
+`/perfect-meetings`.
 
 The App's name is the title of its home page. Set it on the first deploy:
 

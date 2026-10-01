@@ -1,15 +1,13 @@
 import React from "react"
 import { createRoot } from "react-dom/client"
 import {
+  customBlock,
   pages,
+  type DataSourceQueryOptions,
   type NotionDataSourcePage,
   type NotionPageId,
 } from "@notionhq/apps/custom-blocks"
-import {
-  NotionCustomBlock,
-  NotionTokenScope,
-  useDataSource,
-} from "@notionhq/apps/react"
+import { NotionCustomBlock, NotionTokenScope } from "@notionhq/apps/react"
 import "@notionhq/apps/nds.css"
 import "./style.css"
 
@@ -27,14 +25,28 @@ import {
   type DayEvent,
 } from "./meeting"
 import {
+  idleSync,
+  initialQuery,
+  reduceQuery,
+  reduceSync,
+  type QueryEvent,
+  type QueryState,
+  type Snapshot,
+  type SyncEvent,
+  type SyncRequest,
+} from "./live"
+import {
   PREP,
   RUN,
   attendeeCopy,
   blockState,
   canSync,
+  latchPopulated,
+  runStartedMs,
   researchProgress,
   statusText,
   type BlockState,
+  type BlockStateInput,
 } from "./state"
 
 const HOUR_MS = 60 * 60 * 1000
@@ -576,29 +588,46 @@ function Toolbar({
 
 /**
  * Starts a calendar catch-up by adding a Workflow runs row, the same as a
- * person adding one by hand. The request stays pending, so repeat clicks do
- * nothing, until the new row shows up as the latest run or a minute passes.
+ * person adding one by hand. See reduceSync for when repeat clicks are
+ * ignored and when the request ends.
  */
-function useSyncRequest(latestStartedMs: number | null): {
+function useSyncRequest(latestRunId: string | null): {
   pending: boolean
   error: string | null
   request: () => void
 } {
-  const [pendingSince, setPendingSince] = React.useState<number | null>(null)
-  const [error, setError] = React.useState<string | null>(null)
-  const inFlight = React.useRef(false)
-
-  const clear = React.useCallback(() => {
-    inFlight.current = false
-    setPendingSince(null)
+  // A ref, so a second click before React re-renders still sees the first.
+  const state = React.useRef<SyncRequest>(idleSync)
+  const [, rerender] = React.useState(0)
+  const latest = React.useRef(latestRunId)
+  latest.current = latestRunId
+  const apply = React.useCallback((event: SyncEvent) => {
+    const next = reduceSync(state.current, event)
+    if (next !== state.current) {
+      state.current = next
+      rerender((n) => n + 1)
+    }
   }, [])
 
+  React.useEffect(() => {
+    apply({ type: "latest", runId: latestRunId })
+  }, [latestRunId, apply])
+
+  const pending = state.current.status === "pending"
+  React.useEffect(() => {
+    if (!pending) return
+    const timer = window.setInterval(
+      () => apply({ type: "tick", now: Date.now() }),
+      5_000
+    )
+    return () => window.clearInterval(timer)
+  }, [pending, apply])
+
   const request = React.useCallback(() => {
-    if (inFlight.current) return
-    inFlight.current = true
-    const at = Date.now()
-    setPendingSince(at)
-    setError(null)
+    if (state.current.status === "pending") return
+    const now = Date.now()
+    apply({ type: "click", now, latestRunId: latest.current })
+    const failed = (message: string) => apply({ type: "failed", message })
     void pages
       .create({
         parent: { type: "data_source_key", key: "runs" },
@@ -611,36 +640,24 @@ function useSyncRequest(latestStartedMs: number | null): {
           Trigger: { type: "select", select: { name: "Run now" } },
           Started: {
             type: "date",
-            date: { start: new Date(at).toISOString() },
+            date: { start: new Date(now).toISOString() },
           },
         },
       })
       .then(
         (result) => {
-          if (result.status === "error") {
-            setError(result.error.message)
-            clear()
-          }
+          if (result.status === "error") failed(result.error.message)
         },
-        (cause: unknown) => {
-          setError(cause instanceof Error ? cause.message : String(cause))
-          clear()
-        }
+        (cause: unknown) =>
+          failed(cause instanceof Error ? cause.message : String(cause))
       )
-  }, [clear])
+  }, [apply])
 
-  React.useEffect(() => {
-    if (pendingSince === null) return
-    // Started is stored at minute precision, so allow for the lost seconds.
-    if (latestStartedMs !== null && latestStartedMs >= pendingSince - 60_000) {
-      clear()
-      return
-    }
-    const timer = window.setTimeout(clear, 60_000)
-    return () => window.clearTimeout(timer)
-  }, [pendingSince, latestStartedMs, clear])
-
-  return { pending: pendingSince !== null, error, request }
+  return {
+    pending,
+    error: state.current.status === "idle" ? state.current.error : null,
+    request,
+  }
 }
 
 const PANEL_TITLES: Record<Exclude<BlockState["kind"], "ready">, string> = {
@@ -746,15 +763,52 @@ function EmptyState() {
   )
 }
 
-const loaded = (query: { isLoading: boolean; items: unknown[] }) =>
-  !query.isLoading || query.items.length > 0
+type Row = NotionDataSourcePage
+
+/**
+ * A live query that reports `loaded` only after its first real result and
+ * keeps the previous rows while a changed query reloads (see reduceQuery).
+ */
+function useLiveQuery(
+  key: string,
+  options: DataSourceQueryOptions
+): QueryState<Row> {
+  const identity = JSON.stringify(options)
+  const [state, dispatch] = React.useReducer(
+    reduceQuery as (s: QueryState<Row>, e: QueryEvent<Row>) => QueryState<Row>,
+    undefined,
+    () => initialQuery<Row>()
+  )
+  React.useEffect(() => {
+    dispatch({ type: "resubscribe" })
+    let last: Snapshot<Row> = { items: [], isLoading: false }
+    const unsubscribe = customBlock.subscribeToDataSource({
+      key,
+      options: JSON.parse(identity) as DataSourceQueryOptions,
+      onSnapshot: (snapshot) => {
+        last = snapshot
+        dispatch({ type: "snapshot", snapshot })
+      },
+    })
+    const timer = window.setTimeout(
+      () => dispatch({ type: "timeout", snapshot: last }),
+      10_000
+    )
+    return () => {
+      window.clearTimeout(timer)
+      unsubscribe()
+    }
+  }, [key, identity])
+  return state
+}
 
 function MeetingsBlock() {
   const now = useNow()
   const [view, setView] = useViewState()
   const hour = Math.floor(now / HOUR_MS)
   // Reach back to midnight for the day view and 12 hours for long meetings.
-  // Round the cutoff so the subscriptions are not replaced on every tick.
+  // Round the cutoff to the hour so the subscriptions change once an hour;
+  // the previous rows stay on screen while they reload.
   const cutoff = React.useMemo(() => {
     const start = Math.min(dayBounds(now).startMs, now - LOOKBACK_MS)
     return new Date(Math.floor(start / HOUR_MS) * HOUR_MS).toISOString()
@@ -765,81 +819,96 @@ function MeetingsBlock() {
   } as const
   // Date filters compare start dates only, so a multi-day event that began
   // before the cutoff needs its own query: the latest-starting earlier events.
-  const upcoming = useDataSource("meetings", {
+  const upcoming = useLiveQuery("meetings", {
     limit: 50,
     filter: {
       and: [{ key: "When", date: { on_or_after: cutoff } }, notCancelled],
     },
     sorts: [{ key: "When", direction: "ascending" }],
   })
-  const earlier = useDataSource("meetings", {
+  const earlier = useLiveQuery("meetings", {
     limit: 10,
     filter: { and: [{ key: "When", date: { before: cutoff } }, notCancelled] },
     sorts: [{ key: "When", direction: "descending" }],
   })
   const meetings = sortByStart([...earlier.items, ...upcoming.items])
-  const people = useDataSource("people", { limit: 999 })
-  const companies = useDataSource("companies", { limit: 999 })
+  const people = useLiveQuery("people", { limit: 999 })
+  const companies = useLiveQuery("companies", { limit: 999 })
 
   // Setup state, derived from existing rows (see state.ts).
-  const latestRuns = useDataSource("runs", {
+  const latestRuns = useLiveQuery("runs", {
     limit: 1,
     sorts: [{ key: "Started", direction: "descending" }],
   })
-  const successRuns = useDataSource("runs", {
-    limit: 1,
+  const successRuns = useLiveQuery("runs", {
+    limit: 2,
     filter: { key: "Status", select: { equals: RUN.success } },
   })
   // Prep updated is written only when a brief is Ready and never cleared.
-  const prepped = useDataSource("meetings", {
+  const prepped = useLiveQuery("meetings", {
     limit: 1,
     filter: { key: "Prep updated", date: { is_not_empty: true } },
   })
-  const active = useDataSource("meetings", {
-    limit: 100,
+  const finished = useLiveQuery("meetings", {
+    limit: 1,
     filter: {
       key: "Prep status",
-      select: { equals: [PREP.queued, PREP.researching] },
+      select: { equals: [PREP.ready, PREP.failed] },
     },
   })
   const latest = latestRuns.items[0]
-  const latestStartedMs = latest
-    ? (dateRange(latest.propertiesByKey.Started)?.startMs ?? null)
-    : null
-  const sync = useSyncRequest(latestStartedMs)
+  const sync = useSyncRequest(latest?.id ?? null)
 
   const error =
     upcoming.error ?? earlier.error ?? people.error ?? companies.error
-  const loading = ![upcoming, earlier, latestRuns, successRuns, prepped].every(
-    loaded
-  )
+  const runsError = latestRuns.error ?? successRuns.error
+  const loaded = [
+    upcoming,
+    earlier,
+    latestRuns,
+    successRuns,
+    prepped,
+    finished,
+  ].every((query) => query.loaded)
   const picked = pickMeeting(meetings, now)
   const peopleByEmail = byKey(people.items, "Email")
   const companiesByDomain = byKey(companies.items, "Domain")
-  const peopleLoading = people.isLoading && people.items.length === 0
+  const peopleLoading = !people.loaded
 
+  const input: BlockStateInput | null = loaded
+    ? {
+        latestRun: latest
+          ? {
+              id: latest.id,
+              status: text(latest.propertiesByKey.Status) || null,
+              startedMs: runStartedMs(latest),
+              error: text(latest.propertiesByKey.Error),
+            }
+          : null,
+        successRuns: successRuns.items.length,
+        hasPrepUpdated: prepped.items.length > 0,
+        hasPrepFinished: finished.items.length > 0,
+        meetingCount: meetings.length,
+        // k and n come from one query: the upcoming meetings.
+        progress: researchProgress(upcoming.items, now),
+        now,
+      }
+    : null
+  // Either positive signal latches as soon as it loads, before the rest.
+  const signal =
+    (prepped.loaded && prepped.items.length > 0) ||
+    (finished.loaded && finished.items.length > 0)
+  const latch = React.useRef(false)
   // A block bound before Workflow runs was added cannot read runs; it keeps
   // the calendar UI rather than showing setup states it cannot track.
-  const state: BlockState =
-    latestRuns.error || successRuns.error
-      ? { kind: "ready", noMeetings: meetings.length === 0 }
-      : blockState({
-          latestRun: latest
-            ? {
-                status: text(latest.propertiesByKey.Status) || null,
-                startedMs: latestStartedMs,
-                error: text(latest.propertiesByKey.Error),
-              }
-            : null,
-          hasSuccessRun: successRuns.items.length > 0,
-          hasPrepUpdated: prepped.items.length > 0,
-          meetingCount: meetings.length,
-          progress: researchProgress(
-            [...active.items, ...upcoming.items, ...earlier.items],
-            now
-          ),
-          now,
-        })
+  latch.current =
+    latch.current || signal || runsError !== undefined
+      ? true
+      : latchPopulated(false, input)
+  const populated = latch.current
+  const state: BlockState | null = populated
+    ? { kind: "ready", noMeetings: meetings.length === 0 }
+    : input && blockState(input)
 
   const cards = (row: Picked, eyebrow: string) => (
     <MeetingCards
@@ -852,17 +921,20 @@ function MeetingsBlock() {
     />
   )
 
+  // Once populated, a query error is a small notice above the last good
+  // data, never a replacement for it.
+  const notice = error && (
+    <div className="note" data-theme="red" role="alert">
+      <Icon name="alert" />
+      <span className="note-text">Couldn't load meetings: {error.message}</span>
+    </div>
+  )
+
   let content: React.ReactNode
-  if (error) {
-    content = (
-      <div className="note" data-theme="red" role="alert">
-        <Icon name="alert" />
-        <span className="note-text">
-          Couldn't load meetings: {error.message}
-        </span>
-      </div>
-    )
-  } else if (loading) {
+  if (!populated && error) {
+    content = notice
+  } else if (!state || (!upcoming.loaded && !earlier.loaded)) {
+    // Only before the first result of the session.
     content = <Skeleton />
   } else if (state.kind !== "ready") {
     return (
@@ -907,6 +979,7 @@ function MeetingsBlock() {
   return (
     <div className="card">
       <Toolbar view={view} onChange={setView} />
+      {populated && notice}
       {content}
     </div>
   )

@@ -6,7 +6,9 @@ import {
   attendeeCopy,
   blockState,
   canSync,
+  latchPopulated,
   researchProgress,
+  runStartedMs,
   statusText,
   type BlockStateInput,
 } from "../blocks/main_ui/state.js"
@@ -16,16 +18,18 @@ const NOW = Date.parse("2026-09-29T17:00:00Z")
 function input(overrides: Partial<BlockStateInput> = {}): BlockStateInput {
   return {
     latestRun: null,
-    hasSuccessRun: false,
+    successRuns: 0,
     hasPrepUpdated: false,
+    hasPrepFinished: false,
     meetingCount: 0,
-    progress: { done: 0, total: 0 },
+    progress: { done: 0, total: 0, stalled: 0 },
     now: NOW,
     ...overrides,
   }
 }
 
 const run = (status: string | null, error = "", startedMs = NOW - 60_000) => ({
+  id: "run-1",
   status,
   startedMs,
   error,
@@ -44,13 +48,21 @@ function meeting(
     start?: string
     end?: string
     status?: string
+    lastEditedMs?: number
   } = {}
 ): NotionDataSourcePage {
+  const edited = at(new Date(props.lastEditedMs ?? NOW - 60_000).toISOString())
   const start = at(props.start ?? "2026-09-29T18:00:00Z")
   const end = at(props.end ?? "2026-09-29T19:00:00Z")
   return {
     id,
-    propertiesById: {},
+    propertiesById: {
+      last_edited_time: {
+        type: "datetime",
+        start_date: edited.date,
+        start_time: edited.time,
+      },
+    },
     propertiesByKey: {
       "Prep status": props.prep ?? "",
       "Attendee emails": props.attendees ?? "a@acme.com",
@@ -100,12 +112,17 @@ describe("blockState", () => {
     const state = blockState(
       input({
         latestRun: run("Success"),
-        hasSuccessRun: true,
+        successRuns: 1,
         meetingCount: 3,
-        progress: { done: 1, total: 3 },
+        progress: { done: 1, total: 3, stalled: 0 },
       })
     )
-    expect(state).toEqual({ kind: "researching", done: 1, total: 3 })
+    expect(state).toEqual({
+      kind: "researching",
+      done: 1,
+      total: 3,
+      stalled: 0,
+    })
     expect(statusText(state)).toBe(
       "Researching companies and people (1 of 3 meetings ready)"
     )
@@ -128,9 +145,9 @@ describe("blockState", () => {
       blockState(
         input({
           latestRun: run("Success"),
-          hasSuccessRun: true,
+          successRuns: 1,
           meetingCount: 2,
-          progress: { done: 2, total: 2 },
+          progress: { done: 2, total: 2, stalled: 0 },
         })
       )
     ).toEqual({ kind: "ready", noMeetings: false })
@@ -149,7 +166,7 @@ describe("blockState", () => {
           latestRun,
           hasPrepUpdated: true,
           meetingCount: 4,
-          progress: { done: 0, total: 4 },
+          progress: { done: 0, total: 4, stalled: 0 },
         })
       )
       expect(state).toEqual({ kind: "ready", noMeetings: false })
@@ -160,7 +177,7 @@ describe("blockState", () => {
   it("treats a successful sync with no outside meetings as populated", () => {
     const empty = input({
       latestRun: run("Success"),
-      hasSuccessRun: true,
+      successRuns: 1,
       meetingCount: 0,
     })
     expect(blockState(empty)).toEqual({ kind: "ready", noMeetings: true })
@@ -183,7 +200,11 @@ describe("researchProgress", () => {
       // Duplicates from overlapping queries count once.
       meeting("ready", { prep: "Ready" }),
     ]
-    expect(researchProgress(rows, NOW)).toEqual({ done: 2, total: 4 })
+    expect(researchProgress(rows, NOW)).toEqual({
+      done: 2,
+      total: 4,
+      stalled: 0,
+    })
   })
 
   it("skips meetings research will not cover", () => {
@@ -198,7 +219,11 @@ describe("researchProgress", () => {
       meeting("no-attendees", { prep: "Queued", attendees: "" }),
       meeting("empty-status"),
     ]
-    expect(researchProgress(rows, NOW)).toEqual({ done: 0, total: 0 })
+    expect(researchProgress(rows, NOW)).toEqual({
+      done: 0,
+      total: 0,
+      stalled: 0,
+    })
   })
 
   it("keeps a meeting being researched even after it ends", () => {
@@ -209,7 +234,11 @@ describe("researchProgress", () => {
         end: "2026-09-29T16:00:00Z",
       }),
     ]
-    expect(researchProgress(rows, NOW)).toEqual({ done: 0, total: 1 })
+    expect(researchProgress(rows, NOW)).toEqual({
+      done: 0,
+      total: 1,
+      stalled: 0,
+    })
   })
 })
 
@@ -269,5 +298,139 @@ describe("attendeeCopy", () => {
     expect(
       attendeeCopy(meeting("m", { prep: "Researching" }), 1, true, NOW)
     ).toEqual({ kind: "cards", note: null })
+  })
+})
+
+describe("populated", () => {
+  it("counts a Ready or Failed meeting as populated, even without Prep updated", () => {
+    const state = blockState(
+      input({
+        latestRun: run("Pending"),
+        hasPrepFinished: true,
+        meetingCount: 2,
+        progress: { done: 0, total: 2, stalled: 0 },
+      })
+    )
+    expect(state).toEqual({ kind: "ready", noMeetings: false })
+  })
+
+  it("counts a second successful sync as populated", () => {
+    const base = input({
+      latestRun: run("Pending"),
+      meetingCount: 3,
+      progress: { done: 0, total: 3, stalled: 0 },
+    })
+    expect(blockState({ ...base, successRuns: 1 }).kind).toBe("syncing")
+    expect(blockState({ ...base, successRuns: 2 }).kind).toBe("ready")
+  })
+
+  it("latches for the session once populated", () => {
+    const empty = input({
+      latestRun: run("Success"),
+      successRuns: 1,
+      meetingCount: 0,
+    })
+    let latched = latchPopulated(false, empty)
+    expect(latched).toBe(true)
+    // Meetings arrive and the next sync is pending: still ready.
+    const later = input({
+      latestRun: run("Pending"),
+      successRuns: 1,
+      meetingCount: 2,
+      progress: { done: 0, total: 2, stalled: 0 },
+    })
+    latched = latchPopulated(latched, later)
+    expect(latched).toBe(true)
+    expect(blockState(later, latched)).toEqual({
+      kind: "ready",
+      noMeetings: false,
+    })
+    // An unknown input (still loading) never clears the latch.
+    expect(latchPopulated(true, null)).toBe(true)
+    expect(latchPopulated(false, null)).toBe(false)
+  })
+})
+
+describe("stuck research", () => {
+  const stuck = NOW - STALE_RUN_MS - 1
+
+  it("counts stuck Queued or Researching meetings as stalled, not pending", () => {
+    const rows = [
+      meeting("fresh", { prep: "Researching" }),
+      meeting("stuck", { prep: "Researching", lastEditedMs: stuck }),
+      meeting("stuck-queued", { prep: "Queued", lastEditedMs: stuck }),
+    ]
+    expect(researchProgress(rows, NOW)).toEqual({
+      done: 0,
+      total: 1,
+      stalled: 2,
+    })
+  })
+
+  it("lets the viewer act while some meetings are stuck", () => {
+    const state = blockState(
+      input({
+        latestRun: run("Success"),
+        successRuns: 1,
+        meetingCount: 3,
+        progress: { done: 1, total: 2, stalled: 1 },
+      })
+    )
+    expect(canSync(state)).toBe(true)
+    expect(statusText(state)).toContain("Regenerate prep")
+  })
+
+  it("leaves researching once only stuck meetings remain", () => {
+    const rows = [
+      meeting("stuck", { prep: "Researching", lastEditedMs: stuck }),
+    ]
+    const state = blockState(
+      input({
+        latestRun: run("Success"),
+        successRuns: 1,
+        meetingCount: 1,
+        progress: researchProgress(rows, NOW),
+      })
+    )
+    expect(state.kind).toBe("ready")
+    const copy = attendeeCopy(rows[0]!, 0, false, NOW)
+    expect(copy.kind === "message" && copy.text).toContain("stuck")
+  })
+})
+
+describe("runStartedMs", () => {
+  it("falls back to the row's created time when Started is empty", () => {
+    const row = (started: unknown) =>
+      ({
+        id: "r",
+        propertiesByKey: { Started: started },
+        propertiesById: {
+          created_time: {
+            type: "datetime",
+            start_date: "2026-09-29",
+            start_time: "16:00",
+          },
+        },
+      }) as unknown as NotionDataSourcePage
+    expect(runStartedMs(row(undefined))).toBe(
+      Date.parse("2026-09-29T16:00:00Z")
+    )
+    expect(
+      runStartedMs(
+        row({ type: "datetime", start_date: "2026-09-29", start_time: "16:30" })
+      )
+    ).toBe(Date.parse("2026-09-29T16:30:00Z"))
+    // A stale run with no Started is still recognised as stale.
+    const state = blockState(
+      input({
+        latestRun: {
+          id: "r",
+          status: null,
+          startedMs: runStartedMs(row(undefined)),
+          error: "",
+        },
+      })
+    )
+    expect(state).toEqual({ kind: "waiting", stale: true })
   })
 })
