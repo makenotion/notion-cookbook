@@ -104,7 +104,7 @@ describe("roleLabel", () => {
     expect(roleLabel("Engineer", "Low")).toBe("(low confidence) Engineer")
     expect(roleLabel("Engineer", "High")).toBe("Engineer")
     expect(roleLabel("Engineer", "")).toBe("Engineer")
-    expect(roleLabel("", "Low")).toBe("Role not found yet")
+    expect(roleLabel("", "Low")).toBe("")
   })
 })
 

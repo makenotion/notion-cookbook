@@ -38,18 +38,22 @@ import {
 import {
   PREP,
   RUN,
+  RESEARCHING_LINE,
   attendeeCopy,
   blockState,
+  cardLine,
   canSync,
   latchPopulated,
   quietSync,
   runStartedMs,
+  researchPhase,
   researchProgress,
   statusText,
   type BlockState,
   type BlockStateInput,
   type LatestRun,
   type Progress,
+  type ResearchPhase,
 } from "./state"
 
 const HOUR_MS = 60 * 60 * 1000
@@ -231,7 +235,23 @@ const PILL_THEMES: Record<string, string> = {
   [PREP.failed]: "red",
 }
 
-function PersonCard({ person }: { person: NotionDataSourcePage }) {
+/** A shimmering placeholder for a line research has not filled in yet. */
+function LoadingLine() {
+  return (
+    <span className="loading-line" aria-label="Researching">
+      <span className="skeleton-line skeleton-inline" />
+      <span className="loading-label">Researching…</span>
+    </span>
+  )
+}
+
+function PersonCard({
+  person,
+  phase,
+}: {
+  person: NotionDataSourcePage
+  phase: ResearchPhase
+}) {
   const name = text(person.propertiesByKey.Name)
   const email = text(person.propertiesByKey.Email)
   const role = text(person.propertiesByKey.Role)
@@ -251,9 +271,16 @@ function PersonCard({ person }: { person: NotionDataSourcePage }) {
         />
         <span className="tile-body">
           <span className="tile-title">{name || email}</span>
-          <span className="tile-subtitle">
-            {roleLabel(role, text(person.propertiesByKey.Confidence))}
-          </span>
+          {(() => {
+            const line = cardLine(role, phase)
+            if (line.kind === "loading") return <LoadingLine />
+            if (line.kind === "none") return null
+            return (
+              <span className="tile-subtitle">
+                {roleLabel(role, text(person.propertiesByKey.Confidence))}
+              </span>
+            )
+          })()}
           {name && <span className="tile-detail">{email}</span>}
           {source && <span className="tile-detail">Role from {source}</span>}
         </span>
@@ -280,10 +307,12 @@ function CompanyCard({
   domain,
   company,
   attendees,
+  phase,
 }: {
   domain: string
   company: NotionDataSourcePage | undefined
   attendees: NotionDataSourcePage[]
+  phase: ResearchPhase
 }) {
   const name = company ? text(company.propertiesByKey.Name) : ""
   const summary = company ? text(company.propertiesByKey.Summary) : ""
@@ -293,7 +322,12 @@ function CompanyCard({
       <span className="tile-body">
         <span className="tile-title">{name || domain}</span>
         <span className="tile-subtitle">{domain}</span>
-        <span className="tile-summary">{summary || "Research pending."}</span>
+        {(() => {
+          const line = cardLine(summary, phase)
+          if (line.kind === "loading") return <LoadingLine />
+          if (line.kind === "none") return null
+          return <span className="tile-summary">{summary}</span>
+        })()}
         <span className="stack">
           {attendees.map((person) => {
             const label =
@@ -358,6 +392,7 @@ function MeetingCards({
   )
   const status = text(row.propertiesByKey["Prep status"])
   const copy = attendeeCopy(row, attendees.length, peopleLoading, now)
+  const phase = researchPhase(row, now)
 
   return (
     <>
@@ -368,6 +403,12 @@ function MeetingCards({
             {text(row.propertiesByKey.Title) || "Untitled meeting"}
           </h2>
           <div className="muted">{formatWhen(startMs, endMs, allDay)}</div>
+          {phase === "researching" && (
+            <p className="status-line research-line" role="status">
+              <span className="spinner" aria-hidden="true" />
+              {RESEARCHING_LINE}
+            </p>
+          )}
         </div>
         <div className="actions">
           {status && (
@@ -407,6 +448,7 @@ function MeetingCards({
                     domain={group.domain}
                     company={companies.get(group.domain)}
                     attendees={group.attendees}
+                    phase={phase}
                   />
                 ))}
               </ul>
@@ -416,7 +458,7 @@ function MeetingCards({
             <h3 className="section">People</h3>
             <ul className="grid">
               {attendees.map((person) => (
-                <PersonCard key={person.id} person={person} />
+                <PersonCard key={person.id} person={person} phase={phase} />
               ))}
             </ul>
           </section>

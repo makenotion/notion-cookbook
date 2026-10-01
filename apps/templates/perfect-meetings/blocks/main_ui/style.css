@@ -346,6 +346,33 @@ body {
   margin-bottom: var(--spacing-4);
 }
 
+/* A card line research is still filling in. */
+.loading-line {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-8);
+  margin-top: var(--spacing-2);
+}
+
+.skeleton-inline {
+  flex: 1;
+  max-width: 120px;
+  height: 10px;
+}
+
+.loading-label {
+  flex: none;
+  color: var(--content-tertiary);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+}
+
+.research-line {
+  margin-top: var(--spacing-4);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+}
+
 @keyframes pulse {
   50% {
     opacity: 0.5;

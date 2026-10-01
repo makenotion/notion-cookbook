@@ -256,6 +256,9 @@ export type AttendeeCopy =
   | { kind: "message"; text: string }
   | { kind: "cards"; note: string | null }
 
+const STUCK_COPY =
+  "Research looks stuck for this meeting. Tick Regenerate prep on the meeting to try again."
+
 const FAILED_COPY =
   "Research failed for this meeting. Tick Regenerate prep on the meeting to try again."
 
@@ -274,14 +277,13 @@ export function attendeeCopy(
     return { kind: "message", text: "No outside attendees on this meeting." }
   const failed = text(row.propertiesByKey["Prep status"]) === PREP.failed
   if (foundAttendees > 0)
-    return { kind: "cards", note: failed ? FAILED_COPY : null }
+    return {
+      kind: "cards",
+      note: failed ? FAILED_COPY : researchStuck(row, now) ? STUCK_COPY : null,
+    }
   if (peopleLoading) return { kind: "loading" }
   if (failed) return { kind: "message", text: FAILED_COPY }
-  if (researchStuck(row, now))
-    return {
-      kind: "message",
-      text: "Research looks stuck for this meeting. Tick Regenerate prep on the meeting to try again.",
-    }
+  if (researchStuck(row, now)) return { kind: "message", text: STUCK_COPY }
   if (researchPending(row, now))
     return { kind: "message", text: "Attendee details are still loading." }
   return {
@@ -341,4 +343,32 @@ export function quietSync(
     default:
       return { inFlight: false, status: null }
   }
+}
+
+/** Where a meeting's research stands, for its cards. */
+export type ResearchPhase = "researching" | "stuck" | "done"
+
+export function researchPhase(
+  row: NotionDataSourcePage,
+  now: number
+): ResearchPhase {
+  if (researchStuck(row, now)) return "stuck"
+  if (researchPending(row, now)) return "researching"
+  return "done"
+}
+
+/** The progress line under a meeting header while it is being researched. */
+export const RESEARCHING_LINE = "Researching companies and people…"
+
+/**
+ * One card line that research fills in (a person's role or a company's
+ * summary). While research is running and the value is empty, the line is
+ * a loading placeholder. Otherwise an empty value shows nothing: no "not
+ * found" copy, and a stuck meeting is explained once, above the cards.
+ */
+export type CardLine = { kind: "loading" } | { kind: "text" } | { kind: "none" }
+
+export function cardLine(value: string, phase: ResearchPhase): CardLine {
+  if (value.trim()) return { kind: "text" }
+  return phase === "researching" ? { kind: "loading" } : { kind: "none" }
 }

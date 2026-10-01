@@ -5,6 +5,8 @@ import {
   STALE_RUN_MS,
   attendeeCopy,
   blockState,
+  cardLine,
+  researchPhase,
   canSync,
   latchPopulated,
   quietSync,
@@ -495,5 +497,50 @@ describe("quietSync", () => {
     expect(
       quietSync(run("Success"), false, { done: 0, total: 0, stalled: 2 }, NOW)
     ).toEqual({ inFlight: false, status: "2 meeting(s) look stuck." })
+  })
+})
+
+describe("researchPhase and cardLine", () => {
+  const stuck = NOW - STALE_RUN_MS - 1
+
+  it("is researching while prep is Queued or Researching and fresh", () => {
+    expect(researchPhase(meeting("m", { prep: "Queued" }), NOW)).toBe(
+      "researching"
+    )
+    expect(researchPhase(meeting("m", { prep: "Researching" }), NOW)).toBe(
+      "researching"
+    )
+  })
+
+  it("is stuck when nothing changed for too long, and done after Ready or Failed", () => {
+    expect(
+      researchPhase(
+        meeting("m", { prep: "Researching", lastEditedMs: stuck }),
+        NOW
+      )
+    ).toBe("stuck")
+    for (const prep of ["Ready", "Failed", ""])
+      expect(researchPhase(meeting("m", { prep }), NOW)).toBe("done")
+  })
+
+  it("shows a loading line only while research runs and the value is empty", () => {
+    expect(cardLine("", "researching")).toEqual({ kind: "loading" })
+    expect(cardLine("CTO", "researching")).toEqual({ kind: "text" })
+    expect(cardLine("", "done")).toEqual({ kind: "none" })
+    expect(cardLine("  ", "stuck")).toEqual({ kind: "none" })
+    expect(cardLine("Anvils", "done")).toEqual({ kind: "text" })
+  })
+
+  it("explains a stuck meeting once above its cards", () => {
+    const copy = attendeeCopy(
+      meeting("m", { prep: "Researching", lastEditedMs: stuck }),
+      2,
+      false,
+      NOW
+    )
+    expect(copy.kind === "cards" && copy.note).toContain("Regenerate prep")
+    expect(
+      attendeeCopy(meeting("m", { prep: "Researching" }), 2, false, NOW)
+    ).toEqual({ kind: "cards", note: null })
   })
 })

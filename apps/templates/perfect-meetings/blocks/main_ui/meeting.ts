@@ -161,7 +161,7 @@ export function profileLinks(
 
 /** A person card's role line, marked when People Confidence is Low. */
 export function roleLabel(role: string, confidence: string): string {
-  if (!role) return "Role not found yet"
+  if (!role) return ""
   return confidence === "Low" ? `(low confidence) ${role}` : role
 }
 
