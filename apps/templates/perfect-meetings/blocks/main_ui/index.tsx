@@ -42,11 +42,13 @@ import {
   blockState,
   canSync,
   latchPopulated,
+  quietSync,
   runStartedMs,
   researchProgress,
   statusText,
   type BlockState,
   type BlockStateInput,
+  type LatestRun,
 } from "./state"
 
 const HOUR_MS = 60 * 60 * 1000
@@ -85,7 +87,7 @@ function useViewState(): [ViewState, (next: ViewState) => void] {
     } catch {
       // Fall through to the default.
     }
-    return { mode: "next", selectedId: null }
+    return { mode: "day", selectedId: null }
   })
   const update = React.useCallback((next: ViewState) => {
     setState(next)
@@ -435,11 +437,13 @@ function DayView({
   highlightId,
   now,
   onSelect,
+  emptyAction,
 }: {
   meetings: readonly NotionDataSourcePage[]
   highlightId: string | null
   now: number
   onSelect: (id: string) => void
+  emptyAction: React.ReactNode
 }) {
   const day = dayBounds(now)
   const { allDay, timed } = layoutDay(meetings, day)
@@ -476,6 +480,7 @@ function DayView({
               ? "No meetings with outside attendees today."
               : `${timed.length + allDay.length} meeting${timed.length + allDay.length === 1 ? "" : "s"} with outside attendees`}
           </div>
+          {timed.length + allDay.length === 0 && emptyAction}
         </div>
       </header>
 
@@ -579,8 +584,8 @@ function Toolbar({
         <span />
       )}
       <div className="segments" role="tablist">
-        {tab("next", "Next meeting")}
         {tab("day", "Today")}
+        {tab("next", "Next meeting")}
       </div>
     </nav>
   )
@@ -737,8 +742,46 @@ function SetupPanel({
   )
 }
 
+/** A secondary "Sync now" button for empty states in the ready UI. */
+function SyncNow({
+  sync,
+  latestRun,
+  now,
+}: {
+  sync: ReturnType<typeof useSyncRequest>
+  latestRun: LatestRun | null
+  now: number
+}) {
+  const { inFlight, status } = quietSync(latestRun, sync.pending, now)
+  return (
+    <div className="sync-now">
+      <button
+        type="button"
+        className="button"
+        disabled={inFlight}
+        aria-disabled={inFlight}
+        onClick={sync.request}
+      >
+        <Icon name="sync" />
+        Sync now
+      </button>
+      {status && (
+        <span className="status-line" role="status">
+          <span className="spinner" aria-hidden="true" />
+          {status}
+        </span>
+      )}
+      {sync.error && !inFlight && (
+        <span className="error-text" data-theme="red" role="alert">
+          Couldn't start a sync: {sync.error}
+        </span>
+      )}
+    </div>
+  )
+}
+
 /** Shown once the App is set up but no outside meetings have synced. */
-function EmptyState() {
+function EmptyState({ action }: { action: React.ReactNode }) {
   return (
     <div className="empty">
       <span className="empty-icon">
@@ -752,6 +795,7 @@ function EmptyState() {
           Meetings sync from your calendar every hour. Meetings with only
           coworkers are hidden.
         </p>
+        {action}
       </div>
     </div>
   )
@@ -924,6 +968,10 @@ function MeetingsBlock() {
     </div>
   )
 
+  const syncNow = (
+    <SyncNow sync={sync} latestRun={input?.latestRun ?? null} now={now} />
+  )
+
   let content: React.ReactNode
   if (!populated && error) {
     content = notice
@@ -937,7 +985,7 @@ function MeetingsBlock() {
       </div>
     )
   } else if (state.noMeetings) {
-    content = <EmptyState />
+    content = <EmptyState action={syncNow} />
   } else if (view.mode === "day") {
     const selected = view.selectedId
       ? meetings.find((row) => row.id === view.selectedId)
@@ -957,6 +1005,7 @@ function MeetingsBlock() {
           highlightId={picked?.row.id ?? null}
           now={now}
           onSelect={(id) => setView({ mode: "day", selectedId: id })}
+          emptyAction={syncNow}
         />
       )
   } else if (picked) {
@@ -966,7 +1015,10 @@ function MeetingsBlock() {
     )
   } else {
     content = (
-      <div className="muted">No upcoming meetings with outside attendees.</div>
+      <div>
+        <p className="muted">No upcoming meetings with outside attendees.</p>
+        {syncNow}
+      </div>
     )
   }
 

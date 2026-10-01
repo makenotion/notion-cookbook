@@ -18,7 +18,7 @@ const mainUi = customBlock({
 // The view keeps its resource ID, which APP.md embeds.
 meetings.addCustomView({
   resourceId: "meetings-next-view",
-  name: "Next meeting",
+  name: "Today",
   customBlock: mainUi,
   dataSource: meetings.dataSource,
 })

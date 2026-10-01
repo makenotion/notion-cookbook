@@ -1,4 +1,4 @@
-<database inline="true" data-source-url="{{meetings-next-view}}">Next meeting</database>
+<database inline="true" data-source-url="{{meetings-next-view}}">Today</database>
 
 <details>
 <summary>Debug Data</summary>

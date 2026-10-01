@@ -7,6 +7,7 @@ import {
   blockState,
   canSync,
   latchPopulated,
+  quietSync,
   researchProgress,
   runStartedMs,
   statusText,
@@ -432,5 +433,28 @@ describe("runStartedMs", () => {
       })
     )
     expect(state).toEqual({ kind: "waiting", stale: true })
+  })
+})
+
+describe("quietSync", () => {
+  it("is idle when the newest run finished", () => {
+    for (const status of ["Success", "Failed"])
+      expect(quietSync(run(status), false, NOW)).toEqual({
+        inFlight: false,
+        status: null,
+      })
+    expect(quietSync(null, false, NOW).inFlight).toBe(false)
+  })
+
+  it("shows Syncing while a click is pending or a run is waiting or Pending", () => {
+    const syncing = { inFlight: true, status: "Syncing…" }
+    expect(quietSync(run("Success"), true, NOW)).toEqual(syncing)
+    expect(quietSync(run(null), false, NOW)).toEqual(syncing)
+    expect(quietSync(run("Pending"), false, NOW)).toEqual(syncing)
+  })
+
+  it("comes back for a stuck run", () => {
+    const old = NOW - STALE_RUN_MS - 1
+    expect(quietSync(run("Pending", "", old), false, NOW).inFlight).toBe(false)
   })
 })

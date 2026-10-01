@@ -289,3 +289,24 @@ export function attendeeCopy(
     text: "No attendee details for this meeting. Tick Regenerate prep on the meeting to research them.",
   }
 }
+
+/**
+ * The quiet "Sync now" button shown in the ready UI's empty states. A sync
+ * is in flight while a click is pending or the newest run is waiting or
+ * Pending (and not stuck); the button is then disabled with a short status
+ * instead of the setup panel, so a populated block never regresses.
+ */
+export function quietSync(
+  latestRun: LatestRun | null,
+  requestPending: boolean,
+  now: number
+): { inFlight: boolean; status: string | null } {
+  const running =
+    latestRun !== null &&
+    (latestRun.status === null ||
+      latestRun.status === "" ||
+      latestRun.status === RUN.pending) &&
+    !(latestRun.startedMs !== null && now - latestRun.startedMs > STALE_RUN_MS)
+  const inFlight = requestPending || running
+  return { inFlight, status: inFlight ? "Syncing…" : null }
+}

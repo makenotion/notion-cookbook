@@ -264,6 +264,30 @@ body {
   margin-top: var(--spacing-4);
 }
 
+.sync-now {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-8);
+  margin-top: var(--spacing-8);
+}
+
+.sync-now .button {
+  border-color: transparent;
+  color: var(--content-secondary);
+}
+
+.sync-now .button:hover {
+  color: var(--content-primary);
+}
+
+.sync-now .button:disabled,
+.sync-now .button:disabled:hover {
+  border-color: transparent;
+  background: transparent;
+  color: var(--content-disabled);
+}
+
 .error-text {
   color: var(--content-secondary);
   font-size: var(--text-body-sm);

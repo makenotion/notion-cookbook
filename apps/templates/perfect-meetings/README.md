@@ -9,15 +9,15 @@ Notion pages with a short research brief.
 
 ## What it creates
 
-| Kind         | Name               | Purpose                                                                                    |
-| ------------ | ------------------ | ------------------------------------------------------------------------------------------ |
-| Page         | APP.md             | Home page with the main UI block and a Debug Data toggle linking the databases             |
-| Database     | Meetings           | One row per external meeting; brief at the top of the page, notes below                    |
-| Database     | People             | One row per outside attendee, keyed by email                                               |
-| Database     | Companies          | One row per outside company, keyed by email domain                                         |
-| Database     | Workflow runs      | One row per calendar ingest run; add a row to run a catch-up now (linked under Debug Data) |
-| Custom agent | Meeting researcher | Web research plus email summary, returned as JSON                                          |
-| Custom block | main_ui            | Setup progress, then company and people cards for the next meeting and a Today view        |
+| Kind         | Name               | Purpose                                                                                           |
+| ------------ | ------------------ | ------------------------------------------------------------------------------------------------- |
+| Page         | APP.md             | Home page with the main UI block and a Debug Data toggle linking the databases                    |
+| Database     | Meetings           | One row per external meeting; brief at the top of the page, notes below                           |
+| Database     | People             | One row per outside attendee, keyed by email                                                      |
+| Database     | Companies          | One row per outside company, keyed by email domain                                                |
+| Database     | Workflow runs      | One row per calendar ingest run; add a row to run a catch-up now (linked under Debug Data)        |
+| Custom agent | Meeting researcher | Web research plus email summary, returned as JSON                                                 |
+| Custom block | main_ui            | Setup progress, then a Today view (the default) and company and people cards for the next meeting |
 
 ## Workflows
 
@@ -78,14 +78,14 @@ to continue.
 The block works out what to show from Workflow runs and Meetings; it stores
 no state of its own (`blocks/main_ui/state.ts`):
 
-| State       | When                                                         | Shows                                                      |
-| ----------- | ------------------------------------------------------------ | ---------------------------------------------------------- |
-| Never run   | Workflow runs is empty                                       | A **Sync calendar** button                                 |
-| Waiting     | The newest run (by Started) has no Status                    | "Waiting for flow to start"                                |
-| Syncing     | The newest run is Pending                                    | "Reading latest calendar events"                           |
-| Researching | The newest run succeeded and meetings are Queued/Researching | "Researching companies and people (k of n meetings ready)" |
-| Failed      | The newest run failed                                        | The run's Error and a **Retry sync** button                |
-| Ready       | The App is populated, or nothing above applies               | The next meeting and Today views, or an empty state        |
+| State       | When                                                         | Shows                                                                           |
+| ----------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| Never run   | Workflow runs is empty                                       | A **Sync calendar** button                                                      |
+| Waiting     | The newest run (by Started) has no Status                    | "Waiting for flow to start"                                                     |
+| Syncing     | The newest run is Pending                                    | "Reading latest calendar events"                                                |
+| Researching | The newest run succeeded and meetings are Queued/Researching | "Researching companies and people (k of n meetings ready)"                      |
+| Failed      | The newest run failed                                        | The run's Error and a **Retry sync** button                                     |
+| Ready       | The App is populated, or nothing above applies               | The Today (default) and Next meeting views, or an empty state with **Sync now** |
 
 Once the App is populated it always shows Ready, never a setup, loading, or
 error state again. Populated means any of these, each of which only grows:
@@ -117,6 +117,12 @@ appears or a minute passes. A run that has waited or stayed Pending for more
 than 20 minutes (timed from Started, or the row's creation when Started is
 empty) is treated as stuck, and the button comes back.
 
+Every empty state in the ready UI (no outside meetings yet, nothing today,
+nothing upcoming) has a quiet **Sync now** button. It creates the same
+Workflow runs row with the same double-click guard. While a sync is in
+flight it is disabled with "Syncing…" beside it; the block stays on the
+ready UI.
+
 "External" means an attendee's email domain is not your account's domain or
 one of its coworker domains. Consumer mailboxes such as gmail.com get a People
 row but no Company row.
@@ -139,7 +145,8 @@ npm run build
 The custom block's key is `main_ui`: it comes from the file name
 `src/customBlocks/main_ui.ts`, and its browser source is in `blocks/main_ui/`.
 Its display name is **Perfect Meetings** and its slash command is
-`/perfect-meetings`.
+`/perfect-meetings`. It opens on **Today**; a viewer's last tab is remembered
+in their browser, so new viewers start on Today.
 
 The App's name is the title of its home page. Set it on the first deploy:
 
