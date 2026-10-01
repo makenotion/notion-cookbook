@@ -3,6 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "description": "Meeting prep: calendar meetings with outside attendees, people, companies, and AI briefs in Notion",
+  "notion": {
+    "name": "Perfect Meetings",
+    "description": "Syncs calendar meetings with outside attendees into Notion and writes research briefs covering people, companies, recent email, and the likely meeting objective."
+  },
   "type": "module",
   "scripts": {
     "build": "notion-apps build",
