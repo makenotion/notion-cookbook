@@ -1,6 +1,5 @@
 import { access, workflow } from "@notionhq/apps"
 import { FatalError } from "@notionhq/apps/error"
-import { j } from "@notionhq/apps/schema-builder"
 import { connections } from "@notionhq/apps/workflow"
 
 import {
@@ -21,7 +20,6 @@ import {
 } from "../notion.js"
 import {
   allEventIds,
-  currentOrNextMeeting,
   diagnoseListEvents,
   meetingsFromListEvents,
   type ListEventsScriptOutput,
@@ -31,6 +29,7 @@ import {
   cancelMeeting,
   contactsByEmail,
   findMeetingByEventId,
+  ingestPlan,
   loadStoredMeetings,
   upsertMeetings,
 } from "./lib/ingest.js"
@@ -47,9 +46,9 @@ const HOUR_MS = 60 * 60 * 1000
 const DAY_MS = 24 * HOUR_MS
 
 export default workflow({
-  name: "Calendar ingest",
+  name: "Sync calendar",
   description:
-    "Adds calendar meetings with outside attendees to Meetings, and their attendees and companies to People and Companies.",
+    "Reads your calendar and adds meetings with outside attendees to Meetings, and their attendees and companies to People and Companies. Runs hourly, on calendar changes, or whenever you run it.",
   connections: {
     calendar: connections.calendar({
       permissions: "read",
@@ -69,34 +68,8 @@ export default workflow({
     }),
     // Adding a row to Workflow runs runs a calendar catch-up.
     events.notionPageCreated({ dataSource: syncRuns.dataSource }),
-    // Run a calendar catch-up or replay an event on demand.
-    events.manual({
-      inputSchema: j.object({
-        mode: j
-          .enum("backfill", "event", "cancel", "next")
-          .describe(
-            "backfill = calendar catch-up; event = calendar created/updated; cancel = calendar cancelled; next = only your current or next meeting"
-          ),
-        eventStartTime: j
-          .datetime()
-          .nullable()
-          .describe(
-            "For mode=event: the event's start time; scans one hour either side"
-          ),
-        eventId: j
-          .string()
-          .nullable()
-          .describe(
-            "For mode=cancel: the calendar event ID stored in Meetings"
-          ),
-        includeInternal: j
-          .boolean()
-          .nullable()
-          .describe(
-            "Treat coworkers as outside attendees for this run only (defaults to INCLUDE_INTERNAL_ATTENDEES)"
-          ),
-      }),
-    }),
+    // Run a calendar catch-up on demand. It takes no input.
+    events.manual(),
   ],
   // Full access: the first run adds relation properties to the schemas.
   access: {
@@ -160,23 +133,12 @@ export default workflow({
         companies: context.access.companies.id,
       }
 
-      // Map every trigger, including the manual one, onto the three code paths.
-      const manual = event.type === "workflow.manual" ? event.input : null
-      if (manual?.mode === "event" && !manual.eventStartTime) {
-        throw new FatalError("Manual mode=event needs eventStartTime")
-      }
-      if (manual?.mode === "cancel" && !manual.eventId)
-        throw new FatalError("Manual mode=cancel needs eventId")
-
-      const cancelledEventId =
-        event.type === "calendar.event.canceled"
-          ? event.eventId
-          : manual?.mode === "cancel"
-            ? manual.eventId
-            : null
-      if (cancelledEventId) {
+      // Map every trigger onto the three code paths. Manual runs, schedules,
+      // and Workflow runs rows are all a full catch-up.
+      const plan = ingestPlan(event)
+      if (plan.type === "cancel") {
         const pageId = await context.step("Find cancelled meeting", () =>
-          findMeetingByEventId(context.notion, ids.meetings, cancelledEventId)
+          findMeetingByEventId(context.notion, ids.meetings, plan.eventId)
         )
         if (pageId) {
           await context.step("Mark meeting cancelled", () =>
@@ -189,13 +151,7 @@ export default workflow({
       // Event triggers rescan a small window around the changed event, so the
       // meeting is read in the same shape the backfill uses. Other triggers
       // scan the full window and also reconcile meetings that disappeared.
-      const eventStart =
-        event.type === "calendar.event.created" ||
-        event.type === "calendar.event.updated"
-          ? event.startTime
-          : manual?.mode === "event"
-            ? manual.eventStartTime
-            : null
+      const eventStart = plan.type === "event" ? plan.startTime : null
       const isEventTrigger = eventStart !== null
       const window = await context.step("Choose scan window", () => {
         if (eventStart !== null) {
@@ -219,21 +175,9 @@ export default workflow({
           timeZone: TIME_ZONE,
         })
         const typed = output as ListEventsScriptOutput
-        const options = {
-          includeInternal:
-            manual?.includeInternal ?? includeInternalAttendees(),
-        }
-        const found = meetingsFromListEvents(typed, options)
-        const next =
-          manual?.mode === "next"
-            ? currentOrNextMeeting(found, Date.now())
-            : null
-        if (next)
-          console.log(
-            `Current or next meeting: "${next.title}" (${next.attendees.length} attendees)`
-          )
+        const options = { includeInternal: includeInternalAttendees() }
         return {
-          meetings: manual?.mode === "next" ? (next ? [next] : []) : found,
+          meetings: meetingsFromListEvents(typed, options),
           complete: output.errors.length === 0,
           eventIds: allEventIds(typed),
           errors: output.errors.map((error) => error.error),
@@ -287,7 +231,7 @@ export default workflow({
       // at all means the event was deleted. Events that still exist but no longer
       // pass the attendee filter (for example a debugging run that included
       // coworkers) are left alone.
-      if (!isEventTrigger && manual?.mode !== "next" && scan.complete) {
+      if (!isEventTrigger && scan.complete) {
         const seen = new Set(scan.eventIds)
         const missing = Object.entries(stored).filter(([eventId, meeting]) => {
           const start = meeting.start ? Date.parse(meeting.start) : Number.NaN

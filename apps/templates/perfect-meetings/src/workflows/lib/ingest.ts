@@ -369,3 +369,34 @@ export async function findMeetingByEventId(
   })
   return page?.id ?? null
 }
+
+/** What one ingest run does, decided by the event that started it. */
+export type IngestPlan =
+  | { type: "cancel"; eventId: string }
+  | { type: "event"; startTime: string }
+  | { type: "catchUp" }
+
+/**
+ * Calendar event triggers rescan around the event or cancel its meeting.
+ * Everything else (the hourly schedule, a Workflow runs row, and the manual
+ * trigger, which takes no input) is a full catch-up.
+ */
+export function ingestPlan(
+  event:
+    | { type: "calendar.event.canceled"; eventId: string }
+    | {
+        type: "calendar.event.created" | "calendar.event.updated"
+        startTime: string
+      }
+    | { type: string }
+): IngestPlan {
+  if (event.type === "calendar.event.canceled" && "eventId" in event)
+    return { type: "cancel", eventId: event.eventId }
+  if (
+    (event.type === "calendar.event.created" ||
+      event.type === "calendar.event.updated") &&
+    "startTime" in event
+  )
+    return { type: "event", startTime: event.startTime }
+  return { type: "catchUp" }
+}
