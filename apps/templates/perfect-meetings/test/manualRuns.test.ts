@@ -7,38 +7,14 @@ import {
   type BacklogMeeting,
   type BacklogPerson,
 } from "../src/workflows/lib/backlog.js"
-import { ingestPlan } from "../src/workflows/lib/ingest.js"
+import calendarIngest from "../src/workflows/calendarIngest.js"
 
-describe("ingestPlan", () => {
-  it("makes the no-input manual run a full catch-up", () => {
-    expect(ingestPlan({ type: "workflow.manual" })).toEqual({
-      type: "catchUp",
-    })
-  })
-
-  it("keeps the schedule and Workflow runs rows as catch-ups", () => {
-    expect(ingestPlan({ type: "recurrence" })).toEqual({ type: "catchUp" })
-    expect(ingestPlan({ type: "notion.page.created" })).toEqual({
-      type: "catchUp",
-    })
-  })
-
-  it("keeps calendar event triggers unchanged", () => {
-    expect(
-      ingestPlan({
-        type: "calendar.event.created",
-        startTime: "2026-09-29T17:00:00Z",
-      })
-    ).toEqual({ type: "event", startTime: "2026-09-29T17:00:00Z" })
-    expect(
-      ingestPlan({
-        type: "calendar.event.updated",
-        startTime: "2026-09-29T17:00:00Z",
-      })
-    ).toEqual({ type: "event", startTime: "2026-09-29T17:00:00Z" })
-    expect(
-      ingestPlan({ type: "calendar.event.canceled", eventId: "evt-1" })
-    ).toEqual({ type: "cancel", eventId: "evt-1" })
+describe("calendarIngest triggers", () => {
+  it("runs only hourly, on a Workflow runs row, or by hand with no input", () => {
+    const text = JSON.stringify(calendarIngest)
+    for (const type of ["recurrence", "notion.page.created", "workflow.manual"])
+      expect(text).toContain(`"${type}"`)
+    expect(text).not.toMatch(/calendar\.event\./)
   })
 })
 

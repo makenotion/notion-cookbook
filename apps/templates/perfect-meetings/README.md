@@ -24,10 +24,14 @@ Notion pages with a short research brief.
 Each workflow keeps its key (used by `ntn workers exec`); the name is what
 Notion shows.
 
-- **Sync calendar** (`calendarIngest`): calendar event created, updated, or
-  cancelled, plus an hourly catch-up. Upserts Meetings by event ID, People by
-  email, and Companies by domain. On first run it adds the two-way relations
-  (Attendees, Companies, Company), which the SDK cannot declare yet. Each run
+- **Sync calendar** (`calendarIngest`): runs hourly, when a row is added to
+  Workflow runs, or by hand. It has no calendar event triggers, so changes
+  show up within the hour. Each run scans 1 day back and 7 days ahead and
+  upserts Meetings by event ID, People by email, and Companies by domain. A
+  cancelled or declined event marks its meeting Cancelled, and so does an
+  event that a complete scan no longer returns (deleted). On first run it
+  adds the two-way relations (Attendees, Companies, Company), which the SDK
+  cannot declare yet. Each run
   is logged in Workflow runs as Pending, then Success or Failed; adding a row
   there, or pressing **Sync calendar** in the block, runs a catch-up. A run
   that crashes or times out stays Pending, because the SDK has no hook for

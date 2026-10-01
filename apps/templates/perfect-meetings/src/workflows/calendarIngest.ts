@@ -28,8 +28,6 @@ import {
   attendeesToWrite,
   cancelMeeting,
   contactsByEmail,
-  findMeetingByEventId,
-  ingestPlan,
   loadStoredMeetings,
   upsertMeetings,
 } from "./lib/ingest.js"
@@ -42,8 +40,7 @@ import {
 } from "./lib/runs.js"
 import { isRuntimeSignal } from "./lib/runtime.js"
 
-const HOUR_MS = 60 * 60 * 1000
-const DAY_MS = 24 * HOUR_MS
+const DAY_MS = 24 * 60 * 60 * 1000
 
 export default workflow({
   name: "Sync calendar",
@@ -56,10 +53,8 @@ export default workflow({
     }),
   },
   triggers: ({ events }) => [
-    events.calendarEventCreated({ connectionKey: "calendar" }),
-    events.calendarEventUpdated({ connectionKey: "calendar" }),
-    events.calendarEventCanceled({ connectionKey: "calendar" }),
-    // Hourly backfill catches anything the event triggers missed.
+    // Hourly catch-up. It also marks meetings cancelled when their event is
+    // cancelled or deleted.
     events.scheduled({
       frequency: "hour",
       interval: 1,
@@ -133,34 +128,8 @@ export default workflow({
         companies: context.access.companies.id,
       }
 
-      // Map every trigger onto the three code paths. Manual runs, schedules,
-      // and Workflow runs rows are all a full catch-up.
-      const plan = ingestPlan(event)
-      if (plan.type === "cancel") {
-        const pageId = await context.step("Find cancelled meeting", () =>
-          findMeetingByEventId(context.notion, ids.meetings, plan.eventId)
-        )
-        if (pageId) {
-          await context.step("Mark meeting cancelled", () =>
-            cancelMeeting(context.notion, pageId)
-          )
-        }
-        return
-      }
-
-      // Event triggers rescan a small window around the changed event, so the
-      // meeting is read in the same shape the backfill uses. Other triggers
-      // scan the full window and also reconcile meetings that disappeared.
-      const eventStart = plan.type === "event" ? plan.startTime : null
-      const isEventTrigger = eventStart !== null
+      // Every trigger is the same full catch-up of the scan window.
       const window = await context.step("Choose scan window", () => {
-        if (eventStart !== null) {
-          const start = Date.parse(eventStart)
-          return {
-            timeMin: new Date(start - HOUR_MS).toISOString(),
-            timeMax: new Date(start + HOUR_MS).toISOString(),
-          }
-        }
         const now = Date.now()
         return {
           timeMin: new Date(now - SCAN_DAYS_BACK * DAY_MS).toISOString(),
@@ -231,7 +200,7 @@ export default workflow({
       // at all means the event was deleted. Events that still exist but no longer
       // pass the attendee filter (for example a debugging run that included
       // coworkers) are left alone.
-      if (!isEventTrigger && scan.complete) {
+      if (scan.complete) {
         const seen = new Set(scan.eventIds)
         const missing = Object.entries(stored).filter(([eventId, meeting]) => {
           const start = meeting.start ? Date.parse(meeting.start) : Number.NaN
@@ -261,7 +230,6 @@ export default workflow({
 })
 
 function runTrigger(type: string): RunTrigger {
-  if (type.startsWith("calendar.")) return RUN_TRIGGER.calendar
   if (type === "recurrence") return RUN_TRIGGER.hourly
   if (type === "notion.page.created") return RUN_TRIGGER.runNow
   return RUN_TRIGGER.manual
