@@ -59,7 +59,12 @@ export const people = database("people-db", {
   name: "People",
   icon: { type: "emoji", emoji: "🧑‍💼" },
   schema: {
-    Name: { resourceId: "person-name", type: "title" },
+    Name: {
+      resourceId: "person-name",
+      type: "title",
+      description:
+        "Each brief updates the Profile at the top of this page. Write your own Notes below it; refreshes leave them untouched.",
+    },
     Email: { resourceId: "person-email", type: "email" },
     Role: { resourceId: "person-role", type: "text" },
     // Where the researcher found the role, for checking.
@@ -68,16 +73,38 @@ export const people = database("people-db", {
     "Company domain": { resourceId: "person-company-domain", type: "text" },
     Photo: { resourceId: "person-photo", type: "url" },
     // Public profiles. The researcher fills in only the ones that are empty.
-    LinkedIn: { resourceId: "person-linkedin", type: "url" },
-    X: { resourceId: "person-x", type: "url" },
-    Instagram: { resourceId: "person-instagram", type: "url" },
-    "Personal site": { resourceId: "person-site", type: "url" },
+    LinkedIn: {
+      resourceId: "person-linkedin",
+      type: "url",
+      description:
+        "Filled in by research only when empty. Replace a wrong one yourself.",
+    },
+    X: {
+      resourceId: "person-x",
+      type: "url",
+      description:
+        "Filled in by research only when empty. Replace a wrong one yourself.",
+    },
+    Instagram: {
+      resourceId: "person-instagram",
+      type: "url",
+      description:
+        "Filled in by research only when empty. Replace a wrong one yourself.",
+    },
+    "Personal site": {
+      resourceId: "person-site",
+      type: "url",
+      description:
+        "Filled in by research only when empty. Replace a wrong one yourself.",
+    },
     // Low means the match was partial (such as a first name at the right
     // company) and may be replaced by a later match. Set it to High to keep
     // a name and role.
     Confidence: {
       resourceId: "person-confidence",
       type: "select",
+      description:
+        "How sure research is of this name and role. Low is a partial match that a later brief may correct; set High once you have checked it to keep it.",
       options: [
         { name: CONFIDENCE.high, color: "green" },
         { name: CONFIDENCE.low, color: "orange" },
@@ -100,7 +127,12 @@ export const meetings = database("meetings-db", {
   name: "Meetings",
   icon: { type: "emoji", emoji: "🗓️" },
   schema: {
-    Title: { resourceId: "meeting-title", type: "title" },
+    Title: {
+      resourceId: "meeting-title",
+      type: "title",
+      description:
+        "The Meeting prep brief is at the top of the page. Write your own Notes below it; refreshes leave them untouched.",
+    },
     When: { resourceId: "meeting-when", type: "date" },
     Status: {
       resourceId: "meeting-status",
@@ -121,10 +153,25 @@ export const meetings = database("meetings-db", {
       ],
     },
     "Prep updated": { resourceId: "meeting-prep-updated", type: "date" },
-    "Regenerate prep": { resourceId: "meeting-regenerate", type: "checkbox" },
+    "Regenerate prep": {
+      resourceId: "meeting-regenerate",
+      type: "checkbox",
+      description:
+        "Tick to write a fresh brief or retry a failed one. Your notes are left untouched.",
+    },
     Agenda: { resourceId: "meeting-agenda", type: "text" },
-    "Calendar link": { resourceId: "meeting-calendar-url", type: "url" },
-    "Video link": { resourceId: "meeting-video-url", type: "url" },
+    "Calendar link": {
+      resourceId: "meeting-calendar-url",
+      type: "url",
+      description:
+        "Copied from the calendar event and updated when the event changes.",
+    },
+    "Video link": {
+      resourceId: "meeting-video-url",
+      type: "url",
+      description:
+        "Copied from the calendar event and updated when the event changes.",
+    },
     "Event ID": { resourceId: "meeting-event-id", type: "text" },
     // Sorted, comma-separated outside attendee emails: the join key to People.
     // Ingest writes it only when the set changes, so prep watches it.

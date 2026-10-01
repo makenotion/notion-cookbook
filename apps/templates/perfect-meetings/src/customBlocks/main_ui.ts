@@ -3,7 +3,7 @@ import { customBlock } from "@notionhq/apps"
 import { companies, meetings, people } from "../notion.js"
 
 const nextMeeting = customBlock({
-  path: "./blocks/nextMeeting",
+  path: "./blocks/main_ui",
   name: "Next meeting",
   description:
     "Company and attendee cards for your current or next meeting, and a calendar of today's meetings.",

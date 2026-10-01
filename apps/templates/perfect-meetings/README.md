@@ -9,15 +9,15 @@ Notion pages with a short research brief.
 
 ## What it creates
 
-| Kind         | Name               | Purpose                                                                     |
-| ------------ | ------------------ | --------------------------------------------------------------------------- |
-| Page         | APP.md             | Home page with the next-meeting card, upcoming meetings, and usage guidance |
-| Database     | Meetings           | One row per external meeting; brief at the top of the page, notes below     |
-| Database     | People             | One row per outside attendee, keyed by email                                |
-| Database     | Companies          | One row per outside company, keyed by email domain                          |
-| Database     | Workflow runs      | One row per calendar ingest run; add a row to run a catch-up now            |
-| Custom agent | Meeting researcher | Web research plus email summary, returned as JSON                           |
-| Custom view  | Next meeting       | Company and people cards for the next meeting, plus a Today calendar view   |
+| Kind         | Name               | Purpose                                                                                    |
+| ------------ | ------------------ | ------------------------------------------------------------------------------------------ |
+| Page         | APP.md             | Home page with the main UI block and a Debug Data toggle linking the databases             |
+| Database     | Meetings           | One row per external meeting; brief at the top of the page, notes below                    |
+| Database     | People             | One row per outside attendee, keyed by email                                               |
+| Database     | Companies          | One row per outside company, keyed by email domain                                         |
+| Database     | Workflow runs      | One row per calendar ingest run; add a row to run a catch-up now (linked under Debug Data) |
+| Custom agent | Meeting researcher | Web research plus email summary, returned as JSON                                          |
+| Custom block | main_ui            | Company and people cards for the next meeting, plus a Today calendar view                  |
 
 ## Workflows
 
@@ -53,6 +53,9 @@ npm run check
 npm test
 npm run build
 ```
+
+The custom block's key is `main_ui`: it comes from the file name
+`src/customBlocks/main_ui.ts`, and its browser source is in `blocks/main_ui/`.
 
 The App's name is the title of its home page. Set it on the first deploy:
 

@@ -12,7 +12,7 @@ import {
   pickMeeting,
   sortByStart,
   wallTimeToMs,
-} from "../blocks/nextMeeting/meeting.js"
+} from "../blocks/main_ui/meeting.js"
 
 function row(id: string, when: unknown): NotionDataSourcePage {
   return {

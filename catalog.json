@@ -346,7 +346,7 @@
         "src/workflows/calendarIngest.ts",
         "src/workflows/meetingPrep.ts",
         "src/workflows/morningPrep.ts",
-        "src/customBlocks/nextMeeting.ts",
+        "src/customBlocks/main_ui.ts",
         "src/notion.ts"
       ],
       "commands": {
