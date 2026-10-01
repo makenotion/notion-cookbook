@@ -116,7 +116,7 @@ The custom block's key is `main_ui`: it comes from the file name
 The App's name is the title of its home page. Set it on the first deploy:
 
 ```shell
-ntn apps deploy --name "Perfect Meetings App"
+ntn apps deploy --name "Perfect Meetings"
 ```
 
 ## Run on demand and debug

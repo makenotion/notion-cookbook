@@ -354,7 +354,7 @@
         "check": "npm run check",
         "test": "npm test",
         "build": "npm run build",
-        "deploy": "ntn apps deploy --name \"Meeting Prep\""
+        "deploy": "ntn apps deploy --name \"Perfect Meetings\""
       }
     },
     {
