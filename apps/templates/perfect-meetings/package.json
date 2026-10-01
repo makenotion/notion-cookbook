@@ -10,7 +10,7 @@
   "type": "module",
   "scripts": {
     "build": "notion-apps build",
-    "check": "tsc --noEmit && tsc --noEmit -p blocks/nextMeeting/tsconfig.json",
+    "check": "tsc --noEmit && tsc --noEmit -p blocks/main_ui/tsconfig.json",
     "test": "vitest run"
   },
   "engines": {

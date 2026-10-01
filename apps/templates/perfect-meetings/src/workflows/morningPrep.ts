@@ -1,6 +1,4 @@
 import { access, workflow } from "@notionhq/apps"
-import { FatalError } from "@notionhq/apps/error"
-import { j } from "@notionhq/apps/schema-builder"
 
 import { MORNING_PREP_TIME, TIME_ZONE } from "../lib/config.js"
 import { queryAll, read } from "../lib/props.js"
@@ -18,9 +16,9 @@ import { isRuntimeSignal } from "./lib/runtime.js"
 const DAY_MS = 24 * 60 * 60 * 1000
 
 export default workflow({
-  name: "Morning prep",
+  name: "Refresh today's research",
   description:
-    "Refreshes the brief for every meeting happening today, at 7:45 am local time.",
+    "Refreshes the research brief for every meeting happening today: daily at 7:45 am local time, or whenever you run it.",
   connections: prepConnections,
   triggers: ({ events }) => [
     events.scheduled({
@@ -29,17 +27,8 @@ export default workflow({
       start: `2026-09-29T${MORNING_PREP_TIME}:00`,
       timeZone: TIME_ZONE,
     }),
-    // Refresh today's briefs on demand, optionally for another day.
-    events.manual({
-      inputSchema: j.object({
-        date: j
-          .date()
-          .nullable()
-          .describe(
-            `Local date (YYYY-MM-DD) in ${TIME_ZONE}; defaults to today`
-          ),
-      }),
-    }),
+    // Refresh today's briefs on demand. It takes no input.
+    events.manual(),
   ],
   access: {
     meetings: access.edit(meetings.dataSource),
@@ -47,16 +36,9 @@ export default workflow({
     companies: access.edit(companies.dataSource),
     researcher: access.call(researcher),
   },
-  handler: async (event, context) => {
-    const date = event.type === "workflow.manual" ? event.input.date : null
-    if (date && Number.isNaN(Date.parse(`${date}T12:00:00Z`)))
-      throw new FatalError(`Invalid date "${date}"`)
+  handler: async (_event, context) => {
     const todays = await context.step("Find today's meetings", async () => {
-      // Midday UTC falls on the same local date in every zone within ±12h.
-      const day = localDay(
-        date ? Date.parse(`${date}T12:00:00Z`) : Date.now(),
-        TIME_ZONE
-      )
+      const day = localDay(Date.now(), TIME_ZONE)
       // Query a padded range, then keep meetings that start on the local day:
       // all-day dates and date-times compare differently against a filter.
       const pages = await queryAll(context.notion, {
@@ -107,7 +89,7 @@ export default workflow({
     }
     if (failures.length > 0) {
       throw new Error(
-        `Morning prep failed for ${failures.length} meeting(s):\n${failures.join("\n")}`
+        `Refresh today's research failed for ${failures.length} meeting(s):\n${failures.join("\n")}`
       )
     }
   },

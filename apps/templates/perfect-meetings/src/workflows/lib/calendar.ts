@@ -192,24 +192,6 @@ export function meetingsFromListEvents(
   return [...byId.values()]
 }
 
-function endMs(meeting: MeetingInput): number {
-  // All-day dates have an exclusive end date; timed events without an end last an hour.
-  const end = meeting.end ? Date.parse(meeting.end) : Number.NaN
-  return Number.isNaN(end) ? Date.parse(meeting.start) + 60 * 60 * 1000 : end
-}
-
-/** The meeting in progress, or else the next to start (earliest start wins). */
-export function currentOrNextMeeting(
-  meetings: readonly MeetingInput[],
-  now: number
-): MeetingInput | null {
-  const live = meetings.filter(
-    (meeting) => !meeting.cancelled && endMs(meeting) > now
-  )
-  live.sort((a, b) => Date.parse(a.start) - Date.parse(b.start))
-  return live[0] ?? null
-}
-
 /**
  * Every event ID the business account returned, before any filtering. Used to
  * tell a deleted event apart from one that is merely no longer external.

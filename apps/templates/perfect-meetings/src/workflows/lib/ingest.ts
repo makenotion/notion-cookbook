@@ -357,15 +357,3 @@ export async function cancelMeeting(
     properties: { Status: prop.select(MEETING_STATUS.cancelled) },
   })
 }
-
-export async function findMeetingByEventId(
-  notion: Notion,
-  meetingsId: string,
-  eventId: string
-): Promise<string | null> {
-  const page = await findOne(notion, meetingsId, {
-    property: "Event ID",
-    rich_text: { equals: eventId },
-  })
-  return page?.id ?? null
-}

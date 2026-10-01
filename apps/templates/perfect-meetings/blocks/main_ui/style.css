@@ -1,0 +1,724 @@
+/* Notion design tokens only (@notionhq/apps/nds.css). Hues come from a
+   data-theme attribute, which remaps the --content-* and --bg-* tokens to
+   that color in light and dark mode. */
+
+/* body sits outside NotionTokenScope, where the tokens are defined, so it
+   needs a fallback; .card gets the real token. */
+body {
+  margin: 0;
+  background: transparent;
+  font-family: var(--font-sans, system-ui, sans-serif);
+}
+
+.card {
+  color: var(--content-primary);
+  background: var(--bg-base);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-10);
+  padding: var(--spacing-16);
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
+  font-weight: var(--font-weight-regular);
+}
+
+.muted {
+  margin: 0;
+  color: var(--content-secondary);
+}
+
+.icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-12);
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.meta {
+  color: var(--content-secondary);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+}
+
+.title {
+  margin: 0 0 var(--spacing-4);
+  font-size: var(--text-title);
+  line-height: var(--text-title--line-height);
+  font-weight: var(--font-weight-semibold);
+}
+
+.actions {
+  display: flex;
+  gap: var(--spacing-8);
+  align-items: center;
+}
+
+/* Buttons are flat until hovered. */
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-4);
+  border: 1px solid var(--border-primary);
+  background: transparent;
+  color: var(--content-primary);
+  border-radius: var(--radius-6);
+  padding: var(--spacing-4) var(--spacing-8);
+  font: inherit;
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.button:hover {
+  background: var(--bg-hover);
+}
+
+.button:active {
+  background: var(--bg-pressed);
+}
+
+/* The single primary action. data-theme="blue" makes the strong
+   interactive background Notion blue. */
+.button-primary {
+  border-color: transparent;
+  background: var(--bg-interactive-strong);
+  color: var(--content-on-interactive-strong);
+}
+
+.button-primary:hover {
+  background: var(--bg-interactive-strong-hover);
+}
+
+.button-primary:active {
+  background: var(--bg-interactive-strong-pressed);
+}
+
+.button:disabled,
+.button:disabled:hover {
+  cursor: default;
+  border-color: var(--border-primary);
+  background: var(--bg-muted);
+  color: var(--content-disabled);
+}
+
+.button:focus-visible,
+.segment:focus-visible,
+.back:focus-visible,
+.tile:focus-visible,
+.event:focus-visible {
+  outline: 2px solid var(--border-interactive-primary);
+  outline-offset: 1px;
+}
+
+/* Status pills: a muted background with darker text of the same hue. */
+.pill {
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+  font-weight: var(--font-weight-medium);
+  border-radius: var(--radius-full);
+  padding: var(--spacing-2) var(--spacing-8);
+  background: var(--bg-muted);
+  color: var(--content-secondary);
+  white-space: nowrap;
+}
+
+/* An inline notice, colored by data-theme. */
+.note {
+  display: flex;
+  gap: var(--spacing-8);
+  align-items: flex-start;
+  margin: var(--spacing-12) 0 0;
+  padding: var(--spacing-8) var(--spacing-12);
+  border-radius: var(--radius-8);
+  background: var(--bg-muted);
+  color: var(--content-primary);
+}
+
+.note .icon {
+  margin-top: var(--spacing-2);
+  color: var(--content-secondary);
+}
+
+.note-action {
+  margin-left: auto;
+  flex: none;
+  padding: 0 var(--spacing-8);
+}
+
+.note-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-12);
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-6);
+  background: transparent;
+  color: var(--content-secondary);
+  cursor: pointer;
+}
+
+.back:hover {
+  background: var(--bg-hover);
+  color: var(--content-primary);
+}
+
+.segments {
+  display: flex;
+  padding: var(--spacing-2);
+  border-radius: var(--radius-8);
+  background: var(--bg-muted);
+}
+
+.segment {
+  border: none;
+  background: transparent;
+  color: var(--content-secondary);
+  border-radius: var(--radius-6);
+  padding: var(--spacing-2) var(--spacing-8);
+  font: inherit;
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+.segment:hover {
+  color: var(--content-primary);
+}
+
+.segment-active {
+  background: var(--bg-base);
+  color: var(--content-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Setup, progress, and empty states */
+
+.setup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-8);
+  max-width: 520px;
+}
+
+.setup .title,
+.setup .note {
+  margin: 0;
+}
+
+.status-line {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-8);
+  margin: 0;
+  color: var(--content-secondary);
+}
+
+.spinner {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--border-primary);
+  border-top-color: var(--content-secondary);
+  animation: spin 0.9s linear infinite;
+}
+
+.progress {
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: var(--bg-muted);
+  overflow: hidden;
+}
+
+.progress-bar {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--content-secondary);
+  transition: width 0.3s ease;
+}
+
+.setup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-12);
+  margin-top: var(--spacing-4);
+}
+
+.sync-now {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-8);
+  margin-top: var(--spacing-8);
+}
+
+.sync-now .button {
+  border-color: transparent;
+  color: var(--content-secondary);
+}
+
+.sync-now .button:hover {
+  color: var(--content-primary);
+}
+
+.sync-now .button:disabled,
+.sync-now .button:disabled:hover {
+  border-color: transparent;
+  background: transparent;
+  color: var(--content-disabled);
+}
+
+.error-text {
+  color: var(--content-secondary);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+}
+
+.empty {
+  display: flex;
+  gap: var(--spacing-12);
+  align-items: flex-start;
+  padding: var(--spacing-8) 0;
+}
+
+.empty-icon {
+  display: inline-flex;
+  padding: var(--spacing-8);
+  border-radius: var(--radius-8);
+  background: var(--bg-muted);
+  color: var(--content-secondary);
+}
+
+.empty-title {
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: var(--spacing-2);
+}
+
+/* Loading skeleton */
+
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-8);
+  padding: var(--spacing-4) 0;
+}
+
+.skeleton-line {
+  display: block;
+  height: 12px;
+  width: 100%;
+  border-radius: var(--radius-4);
+  background: var(--bg-muted);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.skeleton-line:nth-child(3) {
+  width: 80%;
+}
+
+.skeleton-line:nth-child(4) {
+  width: 60%;
+}
+
+.skeleton-title {
+  height: 18px;
+  width: 40%;
+  margin-bottom: var(--spacing-4);
+}
+
+/* A card line research is still filling in. */
+.loading-line {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-8);
+  margin-top: var(--spacing-2);
+}
+
+.skeleton-inline {
+  flex: 1;
+  max-width: 120px;
+  height: 10px;
+}
+
+.loading-label {
+  flex: none;
+  color: var(--content-tertiary);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+}
+
+.research-line {
+  margin-top: var(--spacing-4);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-line,
+  .spinner {
+    animation: none;
+  }
+}
+
+/* Company and person cards */
+
+.section {
+  margin: var(--spacing-16) 0 var(--spacing-8);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+  font-weight: var(--font-weight-medium);
+  color: var(--content-secondary);
+}
+
+.grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--spacing-8);
+}
+
+.tile {
+  display: flex;
+  gap: var(--spacing-12);
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-8);
+  padding: var(--spacing-12);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+button.tile {
+  cursor: pointer;
+}
+
+button.tile:hover {
+  background: var(--bg-hover);
+}
+
+button.tile:active {
+  background: var(--bg-pressed);
+}
+
+.tile-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  min-width: 0;
+}
+
+.tile-title {
+  font-weight: var(--font-weight-semibold);
+}
+
+.tile-subtitle {
+  color: var(--content-secondary);
+}
+
+.tile-detail {
+  color: var(--content-tertiary);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tile-summary {
+  margin-top: var(--spacing-4);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+  color: var(--content-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.avatar,
+.logo {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-muted);
+  color: var(--content-secondary);
+  font-size: var(--text-body-sm);
+  font-weight: var(--font-weight-semibold);
+  overflow: hidden;
+}
+
+.avatar {
+  border-radius: var(--radius-full);
+}
+
+.avatar-large {
+  width: 36px;
+  height: 36px;
+}
+
+.avatar-small {
+  width: 20px;
+  height: 20px;
+  font-size: var(--text-body-xs);
+  line-height: var(--text-body-xs--line-height);
+  border: 2px solid var(--bg-base);
+  margin-left: calc(var(--spacing-4) * -1);
+}
+
+.avatar-small:first-child {
+  margin-left: 0;
+}
+
+.logo {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-8);
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.stack {
+  display: flex;
+  align-items: center;
+  margin-top: var(--spacing-4);
+}
+
+.stack .tile-detail {
+  margin-left: var(--spacing-8);
+}
+
+/* Day view */
+
+.all-day {
+  display: flex;
+  gap: var(--spacing-8);
+  align-items: flex-start;
+  margin-top: var(--spacing-12);
+  padding-bottom: var(--spacing-8);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.all-day-events {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+
+.all-day-events .event {
+  position: static;
+}
+
+.gutter-label {
+  width: 52px;
+  flex: none;
+  font-size: var(--text-body-xs);
+  line-height: var(--text-body-xs--line-height);
+  font-weight: var(--font-weight-medium);
+  color: var(--content-tertiary);
+  text-align: right;
+}
+
+.timeline {
+  margin-top: var(--spacing-12);
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.timeline-inner {
+  position: relative;
+}
+
+.hour {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px solid var(--border-primary);
+}
+
+.hour:first-child {
+  border-top-color: transparent;
+}
+
+.hour .gutter-label {
+  position: absolute;
+  left: 0;
+  top: -7px;
+  padding-right: var(--spacing-8);
+  box-sizing: border-box;
+  background: var(--bg-base);
+}
+
+/* data-theme="blue" on .events tints these tokens blue. */
+.events {
+  position: absolute;
+  inset: 0 0 0 60px;
+}
+
+.event {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+  border: none;
+  border-radius: var(--radius-4);
+  padding: var(--spacing-2) var(--spacing-8);
+  background: var(--bg-interactive-primary-translucent);
+  color: var(--content-primary);
+  font: inherit;
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+  text-align: left;
+  cursor: pointer;
+}
+
+.event:hover {
+  background: var(--bg-interactive-primary-translucent-hover);
+}
+
+.event:active {
+  background: var(--bg-interactive-primary-translucent-pressed);
+}
+
+.event-compact {
+  flex-direction: row;
+  gap: var(--spacing-4);
+  align-items: center;
+}
+
+.event-title {
+  font-weight: var(--font-weight-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.event-time {
+  color: var(--content-secondary);
+  white-space: nowrap;
+}
+
+.event-past {
+  opacity: 0.55;
+}
+
+.event-highlight,
+.event-highlight:hover {
+  background: var(--bg-interactive-strong);
+  color: var(--content-on-interactive-strong);
+  z-index: 1;
+}
+
+.event-highlight:active {
+  background: var(--bg-interactive-strong-pressed);
+}
+
+.event-highlight .event-time {
+  color: inherit;
+  opacity: 0.85;
+}
+
+/* data-theme="red" on .now makes the strong background red. */
+.now {
+  position: absolute;
+  left: -6px;
+  right: 0;
+  height: 2px;
+  background: var(--bg-interactive-strong);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.now::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  background: var(--bg-interactive-strong);
+}
+
+/* Profile links sit inside the person tile but outside its button, since
+   links cannot be nested in a button. */
+.person-card {
+  position: relative;
+}
+
+.person-card.has-links .tile {
+  padding-bottom: calc(var(--spacing-12) + 20px);
+}
+
+.tile-links {
+  position: absolute;
+  left: var(--spacing-12);
+  right: var(--spacing-12);
+  bottom: var(--spacing-12);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-12);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+}
+
+.tile-links a {
+  color: var(--content-secondary);
+  text-decoration: none;
+}
+
+.tile-links a:hover {
+  color: var(--content-primary);
+  text-decoration: underline;
+}

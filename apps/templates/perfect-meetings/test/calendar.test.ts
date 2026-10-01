@@ -10,7 +10,6 @@ import {
   allEventIds,
   attendeeKey,
   inclusiveEndDate,
-  currentOrNextMeeting,
   internalDomainsFor,
   meetingsFromListEvents,
   pastMeetingsWith,
@@ -219,42 +218,6 @@ describe("helpers", () => {
     expect(stripHtml("<p>Agenda</p><ul><li>One</li></ul>&amp; more")).toBe(
       "Agenda\nOne\n& more"
     )
-  })
-})
-
-describe("currentOrNextMeeting", () => {
-  const base = meetingsFromListEvents(output([event()]))[0]!
-  const at = (id: string, start: string, end: string, cancelled = false) => ({
-    ...base,
-    eventId: id,
-    start,
-    end,
-    cancelled,
-  })
-  const meetings = [
-    at("later", "2026-09-29T20:00:00Z", "2026-09-29T21:00:00Z"),
-    at("offsite", "2026-09-29", "2026-10-01"),
-    at("done", "2026-09-29T15:00:00Z", "2026-09-29T16:00:00Z"),
-    at("cancelled", "2026-09-29T16:30:00Z", "2026-09-29T17:30:00Z", true),
-  ]
-
-  it("prefers the event in progress with the earliest start", () => {
-    expect(
-      currentOrNextMeeting(meetings, Date.parse("2026-09-29T17:00:00Z"))
-        ?.eventId
-    ).toBe("offsite")
-  })
-
-  it("falls through to the next meeting", () => {
-    expect(
-      currentOrNextMeeting(
-        meetings.slice(0, 1),
-        Date.parse("2026-09-29T17:00:00Z")
-      )?.eventId
-    ).toBe("later")
-    expect(
-      currentOrNextMeeting(meetings, Date.parse("2026-10-02T00:00:00Z"))
-    ).toBeNull()
   })
 })
 
