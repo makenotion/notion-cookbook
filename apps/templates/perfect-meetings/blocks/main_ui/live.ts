@@ -21,8 +21,10 @@ export type QueryState<T> = {
   /** The last settled rows, kept across resubscribes. */
   items: readonly T[]
   error?: { message: string }
-  /** Whether any subscription has settled, so `items` can be trusted. */
+  /** Whether any subscription has settled, with rows or an error. */
   loaded: boolean
+  /** Whether `items` came from a successful result (not just an error). */
+  hasData: boolean
 }
 
 export type QueryEvent<T> =
@@ -35,7 +37,7 @@ export type QueryEvent<T> =
   | { type: "timeout"; snapshot: Snapshot<T> }
 
 export function initialQuery<T>(): QueryState<T> {
-  return { phase: "init", items: [], loaded: false }
+  return { phase: "init", items: [], loaded: false, hasData: false }
 }
 
 /**
@@ -74,7 +76,12 @@ export function reduceQuery<T>(
 function settle<T>(state: QueryState<T>, snapshot: Snapshot<T>): QueryState<T> {
   if (snapshot.error)
     return { ...state, phase: "settled", error: snapshot.error, loaded: true }
-  return { phase: "settled", items: snapshot.items, loaded: true }
+  return {
+    phase: "settled",
+    items: snapshot.items,
+    loaded: true,
+    hasData: true,
+  }
 }
 
 // ---- Sync calendar requests -----------------------------------------------

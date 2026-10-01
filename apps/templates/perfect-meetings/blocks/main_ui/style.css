@@ -148,6 +148,12 @@ body {
   color: var(--content-secondary);
 }
 
+.note-action {
+  margin-left: auto;
+  flex: none;
+  padding: 0 var(--spacing-8);
+}
+
 .note-text {
   min-width: 0;
   overflow-wrap: anywhere;

@@ -94,7 +94,7 @@ error state again. Populated means any of these, each of which only grows:
 - a sync succeeded and there are no outside meetings at all, which shows an
   empty state explaining that meetings sync hourly and coworker-only
   meetings are hidden; or
-- two syncs have succeeded.
+- two of the 10 most recent syncs have succeeded.
 
 The block also latches populated for the session. Queries report loaded
 only after their first real result, and keep their last rows while a
@@ -116,6 +116,17 @@ is waiting, syncing, or researching, and after a click until a new run row
 appears or a minute passes. A run that has waited or stayed Pending for more
 than 20 minutes (timed from Started, or the row's creation when Started is
 empty) is treated as stuck, and the button comes back.
+
+The block reads four live queries (`blocks/main_ui/derive.ts`): Meetings
+from local midnight 3 days ago onward (up to 200, not cancelled), the 10
+newest Workflow runs, People, and Companies. The next meeting, Today,
+progress, and populated signals are all derived from those rows. The SDK
+re-sends every subscription's query whenever the host reports a change to
+its data source, with no debounce, so research writes multiply requests per
+subscription; keep the count low. The Meetings window changes once a day,
+so the query is not replaced between renders. When a query fails before any
+rows have loaded, the block shows the error with **Retry**, not an empty
+state.
 
 Every empty state in the ready UI (no outside meetings yet, nothing today,
 nothing upcoming) has a quiet **Sync now** button. It creates the same

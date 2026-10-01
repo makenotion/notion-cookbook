@@ -19,11 +19,19 @@ import {
   pickMeeting,
   profileLinks,
   roleLabel,
-  sortByStart,
   splitEmails,
   text,
   type DayEvent,
 } from "./meeting"
+import {
+  COMPANIES_QUERY,
+  PEOPLE_QUERY,
+  RUNS_QUERY,
+  deriveMeetings,
+  deriveRuns,
+  meetingsQuery,
+  meetingsWindowStart,
+} from "./derive"
 import {
   idleSync,
   initialQuery,
@@ -57,7 +65,6 @@ import {
 } from "./state"
 
 const HOUR_MS = 60 * 60 * 1000
-const LOOKBACK_MS = 12 * HOUR_MS
 const HOUR_PX = 48
 const STATE_KEY = "perfect-meetings:view"
 
@@ -851,10 +858,12 @@ type Row = NotionDataSourcePage
 /**
  * A live query that reports `loaded` only after its first real result and
  * keeps the previous rows while a changed query reloads (see reduceQuery).
+ * Pass stable options; `attempt` changes only to retry after an error.
  */
 function useLiveQuery(
   key: string,
-  options: DataSourceQueryOptions
+  options: DataSourceQueryOptions,
+  attempt: number
 ): QueryState<Row> {
   const identity = JSON.stringify(options)
   const [state, dispatch] = React.useReducer(
@@ -881,106 +890,62 @@ function useLiveQuery(
       window.clearTimeout(timer)
       unsubscribe()
     }
-  }, [key, identity])
+  }, [key, identity, attempt])
   return state
 }
 
 function MeetingsBlock() {
   const now = useNow()
   const [view, setView] = useViewState()
-  const hour = Math.floor(now / HOUR_MS)
-  // Reach back to midnight for the day view and 12 hours for long meetings.
-  // Round the cutoff to the hour so the subscriptions change once an hour;
-  // the previous rows stay on screen while they reload.
-  const cutoff = React.useMemo(() => {
-    const start = Math.min(dayBounds(now).startMs, now - LOOKBACK_MS)
-    return new Date(Math.floor(start / HOUR_MS) * HOUR_MS).toISOString()
-  }, [hour])
-  const notCancelled = {
-    key: "Status",
-    select: { does_not_equal: "Cancelled" },
-  } as const
-  // Date filters compare start dates only, so a multi-day event that began
-  // before the cutoff needs its own query: the latest-starting earlier events.
-  const upcoming = useLiveQuery("meetings", {
-    limit: 50,
-    filter: {
-      and: [{ key: "When", date: { on_or_after: cutoff } }, notCancelled],
-    },
-    sorts: [{ key: "When", direction: "ascending" }],
-  })
-  const earlier = useLiveQuery("meetings", {
-    limit: 10,
-    filter: { and: [{ key: "When", date: { before: cutoff } }, notCancelled] },
-    sorts: [{ key: "When", direction: "descending" }],
-  })
-  const meetings = sortByStart([...earlier.items, ...upcoming.items])
-  const people = useLiveQuery("people", { limit: 999 })
-  const companies = useLiveQuery("companies", { limit: 999 })
+  // Four live queries in all (see derive.ts). The window start changes once
+  // a day, so the Meetings options are identical between renders.
+  const windowStart = meetingsWindowStart(now)
+  const [retries, setRetries] = React.useState(0)
+  const retry = React.useCallback(() => setRetries((n) => n + 1), [])
+  const meetingsQ = useLiveQuery(
+    "meetings",
+    React.useMemo(() => meetingsQuery(windowStart), [windowStart]),
+    retries
+  )
+  const runsQ = useLiveQuery("runs", RUNS_QUERY, retries)
+  const people = useLiveQuery("people", PEOPLE_QUERY, retries)
+  const companies = useLiveQuery("companies", COMPANIES_QUERY, retries)
 
-  // Setup state, derived from existing rows (see state.ts).
-  const latestRuns = useLiveQuery("runs", {
-    limit: 1,
-    sorts: [{ key: "Started", direction: "descending" }],
-  })
-  const successRuns = useLiveQuery("runs", {
-    limit: 2,
-    filter: { key: "Status", select: { equals: RUN.success } },
-  })
-  // Prep updated is written only when a brief is Ready and never cleared.
-  const prepped = useLiveQuery("meetings", {
-    limit: 1,
-    filter: { key: "Prep updated", date: { is_not_empty: true } },
-  })
-  const finished = useLiveQuery("meetings", {
-    limit: 1,
-    filter: {
-      key: "Prep status",
-      select: { equals: [PREP.ready, PREP.failed] },
-    },
-  })
-  const latest = latestRuns.items[0]
-  const sync = useSyncRequest(latest?.id ?? null)
+  const { meetings, hasPrepUpdated, hasPrepFinished } = React.useMemo(
+    () => deriveMeetings(meetingsQ.items),
+    [meetingsQ.items]
+  )
+  const { latestRun, successRuns } = React.useMemo(
+    () => deriveRuns(runsQ.items),
+    [runsQ.items]
+  )
+  const sync = useSyncRequest(latestRun?.id ?? null)
+  const progress = researchProgress(meetings, now)
 
-  const error =
-    upcoming.error ?? earlier.error ?? people.error ?? companies.error
-  const runsError = latestRuns.error ?? successRuns.error
-  const loaded = [
-    upcoming,
-    earlier,
-    latestRuns,
-    successRuns,
-    prepped,
-    finished,
-  ].every((query) => query.loaded)
+  const error = meetingsQ.error ?? people.error ?? companies.error
+  const runsError = runsQ.error
+  const loaded = meetingsQ.loaded && runsQ.loaded
   const picked = pickMeeting(meetings, now)
   const peopleByEmail = byKey(people.items, "Email")
   const companiesByDomain = byKey(companies.items, "Domain")
   const peopleLoading = !people.loaded
 
-  const input: BlockStateInput | null = loaded
-    ? {
-        latestRun: latest
-          ? {
-              id: latest.id,
-              status: text(latest.propertiesByKey.Status) || null,
-              startedMs: runStartedMs(latest),
-              error: text(latest.propertiesByKey.Error),
-            }
-          : null,
-        successRuns: successRuns.items.length,
-        hasPrepUpdated: prepped.items.length > 0,
-        hasPrepFinished: finished.items.length > 0,
-        meetingCount: meetings.length,
-        // k and n come from one query: the upcoming meetings.
-        progress: researchProgress(upcoming.items, now),
-        now,
-      }
-    : null
+  // Without real meeting rows the block cannot tell "none" from "failed".
+  const meetingsKnown = meetingsQ.hasData
+  const input: BlockStateInput | null =
+    loaded && meetingsKnown
+      ? {
+          latestRun: runsError ? null : latestRun,
+          successRuns,
+          hasPrepUpdated,
+          hasPrepFinished,
+          meetingCount: meetings.length,
+          progress,
+          now,
+        }
+      : null
   // Either positive signal latches as soon as it loads, before the rest.
-  const signal =
-    (prepped.loaded && prepped.items.length > 0) ||
-    (finished.loaded && finished.items.length > 0)
+  const signal = hasPrepUpdated || hasPrepFinished
   const latch = React.useRef(false)
   // A block bound before Workflow runs was added cannot read runs; it keeps
   // the calendar UI rather than showing setup states it cannot track.
@@ -1004,12 +969,16 @@ function MeetingsBlock() {
     />
   )
 
-  // Once populated, a query error is a small notice above the last good
-  // data, never a replacement for it.
+  // A query error is a small notice above the last good data, never a
+  // replacement for it. With no good data yet it stands alone, with Retry,
+  // instead of an empty state that would claim there are no meetings.
   const notice = error && (
     <div className="note" data-theme="red" role="alert">
       <Icon name="alert" />
       <span className="note-text">Couldn't load meetings: {error.message}</span>
+      <button type="button" className="button note-action" onClick={retry}>
+        Retry
+      </button>
     </div>
   )
 
@@ -1017,15 +986,15 @@ function MeetingsBlock() {
     <SyncNow
       sync={sync}
       latestRun={input?.latestRun ?? null}
-      progress={researchProgress(upcoming.items, now)}
+      progress={progress}
       now={now}
     />
   )
 
   let content: React.ReactNode
-  if (!populated && error) {
+  if (error && !meetingsKnown) {
     content = notice
-  } else if (!state || (!upcoming.loaded && !earlier.loaded)) {
+  } else if (!state || !meetingsKnown) {
     // Only before the first result of the session.
     content = <Skeleton />
   } else if (state.kind !== "ready") {
@@ -1075,7 +1044,7 @@ function MeetingsBlock() {
   return (
     <div className="card">
       <Toolbar view={view} onChange={setView} />
-      {populated && notice}
+      {meetingsKnown && notice}
       {content}
     </div>
   )

@@ -49,8 +49,16 @@ describe("reduceQuery", () => {
       type: "snapshot",
       snapshot: { items: [], isLoading: false, error: { message: "nope" } },
     })
-    expect(failed).toMatchObject({ loaded: true, items: ["a"] })
+    expect(failed).toMatchObject({ loaded: true, hasData: true, items: ["a"] })
     expect(failed.error?.message).toBe("nope")
+  })
+
+  it("marks a first-time error as loaded but without data", () => {
+    const failed = reduceQuery(initialQuery<string>(), {
+      type: "snapshot",
+      snapshot: { items: [], isLoading: false, error: { message: "429" } },
+    })
+    expect(failed).toMatchObject({ loaded: true, hasData: false, items: [] })
   })
 
   it("settles on timeout only if the query never showed as loading", () => {
