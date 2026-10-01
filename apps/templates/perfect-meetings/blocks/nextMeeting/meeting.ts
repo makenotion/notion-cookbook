@@ -142,6 +142,29 @@ export function pickMeeting(
   return allDayNow ?? upcoming
 }
 
+const PROFILE_LINKS = [
+  ["LinkedIn", "LinkedIn"],
+  ["X", "X"],
+  ["Instagram", "Instagram"],
+  ["Personal site", "Website"],
+] as const
+
+/** A person's public profile links that are set, in a fixed order. */
+export function profileLinks(
+  properties: Record<string, NotionDataSourceValue | undefined>
+): { label: string; url: string }[] {
+  return PROFILE_LINKS.flatMap(([property, label]) => {
+    const url = text(properties[property])
+    return /^https?:\/\//.test(url) ? [{ label, url }] : []
+  })
+}
+
+/** A person card's role line, marked when People Confidence is Low. */
+export function roleLabel(role: string, confidence: string): string {
+  if (!role) return "Role not found yet"
+  return confidence === "Low" ? `(low confidence) ${role}` : role
+}
+
 export function firstSentence(value: string): string {
   const match = value.match(/^.*?[.!?](\s|$)/)
   return (match ? match[0] : value).trim()

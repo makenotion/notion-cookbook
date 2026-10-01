@@ -400,3 +400,32 @@ button.tile:hover {
   border-radius: 50%;
   background: var(--red-60, red);
 }
+
+/* Profile links sit inside the person tile but outside its button, since
+   links cannot be nested in a button. */
+.person-card {
+  position: relative;
+}
+
+.person-card.has-links .tile {
+  padding-bottom: calc(var(--spacing-12) + 20px);
+}
+
+.tile-links {
+  position: absolute;
+  left: var(--spacing-12);
+  right: var(--spacing-12);
+  bottom: var(--spacing-12);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-12);
+  font-size: 12px;
+}
+
+.tile-links a {
+  color: var(--content-secondary);
+}
+
+.tile-links a:hover {
+  color: inherit;
+}

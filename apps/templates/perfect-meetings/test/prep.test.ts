@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest"
 
 import { pageIdFromEvent } from "../src/lib/notionIds.js"
+import { asPage } from "../src/lib/props.js"
 import { localDay, startsOnDay } from "../src/lib/time.js"
 import {
+  PROFILE_HEADING,
+  profileMarkdown,
   briefMarkdown,
   NOTES_HEADING,
   parseBrief,
@@ -11,6 +14,13 @@ import {
 } from "../src/workflows/lib/brief.js"
 import { isRuntimeSignal } from "../src/workflows/lib/runtime.js"
 import { shouldPrep, splitEmails } from "../src/workflows/lib/prep.js"
+
+const EMPTY_PROFILES = {
+  linkedin: null,
+  x: null,
+  instagram: null,
+  website: null,
+}
 
 const brief = {
   company: "Acme makes anvils.",
@@ -31,10 +41,90 @@ describe("parseBrief", () => {
       emails: "C",
       objective: "D",
       people: [
-        { email: "jane@acme.example", name: "", role: "CTO", roleSource: null },
+        {
+          email: "jane@acme.example",
+          name: "",
+          role: "CTO",
+          roleSource: null,
+          lowConfidence: false,
+          responsibilities: "",
+          interactions: "",
+          profiles: { linkedin: null, x: null, instagram: null, website: null },
+        },
       ],
       companies: [{ domain: "acme.example", name: "Acme", summary: "Anvils." }],
     })
+  })
+
+  it("reads profile fields and files each profile URL by its host", () => {
+    const person = (profiles: unknown) =>
+      parseBrief(
+        JSON.stringify({
+          company: "c",
+          people: [
+            {
+              email: "d@mintlify.example",
+              role: "Customer Success",
+              responsibilities: "Owns onboarding.",
+              interactions: "No recent email.",
+              profiles,
+            },
+          ],
+        })
+      ).people[0]
+    expect(
+      person({
+        linkedin: "[in](https://www.linkedin.com/in/d)",
+        x: "https://twitter.com/d",
+        instagram: "https://instagram.com/d",
+        website: "https://d.example",
+      })
+    ).toMatchObject({
+      responsibilities: "Owns onboarding.",
+      interactions: "No recent email.",
+      profiles: {
+        linkedin: "https://www.linkedin.com/in/d",
+        x: "https://twitter.com/d",
+        instagram: "https://instagram.com/d",
+        website: "https://d.example",
+      },
+    })
+    expect(
+      person({
+        linkedin: "https://x.com/d",
+        x: "@d",
+        website: "https://linkedin.com/in/d",
+      })?.profiles
+    ).toEqual(EMPTY_PROFILES)
+    expect(person(undefined)?.profiles).toEqual(EMPTY_PROFILES)
+  })
+
+  it("unwraps Markdown links around emails and domains", () => {
+    const brief = parseBrief(
+      JSON.stringify({
+        company: "c",
+        people: [
+          { email: "[d@mintlify.com](mailto:d@mintlify.com)", role: "" },
+        ],
+        companies: [{ domain: "[mintlify.com](http://mintlify.com)" }],
+      })
+    )
+    expect(brief.people[0]?.email).toBe("d@mintlify.com")
+    expect(brief.companies[0]?.domain).toBe("mintlify.com")
+  })
+
+  it("reads a person's confidence", () => {
+    const reply = (confidence: string) =>
+      parseBrief(
+        JSON.stringify({
+          company: "c",
+          people: [
+            { email: "d@mintlify.example", role: "Engineer", confidence },
+          ],
+        })
+      ).people[0]?.lowConfidence
+    expect(reply("low")).toBe(true)
+    expect(reply("high")).toBe(false)
   })
 
   it("rejects replies without a brief", () => {
@@ -194,5 +284,95 @@ describe("isRuntimeSignal", () => {
     expect(isRuntimeSignal(interrupt)).toBe(true)
     expect(isRuntimeSignal({ error: new Error("x") })).toBe(true)
     expect(isRuntimeSignal(new Error("real failure"))).toBe(false)
+  })
+})
+
+describe("profileMarkdown", () => {
+  const researched = {
+    email: "d@mintlify.example",
+    name: "Demarcus Lloyd",
+    role: "Customer Success",
+    roleSource: "https://linkedin.com/in/d",
+    lowConfidence: false,
+    responsibilities: "Owns onboarding.",
+    interactions: "You met twice about docs.",
+    profiles: { linkedin: null, x: null, instagram: null, website: null },
+  }
+  const input = {
+    researched,
+    lowConfidence: false,
+    meetings: [
+      {
+        title: "Docs [review]",
+        start: "2026-09-12T17:00:00Z",
+        url: "https://notion.example/m1",
+      },
+      { title: "Offsite", start: "2026-09-01", url: null },
+    ],
+    lookbackDays: 90,
+    timeZone: "America/Los_Angeles",
+  }
+
+  it("lists sections, meetings, and the role source", () => {
+    const markdown = profileMarkdown(input, "Sep 30, 2026, 1:00 PM")
+    expect(markdown.startsWith(PROFILE_HEADING)).toBe(true)
+    expect(markdown).toContain(
+      "Owns onboarding. ([source](https://linkedin.com/in/d))"
+    )
+    expect(markdown).toContain(
+      "- Sep 12, 2026 · [Docs \\[review\\]](https://notion.example/m1)"
+    )
+    expect(markdown).toContain("- Sep 1, 2026 · Offsite")
+    expect(markdown).toContain("You met twice about docs.")
+    expect(markdown).not.toContain("callout")
+  })
+
+  it("does not repeat a role source the text already cites", () => {
+    const markdown = profileMarkdown(
+      {
+        ...input,
+        researched: {
+          ...researched,
+          roleSource: "https://www.linkedin.com/in/d/",
+          responsibilities: "Owns onboarding. [1](https://linkedin.com/in/d)",
+        },
+      },
+      "now"
+    )
+    expect(markdown).not.toContain("[source]")
+  })
+
+  it("flags a low-confidence match", () => {
+    const markdown = profileMarkdown(
+      { ...input, lowConfidence: true, meetings: [] },
+      "now"
+    )
+    expect(markdown).toContain("<callout")
+    expect(markdown).toContain("_No meetings in the last 90 days._")
+  })
+
+  it("replaces only the profile section, keeping notes", () => {
+    const existing = `${PROFILE_HEADING}\nold\n---\n## Notes\nmine`
+    expect(planBodyEdit(existing, "new", PROFILE_HEADING)).toEqual({
+      type: "replace",
+      oldStr: `${PROFILE_HEADING}\nold\n---`,
+      newStr: "new",
+    })
+    expect(planBodyEdit("", "new", PROFILE_HEADING)).toEqual({
+      type: "insert",
+      content: "new\n## Notes\n",
+    })
+  })
+})
+
+describe("asPage", () => {
+  it("keeps the page URL for links", () => {
+    expect(
+      asPage({ object: "page", id: "p1", properties: {}, url: "https://n/p1" })
+    ).toEqual({ id: "p1", properties: {}, url: "https://n/p1" })
+    expect(asPage({ id: "p1", properties: {} })).toEqual({
+      id: "p1",
+      properties: {},
+    })
   })
 })

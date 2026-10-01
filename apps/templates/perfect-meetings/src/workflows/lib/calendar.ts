@@ -345,3 +345,65 @@ export function diagnoseListEvents(
     samples,
   }
 }
+
+/** A meeting that already happened with an attendee. */
+export type PastMeeting = {
+  eventId: string
+  title: string
+  start: string
+  calendarUrl: string | null
+}
+
+/**
+ * Past meetings with each of the given attendees, newest first and at most
+ * `limit` each. Only meetings that happened count: cancelled, declined, and
+ * auto-block events are left out, as are events that have not ended yet.
+ */
+export function pastMeetingsWith(
+  outputs: readonly ListEventsScriptOutput[],
+  emails: readonly string[],
+  now: number,
+  limit: number
+): Record<string, PastMeeting[]> {
+  const wanted = new Set(emails.map(normalizeEmail))
+  const byEmail = new Map<string, Map<string, PastMeeting>>()
+  for (const output of outputs) {
+    const account = pickBusinessAccount(output.accounts)
+    for (const calendar of account?.calendars ?? []) {
+      if (calendar.isHidden) continue
+      for (const event of calendar.events) {
+        if (
+          event.isAutoBlock ||
+          event.eventStatus === "cancelled" ||
+          event.responseStatus === "declined"
+        )
+          continue
+        const period = event.period
+        const start =
+          period.type === "DATE" ? period.start.date : period.start.dateTime
+        const end =
+          period.type === "DATE" ? period.end.date : period.end.dateTime
+        if (!(Date.parse(end) <= now)) continue
+        for (const attendee of event.attendees ?? []) {
+          const email = attendee.email ? normalizeEmail(attendee.email) : ""
+          if (!wanted.has(email)) continue
+          const meetings = byEmail.get(email) ?? new Map<string, PastMeeting>()
+          meetings.set(event.eventId, {
+            eventId: event.eventId,
+            title: event.summary?.trim() || "Untitled meeting",
+            start,
+            calendarUrl: event.webUrl || null,
+          })
+          byEmail.set(email, meetings)
+        }
+      }
+    }
+  }
+  const result: Record<string, PastMeeting[]> = {}
+  for (const email of wanted) {
+    result[email] = [...(byEmail.get(email)?.values() ?? [])]
+      .sort((a, b) => Date.parse(b.start) - Date.parse(a.start))
+      .slice(0, limit)
+  }
+  return result
+}

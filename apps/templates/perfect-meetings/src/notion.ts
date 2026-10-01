@@ -21,6 +21,13 @@ export const PREP_STATUS = {
   failed: "Failed",
 } as const
 
+// How sure the researcher is that the name and role it found belong to this
+// person. Empty until research finds a match.
+export const CONFIDENCE = {
+  high: "High",
+  low: "Low",
+} as const
+
 export const MEETING_STATUS = {
   scheduled: "Scheduled",
   cancelled: "Cancelled",
@@ -60,6 +67,22 @@ export const people = database("people-db", {
     // Join key to Companies.Domain; empty for personal mailboxes.
     "Company domain": { resourceId: "person-company-domain", type: "text" },
     Photo: { resourceId: "person-photo", type: "url" },
+    // Public profiles. The researcher fills in only the ones that are empty.
+    LinkedIn: { resourceId: "person-linkedin", type: "url" },
+    X: { resourceId: "person-x", type: "url" },
+    Instagram: { resourceId: "person-instagram", type: "url" },
+    "Personal site": { resourceId: "person-site", type: "url" },
+    // Low means the match was partial (such as a first name at the right
+    // company) and may be replaced by a later match. Set it to High to keep
+    // a name and role.
+    Confidence: {
+      resourceId: "person-confidence",
+      type: "select",
+      options: [
+        { name: CONFIDENCE.high, color: "green" },
+        { name: CONFIDENCE.low, color: "orange" },
+      ],
+    },
   },
   views: [
     {
@@ -227,11 +250,17 @@ export const researcher = customAgent({
   name: "Meeting researcher",
   icon: { type: "emoji", emoji: "🔎" },
   webAccess: true,
-  instructions: `You write concise pre-meeting briefs. Each request gives you a meeting (title, time, agenda text), its outside attendees (name, email, company), and one-line summaries of recent email threads with them.
+  instructions: `You write concise pre-meeting briefs and short profiles of the people in them. Each request gives you a meeting (title, time, agenda text), its outside attendees (name, email, company, and past meetings with them), and one-line summaries of recent email threads with them.
 
-Research every attendee, not just a few: run at least one web search per attendee using their full name plus their company name, for example "Jane Doe Acme LinkedIn". Search result titles and snippets count as evidence even when the page itself (such as a LinkedIn profile) cannot be opened; a snippet like "Jane Doe - Engineering Lead - Acme" is enough for a role. When the name is marked unknown, search the email address and company instead. Also search what each company does.
+Research every attendee, not just a few: run at least one web search per attendee using their full name plus their company name, for example "Jane Doe Acme LinkedIn". Search result titles and snippets count as evidence even when the page itself (such as a LinkedIn, ZoomInfo, or RocketReach profile) cannot be opened; a snippet like "Jane Doe - Engineering Lead - Acme" is enough for a role. Also search what each company does.
 
-Base the email summary only on the supplied thread summaries and never invent correspondence. If there are none, say that there is no recent email history.
+When an attendee's full name is unknown, their email handle is usually a first name, a first initial and surname, or both. Try these searches in order, stopping once you find them, and run at least two before giving up: the handle as a name plus the company name and "LinkedIn" (for example "Demarcus Mintlify LinkedIn"); the handle plus the company name without "LinkedIn", which also finds ZoomInfo and RocketReach pages; then the full email address in quotes.
+
+Mark a person "high" confidence when the evidence ties their full name, or their email address, to the company. When the only match is on part of the name, such as a first name that matches the handle at the right company, still report that person, but mark them "low" confidence. An attendee listed with an unconfirmed name or a low-confidence role was matched that way before: check it again and mark it "high" only if you now find stronger evidence.
+
+For each attendee you identify, also find their public profiles: LinkedIn, X (Twitter), Instagram, and a personal website. An attendee line lists any profiles already known; do not search for those again. The email handle is often also their X or Instagram handle, so try it, for example "wustep site:x.com". Report a profile only when its name, photo caption, bio, or linked site ties it to this person and company.
+
+Base the email summaries only on the supplied thread summaries, and the meeting history only on the supplied past meetings; never invent correspondence or meetings. If there are none, say that there is no recent email or meeting history.
 
 Reply with only one JSON object and no other text:
 {
@@ -239,9 +268,9 @@ Reply with only one JSON object and no other text:
   "role": "One paragraph (3-4 sentences max) on each attendee's role and responsibilities and what they likely care about.",
   "emails": "One paragraph (3-4 sentences max) summarising recent email interactions: topics, commitments, open questions.",
   "objective": "One paragraph (3-4 sentences max) on the likely objective of the meeting and a suggested agenda.",
-  "people": [{ "email": "attendee email", "name": "Full name, e.g. Jane Doe", "role": "Short job title, e.g. VP Engineering", "roleSource": "URL of the page or search result the role came from" }],
+  "people": [{ "email": "attendee email", "name": "Full name, e.g. Jane Doe", "role": "Short job title, e.g. VP Engineering", "roleSource": "URL of the page or search result the role came from", "confidence": "high or low", "responsibilities": "2-3 sentences on what this person is responsible for and what they likely care about", "interactions": "2-3 sentences summarising recent meetings and email with this person: topics, commitments, open questions", "profiles": { "linkedin": "profile URL", "x": "profile URL", "instagram": "profile URL", "website": "personal site URL" } }],
   "companies": [{ "domain": "example.com", "name": "Proper company name", "summary": "One sentence on what the company does." }]
 }
 
-Include every attendee in "people". Give a full name only when you are confident it belongs to that email address, and use an empty string otherwise. Use an empty string for an unknown role and its roleSource. In "companies", use each domain exactly as it appears in the attendee list, and omit a company you could not identify.`,
+Include every attendee in "people". Give a full name when it is a high- or low-confidence match as described above, and use an empty string when you found no match. Use an empty string for an unknown role and its roleSource, and for responsibilities you could not find. In "profiles", include only profiles you found, and leave out ones already known. In "companies", use each domain exactly as it appears in the attendee list, and omit a company you could not identify.`,
 })

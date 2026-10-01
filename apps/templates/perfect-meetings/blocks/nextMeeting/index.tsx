@@ -1,7 +1,15 @@
 import React from "react"
 import { createRoot } from "react-dom/client"
-import { pages, type NotionDataSourcePage, type NotionPageId } from "@notionhq/apps/custom-blocks"
-import { NotionCustomBlock, NotionTokenScope, useDataSource } from "@notionhq/apps/react"
+import {
+  pages,
+  type NotionDataSourcePage,
+  type NotionPageId,
+} from "@notionhq/apps/custom-blocks"
+import {
+  NotionCustomBlock,
+  NotionTokenScope,
+  useDataSource,
+} from "@notionhq/apps/react"
 import "@notionhq/apps/nds.css"
 import "./style.css"
 
@@ -11,6 +19,8 @@ import {
   groupByCompany,
   layoutDay,
   pickMeeting,
+  profileLinks,
+  roleLabel,
   sortByStart,
   splitEmails,
   text,
@@ -41,9 +51,15 @@ function useNow(): number {
 function useViewState(): [ViewState, (next: ViewState) => void] {
   const [state, setState] = React.useState<ViewState>(() => {
     try {
-      const stored = JSON.parse(window.localStorage.getItem(STATE_KEY) ?? "null") as Partial<ViewState> | null
+      const stored = JSON.parse(
+        window.localStorage.getItem(STATE_KEY) ?? "null"
+      ) as Partial<ViewState> | null
       if (stored?.mode === "next" || stored?.mode === "day")
-        return { mode: stored.mode, selectedId: typeof stored.selectedId === "string" ? stored.selectedId : null }
+        return {
+          mode: stored.mode,
+          selectedId:
+            typeof stored.selectedId === "string" ? stored.selectedId : null,
+        }
     } catch {
       // Fall through to the default.
     }
@@ -60,13 +76,29 @@ function useViewState(): [ViewState, (next: ViewState) => void] {
   return [state, update]
 }
 
-function byKey(rows: readonly NotionDataSourcePage[], key: string): Map<string, NotionDataSourcePage> {
-  return new Map(rows.map((row) => [text(row.propertiesByKey[key]).trim().toLowerCase(), row]))
+function byKey(
+  rows: readonly NotionDataSourcePage[],
+  key: string
+): Map<string, NotionDataSourcePage> {
+  return new Map(
+    rows.map((row) => [
+      text(row.propertiesByKey[key]).trim().toLowerCase(),
+      row,
+    ])
+  )
 }
 
-const formatTime = (ms: number) => new Date(ms).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
+const formatTime = (ms: number) =>
+  new Date(ms).toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  })
 const formatDay = (ms: number) =>
-  new Date(ms).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })
+  new Date(ms).toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  })
 
 function formatWhen(startMs: number, endMs: number, allDay: boolean): string {
   if (allDay) return `${formatDay(startMs)} · All day`
@@ -99,12 +131,25 @@ function initials(name: string): string {
 }
 
 /** A photo when one is stored and loads; initials otherwise. */
-function Avatar({ label, photo, size = "large" }: { label: string; photo: string; size?: "large" | "small" }) {
+function Avatar({
+  label,
+  photo,
+  size = "large",
+}: {
+  label: string
+  photo: string
+  size?: "large" | "small"
+}) {
   const [failed, setFailed] = React.useState(false)
   return (
     <span className={`avatar avatar-${size}`} title={label}>
       {photo && !failed ? (
-        <img src={photo} alt="" referrerPolicy="no-referrer" onError={() => setFailed(true)} />
+        <img
+          src={photo}
+          alt=""
+          referrerPolicy="no-referrer"
+          onError={() => setFailed(true)}
+        />
       ) : (
         initials(label)
       )}
@@ -112,24 +157,50 @@ function Avatar({ label, photo, size = "large" }: { label: string; photo: string
   )
 }
 
-const openPeek = (id: NotionPageId) => void pages.open(id, { mode: "side_peek" })
+const openPeek = (id: NotionPageId) =>
+  void pages.open(id, { mode: "side_peek" })
 
 function PersonCard({ person }: { person: NotionDataSourcePage }) {
   const name = text(person.propertiesByKey.Name)
   const email = text(person.propertiesByKey.Email)
   const role = text(person.propertiesByKey.Role)
   const source = hostname(text(person.propertiesByKey["Role source"]))
+  const links = profileLinks(person.propertiesByKey)
   return (
-    <li>
-      <button type="button" className="tile person" title="Open person" onClick={() => openPeek(person.id)}>
-        <Avatar label={name || email} photo={text(person.propertiesByKey.Photo)} />
+    <li className={links.length > 0 ? "person-card has-links" : "person-card"}>
+      <button
+        type="button"
+        className="tile person"
+        title="Open person"
+        onClick={() => openPeek(person.id)}
+      >
+        <Avatar
+          label={name || email}
+          photo={text(person.propertiesByKey.Photo)}
+        />
         <span className="tile-body">
           <span className="tile-title">{name || email}</span>
-          <span className="tile-subtitle">{role || "Role not found yet"}</span>
+          <span className="tile-subtitle">
+            {roleLabel(role, text(person.propertiesByKey.Confidence))}
+          </span>
           {name && <span className="tile-detail">{email}</span>}
           {source && <span className="tile-detail">Role from {source}</span>}
         </span>
       </button>
+      {links.length > 0 && (
+        <span className="tile-links">
+          {links.map((link) => (
+            <a
+              key={link.label}
+              href={link.url}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {link.label}
+            </a>
+          ))}
+        </span>
+      )}
     </li>
   )
 }
@@ -154,8 +225,17 @@ function CompanyCard({
         <span className="tile-summary">{summary || "Research pending."}</span>
         <span className="stack">
           {attendees.map((person) => {
-            const label = text(person.propertiesByKey.Name) || text(person.propertiesByKey.Email)
-            return <Avatar key={person.id} label={label} photo={text(person.propertiesByKey.Photo)} size="small" />
+            const label =
+              text(person.propertiesByKey.Name) ||
+              text(person.propertiesByKey.Email)
+            return (
+              <Avatar
+                key={person.id}
+                label={label}
+                photo={text(person.propertiesByKey.Photo)}
+                size="small"
+              />
+            )
           })}
           <span className="tile-detail">
             {attendees.length} attendee{attendees.length === 1 ? "" : "s"}
@@ -167,7 +247,12 @@ function CompanyCard({
   return (
     <li>
       {company ? (
-        <button type="button" className="tile company" title="Open company" onClick={() => openPeek(company.id)}>
+        <button
+          type="button"
+          className="tile company"
+          title="Open company"
+          onClick={() => openPeek(company.id)}
+        >
           {body}
         </button>
       ) : (
@@ -190,10 +275,12 @@ function MeetingCards({
   companies: Map<string, NotionDataSourcePage>
 }) {
   const { row, startMs, endMs, allDay } = meeting
-  const attendees = splitEmails(text(row.propertiesByKey["Attendee emails"])).flatMap(
-    (email) => people.get(email) ?? [],
+  const attendees = splitEmails(
+    text(row.propertiesByKey["Attendee emails"])
+  ).flatMap((email) => people.get(email) ?? [])
+  const groups = groupByCompany(attendees, (person) =>
+    text(person.propertiesByKey["Company domain"])
   )
-  const groups = groupByCompany(attendees, (person) => text(person.propertiesByKey["Company domain"]))
   const status = text(row.propertiesByKey["Prep status"])
 
   return (
@@ -201,12 +288,22 @@ function MeetingCards({
       <header className="header">
         <div>
           <div className="eyebrow">{eyebrow}</div>
-          <h2 className="title">{text(row.propertiesByKey.Title) || "Untitled meeting"}</h2>
+          <h2 className="title">
+            {text(row.propertiesByKey.Title) || "Untitled meeting"}
+          </h2>
           <div className="muted">{formatWhen(startMs, endMs, allDay)}</div>
         </div>
         <div className="actions">
-          {status && <span className={`pill pill-${status.toLowerCase()}`}>Prep {status.toLowerCase()}</span>}
-          <button type="button" className="button" onClick={() => void pages.open(row.id, { mode: "center_peek" })}>
+          {status && (
+            <span className={`pill pill-${status.toLowerCase()}`}>
+              Prep {status.toLowerCase()}
+            </span>
+          )}
+          <button
+            type="button"
+            className="button"
+            onClick={() => void pages.open(row.id, { mode: "center_peek" })}
+          >
             Open prep
           </button>
         </div>
@@ -246,7 +343,9 @@ function MeetingCards({
 }
 
 function hourLabel(hour: number): string {
-  return new Date(2000, 0, 1, hour).toLocaleTimeString(undefined, { hour: "numeric" })
+  return new Date(2000, 0, 1, hour).toLocaleTimeString(undefined, {
+    hour: "numeric",
+  })
 }
 
 /** Today as a single calendar day, with the current or next meeting highlighted. */
@@ -271,12 +370,17 @@ function DayView({
   const highlighted = timed.find((event) => event.row.id === highlightId)
   const anchorMs = highlighted?.topMs ?? now
   React.useEffect(() => {
-    if (scroller.current) scroller.current.scrollTop = Math.max(0, px(anchorMs) - HOUR_PX)
+    if (scroller.current)
+      scroller.current.scrollTop = Math.max(0, px(anchorMs) - HOUR_PX)
     // Only on mount and when the day changes.
   }, [day.startMs])
 
   const className = (event: { row: NotionDataSourcePage; endMs: number }) =>
-    ["event", event.row.id === highlightId && "event-highlight", event.endMs <= now && "event-past"]
+    [
+      "event",
+      event.row.id === highlightId && "event-highlight",
+      event.endMs <= now && "event-past",
+    ]
       .filter(Boolean)
       .join(" ")
 
@@ -299,8 +403,15 @@ function DayView({
           <span className="gutter-label">All day</span>
           <div className="all-day-events">
             {allDay.map((event) => (
-              <button key={event.row.id} type="button" className={className(event)} onClick={() => onSelect(event.row.id)}>
-                <span className="event-title">{text(event.row.propertiesByKey.Title) || "Untitled meeting"}</span>
+              <button
+                key={event.row.id}
+                type="button"
+                className={className(event)}
+                onClick={() => onSelect(event.row.id)}
+              >
+                <span className="event-title">
+                  {text(event.row.propertiesByKey.Title) || "Untitled meeting"}
+                </span>
               </button>
             ))}
           </div>
@@ -311,13 +422,16 @@ function DayView({
         <div className="timeline-inner" style={{ height: hours * HOUR_PX }}>
           {Array.from({ length: hours }, (_, hour) => (
             <div key={hour} className="hour" style={{ top: hour * HOUR_PX }}>
-              {hour > 0 && <span className="gutter-label">{hourLabel(hour)}</span>}
+              {hour > 0 && (
+                <span className="gutter-label">{hourLabel(hour)}</span>
+              )}
             </div>
           ))}
           <div className="events">
             {timed.map((event: DayEvent) => {
               const height = px(event.bottomMs) - px(event.topMs)
-              const title = text(event.row.propertiesByKey.Title) || "Untitled meeting"
+              const title =
+                text(event.row.propertiesByKey.Title) || "Untitled meeting"
               const time = `${formatTime(event.startMs)} – ${formatTime(event.endMs)}`
               return (
                 <button
@@ -334,11 +448,15 @@ function DayView({
                   onClick={() => onSelect(event.row.id)}
                 >
                   <span className="event-title">{title}</span>
-                  <span className="event-time">{height < 40 ? formatTime(event.startMs) : time}</span>
+                  <span className="event-time">
+                    {height < 40 ? formatTime(event.startMs) : time}
+                  </span>
                 </button>
               )
             })}
-            {now >= day.startMs && now < day.endMs && <div className="now" style={{ top: px(now) }} />}
+            {now >= day.startMs && now < day.endMs && (
+              <div className="now" style={{ top: px(now) }} />
+            )}
           </div>
         </div>
       </div>
@@ -346,7 +464,13 @@ function DayView({
   )
 }
 
-function Toolbar({ view, onChange }: { view: ViewState; onChange: (next: ViewState) => void }) {
+function Toolbar({
+  view,
+  onChange,
+}: {
+  view: ViewState
+  onChange: (next: ViewState) => void
+}) {
   const tab = (mode: Mode, label: string) => (
     <button
       type="button"
@@ -391,12 +515,17 @@ function MeetingsBlock() {
     const start = Math.min(dayBounds(now).startMs, now - LOOKBACK_MS)
     return new Date(Math.floor(start / HOUR_MS) * HOUR_MS).toISOString()
   }, [hour])
-  const notCancelled = { key: "Status", select: { does_not_equal: "Cancelled" } } as const
+  const notCancelled = {
+    key: "Status",
+    select: { does_not_equal: "Cancelled" },
+  } as const
   // Date filters compare start dates only, so a multi-day event that began
   // before the cutoff needs its own query: the latest-starting earlier events.
   const upcoming = useDataSource("meetings", {
     limit: 50,
-    filter: { and: [{ key: "When", date: { on_or_after: cutoff } }, notCancelled] },
+    filter: {
+      and: [{ key: "When", date: { on_or_after: cutoff } }, notCancelled],
+    },
     sorts: [{ key: "When", direction: "ascending" }],
   })
   const earlier = useDataSource("meetings", {
@@ -408,25 +537,37 @@ function MeetingsBlock() {
   const people = useDataSource("people", { limit: 999 })
   const companies = useDataSource("companies", { limit: 999 })
 
-  const error = upcoming.error ?? earlier.error ?? people.error ?? companies.error
-  const loading = (upcoming.isLoading || earlier.isLoading) && meetings.length === 0
+  const error =
+    upcoming.error ?? earlier.error ?? people.error ?? companies.error
+  const loading =
+    (upcoming.isLoading || earlier.isLoading) && meetings.length === 0
   const picked = pickMeeting(meetings, now)
   const peopleByEmail = byKey(people.items, "Email")
   const companiesByDomain = byKey(companies.items, "Domain")
 
   let content: React.ReactNode
   if (error) {
-    content = <div className="muted" role="alert">Couldn't load meetings: {error.message}</div>
+    content = (
+      <div className="muted" role="alert">
+        Couldn't load meetings: {error.message}
+      </div>
+    )
   } else if (loading) {
     content = <div className="muted">Loading…</div>
   } else if (view.mode === "day") {
-    const selected = view.selectedId ? meetings.find((row) => row.id === view.selectedId) : undefined
+    const selected = view.selectedId
+      ? meetings.find((row) => row.id === view.selectedId)
+      : undefined
     const range = selected && dateRange(selected.propertiesByKey.When)
     content =
       selected && range ? (
         <MeetingCards
           meeting={{ row: selected, ...range }}
-          eyebrow={selected.id === picked?.row.id ? relative(range.startMs, range.endMs, now) || "Next meeting" : "Meeting"}
+          eyebrow={
+            selected.id === picked?.row.id
+              ? relative(range.startMs, range.endMs, now) || "Next meeting"
+              : "Meeting"
+          }
           people={peopleByEmail}
           companies={companiesByDomain}
         />
@@ -448,7 +589,9 @@ function MeetingsBlock() {
       />
     )
   } else {
-    content = <div className="muted">No upcoming meetings with outside attendees.</div>
+    content = (
+      <div className="muted">No upcoming meetings with outside attendees.</div>
+    )
   }
 
   return (
@@ -466,5 +609,5 @@ createRoot(root).render(
     <NotionTokenScope>
       <MeetingsBlock />
     </NotionTokenScope>
-  </NotionCustomBlock>,
+  </NotionCustomBlock>
 )

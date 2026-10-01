@@ -16,12 +16,22 @@ import {
   asPage,
   findOne,
   prop,
+  queryAll,
   read,
   type Notion,
   type PropertyMap,
 } from "../../lib/props.js"
-import { MEETING_STATUS, PREP_STATUS } from "../../notion.js"
-import { briefMarkdown, parseBrief, planBodyEdit, type Brief } from "./brief.js"
+import { CONFIDENCE, MEETING_STATUS, PREP_STATUS } from "../../notion.js"
+import {
+  PREP_HEADING,
+  PROFILE_HEADING,
+  briefMarkdown,
+  parseBrief,
+  planBodyEdit,
+  profileMarkdown,
+  type Brief,
+  type Profiles,
+} from "./brief.js"
 import {
   emailLines,
   parseThreads,
@@ -29,7 +39,13 @@ import {
   senderName,
   type EmailThread,
 } from "./email.js"
-import { pickBusinessAccount, truncate } from "./calendar.js"
+import {
+  pastMeetingsWith,
+  pickBusinessAccount,
+  truncate,
+  type ListEventsScriptOutput,
+  type PastMeeting,
+} from "./calendar.js"
 import { contactsByEmail, type ContactInfo, type Contacts } from "./ingest.js"
 import { isRuntimeSignal } from "./runtime.js"
 
@@ -78,7 +94,20 @@ export type Attendee = {
   role: string
   photo: string | null
   companyDomain: string | null
+  /** The People Confidence status, or null before research finds a match. */
+  confidence: string | null
+  profiles: Profiles
 }
+
+/** The People property that stores each profile URL. */
+export const PROFILE_PROPERTIES = {
+  linkedin: "LinkedIn",
+  x: "X",
+  instagram: "Instagram",
+  website: "Personal site",
+} as const satisfies Record<keyof Profiles, string>
+
+const PROFILE_KEYS = Object.keys(PROFILE_PROPERTIES) as Array<keyof Profiles>
 export type Company = {
   id: string
   name: string
@@ -106,19 +135,33 @@ export function shouldPrep(
   }
 }
 
-export type PrepTargets = { agentId: string; people: string; companies: string }
+export type PrepTargets = {
+  agentId: string
+  meetings: string
+  people: string
+  companies: string
+}
 
 export function prepTargets(access: {
   researcher: { id: string }
+  meetings: { id: string }
   people: { id: string }
   companies: { id: string }
 }): PrepTargets {
   return {
     agentId: access.researcher.id,
+    meetings: access.meetings.id,
     people: access.people.id,
     companies: access.companies.id,
   }
 }
+
+// People pages list meetings from this far back, at most this many.
+const HISTORY_DAYS = 90
+const HISTORY_MEETINGS = 10
+// The Calendar connection lists at most a month per call.
+const LIST_EVENTS_DAYS = 30
+const DAY_MS = 24 * 60 * 60 * 1000
 
 export async function runPrep(
   context: PrepContext,
@@ -209,6 +252,39 @@ export async function runPrep(
       )
     }
 
+    // Best effort: without calendar history, profiles say there were no
+    // meetings and prep continues.
+    const history = await step(
+      "Find past meetings",
+      key("past-meetings"),
+      async () => {
+        const emails = attendees.map((attendee) => attendee.email)
+        if (emails.length === 0) return {}
+        try {
+          const now = Date.now()
+          const outputs: ListEventsScriptOutput[] = []
+          for (
+            let end = now;
+            end > now - HISTORY_DAYS * DAY_MS;
+            end -= LIST_EVENTS_DAYS * DAY_MS
+          ) {
+            const output = await context.connections.calendar.listEvents({
+              timeMin: new Date(end - LIST_EVENTS_DAYS * DAY_MS).toISOString(),
+              timeMax: new Date(end).toISOString(),
+              timeZone: TIME_ZONE,
+            })
+            outputs.push(output as ListEventsScriptOutput)
+          }
+          return pastMeetingsWith(outputs, emails, now, HISTORY_MEETINGS)
+        } catch (error) {
+          console.warn(
+            `Past meeting lookup failed: ${(error as Error).message}`
+          )
+          return {} as Record<string, PastMeeting[]>
+        }
+      }
+    )
+
     const sessionId = await step(
       "Start research",
       key("start-research"),
@@ -219,7 +295,8 @@ export async function runPrep(
             meeting,
             withKnownNames(attendees, contacts, excerpts),
             companies,
-            excerpts
+            excerpts,
+            history
           ),
         })
         return session.id
@@ -252,7 +329,12 @@ export async function runPrep(
     const brief = parseBrief(reply)
 
     await step("Write brief", key("write-brief"), () =>
-      writeBrief(notion, meetingPageId, brief)
+      writeSection(
+        notion,
+        meetingPageId,
+        briefMarkdown(brief, updatedLabel()),
+        PREP_HEADING
+      )
     )
 
     for (const attendee of attendees) {
@@ -270,6 +352,51 @@ export async function runPrep(
         )
       }
     }
+    const meetingUrls = await step(
+      "Link past meetings",
+      key("meeting-links"),
+      () =>
+        meetingPageUrls(
+          notion,
+          targets.meetings,
+          Object.values(history).flat()
+        ).catch((error: unknown) => {
+          console.warn(
+            `Meeting link lookup failed: ${(error as Error).message}`
+          )
+          return {} as Record<string, string>
+        })
+    )
+    for (const attendee of attendees) {
+      const researched = acceptedMatch(attendee, brief)
+      const markdown = profileMarkdown(
+        {
+          researched,
+          lowConfidence: researched?.lowConfidence ?? false,
+          meetings: (history[attendee.email] ?? []).map((meeting) => ({
+            title: meeting.title,
+            start: meeting.start,
+            url: meetingUrls[meeting.eventId] ?? meeting.calendarUrl,
+          })),
+          lookbackDays: HISTORY_DAYS,
+          timeZone: TIME_ZONE,
+        },
+        updatedLabel()
+      )
+      // A profile that fails to write does not fail the brief.
+      await step("Write profile", key("profile", attendee.id), () =>
+        writeSection(notion, attendee.id, markdown, PROFILE_HEADING).catch(
+          (error: unknown) => {
+            if (isRuntimeSignal(error)) throw error
+            console.warn(
+              `Profile write failed for a person: ${(error as Error).message}`
+            )
+            return null
+          }
+        )
+      )
+    }
+
     for (const company of companies) {
       const found = matchCompany(company, companies.length, brief)
       const properties: PropertyMap = {}
@@ -320,9 +447,31 @@ export async function runPrep(
 }
 
 /**
- * Role, name, and photo updates for a person. A name replaces only the
- * email-derived placeholder, preferring contacts, then the attendee's own
- * email sender name, then the agent's guess.
+ * The researcher's match for an attendee, if it found one that may be used: a
+ * low-confidence match never overrides a person marked High.
+ */
+export function acceptedMatch(
+  attendee: Pick<Attendee, "email" | "confidence">,
+  brief: Pick<Brief, "people">
+): Brief["people"][number] | undefined {
+  const found = brief.people.find((person) => person.email === attendee.email)
+  const hasProfile = Object.values(found?.profiles ?? {}).some(Boolean)
+  if (
+    !found ||
+    !(found.role || found.name || found.responsibilities || hasProfile)
+  )
+    return undefined
+  if (attendee.confidence === CONFIDENCE.high && found.lowConfidence)
+    return undefined
+  return found
+}
+
+/**
+ * Role, name, photo, and confidence updates for a person. A name replaces
+ * only the email-derived placeholder, preferring contacts, then the attendee's
+ * own email sender name, then the agent's guess. A low-confidence match is
+ * still saved, marked Low; a later match may replace it, but a Low match never
+ * replaces a High one.
  */
 export function personUpdates(
   attendee: Attendee,
@@ -333,23 +482,45 @@ export function personUpdates(
   const properties: PropertyMap = {}
   if (contact?.photoUrl && !attendee.photo)
     properties.Photo = prop.url(contact.photoUrl)
-  const researched = brief.people.find(
-    (person) => person.email === attendee.email
-  )
-  if (researched?.role && !attendee.role) {
+  const researched = acceptedMatch(attendee, brief)
+  const confidence = researched?.lowConfidence
+    ? CONFIDENCE.low
+    : CONFIDENCE.high
+  const replaceable = attendee.confidence === CONFIDENCE.low
+  if (
+    researched?.role &&
+    (!attendee.role || replaceable) &&
+    researched.role !== attendee.role
+  ) {
     properties.Role = prop.text(researched.role)
     if (researched.roleSource)
       properties["Role source"] = prop.url(researched.roleSource)
   }
-  if (isPlaceholderName(attendee.name, attendee.email)) {
-    const name = bestName(
-      attendee.email,
-      contact?.name,
-      senderName(threads, attendee.email),
-      researched?.name
-    )
-    if (name) properties.Name = prop.title(name)
+  for (const key of PROFILE_KEYS) {
+    const url = researched?.profiles[key]
+    const stored = attendee.profiles[key]
+    if (url && (!stored || replaceable) && url !== stored)
+      properties[PROFILE_PROPERTIES[key]] = prop.url(url)
   }
+  // Contacts and email sender names are not research; they win over it.
+  const known = bestName(
+    attendee.email,
+    contact?.name,
+    senderName(threads, attendee.email)
+  )
+  if (replaceable || isPlaceholderName(attendee.name, attendee.email)) {
+    const name = known ?? bestName(attendee.email, researched?.name)
+    if (name && name !== attendee.name) properties.Name = prop.title(name)
+  }
+  // Confidence describes the researcher's match, so it changes only when the
+  // match's name or role is saved, or the match confirms the saved role.
+  const usedMatch =
+    properties.Role !== undefined ||
+    PROFILE_KEYS.some((key) => properties[PROFILE_PROPERTIES[key]]) ||
+    (properties.Name !== undefined && !known) ||
+    (researched?.role !== undefined && researched.role === attendee.role)
+  if (usedMatch && attendee.confidence !== confidence)
+    properties.Confidence = prop.select(confidence)
   return properties
 }
 
@@ -394,6 +565,13 @@ async function loadAttendees(
       role: read.text(page.properties, "Role"),
       photo: read.url(page.properties, "Photo"),
       companyDomain: domain || null,
+      confidence: read.select(page.properties, "Confidence"),
+      profiles: {
+        linkedin: read.url(page.properties, PROFILE_PROPERTIES.linkedin),
+        x: read.url(page.properties, PROFILE_PROPERTIES.x),
+        instagram: read.url(page.properties, PROFILE_PROPERTIES.instagram),
+        website: read.url(page.properties, PROFILE_PROPERTIES.website),
+      },
     })
   }
   const companies: Company[] = []
@@ -445,6 +623,9 @@ async function searchEmail(
   return relevantThreads(threads, email, mailbox)
 }
 
+// Past meetings listed per attendee in the prompt; the People page lists more.
+const PROMPT_PAST_MEETINGS = 5
+
 // The sessions API rejects messages over 10,000 characters.
 export const MAX_PROMPT_CHARS = 9500
 const MAX_AGENDA_CHARS = 1500
@@ -471,7 +652,8 @@ export function researchPrompt(
   meeting: Pick<MeetingSnapshot, "title" | "start" | "end" | "agenda">,
   attendees: readonly Attendee[],
   companies: readonly Company[],
-  threadsByAttendee: Record<string, readonly EmailThread[]>
+  threadsByAttendee: Record<string, readonly EmailThread[]>,
+  pastMeetings: Record<string, readonly PastMeeting[]> = {}
 ): string {
   const companyByDomain = new Map(
     companies.map((company) => [company.domain, company])
@@ -481,16 +663,42 @@ export function researchPrompt(
       const company = attendee.companyDomain
         ? companyByDomain.get(attendee.companyDomain)
         : undefined
-      // Placeholders derived from the email would mislead web searches.
+      // Placeholders derived from the email are not stated as facts, but are
+      // passed as hints: the handle is often a first name to search with.
       const where = !company
         ? "personal email address"
         : company.name === companyNameFromDomain(company.domain)
-          ? `company at ${company.domain} (name unknown)`
+          ? `company at ${company.domain} (name unconfirmed, likely "${company.name}")`
           : `${company.name} (${company.domain})`
+      const handle = attendee.email.split("@")[0] ?? ""
+      const low = attendee.confidence === CONFIDENCE.low
       const name = isPlaceholderName(attendee.name, attendee.email)
-        ? "(full name unknown)"
-        : attendee.name
-      return `- ${name} <${attendee.email}>, ${where}${attendee.role ? `, known role: ${attendee.role}` : ""}`
+        ? `(full name unknown; email handle "${handle}")`
+        : low
+          ? `${attendee.name} (unconfirmed; email handle "${handle}")`
+          : attendee.name
+      const role = !attendee.role
+        ? ""
+        : low
+          ? `, low-confidence role: ${attendee.role}`
+          : `, known role: ${attendee.role}`
+      const past = (pastMeetings[attendee.email] ?? []).slice(
+        0,
+        PROMPT_PAST_MEETINGS
+      )
+      const history =
+        past.length === 0
+          ? ""
+          : `\n  Past meetings: ${past
+              .map(
+                (meeting) =>
+                  `${meeting.start.slice(0, 10)} "${truncate(meeting.title, 80)}"`
+              )
+              .join("; ")}`
+      const known = PROFILE_KEYS.flatMap((key) => attendee.profiles[key] ?? [])
+      const profiles =
+        known.length === 0 ? "" : `\n  Known profiles: ${known.join(", ")}`
+      return `- ${name} <${attendee.email}>, ${where}${role}${profiles}${history}`
     })
     .join("\n")
   const head = `Write the pre-meeting brief for this meeting. Reply with the JSON object described in your instructions.
@@ -560,19 +768,23 @@ async function lastAgentMessage(
   return text
 }
 
-async function writeBrief(
-  notion: Notion,
-  pageId: string,
-  brief: Brief
-): Promise<null> {
-  const updated = new Date().toLocaleString("en-US", {
+function updatedLabel(): string {
+  return new Date().toLocaleString("en-US", {
     timeZone: TIME_ZONE,
     dateStyle: "medium",
     timeStyle: "short",
   })
-  const markdown = briefMarkdown(brief, updated)
+}
+
+/** Replace or insert a managed section at the top of a page body. */
+async function writeSection(
+  notion: Notion,
+  pageId: string,
+  markdown: string,
+  heading: string
+): Promise<null> {
   const current = await notion.pages.retrieveMarkdown({ page_id: pageId })
-  const edit = planBodyEdit(current.markdown, markdown)
+  const edit = planBodyEdit(current.markdown, markdown, heading)
   if (edit.type === "replace") {
     await notion.pages.updateMarkdown({
       page_id: pageId,
@@ -590,4 +802,33 @@ async function writeBrief(
     })
   }
   return null
+}
+
+/** Meetings page URLs by calendar event ID, for the given past meetings. */
+async function meetingPageUrls(
+  notion: Notion,
+  meetingsId: string,
+  meetings: readonly PastMeeting[]
+): Promise<Record<string, string>> {
+  const wanted = new Set(meetings.map((meeting) => meeting.eventId))
+  if (wanted.size === 0) return {}
+  const oldest = meetings.reduce(
+    (min, meeting) => (meeting.start < min ? meeting.start : min),
+    meetings[0]!.start
+  )
+  const pages = await queryAll(notion, {
+    data_source_id: meetingsId,
+    filter: {
+      property: "When",
+      date: {
+        on_or_after: new Date(Date.parse(oldest) - DAY_MS).toISOString(),
+      },
+    },
+  })
+  const urls: Record<string, string> = {}
+  for (const page of pages) {
+    const eventId = read.text(page.properties, "Event ID")
+    if (wanted.has(eventId) && page.url) urls[eventId] = page.url
+  }
+  return urls
 }

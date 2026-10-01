@@ -78,7 +78,11 @@ export const read = {
   },
 }
 
-export type PageRecord = { id: string; properties: RawProperties }
+export type PageRecord = {
+  id: string
+  properties: RawProperties
+  url?: string
+}
 
 export function asPage(value: unknown): PageRecord {
   const page = value as { id?: unknown; properties?: unknown }
@@ -89,7 +93,12 @@ export function asPage(value: unknown): PageRecord {
   ) {
     throw new Error("Notion response was not a full page")
   }
-  return { id: page.id, properties: page.properties as RawProperties }
+  const url = (value as { url?: unknown }).url
+  return {
+    id: page.id,
+    properties: page.properties as RawProperties,
+    ...(typeof url === "string" ? { url } : {}),
+  }
 }
 
 /** Query a data source for pages whose text-like property equals a value. */
