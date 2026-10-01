@@ -26,6 +26,16 @@ import {
   text,
   type DayEvent,
 } from "./meeting"
+import {
+  PREP,
+  RUN,
+  attendeeCopy,
+  blockState,
+  canSync,
+  researchProgress,
+  statusText,
+  type BlockState,
+} from "./state"
 
 const HOUR_MS = 60 * 60 * 1000
 const LOOKBACK_MS = 12 * HOUR_MS
@@ -160,6 +170,52 @@ function Avatar({
 const openPeek = (id: NotionPageId) =>
   void pages.open(id, { mode: "side_peek" })
 
+const ICONS = {
+  sync: "M13.5 8a5.5 5.5 0 0 1-9.9 3.3M2.5 8a5.5 5.5 0 0 1 9.9-3.3M12.5 1.8v2.9H9.6M3.5 14.2v-2.9h2.9",
+  back: "M9.5 3.5 5 8l4.5 4.5",
+  alert: "M8 5v3.5M8 10.8v.2M8 1.8l6.5 11.4h-13Z",
+  calendar: "M2.5 4.5h11v9h-11ZM2.5 7h11M5.5 2.5v3M10.5 2.5v3",
+} as const
+
+/** A 16px stroke icon that takes the surrounding text color. */
+function Icon({ name }: { name: keyof typeof ICONS }) {
+  return (
+    <svg
+      className="icon"
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.25"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d={ICONS[name]} />
+    </svg>
+  )
+}
+
+/** A quiet placeholder shaped like the content that is loading. */
+function Skeleton({ lines = 3 }: { lines?: number }) {
+  return (
+    <div className="skeleton" aria-busy="true" aria-label="Loading">
+      <span className="skeleton-line skeleton-title" />
+      {Array.from({ length: lines }, (_, index) => (
+        <span key={index} className="skeleton-line" />
+      ))}
+    </div>
+  )
+}
+
+const PILL_THEMES: Record<string, string> = {
+  [PREP.queued]: "gray",
+  [PREP.researching]: "blue",
+  [PREP.ready]: "green",
+  [PREP.failed]: "red",
+}
+
 function PersonCard({ person }: { person: NotionDataSourcePage }) {
   const name = text(person.propertiesByKey.Name)
   const email = text(person.propertiesByKey.Email)
@@ -268,11 +324,15 @@ function MeetingCards({
   eyebrow,
   people,
   companies,
+  peopleLoading,
+  now,
 }: {
   meeting: Picked
   eyebrow: string
   people: Map<string, NotionDataSourcePage>
   companies: Map<string, NotionDataSourcePage>
+  peopleLoading: boolean
+  now: number
 }) {
   const { row, startMs, endMs, allDay } = meeting
   const attendees = splitEmails(
@@ -282,12 +342,13 @@ function MeetingCards({
     text(person.propertiesByKey["Company domain"])
   )
   const status = text(row.propertiesByKey["Prep status"])
+  const copy = attendeeCopy(row, attendees.length, peopleLoading, now)
 
   return (
     <>
       <header className="header">
         <div>
-          <div className="eyebrow">{eyebrow}</div>
+          <div className="meta">{eyebrow}</div>
           <h2 className="title">
             {text(row.propertiesByKey.Title) || "Untitled meeting"}
           </h2>
@@ -295,7 +356,7 @@ function MeetingCards({
         </div>
         <div className="actions">
           {status && (
-            <span className={`pill pill-${status.toLowerCase()}`}>
+            <span className="pill" data-theme={PILL_THEMES[status] ?? "gray"}>
               Prep {status.toLowerCase()}
             </span>
           )}
@@ -309,10 +370,18 @@ function MeetingCards({
         </div>
       </header>
 
-      {attendees.length === 0 ? (
-        <p className="muted">Attendee details are still loading.</p>
+      {copy.kind === "loading" ? (
+        <Skeleton lines={2} />
+      ) : copy.kind === "message" ? (
+        <p className="muted">{copy.text}</p>
       ) : (
         <>
+          {copy.note && (
+            <p className="note" data-theme="red" role="status">
+              <Icon name="alert" />
+              {copy.note}
+            </p>
+          )}
           {groups.length > 0 && (
             <section>
               <h3 className="section">Companies</h3>
@@ -388,7 +457,7 @@ function DayView({
     <>
       <header className="header">
         <div>
-          <div className="eyebrow">Today</div>
+          <div className="meta">Today</div>
           <h2 className="title">{formatDay(day.startMs)}</h2>
           <div className="muted">
             {timed.length + allDay.length === 0
@@ -427,7 +496,7 @@ function DayView({
               )}
             </div>
           ))}
-          <div className="events">
+          <div className="events" data-theme="blue">
             {timed.map((event: DayEvent) => {
               const height = px(event.bottomMs) - px(event.topMs)
               const title =
@@ -455,7 +524,7 @@ function DayView({
               )
             })}
             {now >= day.startMs && now < day.endMs && (
-              <div className="now" style={{ top: px(now) }} />
+              <div className="now" data-theme="red" style={{ top: px(now) }} />
             )}
           </div>
         </div>
@@ -492,7 +561,7 @@ function Toolbar({
           title="Back to today"
           onClick={() => onChange({ mode: "day", selectedId: null })}
         >
-          ←
+          <Icon name="back" />
         </button>
       ) : (
         <span />
@@ -504,6 +573,181 @@ function Toolbar({
     </nav>
   )
 }
+
+/**
+ * Starts a calendar catch-up by adding a Workflow runs row, the same as a
+ * person adding one by hand. The request stays pending, so repeat clicks do
+ * nothing, until the new row shows up as the latest run or a minute passes.
+ */
+function useSyncRequest(latestStartedMs: number | null): {
+  pending: boolean
+  error: string | null
+  request: () => void
+} {
+  const [pendingSince, setPendingSince] = React.useState<number | null>(null)
+  const [error, setError] = React.useState<string | null>(null)
+  const inFlight = React.useRef(false)
+
+  const clear = React.useCallback(() => {
+    inFlight.current = false
+    setPendingSince(null)
+  }, [])
+
+  const request = React.useCallback(() => {
+    if (inFlight.current) return
+    inFlight.current = true
+    const at = Date.now()
+    setPendingSince(at)
+    setError(null)
+    void pages
+      .create({
+        parent: { type: "data_source_key", key: "runs" },
+        properties: {
+          Name: {
+            type: "title",
+            title: [{ type: "text", text: { content: "Sync calendar" } }],
+          },
+          // Empty or "Run now" marks a request (src/workflows/lib/runs.ts).
+          Trigger: { type: "select", select: { name: "Run now" } },
+          Started: {
+            type: "date",
+            date: { start: new Date(at).toISOString() },
+          },
+        },
+      })
+      .then(
+        (result) => {
+          if (result.status === "error") {
+            setError(result.error.message)
+            clear()
+          }
+        },
+        (cause: unknown) => {
+          setError(cause instanceof Error ? cause.message : String(cause))
+          clear()
+        }
+      )
+  }, [clear])
+
+  React.useEffect(() => {
+    if (pendingSince === null) return
+    // Started is stored at minute precision, so allow for the lost seconds.
+    if (latestStartedMs !== null && latestStartedMs >= pendingSince - 60_000) {
+      clear()
+      return
+    }
+    const timer = window.setTimeout(clear, 60_000)
+    return () => window.clearTimeout(timer)
+  }, [pendingSince, latestStartedMs, clear])
+
+  return { pending: pendingSince !== null, error, request }
+}
+
+const PANEL_TITLES: Record<Exclude<BlockState["kind"], "ready">, string> = {
+  never_run: "Get ready for your outside meetings",
+  waiting: "Setting up",
+  syncing: "Setting up",
+  researching: "Setting up",
+  failed: "Sync failed",
+}
+
+/** First-run, progress, and failure states, with the Sync calendar button. */
+function SetupPanel({
+  state,
+  sync,
+}: {
+  state: Exclude<BlockState, { kind: "ready" }>
+  sync: ReturnType<typeof useSyncRequest>
+}) {
+  const enabled = canSync(state) && !sync.pending
+  const busy =
+    state.kind === "waiting" ||
+    state.kind === "syncing" ||
+    state.kind === "researching"
+  return (
+    <section className="setup" aria-live="polite">
+      <h2 className="title">{PANEL_TITLES[state.kind]}</h2>
+      {state.kind === "never_run" && (
+        <p className="muted">
+          Perfect Meetings reads your calendar for meetings with outside
+          attendees, then researches their companies and people before you meet.
+        </p>
+      )}
+      {state.kind === "failed" ? (
+        <p className="note" data-theme="red" role="alert">
+          <Icon name="alert" />
+          <span className="note-text">{state.error}</span>
+        </p>
+      ) : (
+        <p className="status-line">
+          {busy && !("stale" in state && state.stale) && (
+            <span className="spinner" aria-hidden="true" />
+          )}
+          <span>{statusText(state)}</span>
+        </p>
+      )}
+      {state.kind === "researching" && state.total > 0 && (
+        <div
+          className="progress"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={state.total}
+          aria-valuenow={state.done}
+        >
+          <span
+            className="progress-bar"
+            style={{ width: `${(state.done / state.total) * 100}%` }}
+          />
+        </div>
+      )}
+      <div className="setup-actions">
+        <button
+          type="button"
+          className="button button-primary"
+          data-theme="blue"
+          disabled={!enabled}
+          aria-disabled={!enabled}
+          onClick={sync.request}
+        >
+          <Icon name="sync" />
+          {sync.pending
+            ? "Starting…"
+            : state.kind === "failed"
+              ? "Retry sync"
+              : "Sync calendar"}
+        </button>
+        {sync.error && (
+          <span className="error-text" data-theme="red" role="alert">
+            Couldn't start a sync: {sync.error}
+          </span>
+        )}
+      </div>
+    </section>
+  )
+}
+
+/** Shown once the App is set up but no outside meetings have synced. */
+function EmptyState() {
+  return (
+    <div className="empty">
+      <span className="empty-icon">
+        <Icon name="calendar" />
+      </span>
+      <div>
+        <div className="empty-title">
+          No meetings with outside attendees yet
+        </div>
+        <p className="muted">
+          Meetings sync from your calendar every hour. Meetings with only
+          coworkers are hidden.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+const loaded = (query: { isLoading: boolean; items: unknown[] }) =>
+  !query.isLoading || query.items.length > 0
 
 function MeetingsBlock() {
   const now = useNow()
@@ -537,23 +781,97 @@ function MeetingsBlock() {
   const people = useDataSource("people", { limit: 999 })
   const companies = useDataSource("companies", { limit: 999 })
 
+  // Setup state, derived from existing rows (see state.ts).
+  const latestRuns = useDataSource("runs", {
+    limit: 1,
+    sorts: [{ key: "Started", direction: "descending" }],
+  })
+  const successRuns = useDataSource("runs", {
+    limit: 1,
+    filter: { key: "Status", select: { equals: RUN.success } },
+  })
+  // Prep updated is written only when a brief is Ready and never cleared.
+  const prepped = useDataSource("meetings", {
+    limit: 1,
+    filter: { key: "Prep updated", date: { is_not_empty: true } },
+  })
+  const active = useDataSource("meetings", {
+    limit: 100,
+    filter: {
+      key: "Prep status",
+      select: { equals: [PREP.queued, PREP.researching] },
+    },
+  })
+  const latest = latestRuns.items[0]
+  const latestStartedMs = latest
+    ? (dateRange(latest.propertiesByKey.Started)?.startMs ?? null)
+    : null
+  const sync = useSyncRequest(latestStartedMs)
+
   const error =
     upcoming.error ?? earlier.error ?? people.error ?? companies.error
-  const loading =
-    (upcoming.isLoading || earlier.isLoading) && meetings.length === 0
+  const loading = ![upcoming, earlier, latestRuns, successRuns, prepped].every(
+    loaded
+  )
   const picked = pickMeeting(meetings, now)
   const peopleByEmail = byKey(people.items, "Email")
   const companiesByDomain = byKey(companies.items, "Domain")
+  const peopleLoading = people.isLoading && people.items.length === 0
+
+  // A block bound before Workflow runs was added cannot read runs; it keeps
+  // the calendar UI rather than showing setup states it cannot track.
+  const state: BlockState =
+    latestRuns.error || successRuns.error
+      ? { kind: "ready", noMeetings: meetings.length === 0 }
+      : blockState({
+          latestRun: latest
+            ? {
+                status: text(latest.propertiesByKey.Status) || null,
+                startedMs: latestStartedMs,
+                error: text(latest.propertiesByKey.Error),
+              }
+            : null,
+          hasSuccessRun: successRuns.items.length > 0,
+          hasPrepUpdated: prepped.items.length > 0,
+          meetingCount: meetings.length,
+          progress: researchProgress(
+            [...active.items, ...upcoming.items, ...earlier.items],
+            now
+          ),
+          now,
+        })
+
+  const cards = (row: Picked, eyebrow: string) => (
+    <MeetingCards
+      meeting={row}
+      eyebrow={eyebrow}
+      people={peopleByEmail}
+      companies={companiesByDomain}
+      peopleLoading={peopleLoading}
+      now={now}
+    />
+  )
 
   let content: React.ReactNode
   if (error) {
     content = (
-      <div className="muted" role="alert">
-        Couldn't load meetings: {error.message}
+      <div className="note" data-theme="red" role="alert">
+        <Icon name="alert" />
+        <span className="note-text">
+          Couldn't load meetings: {error.message}
+        </span>
       </div>
     )
   } else if (loading) {
-    content = <div className="muted">Loading…</div>
+    content = <Skeleton />
+  } else if (state.kind !== "ready") {
+    return (
+      <div className="card">
+        <SetupPanel state={state} sync={sync} />
+      </div>
+    )
+  } else if (state.noMeetings) {
+    content = <EmptyState />
   } else if (view.mode === "day") {
     const selected = view.selectedId
       ? meetings.find((row) => row.id === view.selectedId)
@@ -561,16 +879,12 @@ function MeetingsBlock() {
     const range = selected && dateRange(selected.propertiesByKey.When)
     content =
       selected && range ? (
-        <MeetingCards
-          meeting={{ row: selected, ...range }}
-          eyebrow={
-            selected.id === picked?.row.id
-              ? relative(range.startMs, range.endMs, now) || "Next meeting"
-              : "Meeting"
-          }
-          people={peopleByEmail}
-          companies={companiesByDomain}
-        />
+        cards(
+          { row: selected, ...range },
+          selected.id === picked?.row.id
+            ? relative(range.startMs, range.endMs, now) || "Next meeting"
+            : "Meeting"
+        )
       ) : (
         <DayView
           meetings={meetings}
@@ -580,13 +894,9 @@ function MeetingsBlock() {
         />
       )
   } else if (picked) {
-    content = (
-      <MeetingCards
-        meeting={picked}
-        eyebrow={relative(picked.startMs, picked.endMs, now) || "Next meeting"}
-        people={peopleByEmail}
-        companies={companiesByDomain}
-      />
+    content = cards(
+      picked,
+      relative(picked.startMs, picked.endMs, now) || "Next meeting"
     )
   } else {
     content = (

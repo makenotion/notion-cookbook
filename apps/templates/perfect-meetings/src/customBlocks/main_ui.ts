@@ -1,6 +1,6 @@
 import { customBlock } from "@notionhq/apps"
 
-import { companies, meetings, people } from "../notion.js"
+import { companies, meetings, people, syncRuns } from "../notion.js"
 
 const nextMeeting = customBlock({
   path: "./blocks/main_ui",
@@ -8,7 +8,9 @@ const nextMeeting = customBlock({
   description:
     "Company and attendee cards for your current or next meeting, and a calendar of today's meetings.",
   slashCommand: "next-meeting",
-  dataSources: { meetings, people, companies },
+  // runs (Workflow runs) drives the onboarding and progress states, and the
+  // Sync calendar button adds a row there to start a catch-up.
+  dataSources: { meetings, people, companies, runs: syncRuns },
 })
 
 meetings.addCustomView({
