@@ -661,7 +661,7 @@ function useSyncRequest(latestRunId: string | null): {
 }
 
 const PANEL_TITLES: Record<Exclude<BlockState["kind"], "ready">, string> = {
-  never_run: "Get ready for your outside meetings",
+  never_run: "Be prepared for every external meeting",
   waiting: "Setting up",
   syncing: "Setting up",
   researching: "Setting up",
@@ -684,18 +684,12 @@ function SetupPanel({
   return (
     <section className="setup" aria-live="polite">
       <h2 className="title">{PANEL_TITLES[state.kind]}</h2>
-      {state.kind === "never_run" && (
-        <p className="muted">
-          Perfect Meetings reads your calendar for meetings with outside
-          attendees, then researches their companies and people before you meet.
-        </p>
-      )}
       {state.kind === "failed" ? (
         <p className="note" data-theme="red" role="alert">
           <Icon name="alert" />
           <span className="note-text">{state.error}</span>
         </p>
-      ) : (
+      ) : state.kind === "never_run" ? null : (
         <p className="status-line">
           {busy && !("stale" in state && state.stale) && (
             <span className="spinner" aria-hidden="true" />

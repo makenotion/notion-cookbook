@@ -141,7 +141,7 @@ export function canSync(state: BlockState): boolean {
 export function statusText(state: BlockState): string {
   switch (state.kind) {
     case "never_run":
-      return "Sync your calendar to find meetings with outside attendees."
+      return ""
     case "waiting":
       return state.stale
         ? "Still waiting for the flow to start. Open the Sync calendar workflow in Notion and save it, then try again."
