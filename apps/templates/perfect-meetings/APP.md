@@ -1,5 +1,4 @@
-Prepare for Google Calendar meetings with people outside your organization,
-with a brief on the people and companies you'll meet.
+Prepare for Google Calendar meetings with people outside your organization, with a brief on the people and companies you'll meet.
 
 ## Today
 
