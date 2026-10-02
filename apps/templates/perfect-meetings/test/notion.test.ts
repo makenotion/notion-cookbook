@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { queryAll, type Notion } from "../src/lib/props.js"
+import { prop, queryAll, type Notion } from "../src/lib/props.js"
 import type { MeetingInput } from "../src/workflows/lib/calendar.js"
 import {
   needsUpdate,
@@ -121,13 +121,67 @@ describe("upsertMeetings", () => {
       },
       pages: {
         create: vi.fn(
-          async ({ parent }: { parent: { data_source_id: string } }) => {
-            const created = page(`id-${nextId++}`)
+          async ({
+            parent,
+            properties,
+          }: {
+            parent: { data_source_id: string }
+            properties: Record<string, unknown>
+          }) => {
+            const readable = Object.fromEntries(
+              Object.entries(properties).map(([key, value]) => {
+                const property = value as Record<string, unknown>
+                return [
+                  key,
+                  {
+                    ...property,
+                    ...(Array.isArray(property.rich_text)
+                      ? {
+                          rich_text: property.rich_text.map(
+                            (v: { text: { content: string } }) => ({
+                              plain_text: v.text.content,
+                            })
+                          ),
+                        }
+                      : {}),
+                    ...(Array.isArray(property.title)
+                      ? {
+                          title: property.title.map(
+                            (v: { text: { content: string } }) => ({
+                              plain_text: v.text.content,
+                            })
+                          ),
+                        }
+                      : {}),
+                  },
+                ]
+              })
+            )
+            const created = page(`id-${nextId++}`, readable)
             rows[parent.data_source_id]!.push(created)
             return created
           }
         ),
-        update: vi.fn(async () => ({})),
+        retrieve: vi.fn(async ({ page_id }: { page_id: string }) =>
+          Object.values(rows)
+            .flat()
+            .find((p) => p.id === page_id)
+        ),
+        update: vi.fn(
+          async ({
+            page_id,
+            properties,
+          }: {
+            page_id: string
+            properties: Record<string, unknown>
+          }) => {
+            const row = Object.values(rows)
+              .flat()
+              .find((p) => p.id === page_id)!
+            Object.assign(row.properties, properties)
+            return row
+          }
+        ),
       },
     } as unknown as Notion
     const ids = {
@@ -142,6 +196,16 @@ describe("upsertMeetings", () => {
       upsertMeetings(first.step, notion, ids, [meeting], {})
     ).resolves.toEqual({ created: 1, updated: 0 })
 
+    expect(rows.people[0]!.properties["Research status"]).toEqual(
+      prop.select("Ready")
+    )
+    expect(rows.companies[0]!.properties["Research status"]).toEqual(
+      prop.select("Ready")
+    )
+    // The agent may claim the profile before a later ingest retries.
+    rows.people[0]!.properties["Research status"] = prop.select("Researching")
+    rows.companies[0]!.properties["Research status"] = prop.select("Done")
+
     // A later run whose stored snapshot missed the new row updates instead of creating.
     const second = replayingStep()
     await expect(
@@ -150,6 +214,12 @@ describe("upsertMeetings", () => {
     expect(rows.meetings).toHaveLength(1)
     expect(rows.people).toHaveLength(1)
     expect(rows.companies).toHaveLength(1)
+    expect(rows.people[0]!.properties["Research status"]).toEqual(
+      prop.select("Researching")
+    )
+    expect(rows.companies[0]!.properties["Research status"]).toEqual(
+      prop.select("Done")
+    )
   })
 
   it("skips meetings that have not changed", async () => {

@@ -33,6 +33,7 @@ export type LatestRun = {
   status: string | null
   /** Started, or the row's created time when Started is empty. */
   startedMs: number | null
+  finishedMs?: number | null
   error: string
 }
 
@@ -151,7 +152,7 @@ export function statusText(state: BlockState): string {
         ? "The last sync did not finish. Try again."
         : "Reading latest calendar events"
     case "researching": {
-      const line = `Researching companies and people (${state.done} of ${state.total} meetings ready)`
+      const line = `Preparing meeting briefs (${state.done} of ${state.total} meetings ready)`
       return state.stalled > 0
         ? `${line}. ${state.stalled} meeting(s) look stuck: sync again, or tick Regenerate prep on them.`
         : line
@@ -358,7 +359,7 @@ export function researchPhase(
 }
 
 /** The progress line under a meeting header while it is being researched. */
-export const RESEARCHING_LINE = "Researching companies and people…"
+export const RESEARCHING_LINE = "Preparing meeting briefs…"
 
 /**
  * One card line that research fills in (a person's role or a company's

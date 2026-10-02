@@ -5,11 +5,7 @@ import {
   parseThreads,
   relevantThreads,
 } from "../src/workflows/lib/email.js"
-import {
-  lastAgentText,
-  MAX_PROMPT_CHARS,
-  researchPrompt,
-} from "../src/workflows/lib/prep.js"
+import { MAX_PROMPT_CHARS, researchPrompt } from "../src/workflows/lib/prep.js"
 
 // Shape observed from the Mail connection's searchEmails in a live run.
 const invite = {
@@ -79,7 +75,7 @@ describe("research prompt", () => {
     expect(lines[0]).toContain("with a@x.example, b@x.example")
   })
 
-  it("stays under the sessions API limit for a large meeting", () => {
+  it("bounds stored context for a large meeting", () => {
     const attendees = Array.from({ length: 10 }, (_, i) => ({
       id: `p${i}`,
       name: `Person ${i}`,
@@ -115,31 +111,5 @@ describe("research prompt", () => {
     expect(prompt.length).toBeLessThanOrEqual(MAX_PROMPT_CHARS)
     expect(prompt).toContain("older threads omitted")
     expect(prompt).toContain("Person 9")
-  })
-})
-
-describe("lastAgentText", () => {
-  it("returns the latest agent message among other event types", () => {
-    const events = [
-      {
-        type: "user.message",
-        sequence: 12,
-        content: [{ type: "text", text: "prompt" }],
-      },
-      {
-        type: "agent.message",
-        sequence: 30,
-        content: [{ type: "text", text: "draft" }],
-      },
-      { type: "agent.tool_use", sequence: 39, tool_name: "notion_load_page" },
-      {
-        type: "agent.message",
-        sequence: 44,
-        content: [{ type: "text", text: '{"company":"x"}' }],
-      },
-      { type: "session.status", sequence: 46, status: "completed" },
-    ] as unknown as Parameters<typeof lastAgentText>[0]
-    expect(lastAgentText(events)).toBe('{"company":"x"}')
-    expect(lastAgentText(events.slice(0, 1))).toBeNull()
   })
 })

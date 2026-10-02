@@ -12,6 +12,7 @@
 export type Snapshot<T> = {
   items: readonly T[]
   isLoading: boolean
+  hasMore?: boolean
   error?: { message: string }
 }
 
@@ -25,6 +26,7 @@ export type QueryState<T> = {
   loaded: boolean
   /** Whether `items` came from a successful result (not just an error). */
   hasData: boolean
+  hasMore?: boolean
 }
 
 export type QueryEvent<T> =
@@ -81,6 +83,7 @@ function settle<T>(state: QueryState<T>, snapshot: Snapshot<T>): QueryState<T> {
     items: snapshot.items,
     loaded: true,
     hasData: true,
+    hasMore: snapshot.hasMore,
   }
 }
 

@@ -1,0 +1,55 @@
+/* Skip Tailwind's page reset: this block shares Notion's typography and tokens. */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@source "./**/*.{ts,tsx}";
+
+@theme inline {
+  /* Notion uses --spacing: 1px; inline Tailwind's 4px unit to avoid collision. */
+  --spacing: 4px;
+  --color-background: var(--bg-base);
+  --color-foreground: var(--content-primary);
+  --color-card: var(--bg-base);
+  --color-card-foreground: var(--content-primary);
+  --color-primary: var(--content-primary);
+  --color-primary-foreground: var(--bg-base);
+  --color-secondary: var(--bg-muted);
+  --color-secondary-foreground: var(--content-primary);
+  --color-muted: var(--bg-muted);
+  --color-muted-foreground: var(--content-secondary);
+  --color-accent: var(--bg-hover);
+  --color-accent-foreground: var(--content-primary);
+  --color-border: var(--border-primary);
+  --color-input: var(--border-primary);
+  --color-ring: var(--border-interactive-primary);
+  --color-destructive: var(--content-primary);
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+}
+
+/* Only reset shadcn surfaces; leave the surrounding calendar UI alone. */
+@layer base {
+  [data-slot="card"],
+  [data-slot="card"] *,
+  [data-slot="button"],
+  [data-slot="badge"],
+  [data-slot="progress"] {
+    box-sizing: border-box;
+    border-style: solid;
+    border-width: 0;
+    border-color: var(--border-primary);
+  }
+
+  [data-slot="button"],
+  [data-slot="tabs-trigger"] {
+    font-family: inherit;
+    background-color: transparent;
+    cursor: pointer;
+  }
+
+  [data-slot="button"]:disabled {
+    cursor: default;
+  }
+}

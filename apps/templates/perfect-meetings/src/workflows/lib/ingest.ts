@@ -16,6 +16,7 @@ import {
 } from "../../lib/props.js"
 import { MEETING_STATUS, PREP_STATUS } from "../../notion.js"
 import { attendeeKey, type MeetingInput } from "./calendar.js"
+import { readyForResearch } from "./research.js"
 
 export type DataSourceIds = {
   meetings: string
@@ -191,7 +192,10 @@ async function upsertCompany(
     property: "Domain",
     rich_text: { equals: domain },
   })
-  if (existing) return existing.id
+  if (existing) {
+    await readyForResearch(notion, existing.id)
+    return existing.id
+  }
   const page = await notion.pages.create({
     parent: { data_source_id: companiesId },
     properties: {
@@ -200,6 +204,7 @@ async function upsertCompany(
       Website: prop.url(`https://${domain}`),
     },
   })
+  await readyForResearch(notion, page.id)
   return page.id
 }
 
@@ -238,6 +243,7 @@ async function upsertPerson(
     if (Object.keys(properties).length > 0) {
       await notion.pages.update({ page_id: existing.id, properties })
     }
+    await readyForResearch(notion, existing.id)
     return existing.id
   }
   const properties: PropertyMap = {
@@ -251,6 +257,7 @@ async function upsertPerson(
     parent: { data_source_id: peopleId },
     properties,
   })
+  await readyForResearch(notion, page.id)
   return page.id
 }
 

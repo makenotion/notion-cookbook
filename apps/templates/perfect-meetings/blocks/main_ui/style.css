@@ -10,7 +10,16 @@ body {
   font-family: var(--font-sans, system-ui, sans-serif);
 }
 
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 0;
+}
+
 .card {
+  width: 100%;
+  box-sizing: border-box;
   color: var(--content-primary);
   background: var(--bg-base);
   border: 1px solid var(--border-primary);
@@ -111,9 +120,6 @@ body {
 }
 
 .button:focus-visible,
-.segment:focus-visible,
-.back:focus-visible,
-.tile:focus-visible,
 .event:focus-visible {
   outline: 2px solid var(--border-interactive-primary);
   outline-offset: 1px;
@@ -160,74 +166,7 @@ body {
   white-space: pre-wrap;
 }
 
-.toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--spacing-12);
-}
-
-.back {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: var(--radius-6);
-  background: transparent;
-  color: var(--content-secondary);
-  cursor: pointer;
-}
-
-.back:hover {
-  background: var(--bg-hover);
-  color: var(--content-primary);
-}
-
-.segments {
-  display: flex;
-  padding: var(--spacing-2);
-  border-radius: var(--radius-8);
-  background: var(--bg-muted);
-}
-
-.segment {
-  border: none;
-  background: transparent;
-  color: var(--content-secondary);
-  border-radius: var(--radius-6);
-  padding: var(--spacing-2) var(--spacing-8);
-  font: inherit;
-  font-size: var(--text-body-sm);
-  line-height: var(--text-body-sm--line-height);
-  font-weight: var(--font-weight-medium);
-  cursor: pointer;
-}
-
-.segment:hover {
-  color: var(--content-primary);
-}
-
-.segment-active {
-  background: var(--bg-base);
-  color: var(--content-primary);
-  box-shadow: var(--shadow-sm);
-}
-
 /* Setup, progress, and empty states */
-
-.setup {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-8);
-  max-width: 520px;
-}
-
-.setup .title,
-.setup .note {
-  margin: 0;
-}
 
 .status-line {
   display: flex;
@@ -270,54 +209,237 @@ body {
   margin-top: var(--spacing-4);
 }
 
-.sync-now {
+/* shadcn surfaces use the surrounding Notion token scope in both themes. */
+.setup-shell {
+  padding: 0;
+  border: none;
+}
+
+.setup-welcome {
+  width: 100%;
+  max-width: none;
+  margin: 8px auto;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  border-color: var(--border-primary);
+  box-shadow: none;
+}
+
+.setup-welcome .welcome-header {
+  display: block;
+  padding: 24px 24px 20px;
+  gap: 0;
+}
+
+.welcome-topline {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: var(--spacing-8);
-  margin-top: var(--spacing-8);
+  justify-content: space-between;
+  margin-bottom: 20px;
 }
 
-.sync-now .button {
-  border-color: transparent;
-  color: var(--content-secondary);
-}
-
-.sync-now .button:hover {
-  color: var(--content-primary);
-}
-
-.sync-now .button:disabled,
-.sync-now .button:disabled:hover {
-  border-color: transparent;
-  background: transparent;
-  color: var(--content-disabled);
-}
-
-.error-text {
-  color: var(--content-secondary);
-  font-size: var(--text-body-sm);
-  line-height: var(--text-body-sm--line-height);
-}
-
-.empty {
-  display: flex;
-  gap: var(--spacing-12);
-  align-items: flex-start;
-  padding: var(--spacing-8) 0;
-}
-
-.empty-icon {
+.welcome-icon {
   display: inline-flex;
-  padding: var(--spacing-8);
-  border-radius: var(--radius-8);
+  padding: 9px;
+  border: 1px solid var(--border-primary);
+  border-radius: 10px;
   background: var(--bg-muted);
   color: var(--content-secondary);
 }
 
-.empty-title {
-  font-weight: var(--font-weight-semibold);
-  margin-bottom: var(--spacing-2);
+.welcome-badge {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--content-secondary);
+  border-radius: 5px;
+}
+
+.welcome-title {
+  margin: 0 0 10px;
+  font-size: 23px;
+  line-height: 1.25;
+  letter-spacing: -0.025em;
+  font-weight: 600;
+  text-wrap: balance;
+}
+
+.welcome-description {
+  margin: 0;
+  max-width: 420px;
+  color: var(--content-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.welcome-content {
+  padding: 0 24px 24px;
+}
+
+.setup-stages {
+  list-style: none;
+  padding: 18px 16px;
+  margin: 0;
+  background: var(--bg-muted);
+  border-radius: 8px;
+}
+
+.setup-stage {
+  display: flex;
+  gap: 12px;
+  position: relative;
+  padding-bottom: 18px;
+}
+
+.setup-stage:last-child {
+  padding-bottom: 0;
+}
+
+.setup-stage:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 13px;
+  top: 31px;
+  bottom: 4px;
+  width: 1px;
+  background: var(--border-primary);
+}
+
+.stage-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border: 1px solid var(--border-primary);
+  border-radius: 7px;
+  background: var(--bg-base);
+  color: var(--content-secondary);
+}
+
+.stage-body {
+  min-width: 0;
+  flex: 1;
+  padding-top: 2px;
+}
+
+.stage-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 20px;
+}
+
+.stage-title {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.stage-body .meta {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--content-tertiary);
+}
+
+.stage-badge {
+  margin-left: auto;
+  padding: 0 5px;
+  font-size: 10px;
+  border-radius: 4px;
+  font-weight: 400;
+}
+
+.stage-spinner {
+  flex: none;
+  color: var(--content-secondary);
+  animation: spin 1.3s linear infinite;
+}
+
+.stage-progress {
+  max-width: 240px;
+  height: 3px;
+  margin-top: 8px;
+  background: var(--border-primary);
+}
+
+.stage-progress [data-slot="progress-indicator"] {
+  background: var(--content-secondary);
+}
+
+.welcome-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.welcome-instruction {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12px;
+  color: var(--content-secondary);
+}
+
+.setup-begin {
+  font-size: 13px;
+  gap: 14px;
+  border-radius: 6px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.welcome-footer {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 16px 24px;
+  background: var(--bg-muted);
+  border-top: 1px solid var(--border-primary);
+  color: var(--content-tertiary);
+}
+
+.welcome-footer svg {
+  flex: none;
+  margin-top: 3px;
+}
+
+.welcome-footer p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.welcome-footer strong {
+  color: var(--content-secondary);
+  font-weight: 500;
+}
+
+@media (max-width: 420px) {
+  .setup-welcome .welcome-header {
+    padding: 20px 16px 16px;
+  }
+  .welcome-content {
+    padding: 0 16px 20px;
+  }
+  .welcome-footer {
+    padding: 14px 16px;
+  }
+  .welcome-title {
+    font-size: 21px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-spinner {
+    animation: none;
+  }
+  [data-slot="progress-indicator"] {
+    transition: none;
+  }
 }
 
 /* Loading skeleton */
@@ -350,27 +472,6 @@ body {
   height: 18px;
   width: 40%;
   margin-bottom: var(--spacing-4);
-}
-
-/* A card line research is still filling in. */
-.loading-line {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-8);
-  margin-top: var(--spacing-2);
-}
-
-.skeleton-inline {
-  flex: 1;
-  max-width: 120px;
-  height: 10px;
-}
-
-.loading-label {
-  flex: none;
-  color: var(--content-tertiary);
-  font-size: var(--text-body-sm);
-  line-height: var(--text-body-sm--line-height);
 }
 
 .research-line {
@@ -406,135 +507,6 @@ body {
   line-height: var(--text-body-sm--line-height);
   font-weight: var(--font-weight-medium);
   color: var(--content-secondary);
-}
-
-.grid {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: var(--spacing-8);
-}
-
-.tile {
-  display: flex;
-  gap: var(--spacing-12);
-  width: 100%;
-  height: 100%;
-  box-sizing: border-box;
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-8);
-  padding: var(--spacing-12);
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-}
-
-button.tile {
-  cursor: pointer;
-}
-
-button.tile:hover {
-  background: var(--bg-hover);
-}
-
-button.tile:active {
-  background: var(--bg-pressed);
-}
-
-.tile-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-2);
-  min-width: 0;
-}
-
-.tile-title {
-  font-weight: var(--font-weight-semibold);
-}
-
-.tile-subtitle {
-  color: var(--content-secondary);
-}
-
-.tile-detail {
-  color: var(--content-tertiary);
-  font-size: var(--text-body-sm);
-  line-height: var(--text-body-sm--line-height);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tile-summary {
-  margin-top: var(--spacing-4);
-  font-size: var(--text-body-sm);
-  line-height: var(--text-body-sm--line-height);
-  color: var(--content-secondary);
-  display: -webkit-box;
-  -webkit-line-clamp: 4;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.avatar,
-.logo {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg-muted);
-  color: var(--content-secondary);
-  font-size: var(--text-body-sm);
-  font-weight: var(--font-weight-semibold);
-  overflow: hidden;
-}
-
-.avatar {
-  border-radius: var(--radius-full);
-}
-
-.avatar-large {
-  width: 36px;
-  height: 36px;
-}
-
-.avatar-small {
-  width: 20px;
-  height: 20px;
-  font-size: var(--text-body-xs);
-  line-height: var(--text-body-xs--line-height);
-  border: 2px solid var(--bg-base);
-  margin-left: calc(var(--spacing-4) * -1);
-}
-
-.avatar-small:first-child {
-  margin-left: 0;
-}
-
-.logo {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-8);
-}
-
-.avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.stack {
-  display: flex;
-  align-items: center;
-  margin-top: var(--spacing-4);
-}
-
-.stack .tile-detail {
-  margin-left: var(--spacing-8);
 }
 
 /* Day view */
@@ -689,36 +661,4 @@ button.tile:active {
   height: 10px;
   border-radius: var(--radius-full);
   background: var(--bg-interactive-strong);
-}
-
-/* Profile links sit inside the person tile but outside its button, since
-   links cannot be nested in a button. */
-.person-card {
-  position: relative;
-}
-
-.person-card.has-links .tile {
-  padding-bottom: calc(var(--spacing-12) + 20px);
-}
-
-.tile-links {
-  position: absolute;
-  left: var(--spacing-12);
-  right: var(--spacing-12);
-  bottom: var(--spacing-12);
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-12);
-  font-size: var(--text-body-sm);
-  line-height: var(--text-body-sm--line-height);
-}
-
-.tile-links a {
-  color: var(--content-secondary);
-  text-decoration: none;
-}
-
-.tile-links a:hover {
-  color: var(--content-primary);
-  text-decoration: underline;
 }

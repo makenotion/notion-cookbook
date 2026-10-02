@@ -3,13 +3,7 @@ import { FatalError } from "@notionhq/apps/error"
 
 import { queryAll, read } from "../lib/props.js"
 import { pageIdFromEvent } from "../lib/notionIds.js"
-import {
-  MEETING_STATUS,
-  companies,
-  meetings,
-  people,
-  researcher,
-} from "../notion.js"
+import { MEETING_STATUS, companies, meetings, people } from "../notion.js"
 import {
   BACKLOG_LOOKBACK_DAYS,
   companyAttempted,
@@ -23,15 +17,16 @@ import {
   runPrep,
   splitEmails,
 } from "./lib/prep.js"
+import { needsResearch, readyForResearch } from "./lib/research.js"
 import { isRuntimeSignal } from "./lib/runtime.js"
 
 const HOUR_MS = 60 * 60 * 1000
 const DAY_MS = 24 * HOUR_MS
 
 export default workflow({
-  name: "Research companies and people",
+  name: "Prepare research",
   description:
-    "Researches a meeting's companies, attendees, and recent email, then writes the brief at the top of the meeting page. Run it by hand to catch up on everyone not yet researched.",
+    "Prepares calendar context, then hands meetings to the researcher with Ready. Run manually to queue unresearched people and companies too. No agent session is awaited.",
   connections: prepConnections,
   triggers: ({ events }) => [
     events.notionPageCreated({ dataSource: meetings.dataSource }),
@@ -50,7 +45,6 @@ export default workflow({
     meetings: access.edit(meetings.dataSource),
     people: access.edit(people.dataSource),
     companies: access.edit(companies.dataSource),
-    researcher: access.call(researcher),
   },
   handler: async (event, context) => {
     const targets = prepTargets(context.access)
@@ -103,6 +97,9 @@ export default workflow({
             ]
           }
         )
+        const profilesToQueue = [...personPages, ...companyPages]
+          .filter((page) => needsResearch(page.properties))
+          .map((page) => page.id)
         const backlogPeople = personPages.flatMap((page) => {
           const email = read.email(page.properties, "Email")?.toLowerCase()
           if (!email) return []
@@ -113,17 +110,20 @@ export default workflow({
                 .text(page.properties, "Company domain")
                 .trim()
                 .toLowerCase(),
-              attempted: personAttempted({
-                researchedAt:
-                  read.date(page.properties, "Researched at")?.start ?? null,
-                role: read.text(page.properties, "Role"),
-                confidence: read.select(page.properties, "Confidence"),
-              }),
+              attempted:
+                Boolean(read.select(page.properties, "Research status")) ||
+                personAttempted({
+                  researchedAt:
+                    read.date(page.properties, "Researched at")?.start ?? null,
+                  role: read.text(page.properties, "Role"),
+                  confidence: read.select(page.properties, "Confidence"),
+                }),
             },
           ]
         })
         const attemptedCompanies = new Set(
           companyPages.flatMap((page) =>
+            Boolean(read.select(page.properties, "Research status")) ||
             companyAttempted({
               researchedAt:
                 read.date(page.properties, "Researched at")?.start ?? null,
@@ -140,20 +140,30 @@ export default workflow({
           now
         )
         for (const pick of backlog.picks)
-          console.log(`Researching ${pick.id}: ${pick.reasons.join(", ")}`)
+          console.log(`Preparing ${pick.id}: ${pick.reasons.join(", ")}`)
         if (backlog.picks.length === 0)
-          console.log("Nothing to research: everyone is already researched")
+          console.log("No meeting briefs need preparing")
         if (backlog.remaining > 0)
           console.log(
             `${backlog.remaining} more meeting(s) still need research; run this workflow again to continue`
           )
-        return backlog.picks.map((pick) => pick.id)
+        return {
+          meetings: backlog.picks.map((pick) => pick.id),
+          profiles: profilesToQueue,
+        }
       })
+      for (const pageId of picks.profiles) {
+        await context.step(
+          "Queue profile research",
+          { key: ["profile-ready", pageId] },
+          () => readyForResearch(context.notion, pageId).then(() => null)
+        )
+      }
 
       // Each meeting's steps are keyed by its page ID, so one failing does
       // not stop the others; failures are reported at the end.
       const failures: string[] = []
-      for (const meetingId of picks) {
+      for (const meetingId of picks.meetings) {
         try {
           await runPrep(context, targets, meetingId, "force")
         } catch (error) {

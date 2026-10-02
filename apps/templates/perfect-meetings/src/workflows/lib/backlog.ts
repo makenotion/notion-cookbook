@@ -1,9 +1,9 @@
 import { PREP_STATUS } from "../../notion.js"
 
-// Choosing which meetings a no-input "Research companies and people" run
+// Choosing which meetings a no-input "Prepare research" run
 // preps. Research runs per meeting: one session covers the meeting's brief,
-// its attendees, and their companies. So the backlog is a list of meetings
-// chosen to cover every person and company research has not reached yet.
+// its attendees, and their companies in the saved context. Profiles have their
+// own Ready handoff; a queued profile counts as covered for meeting selection.
 
 /** At most this many meetings are prepped per manual run. */
 export const BACKLOG_MAX_MEETINGS = 10
@@ -33,7 +33,7 @@ export type BacklogPerson = {
   email: string
   /** Lowercased company domain; empty for personal mailboxes. */
   companyDomain: string
-  /** Whether research has ever returned for this person. */
+  /** Whether profile research was queued or previously completed. */
   attempted: boolean
 }
 
@@ -77,7 +77,7 @@ export function companyAttempted(company: {
  * at, so the cooldown is what stops a persistent failure being retried on
  * every run.
  *
- * Picked first: meetings with a person or company research has never reached
+ * Picked first: meetings with a person or company research has never queued
  * that no earlier pick covers. Then: upcoming meetings whose prep never
  * finished (empty, Queued, Failed, or stuck Researching). Within each group,
  * upcoming meetings come first, soonest first, then past ones, most recent

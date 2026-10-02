@@ -4,7 +4,15 @@ import type {
 } from "@notionhq/apps/custom-blocks"
 
 import { dayBounds, sortByStart, text } from "./meeting"
-import { PREP, RUN, runStartedMs, type LatestRun } from "./state"
+import {
+  dateMs,
+  lastActivityMs,
+  PREP,
+  RUN,
+  runStartedMs,
+  STALE_RUN_MS,
+  type LatestRun,
+} from "./state"
 
 // The block reads four live queries: one each for Meetings, Workflow runs,
 // People, and Companies. Everything else is derived here, in memory.
@@ -56,6 +64,56 @@ export const RUNS_QUERY: DataSourceQueryOptions = {
 export const PEOPLE_QUERY: DataSourceQueryOptions = { limit: 999 }
 export const COMPANIES_QUERY: DataSourceQueryOptions = { limit: 999 }
 
+/** Actual agent status, independent of whether a meeting brief is ready. */
+export function researchCounts(rows: readonly NotionDataSourcePage[]) {
+  const counts = {
+    total: rows.length,
+    researching: 0,
+    queued: 0,
+    done: 0,
+    failed: 0,
+    unrequested: 0,
+  }
+  for (const row of rows) {
+    switch (text(row.propertiesByKey["Research status"])) {
+      case "Researching":
+        counts.researching++
+        break
+      case "Ready":
+        counts.queued++
+        break
+      case "Done":
+        counts.done++
+        break
+      case "Failed":
+        counts.failed++
+        break
+      default:
+        counts.unrequested++
+        break
+    }
+  }
+  return counts
+}
+
+/** Separate stalled records from work that still appears active or queued. */
+export function researchActivity(
+  rows: readonly NotionDataSourcePage[],
+  now: number
+) {
+  const counts = { ...researchCounts(rows), stalled: 0 }
+  for (const row of rows) {
+    const status = text(row.propertiesByKey["Research status"])
+    const last = lastActivityMs(row)
+    if (last === null || now - last <= STALE_RUN_MS) continue
+    if (status === "Researching") counts.researching--
+    else if (status === "Ready") counts.queued--
+    else continue
+    counts.stalled++
+  }
+  return counts
+}
+
 /** The latest run and how many recent runs succeeded (at most 2 counted). */
 export function deriveRuns(rows: readonly NotionDataSourcePage[]): {
   latestRun: LatestRun | null
@@ -71,6 +129,7 @@ export function deriveRuns(rows: readonly NotionDataSourcePage[]): {
           id: latest.id,
           status: text(latest.propertiesByKey.Status) || null,
           startedMs: runStartedMs(latest),
+          finishedMs: dateMs(latest.propertiesByKey.Finished),
           error: text(latest.propertiesByKey.Error),
         }
       : null,
