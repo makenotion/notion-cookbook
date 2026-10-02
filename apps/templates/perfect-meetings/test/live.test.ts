@@ -18,6 +18,29 @@ const snap = (items: string[], isLoading = false) => ({
 })
 
 describe("reduceQuery", () => {
+  it("keeps the partial-count flag with the last good rows until a new result", () => {
+    const partial = reduceQuery(initialQuery<string>(), {
+      type: "snapshot",
+      snapshot: { items: ["a"], isLoading: false, hasMore: true },
+    })
+    const failed = reduceQuery(partial, {
+      type: "snapshot",
+      snapshot: {
+        items: [],
+        isLoading: false,
+        hasMore: false,
+        error: { message: "offline" },
+      },
+    })
+    expect(failed).toMatchObject({ items: ["a"], hasMore: true })
+    const recovered = reduceQuery(failed, {
+      type: "snapshot",
+      snapshot: { items: [], isLoading: false, hasMore: false },
+    })
+    expect(recovered).toMatchObject({ items: [], hasMore: false })
+    expect(recovered.error).toBeUndefined()
+  })
+
   it("ignores the SDK's empty placeholder before the first result", () => {
     const state = run([snap([])])
     expect(state.loaded).toBe(false)

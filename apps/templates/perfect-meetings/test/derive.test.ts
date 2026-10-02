@@ -8,6 +8,7 @@ import {
   deriveRuns,
   meetingsQuery,
   meetingsWindowStart,
+  researchCounts,
 } from "../blocks/main_ui/derive.js"
 
 const row = (id: string, props: Record<string, unknown>) =>
@@ -21,6 +22,39 @@ const when = (date: string, time: string) => ({
   type: "datetime",
   start_date: date,
   start_time: time,
+})
+
+describe("researchCounts", () => {
+  it("uses agent research status rather than meeting prep or profile completion", () => {
+    expect(
+      researchCounts([
+        row("active", {
+          "Research status": "Researching",
+          "Researched at": "2026-10-01",
+        }),
+        row("queued", { "Research status": "Ready" }),
+        row("done", { "Research status": "Done" }),
+        row("failed", { "Research status": "Failed" }),
+        row("blank", { "Prep status": "Ready" }),
+        row("unknown", { "Research status": "Unexpected" }),
+      ])
+    ).toEqual({
+      total: 6,
+      researching: 1,
+      queued: 1,
+      done: 1,
+      failed: 1,
+      unrequested: 2,
+    })
+    expect(researchCounts([])).toEqual({
+      total: 0,
+      researching: 0,
+      queued: 0,
+      done: 0,
+      failed: 0,
+      unrequested: 0,
+    })
+  })
 })
 
 describe("query options", () => {
@@ -63,6 +97,7 @@ describe("deriveRuns", () => {
         id: "new",
         status: "Pending",
         startedMs: Date.parse("2026-09-29T17:00:00Z"),
+        finishedMs: null,
         error: "",
       },
       successRuns: 2,

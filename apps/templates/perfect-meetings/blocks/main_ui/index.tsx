@@ -5,11 +5,12 @@ import {
   pages,
   type DataSourceQueryOptions,
   type NotionDataSourcePage,
-  type NotionPageId,
 } from "@notionhq/apps/custom-blocks"
 import { NotionCustomBlock, NotionTokenScope } from "@notionhq/apps/react"
 import "@notionhq/apps/nds.css"
+import "./shadcn.css"
 import "./style.css"
+import "./dashboard.css"
 
 import {
   dateRange,
@@ -17,8 +18,6 @@ import {
   groupByCompany,
   layoutDay,
   pickMeeting,
-  profileLinks,
-  roleLabel,
   splitEmails,
   text,
   type DayEvent,
@@ -49,20 +48,22 @@ import {
   RESEARCHING_LINE,
   attendeeCopy,
   blockState,
-  cardLine,
-  canSync,
   latchPopulated,
-  quietSync,
   runStartedMs,
   researchPhase,
   researchProgress,
-  statusText,
   type BlockState,
   type BlockStateInput,
-  type LatestRun,
-  type Progress,
-  type ResearchPhase,
 } from "./state"
+
+import { SetupPanel } from "./setup"
+import { Button } from "./components/ui/button"
+import { Badge } from "./components/ui/badge"
+import { Card, CardContent } from "./components/ui/card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs"
+import { ActivitySummary, EmptyMeetings, SyncAction } from "./dashboard"
+import { calendarStatus } from "./dashboardState"
+import { PersonCard, CompanyCard } from "./profiles"
 
 const HOUR_MS = 60 * 60 * 1000
 const HOUR_PX = 48
@@ -149,53 +150,6 @@ function relative(startMs: number, endMs: number, now: number): string {
   return hours < 24 ? `Starts in ${hours} h` : ""
 }
 
-function hostname(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "")
-  } catch {
-    return ""
-  }
-}
-
-function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((word) => word[0]?.toUpperCase() ?? "")
-    .join("")
-}
-
-/** A photo when one is stored and loads; initials otherwise. */
-function Avatar({
-  label,
-  photo,
-  size = "large",
-}: {
-  label: string
-  photo: string
-  size?: "large" | "small"
-}) {
-  const [failed, setFailed] = React.useState(false)
-  return (
-    <span className={`avatar avatar-${size}`} title={label}>
-      {photo && !failed ? (
-        <img
-          src={photo}
-          alt=""
-          referrerPolicy="no-referrer"
-          onError={() => setFailed(true)}
-        />
-      ) : (
-        initials(label)
-      )}
-    </span>
-  )
-}
-
-const openPeek = (id: NotionPageId) =>
-  void pages.open(id, { mode: "side_peek" })
-
 const ICONS = {
   sync: "M13.5 8a5.5 5.5 0 0 1-9.9 3.3M2.5 8a5.5 5.5 0 0 1 9.9-3.3M12.5 1.8v2.9H9.6M3.5 14.2v-2.9h2.9",
   back: "M9.5 3.5 5 8l4.5 4.5",
@@ -242,138 +196,6 @@ const PILL_THEMES: Record<string, string> = {
   [PREP.failed]: "red",
 }
 
-/** A shimmering placeholder for a line research has not filled in yet. */
-function LoadingLine() {
-  return (
-    <span className="loading-line" aria-label="Researching">
-      <span className="skeleton-line skeleton-inline" />
-      <span className="loading-label">Researching…</span>
-    </span>
-  )
-}
-
-function PersonCard({
-  person,
-  phase,
-}: {
-  person: NotionDataSourcePage
-  phase: ResearchPhase
-}) {
-  const name = text(person.propertiesByKey.Name)
-  const email = text(person.propertiesByKey.Email)
-  const role = text(person.propertiesByKey.Role)
-  const source = hostname(text(person.propertiesByKey["Role source"]))
-  const links = profileLinks(person.propertiesByKey)
-  return (
-    <li className={links.length > 0 ? "person-card has-links" : "person-card"}>
-      <button
-        type="button"
-        className="tile person"
-        title="Open person"
-        onClick={() => openPeek(person.id)}
-      >
-        <Avatar
-          label={name || email}
-          photo={text(person.propertiesByKey.Photo)}
-        />
-        <span className="tile-body">
-          <span className="tile-title">{name || email}</span>
-          {(() => {
-            const line = cardLine(role, phase)
-            if (line.kind === "loading") return <LoadingLine />
-            if (line.kind === "none") return null
-            return (
-              <span className="tile-subtitle">
-                {roleLabel(role, text(person.propertiesByKey.Confidence))}
-              </span>
-            )
-          })()}
-          {name && <span className="tile-detail">{email}</span>}
-          {source && <span className="tile-detail">Role from {source}</span>}
-        </span>
-      </button>
-      {links.length > 0 && (
-        <span className="tile-links">
-          {links.map((link) => (
-            <a
-              key={link.label}
-              href={link.url}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {link.label}
-            </a>
-          ))}
-        </span>
-      )}
-    </li>
-  )
-}
-
-function CompanyCard({
-  domain,
-  company,
-  attendees,
-  phase,
-}: {
-  domain: string
-  company: NotionDataSourcePage | undefined
-  attendees: NotionDataSourcePage[]
-  phase: ResearchPhase
-}) {
-  const name = company ? text(company.propertiesByKey.Name) : ""
-  const summary = company ? text(company.propertiesByKey.Summary) : ""
-  const body = (
-    <>
-      <span className="logo">{initials(name || domain)}</span>
-      <span className="tile-body">
-        <span className="tile-title">{name || domain}</span>
-        <span className="tile-subtitle">{domain}</span>
-        {(() => {
-          const line = cardLine(summary, phase)
-          if (line.kind === "loading") return <LoadingLine />
-          if (line.kind === "none") return null
-          return <span className="tile-summary">{summary}</span>
-        })()}
-        <span className="stack">
-          {attendees.map((person) => {
-            const label =
-              text(person.propertiesByKey.Name) ||
-              text(person.propertiesByKey.Email)
-            return (
-              <Avatar
-                key={person.id}
-                label={label}
-                photo={text(person.propertiesByKey.Photo)}
-                size="small"
-              />
-            )
-          })}
-          <span className="tile-detail">
-            {attendees.length} attendee{attendees.length === 1 ? "" : "s"}
-          </span>
-        </span>
-      </span>
-    </>
-  )
-  return (
-    <li>
-      {company ? (
-        <button
-          type="button"
-          className="tile company"
-          title="Open company"
-          onClick={() => openPeek(company.id)}
-        >
-          {body}
-        </button>
-      ) : (
-        <div className="tile company">{body}</div>
-      )}
-    </li>
-  )
-}
-
 /** A meeting's header, then a card per outside company and per outside attendee. */
 function MeetingCards({
   meeting,
@@ -412,24 +234,36 @@ function MeetingCards({
           <div className="muted">{formatWhen(startMs, endMs, allDay)}</div>
           {phase === "researching" && (
             <p className="status-line research-line" role="status">
-              <span className="spinner" aria-hidden="true" />
-              {RESEARCHING_LINE}
+              {status === PREP.researching ? (
+                <>
+                  <span className="spinner" aria-hidden="true" />
+                  {RESEARCHING_LINE}
+                </>
+              ) : text(row.propertiesByKey["Research status"]) === "Ready" ? (
+                "Meeting prep queued"
+              ) : (
+                "Waiting for participant and company research"
+              )}
             </p>
           )}
         </div>
         <div className="actions">
           {status && (
-            <span className="pill" data-theme={PILL_THEMES[status] ?? "gray"}>
+            <Badge
+              variant="secondary"
+              className="pill"
+              data-theme={PILL_THEMES[status] ?? "gray"}
+            >
               Prep {status.toLowerCase()}
-            </span>
+            </Badge>
           )}
-          <button
+          <Button
             type="button"
-            className="button"
+            className="dashboard-sync"
             onClick={() => void pages.open(row.id, { mode: "center_peek" })}
           >
             Open prep
-          </button>
+          </Button>
         </div>
       </header>
 
@@ -448,14 +282,14 @@ function MeetingCards({
           {groups.length > 0 && (
             <section>
               <h3 className="section">Companies</h3>
-              <ul className="grid">
+              <ul className="profiles-grid">
                 {groups.map((group) => (
                   <CompanyCard
                     key={group.domain}
                     domain={group.domain}
                     company={companies.get(group.domain)}
                     attendees={group.attendees}
-                    phase={phase}
+                    now={now}
                   />
                 ))}
               </ul>
@@ -463,9 +297,9 @@ function MeetingCards({
           )}
           <section>
             <h3 className="section">People</h3>
-            <ul className="grid">
+            <ul className="profiles-grid">
               {attendees.map((person) => (
-                <PersonCard key={person.id} person={person} phase={phase} />
+                <PersonCard key={person.id} person={person} now={now} />
               ))}
             </ul>
           </section>
@@ -487,13 +321,11 @@ function DayView({
   highlightId,
   now,
   onSelect,
-  emptyAction,
 }: {
   meetings: readonly NotionDataSourcePage[]
   highlightId: string | null
   now: number
   onSelect: (id: string) => void
-  emptyAction: React.ReactNode
 }) {
   const day = dayBounds(now)
   const { allDay, timed } = layoutDay(meetings, day)
@@ -530,7 +362,6 @@ function DayView({
               ? "No meetings with outside attendees today."
               : `${timed.length + allDay.length} meeting${timed.length + allDay.length === 1 ? "" : "s"} with outside attendees`}
           </div>
-          {timed.length + allDay.length === 0 && emptyAction}
         </div>
       </header>
 
@@ -603,41 +434,32 @@ function DayView({
 function Toolbar({
   view,
   onChange,
+  action,
 }: {
   view: ViewState
   onChange: (next: ViewState) => void
+  action: React.ReactNode
 }) {
-  const tab = (mode: Mode, label: string) => (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={view.mode === mode}
-      className={`segment${view.mode === mode ? " segment-active" : ""}`}
-      onClick={() => onChange({ mode, selectedId: null })}
-    >
-      {label}
-    </button>
-  )
   return (
-    <nav className="toolbar">
-      {view.mode === "day" && view.selectedId ? (
-        <button
-          type="button"
-          className="back"
-          aria-label="Back to today"
-          title="Back to today"
-          onClick={() => onChange({ mode: "day", selectedId: null })}
-        >
-          <Icon name="back" />
-        </button>
-      ) : (
-        <span />
-      )}
-      <div className="segments" role="tablist">
-        {tab("day", "Today")}
-        {tab("next", "Next meeting")}
+    <div className="dashboard-toolbar">
+      <div className="dashboard-navigation">
+        {view.mode === "day" && view.selectedId && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Back to today"
+            onClick={() => onChange({ mode: "day", selectedId: null })}
+          >
+            <Icon name="back" />
+          </Button>
+        )}
+        <TabsList aria-label="Meetings view">
+          <TabsTrigger value="day">Today</TabsTrigger>
+          <TabsTrigger value="next">Next meeting</TabsTrigger>
+        </TabsList>
       </div>
-    </nav>
+      {action}
+    </div>
   )
 }
 
@@ -715,144 +537,6 @@ function useSyncRequest(latestRunId: string | null): {
   }
 }
 
-const PANEL_TITLES: Record<Exclude<BlockState["kind"], "ready">, string> = {
-  never_run: "Be prepared for every external meeting",
-  waiting: "Setting up",
-  syncing: "Setting up",
-  researching: "Setting up",
-  failed: "Sync failed",
-}
-
-/** First-run, progress, and failure states, with the Sync calendar button. */
-function SetupPanel({
-  state,
-  sync,
-}: {
-  state: Exclude<BlockState, { kind: "ready" }>
-  sync: ReturnType<typeof useSyncRequest>
-}) {
-  const enabled = canSync(state) && !sync.pending
-  const busy =
-    state.kind === "waiting" ||
-    state.kind === "syncing" ||
-    state.kind === "researching"
-  return (
-    <section className="setup" aria-live="polite">
-      <h2 className="title">{PANEL_TITLES[state.kind]}</h2>
-      {state.kind === "failed" ? (
-        <p className="note" data-theme="red" role="alert">
-          <Icon name="alert" />
-          <span className="note-text">{state.error}</span>
-        </p>
-      ) : state.kind === "never_run" ? null : (
-        <p className="status-line">
-          {busy && !("stale" in state && state.stale) && (
-            <span className="spinner" aria-hidden="true" />
-          )}
-          <span>{statusText(state)}</span>
-        </p>
-      )}
-      {state.kind === "researching" && state.total > 0 && (
-        <div
-          className="progress"
-          role="progressbar"
-          aria-valuemin={0}
-          aria-valuemax={state.total}
-          aria-valuenow={state.done}
-        >
-          <span
-            className="progress-bar"
-            style={{ width: `${(state.done / state.total) * 100}%` }}
-          />
-        </div>
-      )}
-      <div className="setup-actions">
-        <button
-          type="button"
-          className="button button-primary"
-          data-theme="blue"
-          disabled={!enabled}
-          aria-disabled={!enabled}
-          onClick={sync.request}
-        >
-          <Icon name="sync" />
-          {sync.pending
-            ? "Starting…"
-            : state.kind === "failed"
-              ? "Retry sync"
-              : "Sync calendar"}
-        </button>
-        {sync.error && (
-          <span className="error-text" data-theme="red" role="alert">
-            Couldn't start a sync: {sync.error}
-          </span>
-        )}
-      </div>
-    </section>
-  )
-}
-
-/** A secondary "Sync now" button for empty states in the ready UI. */
-function SyncNow({
-  sync,
-  latestRun,
-  progress,
-  now,
-}: {
-  sync: ReturnType<typeof useSyncRequest>
-  latestRun: LatestRun | null
-  progress: Progress
-  now: number
-}) {
-  const { inFlight, status } = quietSync(latestRun, sync.pending, progress, now)
-  return (
-    <div className="sync-now">
-      <button
-        type="button"
-        className="button"
-        disabled={inFlight}
-        aria-disabled={inFlight}
-        onClick={sync.request}
-      >
-        <Icon name="sync" />
-        Sync now
-      </button>
-      {status && (
-        <span className="status-line" role="status">
-          {inFlight && <span className="spinner" aria-hidden="true" />}
-          {status}
-        </span>
-      )}
-      {sync.error && !inFlight && (
-        <span className="error-text" data-theme="red" role="alert">
-          Couldn't start a sync: {sync.error}
-        </span>
-      )}
-    </div>
-  )
-}
-
-/** Shown once the App is set up but no outside meetings have synced. */
-function EmptyState({ action }: { action: React.ReactNode }) {
-  return (
-    <div className="empty">
-      <span className="empty-icon">
-        <Icon name="calendar" />
-      </span>
-      <div>
-        <div className="empty-title">
-          No meetings with outside attendees yet
-        </div>
-        <p className="muted">
-          Meetings sync from your calendar every hour. Meetings with only
-          coworkers are hidden.
-        </p>
-        {action}
-      </div>
-    </div>
-  )
-}
-
 type Row = NotionDataSourcePage
 
 /**
@@ -922,7 +606,8 @@ function MeetingsBlock() {
   const sync = useSyncRequest(latestRun?.id ?? null)
   const progress = researchProgress(meetings, now)
 
-  const error = meetingsQ.error ?? people.error ?? companies.error
+  const error =
+    meetingsQ.error ?? people.error ?? companies.error ?? runsQ.error
   const runsError = runsQ.error
   const loaded = meetingsQ.loaded && runsQ.loaded
   const picked = pickMeeting(meetings, now)
@@ -975,19 +660,42 @@ function MeetingsBlock() {
   const notice = error && (
     <div className="note" data-theme="red" role="alert">
       <Icon name="alert" />
-      <span className="note-text">Couldn't load meetings: {error.message}</span>
-      <button type="button" className="button note-action" onClick={retry}>
+      <span className="note-text">
+        Couldn't refresh updates: {error.message}
+      </span>
+      <Button
+        type="button"
+        variant="outline"
+        className="button note-action"
+        onClick={retry}
+      >
         Retry
-      </button>
+      </Button>
     </div>
   )
 
-  const syncNow = (
-    <SyncNow
-      sync={sync}
-      latestRun={input?.latestRun ?? null}
-      progress={progress}
-      now={now}
+  const calendar = calendarStatus(latestRun, sync.pending, runsQ, now)
+  const dayItems = layoutDay(meetings, dayBounds(now))
+  const emptyDay = dayItems.timed.length + dayItems.allDay.length === 0
+  const showEmpty =
+    state?.kind === "ready" &&
+    (state.noMeetings ||
+      (view.mode === "next" && !picked) ||
+      (view.mode === "day" && !view.selectedId && emptyDay))
+  const emptyState = (
+    <EmptyMeetings
+      status={calendar}
+      onSync={sync.request}
+      scope={
+        view.mode === "day" && state?.kind === "ready" && !state.noMeetings
+          ? "today"
+          : "upcoming"
+      }
+      onNext={
+        view.mode === "day" && picked
+          ? () => setView({ mode: "next", selectedId: null })
+          : undefined
+      }
     />
   )
 
@@ -999,12 +707,18 @@ function MeetingsBlock() {
     content = <Skeleton />
   } else if (state.kind !== "ready") {
     return (
-      <div className="card">
-        <SetupPanel state={state} sync={sync} />
+      <div className="card setup-shell">
+        {notice}
+        <SetupPanel
+          state={state}
+          sync={sync}
+          queries={{ people, companies, meetings: meetingsQ }}
+          now={now}
+        />
       </div>
     )
   } else if (state.noMeetings) {
-    content = <EmptyState action={syncNow} />
+    content = emptyState
   } else if (view.mode === "day") {
     const selected = view.selectedId
       ? meetings.find((row) => row.id === view.selectedId)
@@ -1018,13 +732,14 @@ function MeetingsBlock() {
             ? relative(range.startMs, range.endMs, now) || "Next meeting"
             : "Meeting"
         )
+      ) : emptyDay ? (
+        emptyState
       ) : (
         <DayView
           meetings={meetings}
           highlightId={picked?.row.id ?? null}
           now={now}
           onSelect={(id) => setView({ mode: "day", selectedId: id })}
-          emptyAction={syncNow}
         />
       )
   } else if (picked) {
@@ -1033,20 +748,51 @@ function MeetingsBlock() {
       relative(picked.startMs, picked.endMs, now) || "Next meeting"
     )
   } else {
-    content = (
-      <div>
-        <p className="muted">No upcoming meetings with outside attendees.</p>
-        {syncNow}
-      </div>
-    )
+    content = emptyState
   }
 
+  const hasNavigation = meetingsKnown && meetings.length > 0
   return (
-    <div className="card">
-      <Toolbar view={view} onChange={setView} />
-      {meetingsKnown && notice}
-      {content}
-    </div>
+    <Card className="dashboard">
+      <Tabs
+        value={view.mode}
+        onValueChange={(mode) => {
+          if (mode === "day" || mode === "next")
+            setView({ mode, selectedId: null })
+        }}
+      >
+        {hasNavigation && (
+          <Toolbar
+            view={view}
+            onChange={setView}
+            action={
+              !showEmpty && (
+                <SyncAction status={calendar} onSync={sync.request} />
+              )
+            }
+          />
+        )}
+        <CardContent className="dashboard-content">
+          {meetingsKnown && notice}
+          {sync.error && (
+            <p className="note" data-theme="orange" role="alert">
+              Couldn't start a sync: {sync.error}
+            </p>
+          )}
+          {hasNavigation ? (
+            <TabsContent value={view.mode}>{content}</TabsContent>
+          ) : (
+            content
+          )}
+        </CardContent>
+      </Tabs>
+      <ActivitySummary
+        people={people}
+        companies={companies}
+        status={calendar}
+        now={now}
+      />
+    </Card>
   )
 }
 

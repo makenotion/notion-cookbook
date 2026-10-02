@@ -3,6 +3,8 @@ app.json
 workers.json
 dist/
 node_modules/
+.dev-shell/
+data/worker_*.json
 package-lock.json
 .env
 .env.*

@@ -1,8 +1,5 @@
-// App-wide settings. Change TIME_ZONE to your own IANA zone before deploying:
-// the morning prep runs at MORNING_PREP_TIME in this zone, and "today" is
-// computed in it.
-export const TIME_ZONE = "America/Los_Angeles"
-export const MORNING_PREP_TIME = "07:45"
+// Schedule settings are shared with the browser onboarding copy.
+export { TIME_ZONE, MORNING_PREP_TIME } from "./schedule.js"
 
 // Calendar scan window used by the hourly backfill (listEvents allows ≤ 1 month).
 export const SCAN_DAYS_BACK = 1

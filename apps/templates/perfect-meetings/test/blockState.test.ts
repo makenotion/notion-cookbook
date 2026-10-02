@@ -127,7 +127,7 @@ describe("blockState", () => {
       stalled: 0,
     })
     expect(statusText(state)).toBe(
-      "Researching companies and people (1 of 3 meetings ready)"
+      "Preparing meeting briefs (1 of 3 meetings ready)"
     )
     expect(canSync(state)).toBe(false)
   })
@@ -471,7 +471,7 @@ describe("quietSync", () => {
       quietSync(run("Success"), false, { done: 1, total: 3, stalled: 0 }, NOW)
     ).toEqual({
       inFlight: true,
-      status: "Researching companies and people (1 of 3 meetings ready)",
+      status: "Preparing meeting briefs (1 of 3 meetings ready)",
     })
     expect(
       quietSync(run("Success"), false, { done: 3, total: 3, stalled: 0 }, NOW)
@@ -492,7 +492,7 @@ describe("quietSync", () => {
     ).toEqual({
       inFlight: false,
       status:
-        "Researching companies and people (1 of 2 meetings ready), 1 stuck",
+        "Preparing meeting briefs (1 of 2 meetings ready), 1 stuck",
     })
     expect(
       quietSync(run("Success"), false, { done: 0, total: 0, stalled: 2 }, NOW)

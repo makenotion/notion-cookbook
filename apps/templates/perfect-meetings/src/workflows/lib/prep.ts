@@ -1,78 +1,45 @@
 import type { WorkflowContext } from "@notionhq/apps"
 import { connections } from "@notionhq/apps/workflow"
 
-import {
-  EMAIL_LOOKBACK_DAYS,
-  EMAIL_THREADS_PER_ATTENDEE,
-  TIME_ZONE,
-} from "../../lib/config.js"
+import { EMAIL_LOOKBACK_DAYS, TIME_ZONE } from "../../lib/config.js"
 import {
   bestName,
   companyNameFromDomain,
   isPlaceholderName,
   normalizeEmail,
 } from "../../lib/domains.js"
+import { asPage, findOne, prop, read, type Notion } from "../../lib/props.js"
 import {
-  asPage,
-  findOne,
-  prop,
-  queryAll,
-  read,
-  type Notion,
-  type PropertyMap,
-} from "../../lib/props.js"
-import { CONFIDENCE, MEETING_STATUS, PREP_STATUS } from "../../notion.js"
-import {
-  PREP_HEADING,
-  PROFILE_HEADING,
-  briefMarkdown,
-  parseBrief,
-  planBodyEdit,
-  profileMarkdown,
-  type Brief,
-  type Profiles,
-} from "./brief.js"
-import {
-  emailLines,
-  parseThreads,
-  relevantThreads,
-  senderName,
-  type EmailThread,
-} from "./email.js"
+  CONFIDENCE,
+  MEETING_STATUS,
+  PREP_STATUS,
+  RESEARCH_STATUS,
+} from "../../notion.js"
+import { emailLines, senderName, type EmailThread } from "./email.js"
 import {
   pastMeetingsWith,
-  pickBusinessAccount,
   truncate,
   type ListEventsScriptOutput,
   type PastMeeting,
 } from "./calendar.js"
-import { contactsByEmail, type ContactInfo, type Contacts } from "./ingest.js"
+import { contactsByEmail, type Contacts } from "./ingest.js"
 import { isRuntimeSignal } from "./runtime.js"
+import { needsResearch, readyForResearch } from "./research.js"
 
+// Gmail is temporarily disabled. Both prep workflows require only Calendar.
 export const prepConnections = {
   calendar: connections.calendar({
     permissions: "read",
     readTeammatesCalendars: false,
   }),
-  mail: connections.mail(),
 }
 
 type PrepContext = Pick<
   WorkflowContext<typeof prepConnections>,
-  "step" | "wait" | "notion" | "connections"
+  "step" | "notion" | "connections" | "wait"
 >
 
 export type PrepReason = "created" | "updated" | "morning" | "force"
-
-const POLL_SECONDS = 15
-const MAX_POLLS = 40 // 10 minutes
-const TERMINAL = new Set([
-  "completed",
-  "failed",
-  "canceled",
-  "terminated",
-  "requires_action",
-])
 
 type MeetingSnapshot = {
   title: string
@@ -85,6 +52,16 @@ type MeetingSnapshot = {
   regenerate: boolean
   endedAt: number | null
   now: number
+  researchStatus?: string | null
+  requestedFor?: string
+  prepStatus?: string | null
+}
+
+export type Profiles = {
+  linkedin: string | null
+  x: string | null
+  instagram: string | null
+  website: string | null
 }
 
 export type Attendee = {
@@ -115,13 +92,24 @@ export type Company = {
   summary: string
 }
 
-/** Decide whether a trigger should (re)write the brief. */
+/** Decide whether a trigger should prepare context for a new brief request. */
 export function shouldPrep(
   reason: PrepReason,
   meeting: MeetingSnapshot
 ): boolean {
   if (meeting.status === MEETING_STATUS.cancelled) return false
   if (meeting.attendees === "") return false
+  if (
+    reason !== "force" &&
+    !meeting.regenerate &&
+    meeting.requestedFor === meeting.attendees &&
+    (meeting.researchStatus === RESEARCH_STATUS.ready ||
+      meeting.researchStatus === RESEARCH_STATUS.researching ||
+      (!meeting.researchStatus &&
+        (meeting.prepStatus === PREP_STATUS.queued ||
+          meeting.prepStatus === PREP_STATUS.researching)))
+  )
+    return false
   if (meeting.regenerate || reason === "force") return true
   if (meeting.endedAt !== null && meeting.endedAt < meeting.now) return false
   switch (reason) {
@@ -136,32 +124,30 @@ export function shouldPrep(
 }
 
 export type PrepTargets = {
-  agentId: string
   meetings: string
   people: string
   companies: string
 }
 
 export function prepTargets(access: {
-  researcher: { id: string }
   meetings: { id: string }
   people: { id: string }
   companies: { id: string }
 }): PrepTargets {
   return {
-    agentId: access.researcher.id,
     meetings: access.meetings.id,
     people: access.people.id,
     companies: access.companies.id,
   }
 }
 
-// People pages list meetings from this far back, at most this many.
+// Include recent calendar history in the meeting context.
 const HISTORY_DAYS = 90
 const HISTORY_MEETINGS = 10
 // The Calendar connection lists at most a month per call.
 const LIST_EVENTS_DAYS = 30
 const DAY_MS = 24 * 60 * 60 * 1000
+const PROFILE_WAIT_MS = 20 * 60 * 1000
 
 export async function runPrep(
   context: PrepContext,
@@ -188,48 +174,64 @@ export async function runPrep(
       regenerate: read.checkbox(page.properties, "Regenerate prep"),
       endedAt: endIso ? Date.parse(endIso) : null,
       now: Date.now(),
-    } satisfies MeetingSnapshot
+      researchStatus: read.select(page.properties, "Research status"),
+      requestedFor: read.text(page.properties, "Requested for"),
+      prepStatus: read.select(page.properties, "Prep status"),
+      previousContext: read.text(page.properties, "Research context"),
+    } satisfies MeetingSnapshot & { previousContext: string }
   })
   if (!shouldPrep(reason, meeting)) return
 
-  await step("Mark researching", key("mark-researching"), () =>
-    notion.pages
-      .update({
-        page_id: meetingPageId,
-        properties: { "Prep status": prop.select(PREP_STATUS.researching) },
-      })
-      .then(() => null)
-  )
+  const request = await step("Choose research request", key("request"), () => ({
+    id: crypto.randomUUID(),
+    startedAt: Date.now(),
+  }))
+  const prefix = `Request ID: ${request.id}\nRequested at: ${new Date(request.startedAt).toISOString()}\n\n`
+  const isCurrent = (properties: Record<string, unknown>) =>
+    read.text(properties, "Attendee emails") === meeting.attendees &&
+    read.text(properties, "Requested for") === meeting.attendees &&
+    read.text(properties, "Research context").startsWith(prefix) &&
+    read.select(properties, "Status") !== MEETING_STATUS.cancelled &&
+    !read.checkbox(properties, "Regenerate prep")
 
   try {
-    const { attendees, companies } = await step(
-      "Load attendees",
-      key("load-attendees"),
-      () => loadAttendees(notion, targets, meeting.attendees)
-    )
-
-    const mailbox = await step(
-      "Find mailbox",
-      key("find-mailbox"),
+    const reserved = await step(
+      "Queue prep behind profile research",
+      key("reserve-request"),
       async () => {
-        const { accounts } = await context.connections.calendar.listCalendars(
-          {}
+        const page = asPage(
+          await notion.pages.retrieve({ page_id: meetingPageId })
         )
-        const email = pickBusinessAccount(accounts)?.email
-        if (!email)
-          throw new Error(
-            "No calendar account email found for the Gmail search"
-          )
-        return email
+        if (isCurrent(page.properties)) return true
+        // Do not overwrite a newer request or a changed/cancelled meeting.
+        if (
+          read.text(page.properties, "Research context") !==
+            meeting.previousContext ||
+          read.text(page.properties, "Attendee emails") !== meeting.attendees ||
+          read.select(page.properties, "Status") === MEETING_STATUS.cancelled
+        )
+          return false
+        await notion.pages.update({
+          page_id: meetingPageId,
+          properties: {
+            "Prep status": prop.select(PREP_STATUS.queued),
+            "Research status": { select: null },
+            "Research context": prop.text(prefix),
+            "Requested for": prop.text(meeting.attendees),
+            "Regenerate prep": prop.checkbox(false),
+          },
+        })
+        return true
       }
     )
+    if (!reserved) return
 
     const contacts = await step(
       "Look up contacts",
       key("contacts"),
       async () => {
         try {
-          const emails = attendees.map((attendee) => attendee.email)
+          const emails = splitEmails(meeting.attendees)
           return contactsByEmail(
             await context.connections.calendar.listContacts({
               queries: emails,
@@ -243,22 +245,13 @@ export async function runPrep(
       }
     )
 
-    const excerpts: Record<string, EmailThread[]> = {}
-    for (const attendee of attendees) {
-      excerpts[attendee.email] = await step(
-        "Search email",
-        key("email", attendee.email),
-        () => searchEmail(context, mailbox, attendee.email)
-      )
-    }
-
-    // Best effort: without calendar history, profiles say there were no
-    // meetings and prep continues.
+    // Calendar history is best effort; absence of history is not proof that
+    // no meetings occurred.
     const history = await step(
       "Find past meetings",
       key("past-meetings"),
       async () => {
-        const emails = attendees.map((attendee) => attendee.email)
+        const emails = splitEmails(meeting.attendees)
         if (emails.length === 0) return {}
         try {
           const now = Date.now()
@@ -285,282 +278,169 @@ export async function runPrep(
       }
     )
 
-    const sessionId = await step(
-      "Start research",
-      key("start-research"),
-      async () => {
-        const session = await notion.sessions.update({
-          agent_id: targets.agentId,
-          message: researchPrompt(
-            meeting,
-            withKnownNames(attendees, contacts, excerpts),
-            companies,
-            excerpts,
-            history
-          ),
-        })
-        return session.id
-      }
-    )
-
-    let status = "queued"
-    for (let poll = 0; poll < MAX_POLLS && !TERMINAL.has(status); poll++) {
-      await context.wait.until("Wait for research", {
-        ...key("research-wait", String(poll)),
-        after: { seconds: POLL_SECONDS },
-      })
-      status = await step(
-        "Check research",
-        key("research-status", String(poll)),
+    // Each check has its own durable key, so replay never reuses an earlier
+    // pending snapshot. Waits release compute while profile agents work.
+    let profiles: Awaited<ReturnType<typeof loadAttendees>>
+    for (let attempt = 0; ; attempt += 1) {
+      const checked = await step(
+        "Check meeting profile research",
+        key("check-profiles", String(attempt)),
         async () => {
-          const session = await notion.sessions.retrieve({
-            session_id: sessionId,
-          })
-          return session.status
+          const page = asPage(
+            await notion.pages.retrieve({ page_id: meetingPageId })
+          )
+          if (!isCurrent(page.properties)) return null
+          return {
+            ...(await loadAttendees(notion, targets, meeting.attendees)),
+            timedOut: Date.now() - request.startedAt >= PROFILE_WAIT_MS,
+          }
         }
       )
-    }
-    if (status !== "completed")
-      throw new Error(`Research session ended with status "${status}"`)
-
-    const reply = await step("Read research", key("read-research"), () =>
-      lastAgentMessage(notion, sessionId)
-    )
-    const brief = parseBrief(reply)
-
-    await step("Write brief", key("write-brief"), () =>
-      writeSection(
-        notion,
-        meetingPageId,
-        briefMarkdown(brief, updatedLabel()),
-        PREP_HEADING
-      )
-    )
-
-    // Every attendee and company is stamped Researched at once research
-    // returns, even when it found nothing, so the backlog moves on.
-    for (const attendee of attendees) {
-      const properties = personUpdates(
-        attendee,
-        brief,
-        excerpts[attendee.email] ?? [],
-        contacts[attendee.email]
-      )
-      await step("Save person", key("person", attendee.id), () =>
-        notion.pages
-          .update({
-            page_id: attendee.id,
-            properties: {
-              ...properties,
-              "Researched at": prop.date(new Date().toISOString()),
-            },
-          })
-          .then(() => null)
-      )
-    }
-    const meetingUrls = await step(
-      "Link past meetings",
-      key("meeting-links"),
-      () =>
-        meetingPageUrls(
-          notion,
-          targets.meetings,
-          Object.values(history).flat()
-        ).catch((error: unknown) => {
-          console.warn(
-            `Meeting link lookup failed: ${(error as Error).message}`
-          )
-          return {} as Record<string, string>
-        })
-    )
-    for (const attendee of attendees) {
-      const researched = acceptedMatch(attendee, brief)
-      const markdown = profileMarkdown(
-        {
-          researched,
-          lowConfidence: researched?.lowConfidence ?? false,
-          meetings: (history[attendee.email] ?? []).map((meeting) => ({
-            title: meeting.title,
-            start: meeting.start,
-            url: meetingUrls[meeting.eventId] ?? meeting.calendarUrl,
-          })),
-          lookbackDays: HISTORY_DAYS,
-          timeZone: TIME_ZONE,
-        },
-        updatedLabel()
-      )
-      // A profile that fails to write does not fail the brief.
-      await step("Write profile", key("profile", attendee.id), () =>
-        writeSection(notion, attendee.id, markdown, PROFILE_HEADING).catch(
-          (error: unknown) => {
-            if (isRuntimeSignal(error)) throw error
-            console.warn(
-              `Profile write failed for a person: ${(error as Error).message}`
-            )
-            return null
-          }
+      if (!checked) return
+      if (checked.failed.length)
+        throw new Error(
+          `Profile research failed for ${checked.failed.join(", ")}. Set those profiles to Ready, then retry Regenerate prep.`
         )
-      )
-    }
-
-    for (const company of companies) {
-      const found = matchCompany(company, companies.length, brief)
-      const properties: PropertyMap = {}
-      if (found?.summary && !company.summary)
-        properties.Summary = prop.text(found.summary)
-      if (
-        found?.name &&
-        company.name === companyNameFromDomain(company.domain)
-      ) {
-        properties.Name = prop.title(found.name)
+      if (!checked.pending.length) {
+        profiles = checked
+        break
       }
-      properties["Researched at"] = prop.date(new Date().toISOString())
-      await step("Save company", key("company", company.id), () =>
-        notion.pages
-          .update({ page_id: company.id, properties })
-          .then(() => null)
-      )
+      if (checked.timedOut || attempt >= 40)
+        throw new Error(
+          `Still waiting for profile research after 20 minutes: ${checked.pending.join(", ")}. Check those profiles, then retry Regenerate prep.`
+        )
+      await context.wait.until("Wait for meeting profile research", {
+        ...key("wait-profiles", String(attempt)),
+        after: { seconds: 30 },
+      })
     }
-
-    await step("Mark ready", key("mark-ready"), () =>
-      notion.pages
-        .update({
+    const { attendees, companies } = profiles
+    const contextText =
+      prefix +
+      researchPrompt(
+        meeting,
+        withKnownNames(attendees, contacts),
+        companies,
+        undefined, // Gmail is temporarily disabled; no mailbox is required.
+        history
+      )
+    // Save all inputs before publishing Ready. The agent owns the result and
+    // completion statuses; this workflow never starts or polls a session.
+    const saved = await step(
+      "Save research context",
+      key("save-context"),
+      async () => {
+        const page = asPage(
+          await notion.pages.retrieve({ page_id: meetingPageId })
+        )
+        if (!isCurrent(page.properties)) return false
+        if (read.text(page.properties, "Research context") === contextText)
+          return true
+        await notion.pages.update({
           page_id: meetingPageId,
           properties: {
-            "Prep status": prop.select(PREP_STATUS.ready),
-            "Prep updated": prop.date(new Date().toISOString()),
-            "Prepped for": prop.text(meeting.attendees),
-            "Regenerate prep": prop.checkbox(false),
+            "Research context": {
+              rich_text: Array.from(
+                { length: Math.ceil(contextText.length / 2000) },
+                (_, i) => ({
+                  text: {
+                    content: contextText.slice(i * 2000, (i + 1) * 2000),
+                  },
+                })
+              ),
+            },
           },
         })
-        .then(() => null)
+        return true
+      }
     )
+    if (!saved) return
+    await step("Queue meeting research", key("queue-research"), async () => {
+      // A replay after a successful API write must not requeue an agent that
+      // already claimed or finished this request.
+      const page = asPage(
+        await notion.pages.retrieve({ page_id: meetingPageId })
+      )
+      const status = read.select(page.properties, "Research status")
+      if (
+        !isCurrent(page.properties) ||
+        read.text(page.properties, "Research context") !== contextText
+      )
+        return null
+      // The reservation cleared this status for this unique request. Any
+      // value means it has already been handed off, even if the agent failed.
+      if (status) return null
+      await notion.pages.update({
+        page_id: meetingPageId,
+        properties: { "Research status": prop.select(RESEARCH_STATUS.ready) },
+      })
+      return null
+    })
   } catch (error) {
     if (isRuntimeSignal(error)) throw error
     // Only unwatched properties change here, so a persistent failure does not
     // retrigger prep. Tick Regenerate prep to retry.
-    await step("Mark failed", key("mark-failed"), () =>
-      notion.pages
-        .update({
-          page_id: meetingPageId,
-          properties: { "Prep status": prop.select(PREP_STATUS.failed) },
-        })
-        .then(() => null)
-    )
+    await step("Mark failed", key("mark-failed"), async () => {
+      const page = asPage(
+        await notion.pages.retrieve({ page_id: meetingPageId })
+      )
+      if (
+        !isCurrent(page.properties) ||
+        read.select(page.properties, "Research status")
+      )
+        return null
+      await notion.pages.update({
+        page_id: meetingPageId,
+        properties: {
+          "Prep status": prop.select(PREP_STATUS.failed),
+          "Research status": prop.select(RESEARCH_STATUS.failed),
+          "Research context": prop.text(
+            `${prefix}Preparation blocked: ${(error as Error).message}`
+          ),
+        },
+      })
+      return null
+    })
     throw error
   }
-}
-
-/**
- * The researcher's match for an attendee, if it found one that may be used: a
- * low-confidence match never overrides a person marked High.
- */
-export function acceptedMatch(
-  attendee: Pick<Attendee, "email" | "confidence">,
-  brief: Pick<Brief, "people">
-): Brief["people"][number] | undefined {
-  const found = brief.people.find((person) => person.email === attendee.email)
-  const hasProfile = Object.values(found?.profiles ?? {}).some(Boolean)
-  if (
-    !found ||
-    !(found.role || found.name || found.responsibilities || hasProfile)
-  )
-    return undefined
-  if (attendee.confidence === CONFIDENCE.high && found.lowConfidence)
-    return undefined
-  return found
-}
-
-/**
- * Role, name, photo, and confidence updates for a person. A name replaces
- * only the email-derived placeholder, preferring contacts, then the attendee's
- * own email sender name, then the agent's guess. A low-confidence match is
- * still saved, marked Low; a later match may replace it, but a Low match never
- * replaces a High one.
- */
-export function personUpdates(
-  attendee: Attendee,
-  brief: Brief,
-  threads: readonly EmailThread[],
-  contact?: ContactInfo
-): PropertyMap {
-  const properties: PropertyMap = {}
-  if (contact?.photoUrl && !attendee.photo)
-    properties.Photo = prop.url(contact.photoUrl)
-  const researched = acceptedMatch(attendee, brief)
-  const confidence = researched?.lowConfidence
-    ? CONFIDENCE.low
-    : CONFIDENCE.high
-  const replaceable = attendee.confidence === CONFIDENCE.low
-  if (
-    researched?.role &&
-    (!attendee.role || replaceable) &&
-    researched.role !== attendee.role
-  ) {
-    properties.Role = prop.text(researched.role)
-    if (researched.roleSource)
-      properties["Role source"] = prop.url(researched.roleSource)
-  }
-  for (const key of PROFILE_KEYS) {
-    const url = researched?.profiles[key]
-    const stored = attendee.profiles[key]
-    if (url && (!stored || replaceable) && url !== stored)
-      properties[PROFILE_PROPERTIES[key]] = prop.url(url)
-  }
-  // Contacts and email sender names are not research; they win over it.
-  const known = bestName(
-    attendee.email,
-    contact?.name,
-    senderName(threads, attendee.email)
-  )
-  if (replaceable || isPlaceholderName(attendee.name, attendee.email)) {
-    const name = known ?? bestName(attendee.email, researched?.name)
-    if (name && name !== attendee.name) properties.Name = prop.title(name)
-  }
-  // Confidence describes the researcher's match, so it changes only when the
-  // match's name or role is saved, or the match confirms the saved role.
-  const usedMatch =
-    properties.Role !== undefined ||
-    PROFILE_KEYS.some((key) => properties[PROFILE_PROPERTIES[key]]) ||
-    (properties.Name !== undefined && !known) ||
-    (researched?.role !== undefined && researched.role === attendee.role)
-  if (usedMatch && attendee.confidence !== confidence)
-    properties.Confidence = prop.select(confidence)
-  return properties
-}
-
-/**
- * The researched company for a stored one: by domain, else the only company
- * when both sides have exactly one (the agent may use the company's public web
- * domain rather than its email domain).
- */
-export function matchCompany(
-  company: Pick<Company, "domain">,
-  storedCount: number,
-  brief: Pick<Brief, "companies">
-): Brief["companies"][number] | undefined {
-  const byDomain = brief.companies.find(
-    (candidate) => candidate.domain === company.domain
-  )
-  if (byDomain) return byDomain
-  return storedCount === 1 && brief.companies.length === 1
-    ? brief.companies[0]
-    : undefined
 }
 
 async function loadAttendees(
   notion: Notion,
   targets: PrepTargets,
   attendeeEmails: string
-): Promise<{ attendees: Attendee[]; companies: Company[] }> {
+): Promise<{
+  attendees: Attendee[]
+  companies: Company[]
+  pending: string[]
+  failed: string[]
+}> {
   const attendees: Attendee[] = []
   const domains = new Set<string>()
+  const pending: string[] = []
+  const failed: string[] = []
+  const check = async (page: ReturnType<typeof asPage>, label: string) => {
+    const status = read.select(page.properties, "Research status")
+    if (status === RESEARCH_STATUS.done) return
+    if (status === RESEARCH_STATUS.failed) {
+      failed.push(label)
+      return
+    }
+    // Legacy profiles may have saved research without a status.
+    if (!status && !needsResearch(page.properties)) return
+    pending.push(label)
+    if (needsResearch(page.properties)) await readyForResearch(notion, page.id)
+  }
   for (const email of splitEmails(attendeeEmails)) {
     const page = await findOne(notion, targets.people, {
       property: "Email",
       email: { equals: email },
     })
-    if (!page) continue
+    if (!page) {
+      pending.push(email)
+      continue
+    }
+    await check(page, email)
     const domain = read.text(page.properties, "Company domain")
     if (domain) domains.add(domain)
     attendees.push({
@@ -585,7 +465,11 @@ async function loadAttendees(
       property: "Domain",
       rich_text: { equals: domain },
     })
-    if (!page) continue
+    if (!page) {
+      pending.push(domain)
+      continue
+    }
+    await check(page, domain)
     companies.push({
       id: page.id,
       name: read.title(page.properties, "Name"),
@@ -593,7 +477,7 @@ async function loadAttendees(
       summary: read.text(page.properties, "Summary"),
     })
   }
-  return { attendees, companies }
+  return { attendees, companies, pending, failed }
 }
 
 export function splitEmails(value: string): string[] {
@@ -603,35 +487,10 @@ export function splitEmails(value: string): string[] {
     .filter(Boolean)
 }
 
-async function searchEmail(
-  context: PrepContext,
-  mailbox: string,
-  email: string
-): Promise<EmailThread[]> {
-  const result = await context.connections.mail.searchEmails({
-    userEmailAddress: mailbox,
-    query: `{from:${email} to:${email} cc:${email}} newer_than:${EMAIL_LOOKBACK_DAYS}d`,
-    count: EMAIL_THREADS_PER_ATTENDEE,
-  })
-  if (result.isError)
-    throw new Error(
-      `Gmail search failed for an attendee (code ${result.toolErrorCode ?? "unknown"})`
-    )
-  const threads =
-    parseThreads(result.structuredContent) ?? parseThreads(result.content)
-  if (!threads) {
-    console.warn(
-      "Gmail search returned an unrecognised shape; continuing without email for this attendee"
-    )
-    return []
-  }
-  return relevantThreads(threads, email, mailbox)
-}
-
 // Past meetings listed per attendee in the prompt; the People page lists more.
 const PROMPT_PAST_MEETINGS = 5
 
-// The sessions API rejects messages over 10,000 characters.
+// Bound the context stored on the meeting to keep agent input manageable.
 export const MAX_PROMPT_CHARS = 9500
 const MAX_AGENDA_CHARS = 1500
 
@@ -639,7 +498,7 @@ const MAX_AGENDA_CHARS = 1500
 export function withKnownNames(
   attendees: readonly Attendee[],
   contacts: Contacts,
-  threadsByAttendee: Record<string, readonly EmailThread[]>
+  threadsByAttendee: Record<string, readonly EmailThread[]> = {}
 ): Attendee[] {
   return attendees.map((attendee) => ({
     ...attendee,
@@ -657,7 +516,7 @@ export function researchPrompt(
   meeting: Pick<MeetingSnapshot, "title" | "start" | "end" | "agenda">,
   attendees: readonly Attendee[],
   companies: readonly Company[],
-  threadsByAttendee: Record<string, readonly EmailThread[]>,
+  threadsByAttendee?: Record<string, readonly EmailThread[]>,
   pastMeetings: Record<string, readonly PastMeeting[]> = {}
 ): string {
   const companyByDomain = new Map(
@@ -706,7 +565,12 @@ export function researchPrompt(
       return `- ${name} <${attendee.email}>, ${where}${role}${profiles}${history}`
     })
     .join("\n")
-  const head = `Write the pre-meeting brief for this meeting. Reply with the JSON object described in your instructions.
+  const emailContext =
+    threadsByAttendee === undefined
+      ? "Email research is temporarily disabled. Email was not checked; do not infer that no correspondence exists. Base recent interactions only on the supplied calendar history and linked meeting records."
+      : ""
+  const head = `Context for the meeting brief. Use current People and Companies profiles; the names and roles below are a snapshot, not confirmed research.
+${emailContext}
 
 ## Meeting
 Title: ${meeting.title}
@@ -717,8 +581,9 @@ ${truncate(meeting.agenda, MAX_AGENDA_CHARS) || "(none)"}
 ## Outside attendees
 ${people}
 
-## Recent email threads (last ${EMAIL_LOOKBACK_DAYS} days, newest first)
+${threadsByAttendee === undefined ? "" : `## Recent email threads (last ${EMAIL_LOOKBACK_DAYS} days, newest first)`}
 `
+  if (threadsByAttendee === undefined) return truncate(head, MAX_PROMPT_CHARS)
   // Add threads newest first until the prompt would exceed the API limit.
   let body = ""
   let omitted = 0
@@ -730,110 +595,4 @@ ${people}
   if (!body) body = "(no email with these attendees)\n"
   if (omitted > 0) body += `(${omitted} older threads omitted)\n`
   return truncate(head + body, MAX_PROMPT_CHARS)
-}
-
-type SessionEvent = Awaited<
-  ReturnType<Notion["sessions"]["queryEvents"]>
->["results"][number]
-
-/** The text of the highest-sequence agent message in a list of session events. */
-export function lastAgentText(events: readonly SessionEvent[]): string | null {
-  let best: { sequence: number; text: string } | null = null
-  for (const event of events) {
-    if (event.type !== "agent.message") continue
-    const text = event.content
-      .flatMap((block) => (block.type === "text" ? [block.text] : []))
-      .join("")
-    if (text && (!best || event.sequence > best.sequence))
-      best = { sequence: event.sequence, text }
-  }
-  return best?.text ?? null
-}
-
-async function lastAgentMessage(
-  notion: Notion,
-  sessionId: string
-): Promise<string> {
-  // Read every event rather than relying on a server-side type filter,
-  // which did not narrow results in a live run.
-  const events: SessionEvent[] = []
-  let cursor: string | undefined
-  do {
-    const response = await notion.sessions.queryEvents({
-      session_id: sessionId,
-      sorts: [{ property: "sequence", direction: "ascending" }],
-      start_cursor: cursor,
-      page_size: 100,
-    })
-    events.push(...response.results)
-    cursor = response.has_more ? (response.next_cursor ?? undefined) : undefined
-  } while (cursor)
-  const text = lastAgentText(events)
-  if (!text) throw new Error("Research session produced no reply")
-  return text
-}
-
-function updatedLabel(): string {
-  return new Date().toLocaleString("en-US", {
-    timeZone: TIME_ZONE,
-    dateStyle: "medium",
-    timeStyle: "short",
-  })
-}
-
-/** Replace or insert a managed section at the top of a page body. */
-async function writeSection(
-  notion: Notion,
-  pageId: string,
-  markdown: string,
-  heading: string
-): Promise<null> {
-  const current = await notion.pages.retrieveMarkdown({ page_id: pageId })
-  const edit = planBodyEdit(current.markdown, markdown, heading)
-  if (edit.type === "replace") {
-    await notion.pages.updateMarkdown({
-      page_id: pageId,
-      type: "update_content",
-      update_content: {
-        content_updates: [{ old_str: edit.oldStr, new_str: edit.newStr }],
-        allow_deleting_content: true,
-      },
-    })
-  } else {
-    await notion.pages.updateMarkdown({
-      page_id: pageId,
-      type: "insert_content",
-      insert_content: { content: edit.content, position: { type: "start" } },
-    })
-  }
-  return null
-}
-
-/** Meetings page URLs by calendar event ID, for the given past meetings. */
-async function meetingPageUrls(
-  notion: Notion,
-  meetingsId: string,
-  meetings: readonly PastMeeting[]
-): Promise<Record<string, string>> {
-  const wanted = new Set(meetings.map((meeting) => meeting.eventId))
-  if (wanted.size === 0) return {}
-  const oldest = meetings.reduce(
-    (min, meeting) => (meeting.start < min ? meeting.start : min),
-    meetings[0]!.start
-  )
-  const pages = await queryAll(notion, {
-    data_source_id: meetingsId,
-    filter: {
-      property: "When",
-      date: {
-        on_or_after: new Date(Date.parse(oldest) - DAY_MS).toISOString(),
-      },
-    },
-  })
-  const urls: Record<string, string> = {}
-  for (const page of pages) {
-    const eventId = read.text(page.properties, "Event ID")
-    if (wanted.has(eventId) && page.url) urls[eventId] = page.url
-  }
-  return urls
 }

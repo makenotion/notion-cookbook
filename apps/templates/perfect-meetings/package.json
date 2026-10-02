@@ -5,7 +5,7 @@
   "description": "Meeting prep: calendar meetings with outside attendees, people, companies, and AI briefs in Notion",
   "notion": {
     "name": "Perfect Meetings",
-    "description": "Syncs calendar meetings with outside attendees into Notion and writes research briefs covering people, companies, recent email, and the likely meeting objective."
+    "description": "Syncs calendar meetings with outside attendees into Notion and writes research briefs covering people, companies, calendar history, and the likely meeting objective."
   },
   "type": "module",
   "scripts": {
@@ -18,14 +18,21 @@
   },
   "dependencies": {
     "@notionhq/apps": "latest",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.50.0",
+    "radix-ui": "^1.6.7",
     "react": "^19.2.5",
-    "react-dom": "^19.2.5"
+    "react-dom": "^19.2.5",
+    "tailwind-merge": "^3.7.0"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^26.0.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.0.0",
+    "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
     "vite": "^7.0.0",
     "vitest": "^3.2.7"
