@@ -13,7 +13,7 @@ Prepare for Google Calendar meetings with people outside your organization, with
 <details>
 <summary>How it works</summary>
 	**Before a meeting.** Choose a meeting in Today, then select **Open prep**. Add your thoughts under **Notes**; refreshes preserve them.
-	**Updates happen automatically.** Your calendar syncs every hour, and today's briefs refresh each morning. Research progress appears above as it happens.
+	**Updates happen automatically.** Your calendar syncs every hour, and today's briefs refresh each morning after participant and company research finishes. Progress appears above as it happens.
 	**Need a fresh brief?** Open the meeting page and check **Regenerate prep** to refresh or retry it.
 	<mention-page url="{{sync-runs-db}}">Workflow runs</mention-page> — Calendar sync history, if you need to check what happened.
 </details>

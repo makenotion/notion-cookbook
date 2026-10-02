@@ -40,26 +40,29 @@ describe("shouldPrep", () => {
     ).toBe(true)
   })
 
-  it("ignores its own consumed Regenerate edit before the Ready handoff", () => {
-    expect(
-      shouldPrep("updated", {
-        ...base,
-        requestedFor: base.attendees,
-        prepStatus: "Researching",
-        researchStatus: null,
-        regenerate: false,
-      })
-    ).toBe(false)
-    expect(
-      shouldPrep("updated", {
-        ...base,
-        requestedFor: base.attendees,
-        prepStatus: "Researching",
-        researchStatus: null,
-        regenerate: true,
-      })
-    ).toBe(true)
-  })
+  it.each(["Queued", "Researching"])(
+    "ignores its own consumed Regenerate edit while %s",
+    (prepStatus) => {
+      expect(
+        shouldPrep("updated", {
+          ...base,
+          requestedFor: base.attendees,
+          prepStatus,
+          researchStatus: null,
+          regenerate: false,
+        })
+      ).toBe(false)
+      expect(
+        shouldPrep("updated", {
+          ...base,
+          requestedFor: base.attendees,
+          prepStatus,
+          researchStatus: null,
+          regenerate: true,
+        })
+      ).toBe(true)
+    }
+  )
 
   it("honours Regenerate even for past meetings", () => {
     const past = {

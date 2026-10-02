@@ -96,6 +96,36 @@ describe("first-run stages", () => {
     })
   })
 
+  it("keeps briefs pending until their profile research completes", () => {
+    const waiting = meeting("Queued")
+    waiting.propertiesByKey["Research status"] = ""
+    const stages = setupStages(
+      researching,
+      queries({
+        people: loaded([row("Researching")]),
+        companies: loaded([row("Researching")]),
+        meetings: loaded([waiting]),
+      }),
+      false,
+      NOW
+    )
+    expect(stages[1]?.status).toBe("active")
+    expect(stages[2]?.status).toBe("active")
+    expect(stages[3]).toMatchObject({
+      status: "pending",
+      detail: "1 waiting for research",
+    })
+    waiting.propertiesByKey["Research status"] = "Ready"
+    expect(
+      setupStages(
+        researching,
+        queries({ meetings: loaded([waiting]) }),
+        false,
+        NOW
+      )[3]
+    ).toMatchObject({ status: "pending", detail: "1 queued" })
+  })
+
   it("distinguishes unknown, failed, partial, and genuinely empty results", () => {
     const data = queries({
       people: initialQuery(),

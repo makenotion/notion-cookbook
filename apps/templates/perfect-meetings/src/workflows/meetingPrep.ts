@@ -26,7 +26,7 @@ const DAY_MS = 24 * HOUR_MS
 export default workflow({
   name: "Prepare research",
   description:
-    "Prepares calendar context, then hands meetings to the researcher with Ready. Run manually to queue unresearched people and companies too. No agent session is awaited.",
+    "Prepares calendar context and waits for each meeting's participant and company research before queuing its brief. Run manually to queue unresearched people and companies too.",
   connections: prepConnections,
   triggers: ({ events }) => [
     events.notionPageCreated({ dataSource: meetings.dataSource }),

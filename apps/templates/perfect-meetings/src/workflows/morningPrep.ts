@@ -12,7 +12,7 @@ const DAY_MS = 24 * 60 * 60 * 1000
 export default workflow({
   name: "Refresh today's research",
   description:
-    "Prepares fresh context and queues the agent to refresh today's briefs: daily at 7:45 am local time, or whenever you run it. Finishes without waiting for the agent.",
+    "Prepares fresh context, waits for participant and company research, and queues today's briefs: daily at 7:45 am local time, or whenever you run it.",
   connections: prepConnections,
   triggers: ({ events }) => [
     events.scheduled({

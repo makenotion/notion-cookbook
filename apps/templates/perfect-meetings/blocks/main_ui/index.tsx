@@ -234,8 +234,16 @@ function MeetingCards({
           <div className="muted">{formatWhen(startMs, endMs, allDay)}</div>
           {phase === "researching" && (
             <p className="status-line research-line" role="status">
-              <span className="spinner" aria-hidden="true" />
-              {RESEARCHING_LINE}
+              {status === PREP.researching ? (
+                <>
+                  <span className="spinner" aria-hidden="true" />
+                  {RESEARCHING_LINE}
+                </>
+              ) : text(row.propertiesByKey["Research status"]) === "Ready" ? (
+                "Meeting prep queued"
+              ) : (
+                "Waiting for participant and company research"
+              )}
             </p>
           )}
         </div>

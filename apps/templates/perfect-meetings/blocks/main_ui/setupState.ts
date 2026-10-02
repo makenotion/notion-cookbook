@@ -4,7 +4,7 @@ import { MORNING_PREP_TIME, TIME_ZONE } from "../../src/lib/schedule"
 import { researchActivity } from "./derive"
 import type { QueryState } from "./live"
 import { dateRange, splitEmails, text } from "./meeting"
-import { PREP, type BlockState } from "./state"
+import { PREP, researchStuck, type BlockState } from "./state"
 
 export type SetupStage = {
   key: string
@@ -87,7 +87,7 @@ export function setupStages(
       ? "Prepare meeting briefs"
       : `Research ${plural}`
     const initialDetail = briefs
-      ? "Bring everything into a useful brief"
+      ? "Turn completed research into a useful brief"
       : key === "people"
         ? "Get to know the people you'll meet"
         : "Learn about their companies"
@@ -147,6 +147,14 @@ export function setupStages(
       counts.done === counts.total
     const attention =
       Boolean(query.error) || (!busy && (counts.failed > 0 || stalled > 0))
+    const waitingForProfiles = briefs
+      ? rows.filter(
+          (row) =>
+            text(row.propertiesByKey["Prep status"]) === PREP.queued &&
+            !text(row.propertiesByKey["Research status"]) &&
+            !researchStuck(row, now)
+        ).length
+      : 0
     const detail = [
       counts.researching > 0 && `${counts.researching} researching`,
       counts.total > 0
@@ -154,7 +162,9 @@ export function setupStages(
         : calendarDone
           ? "None to research"
           : "Waiting for calendar results",
-      counts.queued > 0 && `${counts.queued} queued`,
+      waitingForProfiles > 0 && `${waitingForProfiles} waiting for research`,
+      counts.queued > waitingForProfiles &&
+        `${counts.queued - waitingForProfiles} queued`,
       counts.failed > 0 && `${counts.failed} failed`,
       stalled > 0 && `${stalled} may be stuck`,
       counts.unrequested > 0 && `${counts.unrequested} not queued`,

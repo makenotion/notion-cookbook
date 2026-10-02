@@ -24,7 +24,7 @@ export const PREP = {
  * A run row with no Status or a Pending one, or a meeting Queued or
  * Researching, that has not changed for this long is treated as stuck. A
  * crashed or timed-out ingest stays Pending, a row the workflow never picked
- * up has no Status, and a prep polls research for at most 10 minutes.
+ * up has no Status. Prep waits for profile research for at most 20 minutes.
  */
 export const STALE_RUN_MS = 20 * 60 * 1000
 

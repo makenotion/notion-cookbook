@@ -24,6 +24,7 @@ import {
 } from "./calendar.js"
 import { contactsByEmail, type Contacts } from "./ingest.js"
 import { isRuntimeSignal } from "./runtime.js"
+import { needsResearch, readyForResearch } from "./research.js"
 
 // Gmail is temporarily disabled. Both prep workflows require only Calendar.
 export const prepConnections = {
@@ -35,7 +36,7 @@ export const prepConnections = {
 
 type PrepContext = Pick<
   WorkflowContext<typeof prepConnections>,
-  "step" | "notion" | "connections"
+  "step" | "notion" | "connections" | "wait"
 >
 
 export type PrepReason = "created" | "updated" | "morning" | "force"
@@ -105,7 +106,8 @@ export function shouldPrep(
     (meeting.researchStatus === RESEARCH_STATUS.ready ||
       meeting.researchStatus === RESEARCH_STATUS.researching ||
       (!meeting.researchStatus &&
-        meeting.prepStatus === PREP_STATUS.researching))
+        (meeting.prepStatus === PREP_STATUS.queued ||
+          meeting.prepStatus === PREP_STATUS.researching)))
   )
     return false
   if (meeting.regenerate || reason === "force") return true
@@ -145,6 +147,7 @@ const HISTORY_MEETINGS = 10
 // The Calendar connection lists at most a month per call.
 const LIST_EVENTS_DAYS = 30
 const DAY_MS = 24 * 60 * 60 * 1000
+const PROFILE_WAIT_MS = 20 * 60 * 1000
 
 export async function runPrep(
   context: PrepContext,
@@ -174,32 +177,61 @@ export async function runPrep(
       researchStatus: read.select(page.properties, "Research status"),
       requestedFor: read.text(page.properties, "Requested for"),
       prepStatus: read.select(page.properties, "Prep status"),
-    } satisfies MeetingSnapshot
+      previousContext: read.text(page.properties, "Research context"),
+    } satisfies MeetingSnapshot & { previousContext: string }
   })
   if (!shouldPrep(reason, meeting)) return
 
-  await step("Mark researching", key("mark-researching"), () =>
-    notion.pages
-      .update({
-        page_id: meetingPageId,
-        properties: { "Prep status": prop.select(PREP_STATUS.researching) },
-      })
-      .then(() => null)
-  )
+  const request = await step("Choose research request", key("request"), () => ({
+    id: crypto.randomUUID(),
+    startedAt: Date.now(),
+  }))
+  const prefix = `Request ID: ${request.id}\nRequested at: ${new Date(request.startedAt).toISOString()}\n\n`
+  const isCurrent = (properties: Record<string, unknown>) =>
+    read.text(properties, "Attendee emails") === meeting.attendees &&
+    read.text(properties, "Requested for") === meeting.attendees &&
+    read.text(properties, "Research context").startsWith(prefix) &&
+    read.select(properties, "Status") !== MEETING_STATUS.cancelled &&
+    !read.checkbox(properties, "Regenerate prep")
 
   try {
-    const { attendees, companies } = await step(
-      "Load attendees",
-      key("load-attendees"),
-      () => loadAttendees(notion, targets, meeting.attendees)
+    const reserved = await step(
+      "Queue prep behind profile research",
+      key("reserve-request"),
+      async () => {
+        const page = asPage(
+          await notion.pages.retrieve({ page_id: meetingPageId })
+        )
+        if (isCurrent(page.properties)) return true
+        // Do not overwrite a newer request or a changed/cancelled meeting.
+        if (
+          read.text(page.properties, "Research context") !==
+            meeting.previousContext ||
+          read.text(page.properties, "Attendee emails") !== meeting.attendees ||
+          read.select(page.properties, "Status") === MEETING_STATUS.cancelled
+        )
+          return false
+        await notion.pages.update({
+          page_id: meetingPageId,
+          properties: {
+            "Prep status": prop.select(PREP_STATUS.queued),
+            "Research status": { select: null },
+            "Research context": prop.text(prefix),
+            "Requested for": prop.text(meeting.attendees),
+            "Regenerate prep": prop.checkbox(false),
+          },
+        })
+        return true
+      }
     )
+    if (!reserved) return
 
     const contacts = await step(
       "Look up contacts",
       key("contacts"),
       async () => {
         try {
-          const emails = attendees.map((attendee) => attendee.email)
+          const emails = splitEmails(meeting.attendees)
           return contactsByEmail(
             await context.connections.calendar.listContacts({
               queries: emails,
@@ -219,7 +251,7 @@ export async function runPrep(
       "Find past meetings",
       key("past-meetings"),
       async () => {
-        const emails = attendees.map((attendee) => attendee.email)
+        const emails = splitEmails(meeting.attendees)
         if (emails.length === 0) return {}
         try {
           const now = Date.now()
@@ -246,13 +278,45 @@ export async function runPrep(
       }
     )
 
-    const requestAt = await step(
-      "Choose research request",
-      key("request-at"),
-      () => new Date().toISOString()
-    )
+    // Each check has its own durable key, so replay never reuses an earlier
+    // pending snapshot. Waits release compute while profile agents work.
+    let profiles: Awaited<ReturnType<typeof loadAttendees>>
+    for (let attempt = 0; ; attempt += 1) {
+      const checked = await step(
+        "Check meeting profile research",
+        key("check-profiles", String(attempt)),
+        async () => {
+          const page = asPage(
+            await notion.pages.retrieve({ page_id: meetingPageId })
+          )
+          if (!isCurrent(page.properties)) return null
+          return {
+            ...(await loadAttendees(notion, targets, meeting.attendees)),
+            timedOut: Date.now() - request.startedAt >= PROFILE_WAIT_MS,
+          }
+        }
+      )
+      if (!checked) return
+      if (checked.failed.length)
+        throw new Error(
+          `Profile research failed for ${checked.failed.join(", ")}. Set those profiles to Ready, then retry Regenerate prep.`
+        )
+      if (!checked.pending.length) {
+        profiles = checked
+        break
+      }
+      if (checked.timedOut || attempt >= 40)
+        throw new Error(
+          `Still waiting for profile research after 20 minutes: ${checked.pending.join(", ")}. Check those profiles, then retry Regenerate prep.`
+        )
+      await context.wait.until("Wait for meeting profile research", {
+        ...key("wait-profiles", String(attempt)),
+        after: { seconds: 30 },
+      })
+    }
+    const { attendees, companies } = profiles
     const contextText =
-      `Requested at: ${requestAt}\n\n` +
+      prefix +
       researchPrompt(
         meeting,
         withKnownNames(attendees, contacts),
@@ -262,14 +326,19 @@ export async function runPrep(
       )
     // Save all inputs before publishing Ready. The agent owns the result and
     // completion statuses; this workflow never starts or polls a session.
-    await step("Save research context", key("save-context"), () =>
-      notion.pages
-        .update({
+    const saved = await step(
+      "Save research context",
+      key("save-context"),
+      async () => {
+        const page = asPage(
+          await notion.pages.retrieve({ page_id: meetingPageId })
+        )
+        if (!isCurrent(page.properties)) return false
+        if (read.text(page.properties, "Research context") === contextText)
+          return true
+        await notion.pages.update({
           page_id: meetingPageId,
           properties: {
-            // Clear the previous request before publishing Ready, including
-            // explicit refreshes of an already Ready/Researching request.
-            "Research status": { select: null },
             "Research context": {
               rich_text: Array.from(
                 { length: Math.ceil(contextText.length / 2000) },
@@ -280,12 +349,12 @@ export async function runPrep(
                 })
               ),
             },
-            "Requested for": prop.text(meeting.attendees),
-            "Regenerate prep": prop.checkbox(false),
           },
         })
-        .then(() => null)
+        return true
+      }
     )
+    if (!saved) return
     await step("Queue meeting research", key("queue-research"), async () => {
       // A replay after a successful API write must not requeue an agent that
       // already claimed or finished this request.
@@ -294,19 +363,13 @@ export async function runPrep(
       )
       const status = read.select(page.properties, "Research status")
       if (
-        read.text(page.properties, "Requested for") !== meeting.attendees ||
-        read.text(page.properties, "Research context") !== contextText ||
-        read.select(page.properties, "Status") === MEETING_STATUS.cancelled
+        !isCurrent(page.properties) ||
+        read.text(page.properties, "Research context") !== contextText
       )
         return null
-      if (
-        status === RESEARCH_STATUS.ready ||
-        status === RESEARCH_STATUS.researching ||
-        (status === RESEARCH_STATUS.done &&
-          Date.parse(read.date(page.properties, "Prep updated")?.start ?? "") >=
-            Date.parse(requestAt))
-      )
-        return null
+      // The reservation cleared this status for this unique request. Any
+      // value means it has already been handed off, even if the agent failed.
+      if (status) return null
       await notion.pages.update({
         page_id: meetingPageId,
         properties: { "Research status": prop.select(RESEARCH_STATUS.ready) },
@@ -317,17 +380,27 @@ export async function runPrep(
     if (isRuntimeSignal(error)) throw error
     // Only unwatched properties change here, so a persistent failure does not
     // retrigger prep. Tick Regenerate prep to retry.
-    await step("Mark failed", key("mark-failed"), () =>
-      notion.pages
-        .update({
-          page_id: meetingPageId,
-          properties: {
-            "Prep status": prop.select(PREP_STATUS.failed),
-            "Research status": prop.select(RESEARCH_STATUS.failed),
-          },
-        })
-        .then(() => null)
-    )
+    await step("Mark failed", key("mark-failed"), async () => {
+      const page = asPage(
+        await notion.pages.retrieve({ page_id: meetingPageId })
+      )
+      if (
+        !isCurrent(page.properties) ||
+        read.select(page.properties, "Research status")
+      )
+        return null
+      await notion.pages.update({
+        page_id: meetingPageId,
+        properties: {
+          "Prep status": prop.select(PREP_STATUS.failed),
+          "Research status": prop.select(RESEARCH_STATUS.failed),
+          "Research context": prop.text(
+            `${prefix}Preparation blocked: ${(error as Error).message}`
+          ),
+        },
+      })
+      return null
+    })
     throw error
   }
 }
@@ -336,15 +409,38 @@ async function loadAttendees(
   notion: Notion,
   targets: PrepTargets,
   attendeeEmails: string
-): Promise<{ attendees: Attendee[]; companies: Company[] }> {
+): Promise<{
+  attendees: Attendee[]
+  companies: Company[]
+  pending: string[]
+  failed: string[]
+}> {
   const attendees: Attendee[] = []
   const domains = new Set<string>()
+  const pending: string[] = []
+  const failed: string[] = []
+  const check = async (page: ReturnType<typeof asPage>, label: string) => {
+    const status = read.select(page.properties, "Research status")
+    if (status === RESEARCH_STATUS.done) return
+    if (status === RESEARCH_STATUS.failed) {
+      failed.push(label)
+      return
+    }
+    // Legacy profiles may have saved research without a status.
+    if (!status && !needsResearch(page.properties)) return
+    pending.push(label)
+    if (needsResearch(page.properties)) await readyForResearch(notion, page.id)
+  }
   for (const email of splitEmails(attendeeEmails)) {
     const page = await findOne(notion, targets.people, {
       property: "Email",
       email: { equals: email },
     })
-    if (!page) continue
+    if (!page) {
+      pending.push(email)
+      continue
+    }
+    await check(page, email)
     const domain = read.text(page.properties, "Company domain")
     if (domain) domains.add(domain)
     attendees.push({
@@ -369,7 +465,11 @@ async function loadAttendees(
       property: "Domain",
       rich_text: { equals: domain },
     })
-    if (!page) continue
+    if (!page) {
+      pending.push(domain)
+      continue
+    }
+    await check(page, domain)
     companies.push({
       id: page.id,
       name: read.title(page.properties, "Name"),
@@ -377,7 +477,7 @@ async function loadAttendees(
       summary: read.text(page.properties, "Summary"),
     })
   }
-  return { attendees, companies }
+  return { attendees, companies, pending, failed }
 }
 
 export function splitEmails(value: string): string[] {

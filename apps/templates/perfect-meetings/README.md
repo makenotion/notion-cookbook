@@ -60,13 +60,14 @@ Notion shows.
   that yet. Its manual trigger takes no input and is always a catch-up.
 - **Prepare research** (`meetingPrep`): a Meetings row is created, its
   attendees change, or **Regenerate prep** is ticked. Collects calendar history and contact names, saves
-  **Research context**, and sets **Research status → Ready**. It then returns;
-  it does not start an agent session, poll, or wait for research. Its manual
+  **Research context**, and waits for the meeting's People and Companies to finish
+  research before setting **Research status → Ready**. Its manual
   trigger also queues existing unresearched People and Companies.
 - **Refresh today's research** (`morningPrep`): every day at 07:45 in
   `TIME_ZONE`, it prepares fresh context and queues briefs for today's
-  meetings. Its manual trigger takes no input and refreshes today. It also
-  returns before the agent finishes.
+  meetings after their participant and company research finishes. Its manual
+  trigger takes no input and refreshes today. Both workflows return after
+  queuing the brief; they do not wait for the brief itself to finish.
 
 ### Ready handoff
 
@@ -95,9 +96,20 @@ For Meetings, the agent reads saved profiles and **Research context**, writes
 **Meeting prep** above **Notes**, and sets **Prep status → Ready**, **Prep
 updated**, **Prepped for**, and **Research status → Done**. Prep status Ready
 means the brief is available; Research status Ready means work is queued.
-Meeting briefs do not wait for pending profiles or redo their web research.
-Refresh a brief after profiles finish to include their results. The workflow
-consumes Regenerate prep before handing off; the agent leaves it alone.
+While profiles are pending, **Prep status stays Queued** and the block shows
+“waiting for research.” The workflow checks only that meeting's participants
+and their companies every 30 seconds using durable waits, then builds context
+from the completed profiles. Done profiles (including research that found no
+confident match) and legacy profiles with saved research are accepted. Missing
+profiles remain pending; never-requested profiles are queued automatically.
+Failed profiles fail the prep immediately; pending research times out after
+20 minutes. The reason is saved in Research context and the workflow error.
+Retry the affected profiles, then tick Regenerate prep on the meeting.
+The agent rechecks profile completion before writing and never repeats their
+web research. Only then does **Prep status become Researching**. Each handoff
+and failure write rechecks the request identity, attendees, and cancellation
+state to discard stale requests.
+The workflow consumes Regenerate prep before waiting; the agent leaves it alone.
 
 Set a Person or Company's Research status back to **Ready** to retry or refresh
 it. For a Meeting, tick **Regenerate prep** to rebuild context and queue a
