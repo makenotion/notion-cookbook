@@ -1,6 +1,6 @@
 ---
 name: notion-as-code
-description: Declare Notion pages, databases, teamspaces, and custom agents in an App, including data sources used by syncs.
+description: Use when an App declares pages, databases, data sources, teamspaces, or AI custom agents for research and automation.
 user-invocable: false
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: connections
-description: Configure and use typed provider connections and connection-bound triggers in Notion App workflows.
+description: Use when an App workflow needs Calendar, Mail (Gmail or Outlook), Slack, or another provider connection or trigger.
 user-invocable: false
 ---
 
