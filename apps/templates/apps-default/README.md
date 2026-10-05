@@ -63,16 +63,23 @@ import { database, sync } from "@notionhq/apps"
 ```
 
 Use `workflow`, `sync`, `customBlock`, `page`,
-`database`, `teamspace`, and `customAgent`. Syncs use Notion
+`database`, `teamspace`, `customAgent`, and `view`. Workflow helpers `access`,
+`input`, and `events`, plus workflow types, are also root exports. Syncs use Notion
 as Code data sources declared inside `database`; there is no standalone
 `dataSource` creator.
 
-Keep utilities and types on their existing subpaths. For example, import
+Keep other utilities and provider types on their existing subpaths. For example, import
 `Builder` from `@notionhq/apps/builder`, `connections` from
-`@notionhq/apps/workflow`, and `events` from `@notionhq/apps/events`.
+`@notionhq/apps/workflow`. Provider input and result types are exported from
+`@notionhq/apps/connections/<provider>`. The `events` helper is also available
+from `@notionhq/apps/events` or the workflow's typed trigger callback.
 Browser runtime APIs stay on `@notionhq/apps/custom-blocks` and React integration
 stays on `@notionhq/apps/react`. Check that the installed SDK supports these
 exports before building.
+
+Page content, agent instructions, and `APP.md` use the installed SDK's
+`skills/notion-as-code/markdown.md` reference. To set the app page icon, add
+YAML frontmatter such as `icon: 👋` at the start of `APP.md`.
 
 ## Extend the template
 

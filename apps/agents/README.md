@@ -29,18 +29,19 @@ Notion as Code resource declarations can also supply databases for syncs.
 The [Notion as Code loader](skills/notion-as-code/SKILL.md) points to the SDK
 skill for declarations, typed data source handles, and deployment behavior.
 
-| Skill                                          | SDK surface                                                     |
-| ---------------------------------------------- | --------------------------------------------------------------- |
-| [Workflow](skills/workflow/SKILL.md)           | Typed triggers and durable steps                                |
-| [Connections](skills/connections/SKILL.md)     | Workflow provider clients, trigger connection keys, and retries |
-| [Sync](skills/sync/SKILL.md)                   | Notion as Code data source syncs and pagination                 |
-| [Custom blocks](skills/custom-blocks/SKILL.md) | Browser project declarations and host integration               |
+| Skill                                          | SDK surface                                                            |
+| ---------------------------------------------- | ---------------------------------------------------------------------- |
+| [Workflow](skills/workflow/SKILL.md)           | Typed triggers and durable steps                                       |
+| [Connections](skills/connections/SKILL.md)     | Workflow provider clients, Calendar targets, trigger keys, and retries |
+| [Sync](skills/sync/SKILL.md)                   | Notion as Code data source syncs and pagination                        |
+| [Custom blocks](skills/custom-blocks/SKILL.md) | Browser project declarations and host integration                      |
 
-These instructions require an Apps SDK release with the creation-only root
-exports: `page`, `database`, `teamspace`, `customAgent`, `sync`, `workflow`, and
-`customBlock`. Examples import the helpers they use, such as
-`import { database, sync } from "@notionhq/apps"`; utilities
-and types keep their existing subpaths. They replace
+Use Apps SDK 0.0.57 or newer for the current Calendar targets and Notion Markdown
+guidance. Examples import the helpers they use, such as
+`import { access, workflow } from "@notionhq/apps"`.
+The root also exports resource and capability creators, `view`, `input`,
+`events`, and workflow types. Connections, provider types, builders, and browser
+APIs keep their own subpaths. The instructions replace
 Worker registration, auth interception, and database assumptions with Apps APIs.
 Worker tools and webhooks are not registered by the Apps capability discovery
 implementation. Provider declarations do not guarantee server availability.
