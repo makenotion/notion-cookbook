@@ -103,7 +103,7 @@ requests. Explicitly invoking a skill tests execution, not automatic discovery.
 
 | Request                                                      | Expected selection     |
 | ------------------------------------------------------------ | ---------------------- |
-| Set up a support database with ownership and triage views    | Database designer      |
+| Turn these scattered customer requests into a useful tracker | Database designer      |
 | Draft this week’s project update, compared with last week    | Weekly project digest  |
 | Create follow-up tasks from these meeting notes              | Meeting intelligence   |
 | Synthesize customer feedback, preserving segment differences | Research documentation |

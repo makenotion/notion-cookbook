@@ -1,7 +1,8 @@
-# Support triage using an existing database
+# Make customer requests easier to act on
 
-**Request:** “Set up a support triage queue under our Operations hub. Reuse our
-Requests database if it fits. We need new requests, assigned work, and escalations.”
+**Request:** “Customer requests keep getting lost. Start from our Operations hub
+and make it easy to see new requests, who is handling open work, and which requests
+need extra help. Keep the information we already have.”
 
 Fetch the hub and linked Requests database. Suppose its data source already has
 `Request` (title), `State` (New, Working, Closed), `Owner` (person), and `Customer`

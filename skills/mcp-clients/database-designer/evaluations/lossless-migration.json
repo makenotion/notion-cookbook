@@ -1,7 +1,7 @@
 {
-  "name": "Migrate all records using the approved mapping",
+  "name": "Make an existing team tracker easier to scan without losing notes",
   "skills": ["notion-database-designer"],
-  "query": "In https://notion.so/deliverables, add a Status property called Stage. Map Legacy phase queued to Planned, building to Active, and shipped to Done. Populate every record and keep Legacy phase and all page content unchanged. This mapping is approved; apply it.",
+  "query": "Our team tracker at https://notion.so/deliverables is hard to scan. Add a simple progress field so we can quickly see what is planned, underway, or finished. Fill it in from what is already there, and keep our original labels and notes.",
   "context": {
     "sources": {
       "https://notion.so/deliverables": {
@@ -64,10 +64,10 @@
     ]
   },
   "success_criteria": [
-    "Follows pagination and populates Stage as Planned, Active, and Done on all three records.",
+    "Follows pagination and adds a progress field populated as planned for queued, underway for building, and finished for shipped on all three records; equivalent field names and status labels are acceptable.",
     "Preserves Legacy phase values, Project relations, page content, and record identity.",
-    "Does not pause for approval already provided for this mapping.",
-    "Verifies populated values and coverage, not just creation of Stage.",
+    "Uses the clear existing labels to populate the requested progress field without requiring the user to design the schema or repeat authorization.",
+    "Verifies populated values and coverage, not just creation of an empty progress field.",
     "Reports completion only after all three records are verified."
   ]
 }

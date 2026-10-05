@@ -10,7 +10,7 @@ depend on your client.
 
 | Skill                                                         | Use it to                                                                                                |
 | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| [Database designer](database-designer/SKILL.md)               | Design or evolve schemas, relations, and views around a recurring workflow.                              |
+| [Database designer](database-designer/SKILL.md)               | Turn notes or a messy workflow into a tracker that shows what needs attention and who is handling it.    |
 | [Weekly project digest](weekly-project-digest/SKILL.md)       | Explain reporting-period changes, continuing blockers, and next steps from project evidence.             |
 | [Knowledge capture](knowledge-capture/SKILL.md)               | Turn a conversation into a decision record, how-to guide, FAQ, or other durable workspace documentation. |
 | [Meeting intelligence](meeting-intelligence/SKILL.md)         | Prepare agendas, internal pre-reads, and meeting follow-up from Notion context.                          |

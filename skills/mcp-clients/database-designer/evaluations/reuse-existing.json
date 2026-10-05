@@ -1,7 +1,7 @@
 {
-  "name": "Discover and extend the existing source of truth",
+  "name": "Make customer requests easier to act on",
   "skills": ["notion-database-designer"],
-  "query": "Set up a support triage queue under https://notion.so/operations. Reuse a suitable existing database. Add an escalation flag if needed and views for new requests, assigned open work, and open escalations.",
+  "query": "Customer requests keep getting lost. Start from https://notion.so/operations and make it easy to see new requests, who is handling open work, and which open requests need extra help. Keep the information we already have.",
   "context": {
     "sources": {
       "https://notion.so/operations": "Operations hub. Support requests are managed in https://notion.so/requests",
@@ -60,8 +60,8 @@
     ]
   },
   "success_criteria": [
-    "Reuses requests-source and adds a supported escalation flag without duplicating the database or Customer relation.",
-    "Creates three views with filters matching new requests, assigned non-Closed work, and flagged non-Closed work.",
+    "Reuses requests-source and adds a way to identify requests needing extra help without duplicating the database or Customer relation.",
+    "Makes new requests, ownership of open work, and open requests needing extra help easy to find through appropriate views or groups; equivalent names and layouts are acceptable.",
     "Preserves existing records, property values, relation targets, and the All requests view.",
     "Does not represent filtered views as access restrictions.",
     "Verifies the resulting schema and filters and returns the reused database link."
