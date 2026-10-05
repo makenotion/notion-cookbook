@@ -33,7 +33,7 @@ Link to supporting pages and databases that people may need but do not need
 to see embedded on the home page. For example, after declaring the resource:
 
 ```text
-<mention-page url="{{companies-db}}">Companies</mention-page>
+<mention url="companies-db">Companies</mention>
 ```
 
 Keep the page focused on using the app. Put developer setup, deployment
