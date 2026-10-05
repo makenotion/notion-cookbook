@@ -2,13 +2,13 @@ Prepare for Google Calendar meetings with people outside your organization, with
 
 ## Today
 
-<database inline="true" data-source-url="{{meetings-next-view}}">Today</database>
+<database inline="true" data-source-url="meetings-next-view">Today</database>
 
 ## Your library
 
-- <mention url="{{meetings-db}}">Meetings</mention> — Meeting briefs and your notes.
-- <mention url="{{people-db}}">People</mention> — Get to know the people you're meeting.
-- <mention url="{{companies-db}}">Companies</mention> — Background on their companies.
+- <mention url="meetings-db" type="database">Meetings</mention> — Meeting briefs and your notes.
+- <mention url="people-db" type="database">People</mention> — Get to know the people you're meeting.
+- <mention url="companies-db" type="database">Companies</mention> — Background on their companies.
 
 <toggle>
 How it works
@@ -19,5 +19,5 @@ How it works
 
 **Need a fresh brief?** Open the meeting page and check **Regenerate prep** to refresh or retry it.
 
-<mention url="{{sync-runs-db}}">Workflow runs</mention> — Calendar sync history, if you need to check what happened.
+<mention url="sync-runs-db" type="database">Workflow runs</mention> — Calendar sync history, if you need to check what happened.
 </toggle>
