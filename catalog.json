@@ -339,8 +339,7 @@
         "notion-apps",
         "notion-workflow",
         "notion-custom-blocks",
-        "google-calendar",
-        "gmail"
+        "notion-calendar"
       ],
       "entrypoints": [
         "src/workflows/calendarIngest.ts",

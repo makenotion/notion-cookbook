@@ -216,6 +216,21 @@ an unsaved local install does not change the SDK used by the remote build.
    separate for each workflow. Select the same calendars as the sync target if
    their histories should match.
 
+There are **three Calendar targets in setup**, one per workflow:
+
+| Workflow                 | Target     | Used by                                                              |
+| ------------------------ | ---------- | -------------------------------------------------------------------- |
+| Sync calendar            | `meetings` | Event reads, contact lookups, and all three Calendar change triggers |
+| Prepare research         | `history`  | Past meetings and contact lookups for meeting research               |
+| Refresh today's research | `history`  | Past meetings and contact lookups for the daily refresh              |
+
+The two `history` targets reuse one code declaration, but their selections are
+saved separately for each workflow. Every target accepts one or more calendars.
+
+Existing installations need to deploy these target declarations and select
+their calendars again before running the workflows. A successful build does
+not configure or publish the connection.
+
 All targets request read access only. The App never writes Calendar events.
 Reads cover every calendar and account in the selected target, including calendars
 hidden in the Calendar app. Contacts are account-level data from the accounts
@@ -238,7 +253,7 @@ for a future restoration; no Mail connection is declared.
 ## Develop
 
 ```shell
-pnpm install
+npm install
 npm run check
 npm test
 npm run build

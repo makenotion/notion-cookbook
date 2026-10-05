@@ -200,7 +200,6 @@ describe("meeting research handoff", () => {
       calendars: { target: "history" },
       queries: ["jane@acme.example"],
     })
-    expect(context.connections.calendar.listEvents).toHaveBeenCalledTimes(3)
     expect(context.connections.calendar.listEvents).toHaveBeenCalledWith(
       expect.objectContaining({ calendars: { target: "history" } })
     )

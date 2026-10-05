@@ -73,6 +73,11 @@ The Apps SDK provisions the page in the
 installation workspace when the file exists. Its page title is the deployed
 App's name, not `APP.md`; do not put a second copy of the title in its body.
 
+Use the installed SDK's `skills/notion-as-code/markdown.md` reference for
+Notion Markdown in `APP.md`, page content, and custom-agent instructions.
+Use resource IDs in mentions and database tags. An optional YAML frontmatter
+`icon` sets the app page icon; the build removes frontmatter from the body.
+
 Use this basic structure, adapting the sections to the App:
 
 1. **Brief description:** Explain what the App does and who it helps in a few
@@ -111,17 +116,19 @@ Import the creation helpers you use directly from the package root:
 import { database, sync } from "@notionhq/apps"
 ```
 
-The root exports only `page`, `database`, `teamspace`,
-`customAgent`, `sync`, `workflow`, and `customBlock`.
+The root exports `page`, `database`, `teamspace`, `customAgent`, `view`,
+`sync`, `workflow`, and `customBlock`. Workflow helpers `access`, `input`,
+and `events`, plus workflow types such as `WorkflowContext`, are also available
+from the root.
 `sync` takes a Notion as Code data source handle. There is no standalone
 `dataSource`; declare data sources inside `database`.
 
-Keep all other imports on their existing subpaths: `Builder` from
+Keep other imports on their existing subpaths: `Builder` from
 `@notionhq/apps/builder`, value helpers and types from their own modules,
 `connections` from `@notionhq/apps/workflow`, and `events` from
 `@notionhq/apps/events` (or use the workflow's typed trigger callback).
-Browser runtime and React APIs also keep their subpaths. The package root does not export these
-utilities or types.
+Provider input and result types come from `@notionhq/apps/connections/<provider>`.
+Browser runtime and React APIs also keep their subpaths.
 
 Check that the installed SDK supports these exports before building.
 
