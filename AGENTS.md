@@ -156,6 +156,6 @@ Before finishing, confirm that:
 
 For documentation-only changes, validate links and run the root Markdown and
 format checks. For skill changes, read [`skills/README.md`](skills/README.md)
-and the provider-specific guide first; update evaluations when behavior
+and the relevant skill collection guide first; update evaluations when behavior
 changes. Do not treat a skill as a runnable cookbook recipe or add it to
 `catalog.json`.

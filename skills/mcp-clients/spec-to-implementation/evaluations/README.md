@@ -1,6 +1,6 @@
 # Spec to Implementation Skill Evaluations
 
-Evaluation scenarios for testing the Spec to Implementation skill across different Claude models.
+Evaluation scenarios for testing the Spec to Implementation skill across different AI models and MCP clients.
 
 ## Purpose
 
@@ -8,7 +8,7 @@ These evaluations ensure the Spec to Implementation skill:
 
 - Finds and parses specification pages accurately
 - Breaks down specs into actionable implementation plans
-- Creates tasks that Claude can implement with clear acceptance criteria
+- Creates tasks that a coding assistant can implement with clear acceptance criteria
 - Tracks progress and updates implementation status
 - Works consistently across Haiku, Sonnet, and Opus
 

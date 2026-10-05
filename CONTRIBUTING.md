@@ -10,7 +10,7 @@ verify without relying on another project in this repository.
 - Add a deployed Notion Worker at
   `workers/templates/<integration>-<capability>/`, such as `linear-sync`,
   `snowflake-query`, or `zendesk-webhook`.
-- Add reusable AI workflows under the appropriate provider in `skills/`.
+- Add reusable AI workflows for MCP clients in `skills/mcp-clients/`.
 - Add longer conceptual or integration guides to `docs/`.
 
 Keep runnable project roots flat. Language, runtime, integration, and Worker
@@ -115,7 +115,7 @@ For Markdown:
 - Update paths wherever a moved or renamed project is referenced.
 
 For a skill contribution, follow [`skills/README.md`](skills/README.md) and the
-provider-specific guide. Include or update evaluations whenever skill behavior
+relevant skill collection guide. Include or update evaluations whenever skill behavior
 changes.
 
 ## Validate your change

@@ -1,11 +1,11 @@
 ---
 name: notion-meeting-intelligence
-description: Prepares meeting materials by gathering context from Notion, enriching with Claude research, and creating both an internal pre-read and external agenda saved to Notion. Helps you arrive prepared with comprehensive background and structured meeting docs.
+description: Prepares meeting materials by gathering context from Notion, enriching with assistant research, and creating both an internal pre-read and external agenda saved to Notion. Helps you arrive prepared with comprehensive background and structured meeting docs.
 ---
 
 # Meeting Intelligence
 
-Prepares you for meetings by gathering context from Notion, enriching it with Claude research, and creating comprehensive meeting materials. Generates both an internal pre-read for attendees and an external-facing agenda for the meeting itself.
+Prepares you for meetings by gathering context from Notion, enriching it with assistant research, and creating comprehensive meeting materials. Generates both an internal pre-read for attendees and an external-facing agenda for the meeting itself.
 
 ## Quick Start
 
@@ -13,7 +13,7 @@ When asked to prep for a meeting:
 
 1. **Gather Notion context**: Use `Notion:notion-search` to find related pages
 2. **Fetch details**: Use `Notion:notion-fetch` to read relevant content
-3. **Enrich with research**: Use Claude's knowledge to add context, industry insights, or best practices
+3. **Enrich with research**: Use the assistant's knowledge to add context, industry insights, or best practices
 4. **Create internal pre-read**: Use `Notion:notion-create-pages` for background context document (for attendees)
 5. **Create external agenda**: Use `Notion:notion-create-pages` for meeting agenda (shared with all participants)
 6. **Link resources**: Connect both docs to related projects and each other
@@ -64,7 +64,7 @@ For each relevant page:
 3. Note gaps in information
 ```
 
-### Step 4: Enrich with Claude research
+### Step 4: Enrich with assistant research
 
 ```
 Beyond Notion context, add value through:
@@ -107,7 +107,7 @@ Content structure:
   - Where we are now (from Notion content)
   - Recent updates and progress
   - Key metrics or data
-- **Context & Insights** (from Claude research):
+- **Context & Insights** (from assistant research):
   - Industry context or best practices
   - Relevant considerations
   - Potential approaches to discuss
@@ -212,7 +212,7 @@ See [reference/template-selection-guide.md](reference/template-selection-guide.m
 
 ## Research Enrichment Patterns
 
-Beyond Notion content, add value through Claude's capabilities:
+Beyond Notion content, add value through the assistant's capabilities:
 
 **Technical Context**: Explain technologies, architectures, or approaches. Provide industry standard practices. Compare common solutions. Suggest evaluation criteria.
 
@@ -224,7 +224,7 @@ Beyond Notion content, add value through Claude's capabilities:
 
 **Process Guidance**: Meeting facilitation techniques. Discussion frameworks. Retrospective patterns. Brainstorming structures.
 
-Note: Use general knowledge and analytical capabilities. Don't fabricate specific facts. Clearly distinguish Notion facts from Claude insights.
+Note: Use general knowledge and analytical capabilities. Don't fabricate specific facts. Clearly distinguish Notion facts from assistant insights.
 
 ## Meeting Context Sources
 
@@ -263,11 +263,11 @@ Update agenda with:
 ## Best Practices
 
 1. **Create both documents**: Internal pre-read + external agenda for important meetings
-2. **Distinguish sources**: Label what's from Notion vs. Claude research
+2. **Distinguish sources**: Label what's from Notion vs. assistant research
 3. **Start with search**: Cast wide net in Notion, then narrow
 4. **Keep pre-read concise**: 2-3 pages maximum, even with research
 5. **Professional external docs**: Agenda should be polished and focused
-6. **Enrich thoughtfully**: Claude research should add real value, not fluff
+6. **Enrich thoughtfully**: assistant research should add real value, not fluff
 7. **Link documents**: Pre-read mentions agenda, agenda mentions pre-read
 8. **Include metrics**: Data from Notion helps ground discussions
 9. **Share appropriately**: Pre-read to internal team, agenda to all participants
@@ -285,7 +285,7 @@ Update agenda with:
 **"Meeting purpose unclear"**: Ask user to clarify before proceeding
 **"No recent updates"**: Note that in pre-read, focus on historical context and strategic considerations
 **"External meeting - no internal context"**: Create simpler structure with just agenda, skip internal pre-read or keep it minimal
-**"Claude research too generic"**: Focus on specific insights relevant to the actual meeting topic, not general platitudes
+**"assistant research too generic"**: Focus on specific insights relevant to the actual meeting topic, not general platitudes
 
 ## Examples
 

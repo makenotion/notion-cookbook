@@ -35,7 +35,7 @@ Notion:notion-fetch (4 pages)
 
 ### 3. Add Research Context
 
-Claude research added:
+assistant research added:
 
 - Fintech industry compliance requirements
 - Common integration needs for financial products

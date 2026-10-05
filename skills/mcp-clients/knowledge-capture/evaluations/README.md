@@ -1,6 +1,6 @@
 # Knowledge Capture Skill Evaluations
 
-Evaluation scenarios for testing the Knowledge Capture skill across different Claude models.
+Evaluation scenarios for testing the Knowledge Capture skill across different AI models and MCP clients.
 
 ## Purpose
 

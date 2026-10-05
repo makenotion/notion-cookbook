@@ -1,6 +1,6 @@
 # Research & Documentation Skill Evaluations
 
-Evaluation scenarios for testing the Research & Documentation skill across different Claude models.
+Evaluation scenarios for testing the Research & Documentation skill across different AI models and MCP clients.
 
 ## Purpose
 
@@ -79,7 +79,7 @@ Research & Documentation evaluations should verify:
 - Includes citations for all Notion sources
 - Uses mention-page tags: `<mention-page url="...">`
 - Attributes findings to specific sources
-- Distinguishes between Notion content and Claude research
+- Distinguishes between Notion content and assistant research
 - Links related documents
 
 ### Document Quality

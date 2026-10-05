@@ -1,7 +1,10 @@
-# Claude skills for Notion MCP
+# MCP client skills for Notion
 
-Four self-contained skills for working with Notion through Claude and the
-[Notion MCP server](https://developers.notion.com/docs/notion-mcp).
+Four self-contained skills for working with Notion through any MCP client
+connected to the [Notion MCP server](https://developers.notion.com/docs/notion-mcp),
+including Claude and ChatGPT.
+The workflows are independent of the AI provider; installation and invocation
+depend on your client.
 
 ## Choose a skill
 
@@ -14,24 +17,26 @@ Four self-contained skills for working with Notion through Claude and the
 
 ## Install
 
-1. Configure the Notion MCP server in Claude.
-2. Copy the complete directory for each skill you want into the skills directory
-   used by Claude. Keep `SKILL.md`, `reference/`, `examples/`, and `evaluations/`
-   together. For example, from this repository's root, install one user-level
-   Claude Code skill with:
+1. Configure and authenticate the Notion MCP server in your MCP client.
+2. If your client supports skills, copy the complete directory for each skill
+   into the location it expects. Keep `SKILL.md`, `reference/`, `examples/`, and
+   `evaluations/` together. Follow your client's instructions for loading and
+   invoking skills.
+3. If your client does not support skills, provide the selected `SKILL.md` as
+   instructions or conversation context, along with any referenced files needed
+   for the task.
+4. Describe the outcome you want. Automatic skill selection is available only
+   in clients that support it; otherwise, ask the assistant to follow the
+   supplied workflow explicitly.
 
-   ```sh
-   mkdir -p ~/.claude/skills
-   cp -R skills/claude/knowledge-capture ~/.claude/skills/
-   ```
-
-3. Start a new Claude session and describe the outcome you want. Claude selects
-   a relevant installed skill from its `name` and `description` metadata.
+The instructions use tool names such as `Notion:notion-search`. Your client may
+expose a different server prefix or tool namespace. Use the corresponding tool
+from your connected Notion MCP server and follow its available input schema.
 
 ## Directory structure
 
 ```text
-claude/
+mcp-clients/
 ├── knowledge-capture/
 ├── meeting-intelligence/
 ├── research-documentation/
