@@ -36,7 +36,7 @@ skill for declarations, typed data source handles, and deployment behavior.
 | [Sync](skills/sync/SKILL.md)                   | Notion as Code data source syncs and pagination                        |
 | [Custom blocks](skills/custom-blocks/SKILL.md) | Browser project declarations and host integration                      |
 
-Use Apps SDK 0.0.57 or newer for the current Calendar targets and Notion Markdown
+Use the latest Apps SDK for the current Calendar targets and Notion Markdown
 guidance. Examples import the helpers they use, such as
 `import { access, workflow } from "@notionhq/apps"`.
 The root also exports resource and capability creators, `view`, `input`,

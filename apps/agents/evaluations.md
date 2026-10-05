@@ -10,7 +10,7 @@ Verify examples directly import the creation helpers they use, such as
 `database`, `teamspace`, `customAgent`, `view`, `sync`, `workflow`, `customBlock`,
 `access`, `input`, `events`, and workflow types. Data sources belong inside
 `database`. Builders, provider types, connections, and browser runtime clients
-use their own subpaths. Compile against Apps SDK 0.0.57 or newer; report any
+use their own subpaths. Compile against the installed Apps SDK; report any
 version mismatch.
 
 For Calendar, ask for upcoming meetings from calendars chosen during setup.

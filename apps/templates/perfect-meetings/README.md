@@ -198,7 +198,7 @@ row but no Company row.
 
 ## Configure
 
-Use Apps SDK 0.0.57 or newer. After deploying, open workflow setup for
+After deploying, open workflow setup for
 **Sync calendar**, **Prepare research**, and **Refresh today's research**.
 Connect your Calendar account, approve read access, and select the same calendar
 for each workflow's **meetings** target. Each target requires exactly one

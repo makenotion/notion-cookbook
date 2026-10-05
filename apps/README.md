@@ -11,10 +11,9 @@ independent project that can be copied, built, and deployed on its own.
 
 ## Templates
 
-| App                                         | What it demonstrates                                                      |
-| ------------------------------------------- | ------------------------------------------------------------------------- |
-| [Default app](templates/apps-default/)      | A recurring workflow with a durable step and an interactive custom block. |
-| [Meeting Prep](templates/perfect-meetings/) | Calendar sync, participant and company research, and meeting briefs.      |
+| App                                    | What it demonstrates                                                      |
+| -------------------------------------- | ------------------------------------------------------------------------- |
+| [Default app](templates/apps-default/) | A recurring workflow with a durable step and an interactive custom block. |
 
 ## Quick start
 
