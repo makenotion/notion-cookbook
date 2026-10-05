@@ -6,11 +6,23 @@ use live credentials.
 
 Ask for a workflow, a Notion as Code resource, a sync, and a custom block.
 Verify examples directly import the creation helpers they use, such as
-`import { database, sync } from "@notionhq/apps"`. The root has only `page`, `database`, `teamspace`, `customAgent`,
-`sync`, `workflow`, and `customBlock`. Data sources belong inside
-`database`. Builders, types, connections, triggers, and browser runtime
-clients use their own subpaths. Compile the examples against an SDK release
-with these exports; report any version mismatch.
+`import { database, sync } from "@notionhq/apps"`. The root exports `page`,
+`database`, `teamspace`, `customAgent`, `view`, `sync`, `workflow`, `customBlock`,
+`access`, `input`, `events`, and workflow types. Data sources belong inside
+`database`. Builders, provider types, connections, and browser runtime clients
+use their own subpaths. Compile against the installed Apps SDK; report any
+version mismatch.
+
+For Calendar, ask for upcoming meetings from calendars chosen during setup.
+Verify one Calendar connection with reusable named targets, explicit permissions
+and cardinality, and a target on every read. Missing selections must fail rather
+than falling back to every approved calendar. For a write to a multiple target,
+verify it lists the target and passes one returned calendar object per write.
+
+For page content, custom-agent instructions, and `APP.md`, verify the agent
+follows the installed SDK's Notion Markdown reference. Resource mentions use
+`<mention url="resource-id">`; linked views use database tags. An `APP.md` icon
+belongs in YAML frontmatter, not in a repeated page title.
 
 For Notion as Code, ask the agent to declare an Issues database and sync records
 into it. Verify that the sync uses a data source handle with

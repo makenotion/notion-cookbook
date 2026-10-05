@@ -198,6 +198,17 @@ row but no Company row.
 
 ## Configure
 
+After deploying, open workflow setup for
+**Sync calendar**, **Prepare research**, and **Refresh today's research**.
+Connect your Calendar account, approve read access, and select the same calendar
+for each workflow's **meetings** target. Each target requires exactly one
+calendar. Event scans, history reads, and contact lookups pass that target
+explicitly; they do not use an account's global default.
+
+Existing installations need to deploy these target declarations and select
+their calendar again before running the workflows. A successful build does
+not configure or publish the connection.
+
 Set `TIME_ZONE` and `MORNING_PREP_TIME` in `src/lib/schedule.ts` (defaults:
 `America/Los_Angeles`, `07:45`). The workflows and onboarding copy share these
 settings. `src/lib/config.ts` sets the backfill window (1 day back, 7 days ahead).
@@ -212,7 +223,7 @@ for a future restoration; no Mail connection is declared.
 ## Develop
 
 ```shell
-pnpm install
+npm install
 npm run check
 npm test
 npm run build
