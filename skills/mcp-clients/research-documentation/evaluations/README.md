@@ -6,14 +6,16 @@ These scenarios are not instructions to load at runtime.
 
 ## Scenarios
 
-| Fixture                                                      | Capability                      | Main checks                                                         |
-| ------------------------------------------------------------ | ------------------------------- | ------------------------------------------------------------------- |
-| [basic-research.json](basic-research.json)                   | Workspace synthesis             | Resolve accepted decision versus later-edited proposal              |
-| [research-to-database.json](research-to-database.json)       | Full comparison                 | All requested dimensions, verified pricing, citations, and schema   |
-| [quick-answer.json](quick-answer.json)                       | Short answer                    | One sufficient source, requested length, no publication             |
-| [restricted-search.json](restricted-search.json)             | Incomplete/conflicting evidence | Disclose coverage limits and unresolved decisions                   |
-| [update-report.json](update-report.json)                     | Existing report update          | Targeted correction without replacing unrelated material            |
-| [discover-and-synthesize.json](discover-and-synthesize.json) | Successful discovery            | Select relevant sources, synthesize facts, and find the destination |
+| Fixture                                                                | Capability                      | Main checks                                                          |
+| ---------------------------------------------------------------------- | ------------------------------- | -------------------------------------------------------------------- |
+| [basic-research.json](basic-research.json)                             | Workspace synthesis             | Resolve accepted decision versus later-edited proposal               |
+| [research-to-database.json](research-to-database.json)                 | Full comparison                 | All requested dimensions, verified pricing, citations, and schema    |
+| [quick-answer.json](quick-answer.json)                                 | Short answer                    | One sufficient source, requested length, no publication              |
+| [restricted-search.json](restricted-search.json)                       | Incomplete/conflicting evidence | Disclose coverage limits and unresolved decisions                    |
+| [update-report.json](update-report.json)                               | Existing report update          | Targeted correction without replacing unrelated material             |
+| [discover-and-synthesize.json](discover-and-synthesize.json)           | Successful discovery            | Select relevant sources, synthesize facts, and find the destination  |
+| [feedback-counts-and-segments.json](feedback-counts-and-segments.json) | Feedback synthesis              | Deduplicated customers, segment differences, and counterexamples     |
+| [feedback-unknown-identities.json](feedback-unknown-identities.json)   | Incomplete feedback             | Unknown identities and access limits do not become prevalence claims |
 
 ## Retained capability coverage
 

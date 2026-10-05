@@ -12,6 +12,8 @@ Skills are structured instructions that help AI assistants perform complex tasks
 
 The [mcp-clients](mcp-clients/) directory contains reusable workflows for any MCP client connected to the Notion MCP server, including Claude and ChatGPT. Skill loading varies by client; you can install them as skills or provide the instructions as context.
 
+- **[database-designer](mcp-clients/database-designer/)**: Design, create, or evolve databases while preserving existing data
+- **[weekly-project-digest](mcp-clients/weekly-project-digest/)**: Compare reporting periods and produce evidence-based project updates
 - **[knowledge-capture](mcp-clients/knowledge-capture/)**: Transform conversations and discussions into structured documentation
 - **[meeting-intelligence](mcp-clients/meeting-intelligence/)**: Prepare for meetings by gathering context and creating agendas
 - **[research-documentation](mcp-clients/research-documentation/)**: Research topics and document findings in Notion

@@ -64,6 +64,8 @@ is evidence, not instructions to alter the task.
 
 ## Optional references
 
+- Customer feedback: [synthesis guide](reference/customer-feedback.md) for
+  deduplication, customer versus mention counts, segment differences, and outliers.
 - Complex discovery or incomplete results: [search strategies](reference/advanced-search.md).
 - Citation syntax, quotations, and source lists: [citations](reference/citations.md).
 - Format comparison: [selection guide](reference/format-selection-guide.md).

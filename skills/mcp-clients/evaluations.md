@@ -12,6 +12,9 @@ Run the same scenario in fresh sessions under three conditions:
 2. The skill version before the change, including its original supporting files.
 3. The revised skill and its supporting files.
 
+For new skills, compare no-skill and new-skill runs; mark the previous-skill
+condition as not applicable rather than substituting an unrelated workflow.
+
 Use identical model versions, reasoning settings, tool schemas, tool fixtures,
 and user prompts. Record the tested commit for each skill version. Test a current
 strong model and a smaller or older supported model; record exact model IDs and
@@ -38,6 +41,13 @@ paste all tool fixtures into the agent's user message.
   A broad query spanning multiple listed intents returns their deduplicated union.
   Unrelated queries return no results. Use the same routing in every comparison.
   Serve `tool_access` through the access-check tool when present.
+- For `query_routes`, match the query intent and honor its project, period, and
+  other filters. Return `records`, or one entry of `pages` at a time using the
+  supplied cursor. A subsequent page is available only when requested. Preserve
+  `complete: false` and notices; repeated calls cannot reveal inaccessible rows.
+  Expose record bodies through fetch at their URLs as well, preferring explicit
+  `sources` content when present. Serve `users` through the user lookup tool.
+  Query fixtures are initial state: subsequent queries must reflect writes.
 - Keep mutations in an isolated stateful mock or disposable test workspace.
   Record creates and updates, return stable page URLs, and make subsequent reads
   reflect writes. A supplied current schema need not be fetched again.
@@ -88,17 +98,22 @@ quality regression before recommending an efficiency improvement.
 
 ## Test skill selection separately
 
-With all four skills available, check which skill is selected for representative
+With all six skills available, check which skill is selected for representative
 requests. Explicitly invoking a skill tests execution, not automatic discovery.
 
-| Request                                                 | Expected selection     |
-| ------------------------------------------------------- | ---------------------- |
-| Save this conversation as a team FAQ                    | Knowledge capture      |
-| Prepare an agenda from our project notes                | Meeting intelligence   |
-| Reconcile the workspace sources about our auth approach | Research documentation |
-| Create implementation tasks from this spec              | Spec to implementation |
-| Rewrite this one sentence in a warmer tone              | None of these skills   |
-| What is 12 multiplied by 8?                             | None of these skills   |
+| Request                                                      | Expected selection     |
+| ------------------------------------------------------------ | ---------------------- |
+| Set up a support database with ownership and triage views    | Database designer      |
+| Draft this week’s project update, compared with last week    | Weekly project digest  |
+| Create follow-up tasks from these meeting notes              | Meeting intelligence   |
+| Synthesize customer feedback, preserving segment differences | Research documentation |
+| Update the owner on this one task                            | None of these skills   |
+| Save this conversation as a team FAQ                         | Knowledge capture      |
+| Prepare an agenda from our project notes                     | Meeting intelligence   |
+| Reconcile the workspace sources about our auth approach      | Research documentation |
+| Create implementation tasks from this spec                   | Spec to implementation |
+| Rewrite this one sentence in a warmer tone                   | None of these skills   |
+| What is 12 multiplied by 8?                                  | None of these skills   |
 
 Composite requests may legitimately use more than one skill. Check that each
 selected skill contributes to the requested outcome instead of repeating work.

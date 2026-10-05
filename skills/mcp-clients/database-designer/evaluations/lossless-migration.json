@@ -1,0 +1,73 @@
+{
+  "name": "Migrate all records using the approved mapping",
+  "skills": ["notion-database-designer"],
+  "query": "In https://notion.so/deliverables, add a Status property called Stage. Map Legacy phase queued to Planned, building to Active, and shipped to Done. Populate every record and keep Legacy phase and all page content unchanged. This mapping is approved; apply it.",
+  "context": {
+    "sources": {
+      "https://notion.so/deliverables": {
+        "data_source_id": "deliverables-source",
+        "properties": {
+          "Deliverable": "title",
+          "Legacy phase": "text",
+          "Project": {
+            "type": "relation",
+            "target": "projects-source"
+          }
+        },
+        "views": []
+      }
+    },
+    "query_routes": [
+      {
+        "intent": "Read all affected deliverables",
+        "pages": [
+          {
+            "records": [
+              {
+                "url": "https://notion.so/d1",
+                "Deliverable": "Export",
+                "Legacy phase": "queued",
+                "Project": ["https://notion.so/p1"],
+                "content": "Keep export notes."
+              },
+              {
+                "url": "https://notion.so/d2",
+                "Deliverable": "Import",
+                "Legacy phase": "building",
+                "Project": ["https://notion.so/p1"],
+                "content": "Keep import notes."
+              }
+            ],
+            "has_more": true,
+            "next_cursor": "page-2"
+          },
+          {
+            "records": [
+              {
+                "url": "https://notion.so/d3",
+                "Deliverable": "Search",
+                "Legacy phase": "shipped",
+                "Project": ["https://notion.so/p2"],
+                "content": "Keep search notes."
+              }
+            ],
+            "has_more": false
+          }
+        ]
+      }
+    ],
+    "tools": [
+      "fetch",
+      "query-data-sources",
+      "update-data-source",
+      "update-page"
+    ]
+  },
+  "success_criteria": [
+    "Follows pagination and populates Stage as Planned, Active, and Done on all three records.",
+    "Preserves Legacy phase values, Project relations, page content, and record identity.",
+    "Does not pause for approval already provided for this mapping.",
+    "Verifies populated values and coverage, not just creation of Stage.",
+    "Reports completion only after all three records are verified."
+  ]
+}

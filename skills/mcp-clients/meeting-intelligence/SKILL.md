@@ -57,7 +57,9 @@ both for every meeting.
 For recurring series, reuse the series page or meeting database; create series
 structure when requested. After a meeting, record supplied outcomes, decisions,
 action owners, and due dates. Create follow-up tasks only within the requested
-scope, and preserve unresolved items.
+scope, and preserve unresolved items. For linked task creation or reconciliation,
+read [meeting to actions](reference/meeting-to-actions.md): reuse matching tasks,
+preserve supported commitments, and recover partial writes without duplicates.
 
 ## Notion execution
 

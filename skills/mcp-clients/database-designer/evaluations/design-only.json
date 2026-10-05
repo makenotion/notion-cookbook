@@ -1,0 +1,14 @@
+{
+  "name": "Propose a minimal intake schema without writing",
+  "skills": ["notion-database-designer"],
+  "query": "Suggest a Notion database for our volunteer requests. One row is a request; we need to triage new requests and see assigned work. Keep the proposal in chat; do not build anything.",
+  "context": {
+    "tools": ["search", "fetch", "create-database", "create-pages"]
+  },
+  "success_criteria": [
+    "Returns a usable, minimal schema and task-oriented view definitions in chat.",
+    "Explains why the chosen properties support triage and assignment without inventing organizational requirements.",
+    "Creates no database, proposal page, sample records, or other workspace content.",
+    "Does not require unrelated discovery or user confirmation to supply the requested design."
+  ]
+}
