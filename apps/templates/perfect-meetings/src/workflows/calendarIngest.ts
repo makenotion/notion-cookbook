@@ -48,13 +48,8 @@ export default workflow({
     "Reads your calendar and adds meetings with outside attendees to Meetings, and their attendees and companies to People and Companies. Runs hourly, on calendar changes, or whenever you run it.",
   connections: {
     calendar: connections.calendar({
-      targets: {
-        meetings: {
-          description: "Read meetings and contacts for meeting preparation",
-          permissions: "read",
-          multiple: true,
-        },
-      },
+      permissions: "read",
+      readTeammatesCalendars: false,
     }),
   },
   triggers: ({ events }) => [
@@ -144,7 +139,6 @@ export default workflow({
 
       const scan = await context.step("List calendar events", async () => {
         const output = await context.connections.calendar.listEvents({
-          calendars: context.connections.calendar.targets.meetings,
           timeMin: window.timeMin,
           timeMax: window.timeMax,
           timeZone: TIME_ZONE,
@@ -178,7 +172,6 @@ export default workflow({
           : await context.step("Look up contacts", async () => {
               try {
                 const output = await context.connections.calendar.listContacts({
-                  calendars: context.connections.calendar.targets.meetings,
                   queries: emails,
                 })
                 const found = contactsByEmail(output, emails)

@@ -29,13 +29,8 @@ import { needsResearch, readyForResearch } from "./research.js"
 // Gmail is temporarily disabled. Both prep workflows require only Calendar.
 export const prepConnections = {
   calendar: connections.calendar({
-    targets: {
-      meetings: {
-        description: "Read meetings and contacts for meeting preparation",
-        permissions: "read",
-        multiple: true,
-      },
-    },
+    permissions: "read",
+    readTeammatesCalendars: false,
   }),
 }
 
@@ -239,7 +234,6 @@ export async function runPrep(
           const emails = splitEmails(meeting.attendees)
           return contactsByEmail(
             await context.connections.calendar.listContacts({
-              calendars: context.connections.calendar.targets.meetings,
               queries: emails,
             }),
             emails
@@ -268,7 +262,6 @@ export async function runPrep(
             end -= LIST_EVENTS_DAYS * DAY_MS
           ) {
             const output = await context.connections.calendar.listEvents({
-              calendars: context.connections.calendar.targets.meetings,
               timeMin: new Date(end - LIST_EVENTS_DAYS * DAY_MS).toISOString(),
               timeMax: new Date(end).toISOString(),
               timeZone: TIME_ZONE,

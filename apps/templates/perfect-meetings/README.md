@@ -238,10 +238,6 @@ The App's name is the title of its home page. Set it on the first deploy:
 ntn apps deploy --name "Perfect Meetings"
 ```
 
-During setup, connect Calendar and choose the calendars for the **Read meetings
-and contacts for meeting preparation** target in each Calendar workflow.
-The target accepts one or more calendars and requests read-only access.
-
 ## Run on demand and debug
 
 Every workflow has a manual trigger, and none takes input. Run it from the
