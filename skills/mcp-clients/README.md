@@ -1,7 +1,8 @@
 # MCP client skills for Notion
 
 Four self-contained skills for working with Notion through any MCP client
-connected to the [Notion MCP server](https://developers.notion.com/docs/notion-mcp).
+connected to the [Notion MCP server](https://developers.notion.com/docs/notion-mcp),
+including Claude and ChatGPT.
 The workflows are independent of the AI provider; installation and invocation
 depend on your client.
 
