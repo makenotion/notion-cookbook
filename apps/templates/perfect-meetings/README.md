@@ -202,7 +202,10 @@ row but no Company row.
 Use the target-aware Calendar trigger SDK with its matching server and setup UI.
 This template depends on [Apps SDK #92](https://github.com/makenotion/apps-sdk/pull/92);
 until that change is released, use a locally built package from that PR instead
-of the published SDK.
+of the published SDK. For a test deployment, put the SDK tarball inside the App
+project and install it with a saved relative file dependency, such as
+`npm install ./vendor/notionhq-apps.tgz`. Deployment installs dependencies again;
+an unsaved local install does not change the SDK used by the remote build.
 
 1. Connect Calendar accounts once in App setup. Do not choose calendars yet.
 2. For **Sync calendar**, choose one or more calendars under **Meetings to sync
