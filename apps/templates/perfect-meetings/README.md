@@ -46,9 +46,10 @@ rows in this view; when more exist, the overview labels its counts as partial.
 Each workflow keeps its key (used by `ntn workers exec`); the name is what
 Notion shows.
 
-- **Sync calendar** (`calendarIngest`): runs hourly, when a row is added to
-  Workflow runs, or by hand. It has no calendar event triggers, so changes
-  show up within the hour. Each run scans 1 day back and 7 days ahead and
+- **Sync calendar** (`calendarIngest`): runs when an event is created, updated,
+  or canceled in its selected target, hourly, when a row is added to Workflow
+  runs, or by hand. Its three Calendar triggers and event/contact reads share
+  the `meetings` target. Each run scans 1 day back and 7 days ahead and
   upserts Meetings by event ID, People by email, and Companies by domain. A
   cancelled or declined event marks its meeting Cancelled, and so does an
   event that a complete scan no longer returns (deleted). On first run it
@@ -197,6 +198,28 @@ one of its coworker domains. Consumer mailboxes such as gmail.com get a People
 row but no Company row.
 
 ## Configure
+
+Use the target-aware Calendar trigger SDK with its matching server and setup UI.
+This template depends on [Apps SDK #92](https://github.com/makenotion/apps-sdk/pull/92);
+until that change is released, use a locally built package from that PR instead
+of the published SDK.
+
+1. Connect Calendar accounts once in App setup. Do not choose calendars yet.
+2. For **Sync calendar**, choose one or more calendars under **Meetings to sync
+   and watch for changes**. The picker lists Event created, Event updated, and
+   Event canceled as users of the same target.
+3. For **Prepare research** and **Refresh today's research**, choose the calendars
+   under **Calendars for meeting history and contact lookup**. These choices are
+   separate for each workflow. Select the same calendars as the sync target if
+   their histories should match.
+
+All targets request read access only. The App never writes Calendar events.
+Reads cover every calendar and account in the selected target, including calendars
+hidden in the Calendar app. Contacts are account-level data from the accounts
+represented by that target. Unselected accounts are not used. Changing a target
+changes both its reads and any Calendar triggers that use it; there is no second
+trigger picker. Event IDs are used to deduplicate meetings returned on several
+selected calendars.
 
 Set `TIME_ZONE` and `MORNING_PREP_TIME` in `src/lib/schedule.ts` (defaults:
 `America/Los_Angeles`, `07:45`). The workflows and onboarding copy share these

@@ -10,17 +10,6 @@ import {
   type BacklogMeeting,
   type BacklogPerson,
 } from "../src/workflows/lib/backlog.js"
-import calendarIngest from "../src/workflows/calendarIngest.js"
-
-describe("calendarIngest triggers", () => {
-  it("runs only hourly, on a Workflow runs row, or by hand with no input", () => {
-    const text = JSON.stringify(calendarIngest)
-    for (const type of ["recurrence", "notion.page.created", "workflow.manual"])
-      expect(text).toContain(`"${type}"`)
-    expect(text).not.toMatch(/calendar\.event\./)
-  })
-})
-
 const NOW = Date.parse("2026-09-29T17:00:00Z")
 const HOUR = 60 * 60 * 1000
 

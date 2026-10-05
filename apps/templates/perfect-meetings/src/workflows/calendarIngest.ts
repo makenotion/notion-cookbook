@@ -48,11 +48,25 @@ export default workflow({
     "Reads your calendar and adds meetings with outside attendees to Meetings, and their attendees and companies to People and Companies. Runs hourly, on calendar changes, or whenever you run it.",
   connections: {
     calendar: connections.calendar({
-      permissions: "read",
-      readTeammatesCalendars: false,
+      targets: {
+        meetings: {
+          description: "Meetings to sync and watch for changes",
+          permissions: "read",
+          multiple: true,
+        },
+      },
     }),
   },
-  triggers: ({ events }) => [
+  triggers: ({ events, connections }) => [
+    events.calendarEventCreated({
+      calendars: connections.calendar.targets.meetings,
+    }),
+    events.calendarEventUpdated({
+      calendars: connections.calendar.targets.meetings,
+    }),
+    events.calendarEventCanceled({
+      calendars: connections.calendar.targets.meetings,
+    }),
     // Hourly catch-up. It also marks meetings cancelled when their event is
     // cancelled or deleted.
     events.scheduled({
@@ -139,6 +153,7 @@ export default workflow({
 
       const scan = await context.step("List calendar events", async () => {
         const output = await context.connections.calendar.listEvents({
+          calendars: context.connections.calendar.targets.meetings,
           timeMin: window.timeMin,
           timeMax: window.timeMax,
           timeZone: TIME_ZONE,
@@ -172,6 +187,7 @@ export default workflow({
           : await context.step("Look up contacts", async () => {
               try {
                 const output = await context.connections.calendar.listContacts({
+                  calendars: context.connections.calendar.targets.meetings,
                   queries: emails,
                 })
                 const found = contactsByEmail(output, emails)
@@ -230,6 +246,7 @@ export default workflow({
 })
 
 function runTrigger(type: string): RunTrigger {
+  if (type.startsWith("calendar.event.")) return RUN_TRIGGER.calendar
   if (type === "recurrence") return RUN_TRIGGER.hourly
   if (type === "notion.page.created") return RUN_TRIGGER.runNow
   return RUN_TRIGGER.manual

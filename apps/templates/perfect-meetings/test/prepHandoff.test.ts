@@ -136,6 +136,7 @@ function fixture(failAfterClaim = false, claimStatus = "Researching") {
     },
     connections: {
       calendar: {
+        targets: { history: { target: "history" } },
         listContacts: vi.fn(async () => ({ accounts: [] })),
         listEvents: vi.fn(async () => ({ accounts: [] })),
       },
@@ -195,8 +196,14 @@ describe("meeting research handoff", () => {
       "meeting",
       "created"
     )
-    expect(context.connections.calendar.listContacts).toHaveBeenCalled()
+    expect(context.connections.calendar.listContacts).toHaveBeenCalledWith({
+      calendars: { target: "history" },
+      queries: ["jane@acme.example"],
+    })
     expect(context.connections.calendar.listEvents).toHaveBeenCalledTimes(3)
+    expect(context.connections.calendar.listEvents).toHaveBeenCalledWith(
+      expect.objectContaining({ calendars: { target: "history" } })
+    )
     expect(steps).not.toContain("Find mailbox")
     expect(steps).not.toContain("Search email")
     const stored = (
