@@ -96,7 +96,7 @@ including custom view resource IDs. For example, after declaring the view:
 ```
 
 Use a Notion as Code resource reference, such as
-`<mention-page url="{{resourceId}}">Resource name</mention-page>`, to link to
+`<mention url="resource-id">Resource name</mention>`, to link to
 another page declared by the App. Keep the resource ID in sync with the
 corresponding declaration. Use only declared resources in actual embeds and
 links; keep illustrative placeholders in code fences. Do not create a separate
