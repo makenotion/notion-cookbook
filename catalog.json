@@ -329,7 +329,7 @@
     {
       "id": "perfect-meetings",
       "title": "Meeting prep App",
-      "summary": "Turn Google Calendar meetings with outside attendees into Notion pages with an AI research brief.",
+      "summary": "Turn Google Calendar meetings with outside attendees into Notion pages with an AI research brief, with app databases grouped for demo cleanup.",
       "path": "apps/templates/perfect-meetings",
       "kind": "app-default",
       "status": "ready",

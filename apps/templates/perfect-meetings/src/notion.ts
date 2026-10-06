@@ -1,4 +1,4 @@
-import { access, customAgent, database } from "@notionhq/apps"
+import { access, customAgent, page } from "@notionhq/apps"
 import { notion } from "@notionhq/apps/notion-as-code"
 
 // Resource and property IDs are stable declaration identities. Do not rename
@@ -55,7 +55,26 @@ export const MEETING_STATUS = {
   cancelled: "Cancelled",
 } as const
 
-export const companies = database("companies-db", {
+// Keep the data together for demo cleanup without deleting the app home.
+const resources = page({
+  resourceId: "perfect-meetings-resources",
+  properties: { title: notion.text("Perfect Meetings Resources") },
+  content: `These databases contain this app's meeting briefs, notes, research, and sync history.
+
+To clean up a demo, stop the app's workflows and the <mention url="meeting-researcher" type="agent">Meeting researcher</mention> first, then move this page to Trash. This also trashes its child databases and their data, including any notes you added.
+
+This does not uninstall the app or delete its worker or Meeting researcher. Existing installations need their app-created databases moved here manually after updating; confirm what is inside this page before deleting it.
+
+<database url="meetings-db" inline="false">Meetings</database>
+
+<database url="people-db" inline="false">People</database>
+
+<database url="companies-db" inline="false">Companies</database>
+
+<database url="sync-runs-db" inline="false">Workflow runs</database>`,
+})
+
+export const companies = resources.addDatabase("companies-db", {
   dataSourceResourceId: COMPANIES_SOURCE,
   name: "Companies",
   icon: { type: "emoji", emoji: "🏢" },
@@ -83,7 +102,7 @@ export const companies = database("companies-db", {
   ],
 })
 
-export const people = database("people-db", {
+export const people = resources.addDatabase("people-db", {
   dataSourceResourceId: PEOPLE_SOURCE,
   name: "People",
   icon: { type: "emoji", emoji: "🧑‍💼" },
@@ -158,7 +177,7 @@ export const people = database("people-db", {
   ],
 })
 
-export const meetings = database("meetings-db", {
+export const meetings = resources.addDatabase("meetings-db", {
   dataSourceResourceId: MEETINGS_SOURCE,
   name: "Meetings",
   icon: { type: "emoji", emoji: "🗓️" },
@@ -283,7 +302,7 @@ export const RUN_TRIGGER = {
 
 // One row per calendar ingest run. Adding a row yourself runs a calendar
 // catch-up, and the ingest fills in that row.
-export const syncRuns = database("sync-runs-db", {
+export const syncRuns = resources.addDatabase("sync-runs-db", {
   dataSourceResourceId: "sync-runs-source",
   name: "Workflow runs",
   icon: { type: "emoji", emoji: "🔄" },
