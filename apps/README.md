@@ -11,10 +11,10 @@ independent project that can be copied, built, and deployed on its own.
 
 ## Templates
 
-| App                                             | What it demonstrates                                                        |
-| ----------------------------------------------- | --------------------------------------------------------------------------- |
-| [Default app](templates/apps-default/)          | A recurring workflow with a durable step and an interactive custom block.   |
-| [Perfect Meetings](templates/perfect-meetings/) | Calendar targets shared by event triggers and reads, plus meeting research. |
+| App                                             | What it demonstrates                                                      |
+| ----------------------------------------------- | ------------------------------------------------------------------------- |
+| [Default app](templates/apps-default/)          | A recurring workflow with a durable step and an interactive custom block. |
+| [Perfect Meetings](templates/perfect-meetings/) | Calendar connection, deterministic triggers and agentic research          |
 
 ## Quick start
 

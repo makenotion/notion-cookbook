@@ -199,56 +199,7 @@ row but no Company row.
 
 ## Configure
 
-Use the target-aware Calendar trigger SDK with its matching server and setup UI.
-This template depends on [Apps SDK #92](https://github.com/makenotion/apps-sdk/pull/92);
-until that change is released, use a locally built package from that PR instead
-of the published SDK. For a test deployment, put the SDK tarball inside the App
-project and install it with a saved relative file dependency, such as
-`npm install ./vendor/notionhq-apps.tgz`. Deployment installs dependencies again;
-an unsaved local install does not change the SDK used by the remote build.
-
-1. Connect Calendar accounts once in App setup. Do not choose calendars yet.
-2. For **Sync calendar**, choose one or more calendars under **Meetings to sync
-   and watch for changes**. The picker lists Event created, Event updated, and
-   Event canceled as users of the same target.
-3. For **Prepare research** and **Refresh today's research**, choose the calendars
-   under **Calendars for meeting history and contact lookup**. These choices are
-   separate for each workflow. Select the same calendars as the sync target if
-   their histories should match.
-
-There are **three Calendar targets in setup**, one per workflow:
-
-| Workflow                 | Target     | Used by                                                              |
-| ------------------------ | ---------- | -------------------------------------------------------------------- |
-| Sync calendar            | `meetings` | Event reads, contact lookups, and all three Calendar change triggers |
-| Prepare research         | `history`  | Past meetings and contact lookups for meeting research               |
-| Refresh today's research | `history`  | Past meetings and contact lookups for the daily refresh              |
-
-The two `history` targets reuse one code declaration, but their selections are
-saved separately for each workflow. Every target accepts one or more calendars.
-
-Existing installations need to deploy these target declarations and select
-their calendars again before running the workflows. A successful build does
-not configure or publish the connection.
-
-All targets request read access only. The App never writes Calendar events.
-Reads cover every calendar and account in the selected target, including calendars
-hidden in the Calendar app. Contacts are account-level data from the accounts
-represented by that target. Unselected accounts are not used. Changing a target
-changes both its reads and any Calendar triggers that use it; there is no second
-trigger picker. Event IDs are used to deduplicate meetings returned on several
-selected calendars.
-
-Set `TIME_ZONE` and `MORNING_PREP_TIME` in `src/lib/schedule.ts` (defaults:
-`America/Los_Angeles`, `07:45`). The workflows and onboarding copy share these
-settings. `src/lib/config.ts` sets the backfill window (1 day back, 7 days ahead).
-
-Gmail research is temporarily disabled in both **Prepare research** and
-**Refresh today's research**. They require only the Calendar connection, skip
-mailbox lookup and email search, and tell the researcher that email was not
-checked. Calendar history, contacts, and profile research remain available.
-Existing briefs are not rewritten until refreshed. Mail parsing helpers remain
-for a future restoration; no Mail connection is declared.
+After deploying, open the link provided in ntn output to set up calendar access.
 
 ## Develop
 
