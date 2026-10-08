@@ -35,6 +35,7 @@ skill for declarations, typed data source handles, and deployment behavior.
 | [Connections](skills/connections/SKILL.md)     | Workflow provider clients, Calendar targets, trigger keys, and retries |
 | [Sync](skills/sync/SKILL.md)                   | Notion as Code data source syncs and pagination                        |
 | [Custom blocks](skills/custom-blocks/SKILL.md) | Browser project declarations and host integration                      |
+| [Sketch](skills/sketch/SKILL.md)               | Reviewable App design sketches before implementation                   |
 
 Use the latest Apps SDK for the current Calendar targets and Notion Markdown
 guidance. Examples import the helpers they use, such as

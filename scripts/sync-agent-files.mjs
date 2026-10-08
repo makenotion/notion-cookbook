@@ -78,6 +78,7 @@ const APP_GROUP = {
     "sync",
     "custom-blocks",
     "notion-as-code",
+    "sketch",
   ],
 }
 

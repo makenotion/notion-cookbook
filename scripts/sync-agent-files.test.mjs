@@ -59,6 +59,7 @@ async function fixture(t) {
       "custom-blocks",
       "connections",
       "notion-as-code",
+      "sketch",
     ]) {
       await put(
         family + "/agents/skills/" + skill + "/SKILL.md",

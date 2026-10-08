@@ -44,6 +44,11 @@ to be recorded. Ask about workspace creation and standalone Notion as Code apply
 should identify the Apps workspace restriction and the different artifact
 and attachment flows.
 
+Ask for a new App from a short description. Verify the agent writes a sketch
+with the SDK sketch skill, shares its viewer link, and lists `APP.md` and any
+syncs separately because the sketch format does not show them. It should not
+read SDK declarations or write capability code until the user agrees.
+
 | Request                                                      | Expected observable outcome                                                                                                                                                                                     |
 | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Add a paginated issue sync                                   | Direct default export in src/syncs; Notion as Code data source for an App-created database; primary key on sync and omitted from upsert properties; stable keys; cursor survives empty pages with a next cursor |
@@ -53,3 +58,4 @@ and attachment flows.
 | Listen for Slack messages through a named support connection | Declares a Slack connection and binds its key using the typed trigger callback; rejects undeclared or wrong-provider keys and duplicate trigger/key pairs; distinguishes connection keys from step keys         |
 | Add an interactive issue board                               | Uses customBlock, Apps React imports, root-owned dependencies, and separate browser tsconfig; schema declaration is distinguished from binding                                                                  |
 | Review a workflow with mutable step-local state              | Reports replay hazard with file, line, impact, and fix; returns needed values from steps; narrows trigger events                                                                                                |
+| Propose a new App before building                            | Writes a checked sketch from the SDK sketch skill; shares its link; notes APP.md and syncs outside the sketch; waits for agreement before code                                                                  |
