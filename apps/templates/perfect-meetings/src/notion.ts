@@ -59,6 +59,13 @@ export const MEETING_STATUS = {
 const resources = page({
   resourceId: "perfect-meetings-resources",
   properties: { title: notion.text("Perfect Meetings Resources") },
+  content: `<database url="meetings-db" inline="false">Meetings</database>
+
+<database url="people-db" inline="false">People</database>
+
+<database url="companies-db" inline="false">Companies</database>
+
+<database url="sync-runs-db" inline="false">Workflow runs</database>`,
 })
 
 export const companies = resources.addDatabase("companies-db", {
