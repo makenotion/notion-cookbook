@@ -9,15 +9,16 @@ Notion pages with a short research brief.
 
 ## What it creates
 
-| Kind         | Name               | Purpose                                                                                           |
-| ------------ | ------------------ | ------------------------------------------------------------------------------------------------- |
-| Page         | APP.md             | Home page with Today, live research progress, library links, and collapsed help                   |
-| Database     | Meetings           | One row per external meeting; brief at the top of the page, notes below                           |
-| Database     | People             | One row per outside attendee, keyed by email                                                      |
-| Database     | Companies          | One row per outside company, keyed by email domain                                                |
-| Database     | Workflow runs      | One row per calendar ingest run; add a row to run a catch-up now (linked under How it works)      |
-| Custom agent | Meeting researcher | Researches Ready rows and writes profiles and meeting briefs directly                             |
-| Custom block | main_ui            | Setup progress, then a Today view (the default) and company and people cards for the next meeting |
+| Kind         | Name                       | Purpose                                                                                           |
+| ------------ | -------------------------- | ------------------------------------------------------------------------------------------------- |
+| Page         | APP.md                     | Home page with Today, live research progress, library links, and collapsed help                   |
+| Page         | Perfect Meetings Resources | Parent of the four app databases for demo cleanup                                                 |
+| Database     | Meetings                   | One row per external meeting; brief at the top of the page, notes below                           |
+| Database     | People                     | One row per outside attendee, keyed by email                                                      |
+| Database     | Companies                  | One row per outside company, keyed by email domain                                                |
+| Database     | Workflow runs              | One row per calendar ingest run; add a row to run a catch-up now (linked under How it works)      |
+| Custom agent | Meeting researcher         | Researches Ready rows and writes profiles and meeting briefs directly                             |
+| Custom block | main_ui                    | Setup progress, then a Today view (the default) and company and people cards for the next meeting |
 
 ## Home page
 
