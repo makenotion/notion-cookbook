@@ -1,5 +1,5 @@
 import type { WorkflowContext } from "@notionhq/apps"
-import { connections } from "@notionhq/apps/workflow"
+import { calendar } from "../../connections/calendar.js"
 
 import { EMAIL_LOOKBACK_DAYS, TIME_ZONE } from "../../lib/config.js"
 import {
@@ -26,23 +26,8 @@ import { contactsByEmail, type Contacts } from "./ingest.js"
 import { isRuntimeSignal } from "./runtime.js"
 import { needsResearch, readyForResearch } from "./research.js"
 
-// Gmail is temporarily disabled. Both prep workflows require only Calendar.
-export const prepConnections = {
-  calendar: connections.calendar({
-    targets: {
-      history: {
-        description: "Read past meetings and contact names",
-        permissions: "read",
-        multiple: true,
-      },
-    },
-  }),
-}
-
-type PrepContext = Pick<
-  WorkflowContext<typeof prepConnections>,
-  "step" | "notion" | "connections" | "wait"
->
+// Mail is temporarily disabled. Both prep workflows use the shared Calendar.
+type PrepContext = Pick<WorkflowContext, "step" | "notion" | "wait">
 
 export type PrepReason = "created" | "updated" | "morning" | "force"
 
@@ -238,8 +223,8 @@ export async function runPrep(
         try {
           const emails = splitEmails(meeting.attendees)
           return contactsByEmail(
-            await context.connections.calendar.listContacts({
-              calendars: context.connections.calendar.targets.history,
+            await calendar.listContacts({
+              calendars: calendar.history,
               queries: emails,
             }),
             emails
@@ -267,8 +252,8 @@ export async function runPrep(
             end > now - HISTORY_DAYS * DAY_MS;
             end -= LIST_EVENTS_DAYS * DAY_MS
           ) {
-            const output = await context.connections.calendar.listEvents({
-              calendars: context.connections.calendar.targets.history,
+            const output = await calendar.listEvents({
+              calendars: calendar.history,
               timeMin: new Date(end - LIST_EVENTS_DAYS * DAY_MS).toISOString(),
               timeMax: new Date(end).toISOString(),
               timeZone: TIME_ZONE,

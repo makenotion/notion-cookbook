@@ -4,7 +4,7 @@ import { MORNING_PREP_TIME, TIME_ZONE } from "../lib/config.js"
 import { queryAll, read } from "../lib/props.js"
 import { localDay, startsOnDay } from "../lib/time.js"
 import { MEETING_STATUS, companies, meetings, people } from "../notion.js"
-import { prepConnections, prepTargets, runPrep } from "./lib/prep.js"
+import { prepTargets, runPrep } from "./lib/prep.js"
 import { isRuntimeSignal } from "./lib/runtime.js"
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -13,7 +13,6 @@ export default workflow({
   name: "Refresh today's research",
   description:
     "Prepares fresh context, waits for participant and company research, and queues today's briefs: daily at 7:45 am local time, or whenever you run it.",
-  connections: prepConnections,
   triggers: ({ events }) => [
     events.scheduled({
       frequency: "day",
