@@ -282,3 +282,11 @@ Notes:
   past meeting. Confirm profiles and Researched at are written, Done edits
   cause no further research, and Notes survive a retry. Build and offline
   tests cannot verify native trigger delivery or agent behavior.
+
+## Shared Calendar setup
+
+`src/connections/calendar.ts` declares Calendar once for all workflows. The
+`meetings` target selects calendars to sync; the `history` target selects past
+meetings for prep. All workflows share the connected accounts. Targets may have
+different selected calendars. Configure these targets in the app setup page
+once, not separately for each workflow.

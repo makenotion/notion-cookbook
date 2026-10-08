@@ -33,24 +33,17 @@ must be enabled before deployment.
 
 Apps are a private alpha and are not currently open for general contribution.
 
-## Calendar targets
+## Shared connections
 
-Declare one Calendar connection per workflow. Give each purpose a named target
-with a description, needed permissions, and an explicit `multiple` setting.
-Connect accounts during setup, then choose calendars under each target.
-Connecting an account alone does not approve access to its calendars.
+Declare connections once in `src/connections/*.ts`, then import them in each
+workflow. Use `connection({ type: "calendar", ... })` or
+`connection({ type: "mail" })` instead of workflow-local connection declarations.
+Calendar targets are flat properties, such as `calendar.meetings`.
 
-Calendar event triggers require a target from the trigger callback's
-`connections`. Reads require a target from `context.connections`. Reuse the same
-target when the trigger and the read should use the same calendars; setup shows
-one picker and lists the triggers that use it.
+An installation configures each connection and its targets once. Every workflow
+in that App uses that saved setup. Accounts are not shared between installations.
 
-See [Perfect Meetings' Calendar workflow](templates/perfect-meetings/src/workflows/calendarIngest.ts)
-for all three Calendar event triggers sharing a read target. This example needs
-the target-aware Calendar trigger SDK and matching server/setup UI; older SDKs
-that accept only `connectionKey` for Calendar triggers cannot build it.
-
-The SDK supports workflows, database syncs, and custom blocks. The full coding
-guidance ships with `@notionhq/apps`. Template skill loaders live in
-[agents/](agents/); run `npm run agents:sync` from the repository root after
-changing them.
+See [Perfect Meetings' shared Calendar connection](templates/perfect-meetings/src/connections/calendar.ts)
+and its [Calendar workflow](templates/perfect-meetings/src/workflows/calendarIngest.ts).
+This example requires the app-level connections SDK and matching server/setup UI.
+Older SDKs with workflow-local connections cannot build it.

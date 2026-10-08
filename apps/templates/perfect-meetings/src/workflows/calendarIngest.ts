@@ -1,6 +1,6 @@
 import { access, workflow } from "@notionhq/apps"
 import { FatalError } from "@notionhq/apps/error"
-import { connections } from "@notionhq/apps/workflow"
+import { calendar } from "../connections/calendar.js"
 
 import {
   SCAN_DAYS_AHEAD,
@@ -46,26 +46,15 @@ export default workflow({
   name: "Sync calendar",
   description:
     "Reads your calendar and adds meetings with outside attendees to Meetings, and their attendees and companies to People and Companies. Runs hourly, on calendar changes, or whenever you run it.",
-  connections: {
-    calendar: connections.calendar({
-      targets: {
-        meetings: {
-          description: "Meetings to sync and watch for changes",
-          permissions: "read",
-          multiple: true,
-        },
-      },
-    }),
-  },
-  triggers: ({ events, connections }) => [
+  triggers: ({ events }) => [
     events.calendarEventCreated({
-      calendars: connections.calendar.targets.meetings,
+      calendars: calendar.meetings,
     }),
     events.calendarEventUpdated({
-      calendars: connections.calendar.targets.meetings,
+      calendars: calendar.meetings,
     }),
     events.calendarEventCanceled({
-      calendars: connections.calendar.targets.meetings,
+      calendars: calendar.meetings,
     }),
     // Hourly catch-up. It also marks meetings cancelled when their event is
     // cancelled or deleted.
@@ -152,8 +141,8 @@ export default workflow({
       })
 
       const scan = await context.step("List calendar events", async () => {
-        const output = await context.connections.calendar.listEvents({
-          calendars: context.connections.calendar.targets.meetings,
+        const output = await calendar.listEvents({
+          calendars: calendar.meetings,
           timeMin: window.timeMin,
           timeMax: window.timeMax,
           timeZone: TIME_ZONE,
@@ -186,8 +175,8 @@ export default workflow({
           ? {}
           : await context.step("Look up contacts", async () => {
               try {
-                const output = await context.connections.calendar.listContacts({
-                  calendars: context.connections.calendar.targets.meetings,
+                const output = await calendar.listContacts({
+                  calendars: calendar.meetings,
                   queries: emails,
                 })
                 const found = contactsByEmail(output, emails)
