@@ -20,23 +20,6 @@ Notion pages with a short research brief.
 | Custom agent | Meeting researcher         | Researches Ready rows and writes profiles and meeting briefs directly                             |
 | Custom block | main_ui                    | Setup progress, then a Today view (the default) and company and people cards for the next meeting |
 
-## Demo cleanup
-
-New installations group Meetings, People, Companies, and Workflow runs under
-**Perfect Meetings Resources**, linked from `APP.md`. Database rows live under
-their databases. Resource IDs and the existing library links stay unchanged.
-
-Before moving the resources page to Trash, stop the app workflows and the
-Meeting researcher so they do not continue using the deleted databases. Trashing
-the page also trashes the child databases and their rows, including user notes.
-This is not an uninstall: the app home, worker, workflows, and Meeting researcher
-remain. The Apps SDK does not support parenting a custom agent to a page.
-Existing linked resources should remain outside this cleanup page.
-
-For existing installations, deployment preserves the databases' existing parents.
-After updating, move the four app-created databases into the resources page
-manually and confirm their parents. Do not move shared or linked databases.
-
 ## Home page
 
 `APP.md` leads with a short explanation and Today, the main place to start a

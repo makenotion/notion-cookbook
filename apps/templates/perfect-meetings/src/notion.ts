@@ -59,19 +59,6 @@ export const MEETING_STATUS = {
 const resources = page({
   resourceId: "perfect-meetings-resources",
   properties: { title: notion.text("Perfect Meetings Resources") },
-  content: `These databases contain this app's meeting briefs, notes, research, and sync history.
-
-To clean up a demo, stop the app's workflows and the <mention url="meeting-researcher" type="agent">Meeting researcher</mention> first, then move this page to Trash. This also trashes its child databases and their data, including any notes you added.
-
-This does not uninstall the app or delete its worker or Meeting researcher. Existing installations need their app-created databases moved here manually after updating; confirm what is inside this page before deleting it.
-
-<database url="meetings-db" inline="false">Meetings</database>
-
-<database url="people-db" inline="false">People</database>
-
-<database url="companies-db" inline="false">Companies</database>
-
-<database url="sync-runs-db" inline="false">Workflow runs</database>`,
 })
 
 export const companies = resources.addDatabase("companies-db", {
