@@ -11,58 +11,20 @@ triggers, external services, and every Notion resource it needs. Recommend a
 workflow for most automations; use a sync when the goal is to mirror an external
 collection into a Notion database. An App may contain both.
 
-Before proposing the design, read only enough of this guidance and the
-top-level descriptions of the relevant capability skills (workflow, sync,
-connections, and Notion as Code) to describe concrete options for open
-decisions. Do not read full skill instructions, generated declarations
-(`*.generated.d.ts`), full provider API surfaces, or other implementation
-details until the user agrees on a direction. Verify those details against the
-selected option during implementation.
-
-Present the proposed design concisely and get the user's agreement before
-implementing. Include `APP.md` as the App's home page and primary user
-interface. It should briefly explain the App, embed its most important views,
-and link to supporting Notion resources. The proposal should
-include:
+Follow `.agents/skills/sketch/SKILL.md` to propose the design as a
+sketch the user can review. Sketch from the user's description; do not read
+full skill instructions, generated declarations (`*.generated.d.ts`), or
+provider API surfaces until the user agrees on a direction. Alongside the
+sketch link, briefly state what the sketch does not show:
 
 - `APP.md`, the primary views it will embed, and the resources it will link to.
-- Other Notion resources the App will create, including databases, pages, and
-  custom agents; state each resource's purpose and which capabilities use it.
 - Every sync, including its external source, destination database, and
   synchronization behavior.
-- Every workflow, including its trigger, main actions, resources it reads or
-  changes, and external connections.
 - Open decisions and required access.
 
-Adapt the format to the App. For example:
-
-### Example App design
-
-**Outcome:** Bring support tickets into Notion and escalate urgent tickets to
-the support team.
-
-**Notion resources**
-
-| Kind         | Name              | Purpose                                             | Used by                          |
-| ------------ | ----------------- | --------------------------------------------------- | -------------------------------- |
-| `APP.md`     | Support App       | Explain the App and embed the ticket triage view    | Team members                     |
-| Database     | Support tickets   | Store synchronized tickets and triage status        | Ticket sync, escalation workflow |
-| Page         | Support dashboard | Give the team an operational home and database view | Team members                     |
-| Custom agent | Ticket triage     | Classify urgency and summarize a ticket             | Escalation workflow              |
-
-**Syncs and workflows**
-
-| Kind     | Name                   | Source or trigger                       | Behavior                                              | Dependencies                                                        |
-| -------- | ---------------------- | --------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------- |
-| Sync     | Ticket sync            | Support-system tickets                  | Upsert by stable external ID                          | Support-system connection, Support tickets database                 |
-| Workflow | Escalate urgent ticket | Support tickets page created or updated | Run triage, update status, and notify support channel | Ticket triage agent, Support tickets database, messaging connection |
-
-**Open questions:** Which support system and messaging channel should the App use?
-
-Ask the user to confirm or revise the design. Do not begin implementation
-until they agree. If implementation reveals a material resource or capability
-not covered by the agreed design, update the proposal and confirm the change
-before adding it.
+Do not begin implementation until the user agrees. If implementation reveals a
+material resource or capability not covered by the agreed design, update the
+sketch and confirm the change before adding it.
 
 ## App home page (APP.md)
 
@@ -161,6 +123,7 @@ release that includes it. Do not continue without the full SDK guidance.
 | Database sync  | `src/syncs/`                                                 | `.agents/skills/sync/SKILL.md`           | `node_modules/@notionhq/apps/skills/sync/SKILL.md`           |
 | Custom blocks  | `src/customBlocks/`                                          | `.agents/skills/custom-blocks/SKILL.md`  | `node_modules/@notionhq/apps/skills/custom-blocks/SKILL.md`  |
 | Notion as Code | Resources declared in modules imported by workflows or syncs | `.agents/skills/notion-as-code/SKILL.md` | `node_modules/@notionhq/apps/skills/notion-as-code/SKILL.md` |
+| Sketch         | Design proposals before implementation                       | `.agents/skills/sketch/SKILL.md`         | `node_modules/@notionhq/apps/skills/sketch/SKILL.md`         |
 
 Notion as Code declarations are not a separate discovered capability
 directory. Syncs can use their declared data source handles.
