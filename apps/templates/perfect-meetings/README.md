@@ -46,9 +46,10 @@ rows in this view; when more exist, the overview labels its counts as partial.
 Each workflow keeps its key (used by `ntn workers exec`); the name is what
 Notion shows.
 
-- **Sync calendar** (`calendarIngest`): runs hourly, when a row is added to
-  Workflow runs, or by hand. It has no calendar event triggers, so changes
-  show up within the hour. Each run scans 1 day back and 7 days ahead and
+- **Sync calendar** (`calendarIngest`): runs when an event is created, updated,
+  or canceled in its selected target, hourly, when a row is added to Workflow
+  runs, or by hand. Its three Calendar triggers and event/contact reads share
+  the `meetings` target. Each run scans 1 day back and 7 days ahead and
   upserts Meetings by event ID, People by email, and Companies by domain. A
   cancelled or declined event marks its meeting Cancelled, and so does an
   event that a complete scan no longer returns (deleted). On first run it
@@ -198,27 +199,7 @@ row but no Company row.
 
 ## Configure
 
-After deploying, open workflow setup for
-**Sync calendar**, **Prepare research**, and **Refresh today's research**.
-Connect your Calendar account, approve read access, and select the same calendar
-for each workflow's **meetings** target. Each target requires exactly one
-calendar. Event scans, history reads, and contact lookups pass that target
-explicitly; they do not use an account's global default.
-
-Existing installations need to deploy these target declarations and select
-their calendar again before running the workflows. A successful build does
-not configure or publish the connection.
-
-Set `TIME_ZONE` and `MORNING_PREP_TIME` in `src/lib/schedule.ts` (defaults:
-`America/Los_Angeles`, `07:45`). The workflows and onboarding copy share these
-settings. `src/lib/config.ts` sets the backfill window (1 day back, 7 days ahead).
-
-Gmail research is temporarily disabled in both **Prepare research** and
-**Refresh today's research**. They require only the Calendar connection, skip
-mailbox lookup and email search, and tell the researcher that email was not
-checked. Calendar history, contacts, and profile research remain available.
-Existing briefs are not rewritten until refreshed. Mail parsing helpers remain
-for a future restoration; no Mail connection is declared.
+After deploying, open the link provided in ntn output to set up calendar access.
 
 ## Develop
 

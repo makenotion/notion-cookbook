@@ -30,10 +30,10 @@ import { needsResearch, readyForResearch } from "./research.js"
 export const prepConnections = {
   calendar: connections.calendar({
     targets: {
-      meetings: {
+      history: {
         description: "Read past meetings and contact names",
         permissions: "read",
-        multiple: false,
+        multiple: true,
       },
     },
   }),
@@ -239,7 +239,7 @@ export async function runPrep(
           const emails = splitEmails(meeting.attendees)
           return contactsByEmail(
             await context.connections.calendar.listContacts({
-              calendars: context.connections.calendar.targets.meetings,
+              calendars: context.connections.calendar.targets.history,
               queries: emails,
             }),
             emails
@@ -268,7 +268,7 @@ export async function runPrep(
             end -= LIST_EVENTS_DAYS * DAY_MS
           ) {
             const output = await context.connections.calendar.listEvents({
-              calendars: context.connections.calendar.targets.meetings,
+              calendars: context.connections.calendar.targets.history,
               timeMin: new Date(end - LIST_EVENTS_DAYS * DAY_MS).toISOString(),
               timeMax: new Date(end).toISOString(),
               timeZone: TIME_ZONE,

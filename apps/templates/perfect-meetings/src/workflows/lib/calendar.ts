@@ -78,17 +78,6 @@ export function internalDomainsFor(
   return domains
 }
 
-/** The business account: the first work-category Google account, else the first Google account. */
-export function pickBusinessAccount<
-  T extends Pick<Account, "providerName" | "category" | "email">,
->(accounts: readonly T[]): T | undefined {
-  const google = accounts.filter((account) =>
-    /google/i.test(account.providerName)
-  )
-  const pool = google.length > 0 ? google : accounts
-  return pool.find((account) => account.category === "work") ?? pool[0]
-}
-
 export function externalAttendees(
   event: CalendarEvent,
   internalDomains: ReadonlySet<string>,
@@ -177,30 +166,30 @@ export function meetingsFromListEvents(
   output: ListEventsScriptOutput,
   options: ScanOptions = {}
 ): MeetingInput[] {
-  const account = pickBusinessAccount(output.accounts)
-  if (!account) return []
-  const internal = scanDomains(account, options)
   const byId = new Map<string, MeetingInput>()
-  for (const calendar of account.calendars) {
-    if (calendar.isHidden) continue
-    for (const event of calendar.events) {
-      const meeting = toMeetingInput(event, internal, account.email)
-      if (meeting && !byId.has(meeting.eventId))
-        byId.set(meeting.eventId, meeting)
+  for (const account of output.accounts) {
+    const internal = scanDomains(account, options)
+    for (const calendar of account.calendars) {
+      for (const event of calendar.events) {
+        const meeting = toMeetingInput(event, internal, account.email)
+        if (meeting && !byId.has(meeting.eventId))
+          byId.set(meeting.eventId, meeting)
+      }
     }
   }
   return [...byId.values()]
 }
 
 /**
- * Every event ID the business account returned, before any filtering. Used to
+ * Every event ID the selected calendars returned, before any filtering. Used to
  * tell a deleted event apart from one that is merely no longer external.
  */
 export function allEventIds(output: ListEventsScriptOutput): string[] {
-  const account = pickBusinessAccount(output.accounts)
   const ids = new Set<string>()
-  for (const calendar of account?.calendars ?? []) {
-    for (const event of calendar.events) ids.add(event.eventId)
+  for (const account of output.accounts) {
+    for (const calendar of account.calendars) {
+      for (const event of calendar.events) ids.add(event.eventId)
+    }
   }
   return [...ids]
 }
@@ -239,7 +228,6 @@ export type ScanDiagnostics = {
     coworkerDomains: string[]
     calendars: number
     events: number
-    picked: boolean
   }>
   internalDomains: string[]
   includeInternal: boolean
@@ -277,36 +265,37 @@ export function diagnoseListEvents(
   output: ListEventsScriptOutput,
   options: ScanOptions = {}
 ): ScanDiagnostics {
-  const account = pickBusinessAccount(output.accounts)
-  const internal = account ? scanDomains(account, options) : new Set<string>()
+  const internalDomains = new Set<string>()
   const dropped: Record<string, number> = {}
   const attendeeDomains: Record<string, number> = {}
   const samples: ScanDiagnostics["samples"] = []
-  for (const calendar of account?.calendars ?? []) {
-    for (const event of calendar.events) {
-      for (const attendee of event.attendees ?? []) {
-        const domain = attendee.email
-          ? (emailDomain(attendee.email) ?? "(invalid)")
-          : "(no email)"
-        attendeeDomains[domain] = (attendeeDomains[domain] ?? 0) + 1
-      }
-      const reason = calendar.isHidden
-        ? "hiddenCalendar"
-        : dropReason(event, internal, account?.email)
-      if (!reason) continue
-      dropped[reason] = (dropped[reason] ?? 0) + 1
-      if (samples.length < 10) {
-        samples.push({
-          reason,
-          eventType: event.eventType ?? null,
-          attendeeDomains: [
-            ...new Set(
-              (event.attendees ?? []).flatMap((a) =>
-                a.email ? (emailDomain(a.email) ?? []) : []
-              )
-            ),
-          ],
-        })
+  for (const account of output.accounts) {
+    const internal = scanDomains(account, options)
+    for (const domain of internal) internalDomains.add(domain)
+    for (const calendar of account.calendars) {
+      for (const event of calendar.events) {
+        for (const attendee of event.attendees ?? []) {
+          const domain = attendee.email
+            ? (emailDomain(attendee.email) ?? "(invalid)")
+            : "(no email)"
+          attendeeDomains[domain] = (attendeeDomains[domain] ?? 0) + 1
+        }
+        const reason = dropReason(event, internal, account.email)
+        if (!reason) continue
+        dropped[reason] = (dropped[reason] ?? 0) + 1
+        if (samples.length < 10) {
+          samples.push({
+            reason,
+            eventType: event.eventType ?? null,
+            attendeeDomains: [
+              ...new Set(
+                (event.attendees ?? []).flatMap((a) =>
+                  a.email ? (emailDomain(a.email) ?? []) : []
+                )
+              ),
+            ],
+          })
+        }
       }
     }
   }
@@ -318,9 +307,8 @@ export function diagnoseListEvents(
       coworkerDomains: a.coworkersEmailDomains ?? [],
       calendars: a.calendars.length,
       events: a.calendars.reduce((sum, c) => sum + c.events.length, 0),
-      picked: a === account,
     })),
-    internalDomains: [...internal],
+    internalDomains: [...internalDomains],
     includeInternal: options.includeInternal === true,
     dropped,
     attendeeDomains,
@@ -350,33 +338,34 @@ export function pastMeetingsWith(
   const wanted = new Set(emails.map(normalizeEmail))
   const byEmail = new Map<string, Map<string, PastMeeting>>()
   for (const output of outputs) {
-    const account = pickBusinessAccount(output.accounts)
-    for (const calendar of account?.calendars ?? []) {
-      if (calendar.isHidden) continue
-      for (const event of calendar.events) {
-        if (
-          event.isAutoBlock ||
-          event.eventStatus === "cancelled" ||
-          event.responseStatus === "declined"
-        )
-          continue
-        const period = event.period
-        const start =
-          period.type === "DATE" ? period.start.date : period.start.dateTime
-        const end =
-          period.type === "DATE" ? period.end.date : period.end.dateTime
-        if (!(Date.parse(end) <= now)) continue
-        for (const attendee of event.attendees ?? []) {
-          const email = attendee.email ? normalizeEmail(attendee.email) : ""
-          if (!wanted.has(email)) continue
-          const meetings = byEmail.get(email) ?? new Map<string, PastMeeting>()
-          meetings.set(event.eventId, {
-            eventId: event.eventId,
-            title: event.summary?.trim() || "Untitled meeting",
-            start,
-            calendarUrl: event.webUrl || null,
-          })
-          byEmail.set(email, meetings)
+    for (const account of output.accounts) {
+      for (const calendar of account.calendars) {
+        for (const event of calendar.events) {
+          if (
+            event.isAutoBlock ||
+            event.eventStatus === "cancelled" ||
+            event.responseStatus === "declined"
+          )
+            continue
+          const period = event.period
+          const start =
+            period.type === "DATE" ? period.start.date : period.start.dateTime
+          const end =
+            period.type === "DATE" ? period.end.date : period.end.dateTime
+          if (!(Date.parse(end) <= now)) continue
+          for (const attendee of event.attendees ?? []) {
+            const email = attendee.email ? normalizeEmail(attendee.email) : ""
+            if (!wanted.has(email)) continue
+            const meetings =
+              byEmail.get(email) ?? new Map<string, PastMeeting>()
+            meetings.set(event.eventId, {
+              eventId: event.eventId,
+              title: event.summary?.trim() || "Untitled meeting",
+              start,
+              calendarUrl: event.webUrl || null,
+            })
+            byEmail.set(email, meetings)
+          }
         }
       }
     }

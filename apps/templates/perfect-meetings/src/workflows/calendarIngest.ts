@@ -50,14 +50,23 @@ export default workflow({
     calendar: connections.calendar({
       targets: {
         meetings: {
-          description: "Read upcoming meetings and contact names",
+          description: "Meetings to sync and watch for changes",
           permissions: "read",
-          multiple: false,
+          multiple: true,
         },
       },
     }),
   },
-  triggers: ({ events }) => [
+  triggers: ({ events, connections }) => [
+    events.calendarEventCreated({
+      calendars: connections.calendar.targets.meetings,
+    }),
+    events.calendarEventUpdated({
+      calendars: connections.calendar.targets.meetings,
+    }),
+    events.calendarEventCanceled({
+      calendars: connections.calendar.targets.meetings,
+    }),
     // Hourly catch-up. It also marks meetings cancelled when their event is
     // cancelled or deleted.
     events.scheduled({
@@ -237,6 +246,7 @@ export default workflow({
 })
 
 function runTrigger(type: string): RunTrigger {
+  if (type.startsWith("calendar.event.")) return RUN_TRIGGER.calendar
   if (type === "recurrence") return RUN_TRIGGER.hourly
   if (type === "notion.page.created") return RUN_TRIGGER.runNow
   return RUN_TRIGGER.manual

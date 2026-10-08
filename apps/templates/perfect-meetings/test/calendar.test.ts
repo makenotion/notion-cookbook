@@ -9,11 +9,11 @@ import {
 import {
   allEventIds,
   attendeeKey,
+  diagnoseListEvents,
   inclusiveEndDate,
   internalDomainsFor,
   meetingsFromListEvents,
   pastMeetingsWith,
-  pickBusinessAccount,
   stripHtml,
   type CalendarEvent,
   type ListEventsScriptOutput,
@@ -86,6 +86,50 @@ describe("domains", () => {
 })
 
 describe("meetingsFromListEvents", () => {
+  it("reads every account selected by the target, including hidden calendars", () => {
+    const data = {
+      accounts: [
+        ...output([event({ eventId: "work" })]).accounts,
+        ...output([event({ eventId: "personal" })], {
+          email: "me@gmail.com",
+          category: "personal",
+          calendars: [
+            { isHidden: true, events: [event({ eventId: "personal" })] },
+          ],
+        }).accounts,
+      ],
+    }
+    expect(
+      meetingsFromListEvents(data).map((meeting) => meeting.eventId)
+    ).toEqual(["work", "personal"])
+    expect(allEventIds(data)).toEqual(["work", "personal"])
+  })
+
+  it("diagnoses selected calendars using each account's own internal domains", () => {
+    const data = {
+      accounts: [
+        ...output([
+          event({ attendees: [{ isSelf: false, email: "peer@example.com" }] }),
+        ]).accounts,
+        ...output(
+          [event({ attendees: [{ isSelf: false, email: "peer@gmail.com" }] })],
+          {
+            email: "me@gmail.com",
+            category: "personal",
+            coworkersEmailDomains: [],
+          }
+        ).accounts,
+      ],
+    }
+    expect(meetingsFromListEvents(data)[0]?.attendees[0]?.email).toBe(
+      "peer@gmail.com"
+    )
+    expect(diagnoseListEvents(data).attendeeDomains).toEqual({
+      "example.com": 1,
+      "gmail.com": 1,
+    })
+  })
+
   it("keeps only outside attendees, grouped by company domain", () => {
     const [meeting] = meetingsFromListEvents(output([event()]))
     expect(meeting?.attendees).toEqual([
@@ -184,22 +228,6 @@ describe("meetingsFromListEvents", () => {
     })
     expect(internal.has("gmail.com")).toBe(false)
   })
-
-  it("prefers the work Google account", () => {
-    const accounts = [
-      {
-        providerName: "Google",
-        category: "personal" as const,
-        email: "me@gmail.com",
-      },
-      {
-        providerName: "Google",
-        category: "work" as const,
-        email: "me@acme.example",
-      },
-    ]
-    expect(pickBusinessAccount(accounts)?.email).toBe("me@acme.example")
-  })
 })
 
 describe("helpers", () => {
@@ -234,6 +262,23 @@ describe("pastMeetingsWith", () => {
       ...extra,
     })
   const now = Date.parse("2026-09-29T12:00:00Z")
+
+  it("uses history from every selected account", () => {
+    const data = {
+      accounts: [
+        ...output([at("work", "10")]).accounts,
+        ...output([at("personal", "20")], {
+          email: "me@gmail.com",
+          category: "personal",
+        }).accounts,
+      ],
+    }
+    expect(
+      pastMeetingsWith([data], ["jane.doe@acme.example"], now, 10)[
+        "jane.doe@acme.example"
+      ]?.map((meeting) => meeting.eventId)
+    ).toEqual(["personal", "work"])
+  })
 
   it("keeps meetings that happened, newest first, across listEvents calls", () => {
     const result = pastMeetingsWith(
