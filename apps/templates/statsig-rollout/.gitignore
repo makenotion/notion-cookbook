@@ -1,0 +1,12 @@
+.notion/
+app.json
+workers.json
+dist/
+node_modules/
+package-lock.json
+.env
+.env.*
+!.env.example
+
+# Local editor state; each installation creates its own.
+.claude/settings.local.json

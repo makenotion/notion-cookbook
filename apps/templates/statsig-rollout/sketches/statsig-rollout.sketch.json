@@ -1,0 +1,224 @@
+{
+  "version": 0,
+  "name": "Statsig Rollout",
+  "resources": [
+    {
+      "id": "rollout",
+      "label": "Rollout",
+      "properties": {
+        "ID": "title",
+        "Status": "status (pending, adding, success, invalid, fail)",
+        "Error": "text"
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "statsig",
+      "label": "Statsig",
+      "notes": "Console API key with write access (STATSIG_CONSOLE_API_KEY) and an ID List segment (STATSIG_SEGMENT_ID)."
+    }
+  ],
+  "state": {
+    "pageId": "1f2e…",
+    "rawId": " 0B9C4D2E8F1A4B3C9D7E6F5A4B3C2D1E ",
+    "status": "pending",
+    "id": "0b9c4d2e-8f1a-4b3c-9d7e-6f5a4b3c2d1e"
+  },
+  "nodes": [
+    {
+      "id": "readRow",
+      "label": "Read the row's ID and Status",
+      "uses": ["rollout"],
+      "reads": ["pageId"],
+      "writes": ["rawId", "status"]
+    },
+    {
+      "id": "gate",
+      "label": "Continue only if the ID is set and Status is pending",
+      "notes": "The workflow never writes pending, so the update events from its own Status writes stop here. Set a row back to pending to retry it.",
+      "reads": ["rawId", "status"],
+      "aux": {
+        "label": "No ID yet, or not pending",
+        "color": "amber",
+        "shape": {
+          "status": "success"
+        }
+      }
+    },
+    {
+      "id": "normalize",
+      "label": "Normalize the ID to a lowercase, dashed UUID",
+      "notes": "Trims, lowercases, and converts the 32-character compact form.",
+      "reads": ["rawId"],
+      "writes": ["id"],
+      "aux": {
+        "label": "Not a UUID",
+        "color": "amber",
+        "shape": {
+          "rawId": "space-123"
+        }
+      }
+    },
+    {
+      "id": "markInvalid",
+      "label": "Set Status to invalid and explain in Error",
+      "uses": ["rollout"],
+      "reads": ["pageId", "rawId"],
+      "out": null
+    },
+    {
+      "id": "markAdding",
+      "label": "Set Status to adding",
+      "uses": ["rollout"],
+      "reads": ["pageId"],
+      "out": null
+    },
+    {
+      "id": "addToSegment",
+      "label": "Add the ID to the Statsig segment",
+      "notes": "PATCH /console/v1/segments/{segment}/id_list. Up to 3 attempts with 1s and 4s backoff for network errors, 409, 429, and 5xx. Adding an ID already in the segment succeeds.",
+      "uses": ["statsig"],
+      "reads": ["id"],
+      "out": null,
+      "error": {
+        "shape": {
+          "status": 403,
+          "body": "…"
+        }
+      }
+    },
+    {
+      "id": "markSuccess",
+      "label": "Set Status to success and clear Error",
+      "uses": ["rollout"],
+      "reads": ["pageId"],
+      "out": null
+    },
+    {
+      "id": "markFail",
+      "label": "Set Status to fail and put the Statsig error in Error",
+      "uses": ["rollout"],
+      "reads": ["pageId"],
+      "out": null
+    },
+    {
+      "id": "manualValidate",
+      "label": "Normalize the ID, failing the run if it isn't a UUID",
+      "notes": "Manual debugging path. It doesn't read or write Rollout.",
+      "reads": ["rawId"],
+      "writes": ["id"],
+      "out": null
+    },
+    {
+      "id": "manualAdd",
+      "label": "Add the ID to the Statsig segment",
+      "notes": "Same Statsig call and retries as addToSegment.",
+      "uses": ["statsig"],
+      "reads": ["id"],
+      "out": null,
+      "error": {
+        "shape": {
+          "status": 403,
+          "body": "…"
+        }
+      }
+    },
+    {
+      "id": "manualFail",
+      "label": "Fail the run with the Statsig error",
+      "out": null
+    }
+  ],
+  "edges": [
+    {
+      "from": null,
+      "to": "readRow",
+      "label": "When a row is added to Rollout",
+      "uses": ["rollout"],
+      "shape": {
+        "pageId": "1f2e…"
+      },
+      "writes": ["pageId"]
+    },
+    {
+      "from": null,
+      "to": "readRow",
+      "label": "When a Rollout row's ID or Status changes",
+      "uses": ["rollout"],
+      "shape": {
+        "pageId": "1f2e…"
+      },
+      "writes": ["pageId"]
+    },
+    {
+      "from": "readRow",
+      "to": "gate"
+    },
+    {
+      "from": "gate",
+      "to": "normalize"
+    },
+    {
+      "from": "gate.aux",
+      "to": null
+    },
+    {
+      "from": "normalize",
+      "to": "markAdding"
+    },
+    {
+      "from": "normalize.aux",
+      "to": "markInvalid"
+    },
+    {
+      "from": "markInvalid",
+      "to": null
+    },
+    {
+      "from": "markAdding",
+      "to": "addToSegment"
+    },
+    {
+      "from": "addToSegment",
+      "to": "markSuccess"
+    },
+    {
+      "from": "addToSegment.error",
+      "to": "markFail"
+    },
+    {
+      "from": "markSuccess",
+      "to": null
+    },
+    {
+      "from": "markFail",
+      "to": null
+    },
+    {
+      "from": null,
+      "to": "manualValidate",
+      "label": "Run manually with an ID (debugging)",
+      "shape": {
+        "id": "0b9c4d2e8f1a4b3c9d7e6f5a4b3c2d1e"
+      },
+      "writes": ["rawId"]
+    },
+    {
+      "from": "manualValidate",
+      "to": "manualAdd"
+    },
+    {
+      "from": "manualAdd",
+      "to": null
+    },
+    {
+      "from": "manualAdd.error",
+      "to": "manualFail"
+    },
+    {
+      "from": "manualFail",
+      "to": null
+    }
+  ]
+}
