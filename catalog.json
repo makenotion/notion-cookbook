@@ -366,11 +366,7 @@
       "language": "typescript",
       "runtime": "node",
       "integrations": ["notion-apps", "notion-workflow", "statsig"],
-      "entrypoints": [
-        "src/workflows/addToSegment.ts",
-        "src/workflows/lib/notion.ts",
-        "src/workflows/lib/statsig.ts"
-      ],
+      "entrypoints": ["APP.md"],
       "commands": {
         "install": "npm install",
         "check": "npm run check",
