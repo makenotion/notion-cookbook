@@ -19,7 +19,7 @@ decisions. Do not read full skill instructions, generated declarations
 details until the user agrees on a direction. Verify those details against the
 selected option during implementation.
 
-When planning or iterating on a workflow design with the user, use the sketch
+When planning or iterating on workflow designs with the user, use the sketch
 skill (`.agents/skills/sketch/SKILL.md`) to show the design as a reviewable
 flow diagram; read that skill before sketching. If the sketch skill is missing
 or its tools fail, tell the user the sketch skill is not available and present
