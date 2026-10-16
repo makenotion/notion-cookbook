@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { prop, read } from "../src/lib/props.js"
-import { prepConnections, runPrep } from "../src/workflows/lib/prep.js"
+import { runPrep } from "../src/workflows/lib/prep.js"
+
+import { calendar } from "../src/connections/calendar.js"
+
+vi.mock("../src/connections/calendar.js", () => ({
+ calendar: {history: {target:"history", connectionKey:"calendar"},
+   listContacts: vi.fn(), listEvents: vi.fn()},
+}))
 
 /** API-style plain_text values for the in-memory page store. */
 function readable(properties: Record<string, unknown>) {
@@ -134,14 +141,10 @@ function fixture(failAfterClaim = false, claimStatus = "Researching") {
         throw new Error("Unexpected wait")
       }),
     },
-    connections: {
-      calendar: {
-        targets: { history: { target: "history" } },
-        listContacts: vi.fn(async () => ({ accounts: [] })),
-        listEvents: vi.fn(async () => ({ accounts: [] })),
-      },
-    },
+
   }
+  vi.mocked(calendar.listContacts).mockResolvedValue({accounts:[], errors:[]})
+  vi.mocked(calendar.listEvents).mockResolvedValue({accounts:[], errors:[]})
   const waits = new Set<string>()
   const run = (reason: Parameters<typeof runPrep>[3] = "created") =>
     runPrep(
@@ -189,19 +192,18 @@ afterEach(() => vi.restoreAllMocks())
 describe("meeting research handoff", () => {
   it("prepares research with only Calendar and explicitly marks email as unchecked", async () => {
     const { context, properties, steps } = fixture()
-    expect(Object.keys(prepConnections)).toEqual(["calendar"])
     await runPrep(
       context as unknown as Parameters<typeof runPrep>[0],
       targets,
       "meeting",
       "created"
     )
-    expect(context.connections.calendar.listContacts).toHaveBeenCalledWith({
-      calendars: { target: "history" },
+    expect(calendar.listContacts).toHaveBeenCalledWith({
+      calendars: calendar.history,
       queries: ["jane@acme.example"],
     })
-    expect(context.connections.calendar.listEvents).toHaveBeenCalledWith(
-      expect.objectContaining({ calendars: { target: "history" } })
+    expect(calendar.listEvents).toHaveBeenCalledWith(
+      expect.objectContaining({ calendars: calendar.history })
     )
     expect(steps).not.toContain("Find mailbox")
     expect(steps).not.toContain("Search email")
