@@ -42,21 +42,27 @@ for (const parent of projectParents) {
     if (stage === "typecheck" && !existsSync(join(path, "tsconfig.json"))) {
       continue
     }
-    const { scripts } = JSON.parse(
+    const { scripts, dependencies, devDependencies } = JSON.parse(
       readFileSync(join(path, "package.json"), "utf8")
     )
     if (stage === "test" && !scripts?.test) {
       console.log(`Skipping ${name} (no test script).`)
       continue
     }
-    projects.push({ name, path, scripts })
+    const latestDependencies = Object.entries({
+      ...dependencies,
+      ...devDependencies,
+    })
+      .filter(([, version]) => version === "latest")
+      .map(([name]) => name)
+    projects.push({ name, path, scripts, latestDependencies })
   }
 }
 
 function runProject(project) {
   const args =
     stage === "install"
-      ? ["install"]
+      ? installArgs(project)
       : stage === "test"
         ? ["test"]
         : project.scripts?.check
@@ -81,6 +87,14 @@ function runProject(project) {
     )
     child.on("close", (code) => resolveResult({ project, code, output }))
   })
+}
+
+function installArgs(project) {
+  // npm install can retain an obsolete version of a dist-tag in a local lockfile.
+  if (project.latestDependencies.length > 0) {
+    return ["update", ...project.latestDependencies]
+  }
+  return ["install"]
 }
 
 let nextIndex = 0

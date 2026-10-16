@@ -24,6 +24,7 @@ function fixture() {
   writeFileSync(
     join(root, "bin/npm"),
     `#!/usr/bin/env bash
+printf '%s\\n' "$*" > "$PWD/npm-args"
 printf 'start %s\\n' "\${PWD##*/}" >> "$EVENTS"
 if [[ "\${PWD##*/}" == "three" ]]; then sleep 0.3; else sleep 0.1; fi
 printf 'end %s\\n' "\${PWD##*/}" >> "$EVENTS"
@@ -68,6 +69,10 @@ test("starts the next project when one worker finishes, without exceeding the li
   try {
     const result = run(root, events, "install")
     assert.equal(result.status, 0, result.stderr)
+    assert.equal(
+      readFileSync(join(root, "examples/one/npm-args"), "utf8"),
+      "install\n"
+    )
     const lines = readFileSync(events, "utf8").trim().split("\n")
     assert.deepEqual(
       new Set(lines.slice(0, 2)),
@@ -75,6 +80,31 @@ test("starts the next project when one worker finishes, without exceeding the li
     )
     assert.ok(lines.indexOf("start two") > lines.indexOf("end one"))
     assert.ok(lines.indexOf("start two") < lines.indexOf("end three"))
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test("refreshes latest dependencies without updating dependencies declared with version ranges", () => {
+  const { root, events } = fixture()
+  try {
+    writeFileSync(
+      join(root, "examples/one/package.json"),
+      JSON.stringify({
+        dependencies: { "@notionhq/apps": "latest", react: "^19.2.5" },
+        devDependencies: { typescript: "latest" },
+      })
+    )
+    const result = run(root, events, "install")
+    assert.equal(result.status, 0, result.stderr)
+    assert.equal(
+      readFileSync(join(root, "examples/one/npm-args"), "utf8"),
+      "update @notionhq/apps typescript\n"
+    )
+    assert.equal(
+      readFileSync(join(root, "examples/two/npm-args"), "utf8"),
+      "install\n"
+    )
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

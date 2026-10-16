@@ -148,6 +148,10 @@ npm install
 npm run verify:all
 ```
 
+`verify:all` installs project dependencies before running checks. Dependencies
+declared as `latest` are refreshed to the current npm release, even when a local
+lockfile contains an older version.
+
 In the pull request, list the commands you ran and any live checks you did not
 run.
 
