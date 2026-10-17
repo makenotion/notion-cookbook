@@ -19,6 +19,12 @@ decisions. Do not read full skill instructions, generated declarations
 details until the user agrees on a direction. Verify those details against the
 selected option during implementation.
 
+When planning or iterating on workflow designs with the user, use the sketch
+skill (`.agents/skills/sketch/SKILL.md`) to show the design as a reviewable
+flow diagram; read that skill before sketching. If the sketch skill is missing
+or its tools fail, tell the user the sketch skill is not available and present
+the design in text instead.
+
 Present the proposed design concisely and get the user's agreement before
 implementing. Include `APP.md` as the App's home page and primary user
 interface. It should briefly explain the App, embed its most important views,
