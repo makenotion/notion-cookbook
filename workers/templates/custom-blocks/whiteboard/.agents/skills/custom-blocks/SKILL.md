@@ -339,7 +339,9 @@ In React blocks, press `\` to toggle the SDK debug console.
 See the dev shell package documentation for details.
 
 Report what you tested and any checks you could not complete.
-Dev shell tests do not verify production permissions or sandbox behavior.
+Use the dev shell for iframe sandbox and local CSP checks. Read the installed dev shell docs for
+local origin approval and development exceptions. Preview tests use sample data; verify production
+permissions and navigation containment after deployment.
 
 ## Deploy and share
 
