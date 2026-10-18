@@ -7,6 +7,11 @@ worker.customBlock("whiteboard", {
   path: "./blocks/whiteboard",
   command: "npx vite build",
   output: "dist",
+  name: "Whiteboard",
+  description:
+    "A freeform whiteboard for sticky notes, pen strokes, lines, and arrows.",
+  icon: { type: "emoji", emoji: "🖊️" },
+  slashCommand: "whiteboard",
   version: 1,
   dataSources: {
     items: {
