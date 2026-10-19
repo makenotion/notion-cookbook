@@ -10,7 +10,7 @@ worker.customBlock("whiteboard", {
   name: "Whiteboard",
   description:
     "A freeform whiteboard for sticky notes, pen strokes, lines, and arrows.",
-  icon: { type: "emoji", emoji: "🖊️" },
+  icon: { type: "emoji", emoji: "🎨" },
   slashCommand: "whiteboard",
   version: 1,
   dataSources: {
