@@ -31,7 +31,7 @@ because it does not need a database mapping.
 
 The dev shell (`ntn customblocks dev`, above) is the local test loop: it
 builds the worker, serves the block with this project's Vite, and renders it
-in a mock Notion host. Edit `blocks/custom/src/index.tsx` to change the
+in a mock Notion host. Edit `blocks/hello-world/src/index.tsx` to change the
 rendered content; edits hot-reload. Add data-source definitions to
 `src/index.ts` when the block needs Notion data, then restart the dev shell
 to pick up the new manifest and bind sample data.
@@ -40,7 +40,7 @@ to pick up the new manifest and bind sample data.
 
 ```text
 src/index.ts                 Worker definition and custom block ID
-blocks/custom/
+blocks/hello-world/
   src/index.tsx              React entry point
   src/index.css              Notion token-based styles
 ```

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "check": "tsc --noEmit && tsc -p blocks/custom/tsconfig.json --noEmit",
+    "check": "tsc --noEmit && tsc -p blocks/hello-world/tsconfig.json --noEmit",
     "test": "node --test test/*.test.mjs"
   },
   "engines": {

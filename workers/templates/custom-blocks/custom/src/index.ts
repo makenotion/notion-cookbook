@@ -3,8 +3,8 @@ import { Worker } from "@notionhq/workers"
 const worker = new Worker()
 export default worker
 
-worker.customBlock("custom", {
-  path: "./blocks/custom",
+worker.customBlock("helloWorld", {
+  path: "./blocks/hello-world",
   command: "npx vite build",
   output: "dist",
   name: "Hello world",
