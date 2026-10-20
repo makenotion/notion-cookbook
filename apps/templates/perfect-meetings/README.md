@@ -200,7 +200,19 @@ row but no Company row.
 
 ## Configure
 
-After deploying, open the link provided in ntn output to set up calendar access.
+After deploying, open the setup link from `ntn apps deploy`:
+
+1. Review the app, then select **Start setup**.
+2. Connect a Calendar account. Account and calendar choices are all on this page.
+3. Under **Sync calendar**, choose **Meetings to sync**. Under **Prepare
+   research** and **Refresh today's research**, choose **Meeting history**.
+   These are separate workflow selections; choose the same calendars if you
+   want sync and research to use the same meetings. Both uses need read-only access.
+4. Select **Install**. There is no separate trigger setup or review screen.
+
+Calendar changes, page watches, and schedules are declared in the workflow code.
+Setup saves connection choices automatically and installs the declared workflows.
+You do not need to add triggers by hand.
 
 ## Develop
 
@@ -272,8 +284,8 @@ AI credits quickly. Rows it creates remain after you unset it.
 
 Notes:
 
-- New page watches and schedules take effect after you open the workflow in
-  Notion and save it.
+- Finish app setup with **Install** to publish the workflows and activate their
+  declared page watches and schedules.
 - Workflow success confirms context preparation or ingestion, not agent
   completion. Check Research status and the Meeting researcher's activity for
   profile results, and Prep status for finished briefs.

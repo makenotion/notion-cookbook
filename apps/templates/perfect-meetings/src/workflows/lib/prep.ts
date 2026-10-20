@@ -31,7 +31,7 @@ export const prepConnections = {
   calendar: connections.calendar({
     targets: {
       history: {
-        description: "Read past meetings and contact names",
+        description: "Meeting history",
         permissions: "read",
         multiple: true,
       },

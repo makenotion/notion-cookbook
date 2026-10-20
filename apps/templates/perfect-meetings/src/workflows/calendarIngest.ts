@@ -50,7 +50,7 @@ export default workflow({
     calendar: connections.calendar({
       targets: {
         meetings: {
-          description: "Meetings to sync and watch for changes",
+          description: "Meetings to sync",
           permissions: "read",
           multiple: true,
         },
