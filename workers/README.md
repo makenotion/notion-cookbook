@@ -29,6 +29,7 @@ For self-hosted integrations built directly with the Notion API, see the [API ex
 | [Salesforce sync](salesforce-sync/)                 | Salesforce accounts and opportunities, with related account context.                                                                 |
 | [Sentry sync](sentry-sync/)                         | Issue triage, project reliability trends, and recent release health for cross-functional follow-up.                                  |
 | [Snowflake sync](snowflake-sync/)                   | Rows returned by a configurable Snowflake query.                                                                                     |
+| [Stripe sync](stripe-sync/)                         | Customers, subscriptions, and charges for a billing and revenue-operations view.                                                     |
 | [Todoist sync](todoist-sync/)                       | Open tasks and project summaries with recent completion context.                                                                     |
 | [Workday employee directory sync](workday-sync/)    | A daily employee-facing directory of people, work email, Notion People references, supervisory organizations, and manager relations. |
 | [Zendesk sync](zendesk-sync/)                       | Related tickets, organizations, users, CSAT responses, metrics, and SLA policies with manual repair sweeps.                          |
