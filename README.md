@@ -20,6 +20,7 @@ directory.
   [GitHub stars](workers/templates/github-stars-sync/), [HubSpot](workers/templates/hubspot-sync/),
   [Intercom](workers/templates/intercom-sync/),
   [Linear](workers/templates/linear-sync/), [PagerDuty](workers/templates/pagerduty-sync/),
+  [Patents](workers/templates/patent-portfolio-sync/),
   [Readwise and Reader](workers/templates/readwise-sync/),
   [Salesforce](workers/templates/salesforce-sync/), [Sentry](workers/templates/sentry-sync/),
   [Todoist](workers/templates/todoist-sync/), [Zendesk](workers/templates/zendesk-sync/) and more.
@@ -125,6 +126,7 @@ and a **webhook** handles events from another service. See the complete
 | Sync issues, sprints, analytics, and projects                        | [Jira sync](workers/templates/jira-sync/)                             | Jira Cloud  |
 | Sync projects, issues, and initiatives                               | [Linear sync](workers/templates/linear-sync/)                         | Linear      |
 | Monitor PagerDuty incidents and service readiness in Notion          | [PagerDuty sync](workers/templates/pagerduty-sync/)                   | PagerDuty   |
+| Sync US and European patent filings grouped into families            | [Patent portfolio sync](workers/templates/patent-portfolio-sync/)     | USPTO / EPO |
 | Turn saved sources and highlights into project evidence              | [Raindrop.io research library sync](workers/templates/raindrop-sync/) | Raindrop.io |
 | Build a related reading library and highlight knowledge base         | [Readwise and Reader sync](workers/templates/readwise-sync/)          | Readwise    |
 | Sync accounts and opportunities                                      | [Salesforce sync](workers/templates/salesforce-sync/)                 | Salesforce  |
