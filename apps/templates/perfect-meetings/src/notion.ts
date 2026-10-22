@@ -357,7 +357,7 @@ export const researcher = customAgent({
     {
       resourceId: "research-person-ready",
       type: "property_updated",
-      dataSourceResourceId: PEOPLE_SOURCE,
+      targetResourceId: PEOPLE_SOURCE,
       propertyConditions: {
         "person-research-status": { type: "property_edited" },
       },
@@ -365,7 +365,7 @@ export const researcher = customAgent({
     {
       resourceId: "research-company-ready",
       type: "property_updated",
-      dataSourceResourceId: COMPANIES_SOURCE,
+      targetResourceId: COMPANIES_SOURCE,
       propertyConditions: {
         "company-research-status": { type: "property_edited" },
       },
@@ -373,7 +373,7 @@ export const researcher = customAgent({
     {
       resourceId: "research-meeting-ready",
       type: "property_updated",
-      dataSourceResourceId: MEETINGS_SOURCE,
+      targetResourceId: MEETINGS_SOURCE,
       propertyConditions: {
         "meeting-research-status": { type: "property_edited" },
       },
