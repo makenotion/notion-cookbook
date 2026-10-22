@@ -1,8 +1,7 @@
-import { connection } from "@notionhq/apps"
+import { connections } from "@notionhq/apps"
 
 // All workflows in this installation share these accounts and selections.
-export const calendar = connection({
-  type: "calendar",
+export default connections.calendar({
   meetings: {
     description: "Meetings to sync and watch for changes",
     permissions: "read",

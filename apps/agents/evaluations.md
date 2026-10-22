@@ -8,12 +8,15 @@ Ask for a workflow, a Notion as Code resource, a sync, and a custom block.
 Verify examples directly import the creation helpers they use, such as
 `import { database, sync } from "@notionhq/apps"`. The root exports `page`,
 `database`, `teamspace`, `customAgent`, `view`, `sync`, `workflow`, `customBlock`,
-`access`, `input`, `events`, and workflow types. Data sources belong inside
-`database`. Builders, provider types, connections, and browser runtime clients
+`access`, `input`, `events`, `connections`, and workflow types. Data sources belong inside
+`database`. Builders, provider types, and browser runtime clients
 use their own subpaths. Compile against the installed Apps SDK; report any
 version mismatch.
 
 For Calendar, ask for upcoming meetings from calendars chosen during setup.
+Verify one default-exported app connection imported by each workflow, with no
+workflow-local connections or `context.connections`. All workflow manifests
+should contain the same connection definitions and target keys.
 Verify one Calendar connection with reusable named targets, explicit permissions
 and cardinality, and a target on every read. Missing selections must fail rather
 than falling back to every approved calendar. For a write to a multiple target,
@@ -53,3 +56,4 @@ and attachment flows.
 | Listen for Slack messages through a named support connection | Declares a Slack connection and binds its key using the typed trigger callback; rejects undeclared or wrong-provider keys and duplicate trigger/key pairs; distinguishes connection keys from step keys         |
 | Add an interactive issue board                               | Uses customBlock, Apps React imports, root-owned dependencies, and separate browser tsconfig; schema declaration is distinguished from binding                                                                  |
 | Review a workflow with mutable step-local state              | Reports replay hazard with file, line, impact, and fix; returns needed values from steps; narrows trigger events                                                                                                |
+| Plan a new workflow with the user                            | Uses the sketch skill to share a reviewable flow diagram; if the skill is missing, says it is not available and proposes the design in text                                                                     |

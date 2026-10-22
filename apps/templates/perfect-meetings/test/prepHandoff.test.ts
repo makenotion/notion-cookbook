@@ -2,11 +2,14 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { prop, read } from "../src/lib/props.js"
 import { runPrep } from "../src/workflows/lib/prep.js"
 
-import { calendar } from "../src/connections/calendar.js"
+import calendar from "../src/connections/calendar.js"
 
 vi.mock("../src/connections/calendar.js", () => ({
- calendar: {history: {target:"history", connectionKey:"calendar"},
-   listContacts: vi.fn(), listEvents: vi.fn()},
+  default: {
+    history: { target: "history", connectionKey: "calendar" },
+    listContacts: vi.fn(),
+    listEvents: vi.fn(),
+  },
 }))
 
 /** API-style plain_text values for the in-memory page store. */
@@ -141,10 +144,9 @@ function fixture(failAfterClaim = false, claimStatus = "Researching") {
         throw new Error("Unexpected wait")
       }),
     },
-
   }
-  vi.mocked(calendar.listContacts).mockResolvedValue({accounts:[], errors:[]})
-  vi.mocked(calendar.listEvents).mockResolvedValue({accounts:[], errors:[]})
+  vi.mocked(calendar.listContacts).mockResolvedValue({ accounts: [], errors: [] })
+  vi.mocked(calendar.listEvents).mockResolvedValue({ accounts: [], errors: [] })
   const waits = new Set<string>()
   const run = (reason: Parameters<typeof runPrep>[3] = "created") =>
     runPrep(

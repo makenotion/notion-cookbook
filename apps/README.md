@@ -15,6 +15,7 @@ independent project that can be copied, built, and deployed on its own.
 | ----------------------------------------------- | ------------------------------------------------------------------------- |
 | [Default app](templates/apps-default/)          | A recurring workflow with a durable step and an interactive custom block. |
 | [Perfect Meetings](templates/perfect-meetings/) | Calendar connection, deterministic triggers and agentic research          |
+| [Statsig Rollout](templates/statsig-rollout/)   | Database-triggered workflow that calls an external API with retries       |
 
 ## Quick start
 
@@ -36,8 +37,8 @@ Apps are a private alpha and are not currently open for general contribution.
 ## Shared connections
 
 Declare connections once in `src/connections/*.ts`, then import them in each
-workflow. Use `connection({ type: "calendar", ... })` or
-`connection({ type: "mail" })` instead of workflow-local connection declarations.
+workflow. Default-export `connections.calendar(...)` or
+`connections.mail()` from `@notionhq/apps` instead of workflow-local connection declarations.
 Calendar targets are flat properties, such as `calendar.meetings`.
 
 An installation configures each connection and its targets once. Every workflow

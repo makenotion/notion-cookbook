@@ -6,6 +6,8 @@ Prepare for Google Calendar meetings with people outside your organization, with
 
 ## Your library
 
+<mention url="perfect-meetings-resources">Perfect Meetings Resources</mention> — The databases created by this app, grouped for demo cleanup.
+
 - <mention url="meetings-db" type="database">Meetings</mention> — Meeting briefs and your notes.
 - <mention url="people-db" type="database">People</mention> — Get to know the people you're meeting.
 - <mention url="companies-db" type="database">Companies</mention> — Background on their companies.

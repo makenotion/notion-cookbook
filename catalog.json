@@ -357,6 +357,25 @@
       }
     },
     {
+      "id": "statsig-rollout",
+      "title": "Statsig rollout App",
+      "summary": "Add IDs entered in a Notion database to a Statsig ID List segment, with per-row status.",
+      "path": "apps/templates/statsig-rollout",
+      "kind": "app-default",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-apps", "notion-workflow", "statsig"],
+      "entrypoints": ["APP.md"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn apps deploy --name \"Statsig Rollout\""
+      }
+    },
+    {
       "id": "duckdb-query",
       "title": "DuckDB query agent tool",
       "summary": "Learn the Worker tool pattern by querying a seeded, in-memory DuckDB sales database with no credentials.",

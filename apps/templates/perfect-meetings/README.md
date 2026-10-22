@@ -9,15 +9,16 @@ Notion pages with a short research brief.
 
 ## What it creates
 
-| Kind         | Name               | Purpose                                                                                           |
-| ------------ | ------------------ | ------------------------------------------------------------------------------------------------- |
-| Page         | APP.md             | Home page with Today, live research progress, library links, and collapsed help                   |
-| Database     | Meetings           | One row per external meeting; brief at the top of the page, notes below                           |
-| Database     | People             | One row per outside attendee, keyed by email                                                      |
-| Database     | Companies          | One row per outside company, keyed by email domain                                                |
-| Database     | Workflow runs      | One row per calendar ingest run; add a row to run a catch-up now (linked under How it works)      |
-| Custom agent | Meeting researcher | Researches Ready rows and writes profiles and meeting briefs directly                             |
-| Custom block | main_ui            | Setup progress, then a Today view (the default) and company and people cards for the next meeting |
+| Kind         | Name                       | Purpose                                                                                           |
+| ------------ | -------------------------- | ------------------------------------------------------------------------------------------------- |
+| Page         | APP.md                     | Home page with Today, live research progress, library links, and collapsed help                   |
+| Page         | Perfect Meetings Resources | Parent of the four app databases for demo cleanup                                                 |
+| Database     | Meetings                   | One row per external meeting; brief at the top of the page, notes below                           |
+| Database     | People                     | One row per outside attendee, keyed by email                                                      |
+| Database     | Companies                  | One row per outside company, keyed by email domain                                                |
+| Database     | Workflow runs              | One row per calendar ingest run; add a row to run a catch-up now (linked under How it works)      |
+| Custom agent | Meeting researcher         | Researches Ready rows and writes profiles and meeting briefs directly                             |
+| Custom block | main_ui                    | Setup progress, then a Today view (the default) and company and people cards for the next meeting |
 
 ## Home page
 
@@ -199,7 +200,16 @@ row but no Company row.
 
 ## Configure
 
-After deploying, open the link provided in ntn output to set up calendar access.
+After deploying, open `setup_url` from the CLI output. Connect your Calendar
+account and choose calendars for both **Meetings to sync and watch for changes**
+and **Read past meetings and contact names**. You can choose the same calendars
+for both targets, or different ones. Setup shows Calendar once for all three
+workflows. Each workflow keeps its own saved connection module with the same
+approved accounts and target selections.
+
+Finish installation, open the app, and press **Begin Sync**. No Mail connection
+is needed. Calendar access and the Meeting researcher must be enabled on the
+server; a successful build alone does not verify either.
 
 ## Develop
 
@@ -227,7 +237,8 @@ in their browser, so new viewers start on Today.
 The App's name is the title of its home page. Set it on the first deploy:
 
 ```shell
-ntn apps deploy --name "Perfect Meetings"
+ntn experiments enable apps
+ntn apps deploy --json --name "Perfect Meetings"
 ```
 
 ## Run on demand and debug
@@ -285,7 +296,8 @@ Notes:
 
 ## Shared Calendar setup
 
-`src/connections/calendar.ts` declares Calendar once for all workflows. The
+`src/connections/calendar.ts` default-exports `connections.calendar(...)` once
+for all workflows. The
 `meetings` target selects calendars to sync; the `history` target selects past
 meetings for prep. All workflows share the connected accounts. Targets may have
 different selected calendars. Configure these targets in the app setup page

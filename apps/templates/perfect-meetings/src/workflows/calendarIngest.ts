@@ -1,6 +1,6 @@
 import { access, workflow } from "@notionhq/apps"
 import { FatalError } from "@notionhq/apps/error"
-import { calendar } from "../connections/calendar.js"
+import calendar from "../connections/calendar.js"
 
 import {
   SCAN_DAYS_AHEAD,

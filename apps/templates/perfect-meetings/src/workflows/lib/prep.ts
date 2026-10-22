@@ -1,5 +1,5 @@
 import type { WorkflowContext } from "@notionhq/apps"
-import { calendar } from "../../connections/calendar.js"
+import calendar from "../../connections/calendar.js"
 
 import { EMAIL_LOOKBACK_DAYS, TIME_ZONE } from "../../lib/config.js"
 import {

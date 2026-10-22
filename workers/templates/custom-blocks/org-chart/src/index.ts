@@ -7,6 +7,11 @@ worker.customBlock("orgChart", {
   path: "./blocks/org-chart",
   command: "npx vite build",
   output: "dist",
+  name: "Org chart",
+  description:
+    "Visualize people and reporting relationships in an interactive org chart.",
+  icon: { type: "emoji", emoji: "🌳" },
+  slashCommand: "org-chart",
   version: 1,
   dataSources: {
     people: {
