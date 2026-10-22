@@ -18,7 +18,7 @@ jobs:
         # v4.1.0
         uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af
         with:
-          node-version: 22.x
+          node-version: "22.23.4"
       - name: Install repository tooling
         run: npm ci
       - name: Verify all cookbook projects
