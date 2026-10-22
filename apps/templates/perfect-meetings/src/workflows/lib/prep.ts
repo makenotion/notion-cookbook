@@ -224,7 +224,7 @@ export async function runPrep(
           const emails = splitEmails(meeting.attendees)
           return contactsByEmail(
             await calendar.listContacts({
-              calendars: calendar.history,
+              calendars: calendar.meetings,
               queries: emails,
             }),
             emails
@@ -253,7 +253,7 @@ export async function runPrep(
             end -= LIST_EVENTS_DAYS * DAY_MS
           ) {
             const output = await calendar.listEvents({
-              calendars: calendar.history,
+              calendars: calendar.meetings,
               timeMin: new Date(end - LIST_EVENTS_DAYS * DAY_MS).toISOString(),
               timeMax: new Date(end).toISOString(),
               timeZone: TIME_ZONE,

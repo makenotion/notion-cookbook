@@ -3,12 +3,7 @@ import { connections } from "@notionhq/apps"
 // All workflows in this installation share these accounts and selections.
 export default connections.calendar({
   meetings: {
-    description: "Meetings to sync and watch for changes",
-    permissions: "read",
-    multiple: true,
-  },
-  history: {
-    description: "Read past meetings and contact names",
+    description: "Calendars for meeting sync and research",
     permissions: "read",
     multiple: true,
   },

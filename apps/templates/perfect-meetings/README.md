@@ -201,11 +201,10 @@ row but no Company row.
 ## Configure
 
 After deploying, open `setup_url` from the CLI output. Connect your Calendar
-account and choose calendars for both **Meetings to sync and watch for changes**
-and **Read past meetings and contact names**. You can choose the same calendars
-for both targets, or different ones. Setup shows Calendar once for all three
-workflows. Each workflow keeps its own saved connection module with the same
-approved accounts and target selections.
+account and choose **Calendars for meeting sync and research**. This one target
+is used for event sync, past meetings, and contact lookup across all three
+workflows. You can select multiple calendars. Each workflow keeps its own saved
+connection module with the same approved accounts and calendar selections.
 
 Finish installation, open the app, and press **Begin Sync**. No Mail connection
 is needed. Calendar access and the Meeting researcher must be enabled on the
@@ -297,8 +296,6 @@ Notes:
 ## Shared Calendar setup
 
 `src/connections/calendar.ts` default-exports `connections.calendar(...)` once
-for all workflows. The
-`meetings` target selects calendars to sync; the `history` target selects past
-meetings for prep. All workflows share the connected accounts. Targets may have
-different selected calendars. Configure these targets in the app setup page
-once, not separately for each workflow.
+for all workflows. Its single read-only `meetings` target supplies the calendars
+for sync triggers, event reads, past-meeting research, and contact lookup.
+Configure it once in the app setup page, not separately for each workflow.

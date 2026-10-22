@@ -6,7 +6,7 @@ import calendar from "../src/connections/calendar.js"
 
 vi.mock("../src/connections/calendar.js", () => ({
   default: {
-    history: { target: "history", connectionKey: "calendar" },
+    meetings: { target: "meetings", connectionKey: "calendar" },
     listContacts: vi.fn(),
     listEvents: vi.fn(),
   },
@@ -145,7 +145,10 @@ function fixture(failAfterClaim = false, claimStatus = "Researching") {
       }),
     },
   }
-  vi.mocked(calendar.listContacts).mockResolvedValue({ accounts: [], errors: [] })
+  vi.mocked(calendar.listContacts).mockResolvedValue({
+    accounts: [],
+    errors: [],
+  })
   vi.mocked(calendar.listEvents).mockResolvedValue({ accounts: [], errors: [] })
   const waits = new Set<string>()
   const run = (reason: Parameters<typeof runPrep>[3] = "created") =>
@@ -201,11 +204,11 @@ describe("meeting research handoff", () => {
       "created"
     )
     expect(calendar.listContacts).toHaveBeenCalledWith({
-      calendars: calendar.history,
+      calendars: calendar.meetings,
       queries: ["jane@acme.example"],
     })
     expect(calendar.listEvents).toHaveBeenCalledWith(
-      expect.objectContaining({ calendars: calendar.history })
+      expect.objectContaining({ calendars: calendar.meetings })
     )
     expect(steps).not.toContain("Find mailbox")
     expect(steps).not.toContain("Search email")
