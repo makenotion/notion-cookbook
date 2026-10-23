@@ -4,22 +4,29 @@ import path from "node:path"
 import type { MemoryType } from "./memories.ts"
 
 export interface Config {
-  token: string | undefined
-  baseUrl: string
+  // Codex executable used to start `codex app-server`.
+  codexPath: string
+  // Name of the Notion MCP server in Codex. Detected automatically when unset.
+  mcpServer?: string
+  // Notion MCP endpoint the plugin signs in to directly in Claude Code.
+  mcpUrl: string
 }
 
 export interface MemoryState {
   hash: string
   title: string
   type: MemoryType
-  pageId?: string
-  // `last_edited_time` right after the plugin wrote the page. A later value means someone
-  // edited the memory in Notion, and the plugin stops managing it.
-  lastEditedTime?: string
+  pageId: string
+  // Hash of the page as Notion returned it right after the plugin wrote it. A different
+  // page later means someone edited it in Notion.
+  pageHash?: string
+  // Set once the page was edited or deleted in Notion. The plugin never touches it again.
+  released?: "edited" | "deleted"
 }
 
 export interface State {
   memories: Record<string, MemoryState>
+  userName?: string
 }
 
 export type Agent = "codex" | "claude"
@@ -47,12 +54,10 @@ export function loadConfig(): Config {
   if (fs.existsSync(CONFIG_FILE))
     file = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8"))
   return {
-    token: process.env.NOTION_API_TOKEN || file.token,
-    baseUrl: (
-      process.env.NOTION_API_BASE_URL ||
-      file.baseUrl ||
-      "https://api.notion.com"
-    ).replace(/\/$/, ""),
+    codexPath: process.env.CODEX_PATH || file.codexPath || "codex",
+    mcpServer: process.env.NOTION_MCP_SERVER || file.mcpServer,
+    mcpUrl:
+      process.env.NOTION_MCP_URL || file.mcpUrl || "https://mcp.notion.com/mcp",
   }
 }
 

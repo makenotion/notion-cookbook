@@ -93,7 +93,7 @@ See the [API examples guide](examples/) for shared setup information.
 | Task                                                         | Example                                                                    | Integrations                   |
 | ------------------------------------------------------------ | -------------------------------------------------------------------------- | ------------------------------ |
 | Learn blocks, pages, databases, queries, and file uploads    | [Introduction to the Notion API](examples/intro-to-notion-api/)            | Notion API                     |
-| Bring Codex or Claude Code memories into Notion Memories     | [Codex Notion memory](examples/codex-notion-memory/)                       | Notion API, Codex, Claude Code |
+| Bring Codex or Claude Code memories into Notion Memories     | [Codex Notion memory](examples/codex-notion-memory/)                       | Notion MCP, Codex, Claude Code |
 | Send an email when a database status changes                 | [Database email update](examples/database-email-update/)                   | Notion API, SendGrid           |
 | Fill a database with correctly typed sample rows             | [Generate random data](examples/generate-random-data/)                     | Notion API                     |
 | Copy GitHub issues into a Notion database                    | [Notion–GitHub issue sync](examples/notion-github-sync/)                   | Notion API, GitHub             |

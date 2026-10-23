@@ -2,9 +2,10 @@
 // NOTION_MEMORY_AGENT=claude to work on Claude Code memories instead of Codex's.
 //
 //   node src/main.ts hook <event>                called by the agent (reads hook JSON on stdin)
+//   node src/main.ts login                       Claude Code only: sign in to Notion MCP
 //   node src/main.ts sync                        import the agent's memories now
-//   node src/main.ts preview [--dir <path>]      offline: print what would be imported
-//   node src/main.ts status                      memory pages managed by the plugin
+//   node src/main.ts preview [--dir <path>]      offline: print the memories it would write
+//   node src/main.ts status                      memories the plugin manages
 import { spawn } from "node:child_process"
 import fs from "node:fs"
 import { fileURLToPath } from "node:url"
@@ -12,7 +13,6 @@ import { claudeSource, isClaudeMemoryFile } from "./claude.ts"
 import { codexSource, watchMemories } from "./codex.ts"
 import {
   AGENT,
-  CONFIG_FILE,
   type Config,
   DATA_DIR,
   LOG_FILE,
@@ -21,11 +21,13 @@ import {
   log,
   withLock,
 } from "./config.ts"
+import { type CallTool, CodexNotionMcp } from "./mcp.ts"
 import { syncMemories } from "./memories.ts"
-import { NotionClient } from "./notion.ts"
+import { login, NotionMcpHttp, openBrowser } from "./notionMcp.ts"
 
 interface HookInput {
   session_id?: string
+  cwd?: string
   tool_input?: { file_path?: string }
 }
 
@@ -49,41 +51,56 @@ async function main(): Promise<void> {
 
   switch (command) {
     case "hook":
-      return handleHook(args[0], config)
+      return handleHook(args[0])
     case "worker": {
       const event = args[0] === "stop" ? "stop" : "session-start"
-      const client = requireClient(config)
-      await withLock(() => syncMemories(client, SOURCE))
       // Claude Code writes memories with its own tools, so the PostToolUse hook already
-      // fires on every change and there is nothing to watch.
-      if (AGENT === "codex") await watchMemories(client, WATCH[event])
+      // fires on every change and there is nothing to watch. Its worker holds the lock
+      // while connected, because refreshing the OAuth token must not race.
+      if (AGENT === "claude")
+        return withLock(() =>
+          withNotion(config, undefined, async (callTool) => {
+            await syncMemories(callTool, SOURCE)
+          })
+        )
+      return withNotion(config, option("--cwd"), async (callTool) => {
+        await withLock(() => syncMemories(callTool, SOURCE))
+        await watchMemories(callTool, WATCH[event])
+      })
+    }
+    case "sync":
+      return withLock(() =>
+        withNotion(config, undefined, async (callTool) => {
+          console.log(JSON.stringify(await syncMemories(callTool, SOURCE)))
+        })
+      )
+    case "login":
+      if (AGENT !== "claude") {
+        console.log("Codex signs in itself: run `codex mcp login notion`.")
+        return
+      }
+      return login(config.mcpUrl, openBrowser)
+    case "preview": {
+      const name = loadState().userName
+      const memories = SOURCE.parse(option("--dir") ?? SOURCE.dir, name)
+      console.log(JSON.stringify(memories, null, 2))
       return
     }
-    case "sync": {
-      const client = requireClient(config)
-      console.log(
-        JSON.stringify(await withLock(() => syncMemories(client, SOURCE)))
-      )
-      return
-    }
-    case "preview":
-      console.log(
-        JSON.stringify(SOURCE.parse(option("--dir") ?? SOURCE.dir), null, 2)
-      )
-      return
     case "status":
       console.log(JSON.stringify(loadState(), null, 2))
       return
     default:
       console.log(
-        "usage: node src/main.ts sync | preview [--dir <path>] | status"
+        "usage: node src/main.ts login | sync | preview [--dir <path>] | status"
       )
   }
 }
 
 // Hooks have a short timeout and block the agent while they run, so hand the work to a
 // detached worker process and return immediately. The worker logs to LOG_FILE.
-function handleHook(event: string | undefined, config: Config): void {
+function handleHook(event: string | undefined): void {
+  // The worker's own `codex app-server` can start sessions too. Never recurse.
+  if (process.env.NOTION_MEMORY_WORKER) return
   let input: HookInput = {}
   try {
     input = JSON.parse(fs.readFileSync(0, "utf8") || "{}")
@@ -99,29 +116,47 @@ function handleHook(event: string | undefined, config: Config): void {
     !isClaudeMemoryFile(input.tool_input?.file_path ?? "")
   )
     return
-  if (!config.token) {
-    log(`hook ${event}: no Notion token in ${CONFIG_FILE} or NOTION_API_TOKEN`)
-    return
-  }
   fs.mkdirSync(DATA_DIR, { recursive: true })
   const out = fs.openSync(LOG_FILE, "a")
   // The watcher reads Codex's job table with node:sqlite, which warns on Node 22.
-  const nodeArgs = ["--disable-warning=ExperimentalWarning", MAIN]
-  const child = spawn(
-    process.execPath,
-    [...nodeArgs, "worker", event ?? "session-start"],
-    { detached: true, stdio: ["ignore", out, out], env: process.env }
-  )
+  const args = [
+    "--disable-warning=ExperimentalWarning",
+    MAIN,
+    "worker",
+    event ?? "session-start",
+    "--cwd",
+    input.cwd || process.cwd(),
+  ]
+  const child = spawn(process.execPath, args, {
+    detached: true,
+    stdio: ["ignore", out, out],
+    env: { ...process.env, NOTION_MEMORY_WORKER: "1" },
+  })
   child.unref()
   log(`hook ${event}: session=${input.session_id} -> worker pid ${child.pid}`)
 }
 
-function requireClient(config: Config): NotionClient {
-  if (!config.token)
-    throw new Error(
-      `Set NOTION_API_TOKEN or add {"token": "..."} to ${CONFIG_FILE}`
-    )
-  return new NotionClient(config.baseUrl, config.token)
+// Connects to Notion MCP: through the server Codex is already signed in to, or, in Claude
+// Code, directly with the plugin's own sign-in.
+async function withNotion(
+  config: Config,
+  cwd: string | undefined,
+  fn: (callTool: CallTool) => Promise<void>
+): Promise<void> {
+  if (AGENT === "claude") {
+    const mcp = await NotionMcpHttp.connect(config.mcpUrl)
+    return fn(mcp.callTool)
+  }
+  const mcp = await CodexNotionMcp.connect({
+    codexPath: config.codexPath,
+    cwd: cwd || process.cwd(),
+    server: config.mcpServer,
+  })
+  try {
+    await fn(mcp.callTool)
+  } finally {
+    mcp.close()
+  }
 }
 
 main().catch((e: unknown) => {

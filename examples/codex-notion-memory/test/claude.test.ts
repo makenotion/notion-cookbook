@@ -4,7 +4,7 @@ import os from "node:os"
 import path from "node:path"
 import { test } from "node:test"
 import { fileURLToPath } from "node:url"
-import { fakeNotion } from "./fakeNotion.ts"
+import { fakeNotionMcp } from "./fakeNotionMcp.ts"
 
 // The plugin resolves its paths at import time, so point them at a temp dir first.
 const home = fs.mkdtempSync(path.join(os.tmpdir(), "claude-notion-memory-"))
@@ -24,25 +24,27 @@ const { claudeSource, isClaudeMemoryFile, parseClaudeMemories } = await import(
 const { syncMemories } = await import("../plugin/src/memories.ts")
 const { loadState } = await import("../plugin/src/config.ts")
 
-test("parses Claude Code auto memory files into typed memories", () => {
-  const memories = parseClaudeMemories(claudeSource.dir)
+test("parses Claude Code auto memory files, one memory per file", () => {
+  const memories = parseClaudeMemories(claudeSource.dir, "Casey")
   assert.deepEqual(
     memories.map((m) => [m.type, m.title]),
     [
-      ["Preference", 'Integration tests must hit a "real" database, not mocks'],
-      ["Work", "Merge freeze for the billing launch starts 2026-03-05"],
-      [
-        "Notes",
-        'API latency dashboard lives in Grafana under "API / Overview"',
-      ],
-      ["Profile", "Backend engineer who is new to the React frontend"],
+      ["Preference", "Integration tests real db"],
+      ["Work", "Billing launch freeze"],
+      ["Notes", "Latency dashboard"],
+      ["Profile", "Role and background"],
     ]
   )
-  const feedback = memories[0]
-  assert.equal(feedback.key, `${PROJECT}/feedback_tests.md`)
-  assert.equal(feedback.from, "code-app › feedback_tests.md")
-  assert.match(feedback.content, /^Don't mock the database/)
+  const [feedback, , , profile] = memories
+  assert.equal(feedback.key, `claude:${PROJECT}/feedback_tests.md`)
+  assert.equal(feedback.from, "code-app › `feedback_tests.md`")
+  // The description leads the body, with escaped quotes unescaped.
+  assert.match(
+    feedback.content,
+    /^Integration tests must hit a "real" database, not mocks\n\nDon't mock/
+  )
   assert.doesNotMatch(feedback.content, /^---|type: feedback/m)
+  assert.match(profile.content, /Casey has ten years of Go/)
 })
 
 test("recognizes only auto memory files from hook input", () => {
@@ -56,28 +58,33 @@ test("recognizes only auto memory files from hook input", () => {
   assert.equal(isClaudeMemoryFile(""), false)
 })
 
-test("syncs with Source = Claude Code and follows renamed content", async () => {
-  const { pages, client } = fakeNotion("Claude Code")
-  assert.deepEqual(await syncMemories(client, claudeSource), {
-    total: 4,
-    created: 4,
-    updated: 0,
-    removed: 0,
-    skippedEdited: 0,
-  })
+test("writes Claude Code memories incrementally and never deletes", async () => {
+  const notion = fakeNotionMcp()
+  const first = await syncMemories(notion.callTool, claudeSource)
+  assert.equal(first.created, 4)
+  const profile = [...notion.pages.values()].find(
+    (p) => p.Title === "Role and background"
+  )
+  assert.equal(profile?.Type, "Profile")
+  // The fake MCP's user is Casey Boyer; memories use the first name.
+  assert.match(profile?.content ?? "", /Casey has ten years of Go/)
+  assert.match(profile?.content ?? "", /From Claude Code memories \(code-app/)
 
   // Claude rewrites one memory and deletes another (for example with `rm`).
   const role = path.join(MEMORY_DIR, "user_role.md")
   fs.writeFileSync(
     role,
-    fs.readFileSync(role, "utf8").replace("Ten years", "Twelve years")
+    fs.readFileSync(role, "utf8").replace("ten years", "twelve years")
   )
   fs.rmSync(path.join(MEMORY_DIR, "reference_dashboards.md"))
-
-  const result = await syncMemories(client, claudeSource)
-  assert.equal(result.updated, 1)
-  assert.equal(result.removed, 1)
-  const live = [...pages.values()].filter((p) => !p.in_trash)
-  assert.equal(live.length, 3)
+  notion.calls.length = 0
+  const second = await syncMemories(notion.callTool, claudeSource)
+  assert.equal(second.updated, 1)
+  assert.equal(second.unchanged, 2)
+  assert.equal(second.noLongerInAgent, 1)
+  assert.match(profile?.content ?? "", /twelve years/)
+  assert.ok(notion.calls.includes("notion-finish-revision"))
+  // The dropped memory stays in Notion; the plugin only stops managing it.
+  assert.equal(notion.pages.size, 4)
   assert.equal(Object.keys(loadState().memories).length, 3)
 })
