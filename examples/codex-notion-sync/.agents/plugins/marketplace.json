@@ -1,0 +1,12 @@
+{
+  "name": "notion-cookbook",
+  "interface": { "displayName": "Notion Cookbook" },
+  "plugins": [
+    {
+      "name": "notion-sync",
+      "source": { "source": "local", "path": "./plugin" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "category": "Productivity"
+    }
+  ]
+}
