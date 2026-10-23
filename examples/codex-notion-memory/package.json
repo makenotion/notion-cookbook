@@ -1,8 +1,8 @@
 {
-  "name": "@notion-cookbook/codex-notion-sync",
+  "name": "@notion-cookbook/codex-notion-memory",
   "version": "0.1.0",
   "private": true,
-  "description": "Codex plugin that syncs Codex session transcripts and Codex memories into Notion.",
+  "description": "Codex plugin that imports Codex memories into Notion Memories.",
   "type": "module",
   "engines": {
     "node": ">=22.18"
@@ -10,8 +10,8 @@
   "scripts": {
     "check": "tsc --noEmit",
     "test": "node --test \"test/*.test.ts\"",
-    "preview-memories": "node plugin/src/main.ts preview-memories",
-    "sync-memories": "node plugin/src/main.ts sync-memories",
+    "preview": "node plugin/src/main.ts preview",
+    "sync": "node plugin/src/main.ts sync",
     "status": "node plugin/src/main.ts status"
   },
   "devDependencies": {

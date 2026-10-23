@@ -2,10 +2,10 @@
   "version": 1,
   "recipes": [
     {
-      "id": "codex-notion-sync",
-      "title": "Codex Notion sync",
-      "summary": "Codex plugin that appends each Codex session turn, with a redacted transcript, to a Notion database and can import Codex memories into Notion Memories.",
-      "path": "examples/codex-notion-sync",
+      "id": "codex-notion-memory",
+      "title": "Codex Notion memory",
+      "summary": "Codex plugin that imports the memories Codex builds about you into Notion Memories, keeping your Notion edits.",
+      "path": "examples/codex-notion-memory",
       "kind": "api-example",
       "status": "ready",
       "language": "typescript",
@@ -14,7 +14,7 @@
       "entrypoints": ["plugin/src/main.ts"],
       "commands": {
         "install": "npm install",
-        "run": "npm run status",
+        "run": "npm run preview",
         "check": "npm run check",
         "test": "npm test"
       }

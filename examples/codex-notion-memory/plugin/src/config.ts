@@ -6,16 +6,6 @@ import type { MemoryType } from "./memories.ts"
 export interface Config {
   token: string | undefined
   baseUrl: string
-  parentPageId: string | undefined
-  syncMemories: boolean
-}
-
-export interface SessionState {
-  syncedTurns: number
-  pageId?: string
-  url?: string
-  lastSyncedAt?: string
-  rollout?: string
 }
 
 export interface MemoryState {
@@ -29,20 +19,17 @@ export interface MemoryState {
 }
 
 export interface State {
-  sessions: Record<string, SessionState>
   memories: Record<string, MemoryState>
-  rootPageId?: string
-  databaseId?: string
-  dataSourceId?: string
 }
 
 export const CODEX_HOME =
   process.env.CODEX_HOME || path.join(os.homedir(), ".codex")
 export const CONFIG_FILE =
-  process.env.NOTION_SYNC_CONFIG || path.join(CODEX_HOME, "notion-sync.json")
+  process.env.NOTION_MEMORY_CONFIG ||
+  path.join(CODEX_HOME, "notion-memory.json")
 // Not $PLUGIN_DATA: hooks and manual commands from the skill must share one state file.
-export const DATA_DIR = path.join(CODEX_HOME, "notion-sync")
-export const LOG_FILE = path.join(DATA_DIR, "notion-sync.log")
+export const DATA_DIR = path.join(CODEX_HOME, "notion-memory")
+export const LOG_FILE = path.join(DATA_DIR, "notion-memory.log")
 const STATE_FILE = path.join(DATA_DIR, "state.json")
 const LOCK_DIR = path.join(DATA_DIR, "lock")
 const STALE_LOCK_MS = 120_000
@@ -58,10 +45,6 @@ export function loadConfig(): Config {
       file.baseUrl ||
       "https://api.notion.com"
     ).replace(/\/$/, ""),
-    parentPageId: process.env.NOTION_SYNC_PARENT_PAGE_ID || file.parentPageId,
-    // Experimental and off by default: see "Codex memories" in the README.
-    syncMemories:
-      process.env.NOTION_SYNC_MEMORIES === "1" || file.syncMemories === true,
   }
 }
 
@@ -69,7 +52,7 @@ export function loadState(): State {
   try {
     return JSON.parse(fs.readFileSync(STATE_FILE, "utf8"))
   } catch {
-    return { sessions: {}, memories: {} }
+    return { memories: {} }
   }
 }
 
@@ -89,8 +72,8 @@ export function log(...parts: unknown[]): void {
   if (process.env.NOTION_SYNC_VERBOSE) process.stderr.write(line)
 }
 
-// Cross-process lock. Stop hooks for back-to-back turns can overlap, and two workers
-// appending the same turn would duplicate it on the page.
+// Cross-process lock. Workers from back-to-back hooks can overlap, and two imports
+// running at once would create the same memory twice.
 export async function withLock<T>(fn: () => Promise<T>): Promise<T> {
   fs.mkdirSync(DATA_DIR, { recursive: true })
   for (let attempt = 0; ; attempt++) {

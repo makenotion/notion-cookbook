@@ -1,0 +1,13 @@
+{
+  "name": "notion-memory",
+  "version": "0.1.0",
+  "description": "Import the memories Codex builds about you into Notion Memories.",
+  "skills": "./skills/",
+  "hooks": "./hooks.json",
+  "interface": {
+    "displayName": "Notion Memory",
+    "shortDescription": "Bring Codex memories into Notion Memories",
+    "developerName": "Notion",
+    "category": "Productivity"
+  }
+}

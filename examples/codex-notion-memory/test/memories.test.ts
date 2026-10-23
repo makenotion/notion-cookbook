@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url"
 import type { NotionClient } from "../plugin/src/notion.ts"
 
 // The plugin resolves CODEX_HOME at import time, so point it at a temp dir first.
-const home = fs.mkdtempSync(path.join(os.tmpdir(), "codex-notion-sync-"))
+const home = fs.mkdtempSync(path.join(os.tmpdir(), "codex-notion-memory-"))
 process.env.CODEX_HOME = home
 const FIXTURES = fileURLToPath(new URL("fixtures/memories", import.meta.url))
 const { parseCodexMemories, syncMemories } = await import(
