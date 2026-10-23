@@ -15,7 +15,32 @@ const { codexSource, parseCodexMemories } = await import(
   "../plugin/src/codex.ts"
 )
 const { syncMemories } = await import("../plugin/src/memories.ts")
+const { notionTools } = await import("../plugin/src/mcp.ts")
 const { loadState } = await import("../plugin/src/config.ts")
+
+test("finds Notion tools on the MCP server and on the Notion app", () => {
+  const mcp = notionTools({
+    name: "notion",
+    tools: {
+      "notion-create-pages": {},
+      "notion-fetch": {},
+      "notion-update-page": {},
+    },
+  })
+  assert.equal(mcp.get("createpages"), "notion-create-pages")
+  assert.equal(mcp.get("updatepage"), "notion-update-page")
+  const apps = notionTools({
+    name: "codex_apps",
+    tools: {
+      notion_notion_create_pages: {},
+      notion_notion_fetch: {},
+      google_drive_fetch: {},
+    },
+  })
+  assert.equal(apps.get("fetch"), "notion_notion_fetch")
+  assert.equal(apps.size, 2)
+  assert.equal(notionTools({ name: "other", tools: { fetch: {} } }).size, 0)
+})
 
 test("parses Codex memory files into one memory per topic", () => {
   const memories = parseCodexMemories(FIXTURES, "Casey")
@@ -73,8 +98,8 @@ test("writes memories incrementally and never deletes", async () => {
   notion.calls.length = 0
   const again = await syncMemories(notion.callTool, codexSource)
   assert.equal(again.unchanged, 2)
-  assert.ok(!notion.calls.includes("notion-create-pages"))
-  assert.ok(!notion.calls.includes("notion-update-page"))
+  assert.ok(!notion.calls.includes("create-pages"))
+  assert.ok(!notion.calls.includes("update-page"))
 
   // Codex rewrites its profile: the plugin updates the same page.
   const summary = path.join(dir, "memory_summary.md")
@@ -83,7 +108,7 @@ test("writes memories incrementally and never deletes", async () => {
   const updated = await syncMemories(notion.callTool, codexSource)
   assert.equal(updated.updated, 1)
   assert.match(profile?.content ?? "", /Rust developer/)
-  assert.ok(notion.calls.includes("notion-finish-revision"))
+  assert.ok(notion.calls.includes("finish-revision"))
 
   // Casey edits the profile in Notion. Codex changes after that leave it alone.
   profile!.content += "\nAlso writes Python."
@@ -107,7 +132,7 @@ test("writes memories incrementally and never deletes", async () => {
     (await syncMemories(notion.callTool, codexSource)).changedInNotion,
     2
   )
-  assert.ok(!notion.calls.includes("notion-create-pages"))
+  assert.ok(!notion.calls.includes("create-pages"))
 
   // Codex drops the project: the plugin forgets it and deletes nothing.
   fs.writeFileSync(memoryFile, "")

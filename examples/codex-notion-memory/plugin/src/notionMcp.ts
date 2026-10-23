@@ -8,7 +8,13 @@ import fs from "node:fs"
 import http from "node:http"
 import path from "node:path"
 import { DATA_DIR } from "./config.ts"
-import { type CallTool, type ToolResult, toolResultValue } from "./mcp.ts"
+import {
+  type CallTool,
+  notionTools,
+  squash,
+  type ToolResult,
+  toolResultValue,
+} from "./mcp.ts"
 
 interface OAuthTokens {
   mcpUrl: string
@@ -36,6 +42,7 @@ export class NotionMcpHttp {
   private tokens: OAuthTokens
   private sessionId: string | undefined
   private nextId = 0
+  private tools = new Map<string, string>()
 
   private constructor(tokens: OAuthTokens) {
     this.tokens = tokens
@@ -54,15 +61,34 @@ export class NotionMcpHttp {
       clientInfo: { name: "notion-memory", version: "0.1.0" },
     })
     await mcp.post({ jsonrpc: "2.0", method: "notifications/initialized" })
+    mcp.tools = notionTools({ name: "notion", tools: await mcp.listTools() })
     return mcp
   }
 
+  // `tool` is a logical name such as "create-pages"; hosted Notion MCP calls it
+  // "notion-create-pages".
   readonly callTool: CallTool = async (tool, args) => {
+    const name = this.tools.get(squash(tool))
+    if (!name) throw new Error(`Notion MCP has no ${tool} tool`)
     const result = (await this.rpc("tools/call", {
-      name: tool,
+      name,
       arguments: args,
     })) as ToolResult
     return toolResultValue(tool, result)
+  }
+
+  private async listTools(): Promise<Record<string, unknown>> {
+    const tools: Record<string, unknown> = {}
+    let cursor: string | undefined
+    do {
+      const page = (await this.rpc("tools/list", cursor ? { cursor } : {})) as {
+        tools?: { name: string }[]
+        nextCursor?: string
+      }
+      for (const tool of page.tools ?? []) tools[tool.name] = tool
+      cursor = page.nextCursor
+    } while (cursor)
+    return tools
   }
 
   private async rpc(method: string, params: unknown): Promise<unknown> {

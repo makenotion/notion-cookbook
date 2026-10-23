@@ -92,6 +92,18 @@ async function fakeNotionServer() {
             )
         assert.equal(req.headers["mcp-session-id"], "session-1")
         if (message.id === undefined) return res.writeHead(202).end()
+        if (message.method === "tools/list")
+          return json(200, {
+            jsonrpc: "2.0",
+            id: message.id,
+            result: {
+              tools: [
+                { name: "notion-create-pages" },
+                { name: "notion-get-self" },
+                { name: "notion-fetch" },
+              ],
+            },
+          })
         assert.equal(message.method, "tools/call")
         return json(200, {
           jsonrpc: "2.0",
@@ -115,7 +127,7 @@ async function fakeNotionServer() {
   return { base, valid, log, close: () => server.close() }
 }
 
-test("signs in with PKCE, calls tools, and refreshes an expired token", async () => {
+test("signs in with PKCE, maps tool names, and refreshes an expired token", async () => {
   const notion = await fakeNotionServer()
   try {
     const mcpUrl = `${notion.base}/mcp`
@@ -126,17 +138,19 @@ test("signs in with PKCE, calls tools, and refreshes an expired token", async ()
     assert.equal(fs.statSync(TOKEN_FILE).mode & 0o777, 0o600)
 
     const mcp = await NotionMcpHttp.connect(mcpUrl)
-    assert.deepEqual(await mcp.callTool("notion-get-self", {}), {
+    // Logical tool names map to the hosted server's `notion-` names.
+    assert.deepEqual(await mcp.callTool("get-self", {}), {
       tool: "notion-get-self",
       token: "access-1",
     })
 
     // The access token stops working: the client refreshes once and retries.
     notion.valid.delete("access-1")
-    assert.deepEqual(await mcp.callTool("notion-fetch", { id: "memory" }), {
+    assert.deepEqual(await mcp.callTool("fetch", { id: "memory" }), {
       tool: "notion-fetch",
       token: "access-2",
     })
+    await assert.rejects(mcp.callTool("move-pages", {}), /no move-pages/)
     const saved = JSON.parse(fs.readFileSync(TOKEN_FILE, "utf8"))
     assert.equal(saved.refreshToken, "refresh-2")
   } finally {

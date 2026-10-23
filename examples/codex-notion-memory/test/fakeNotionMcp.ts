@@ -28,9 +28,9 @@ export function fakeNotionMcp(existing: Partial<FakePage>[] = []) {
   async function callTool(tool: string, args: any): Promise<unknown> {
     calls.push(tool)
     switch (tool) {
-      case "notion-get-self":
+      case "get-self":
         return { user: { name: "Casey Boyer" } }
-      case "notion-fetch": {
+      case "fetch": {
         if (args.id === "memory")
           return { text: `<data-source url="${DATA_SOURCE}">` }
         const page = pages.get(args.id)
@@ -43,10 +43,10 @@ export function fakeNotionMcp(existing: Partial<FakePage>[] = []) {
           text: `<page url="https://notion.so/${page.id}"${page.deleted ? " deleted" : ""}>\n<properties>\n${properties}\n</properties>\n<content>\n${page.content}\n</content>\n</page>`,
         }
       }
-      case "notion-query-data-sources":
+      case "query-data-sources":
         assert.deepEqual(args.data.data_source_urls, [DATA_SOURCE])
         return { results: [...pages.values()] }
-      case "notion-create-pages": {
+      case "create-pages": {
         assert.equal(args.parent, "memory")
         const [page] = args.pages
         assert.equal(page.properties.Source, undefined)
@@ -62,14 +62,14 @@ export function fakeNotionMcp(existing: Partial<FakePage>[] = []) {
           ],
         }
       }
-      case "notion-update-page": {
+      case "update-page": {
         const page = pages.get(args.page_id)
         assert.ok(page, `unknown page ${args.page_id}`)
         assert.equal(args.command, "replace_content")
         page.content = args.new_str
         return {}
       }
-      case "notion-finish-revision":
+      case "finish-revision":
         return {}
       default:
         throw new Error(`unexpected tool ${tool}`)

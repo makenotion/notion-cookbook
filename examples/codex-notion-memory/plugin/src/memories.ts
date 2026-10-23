@@ -44,7 +44,8 @@ export async function syncMemories(
   source: MemorySource
 ): Promise<MemorySyncResult> {
   const state = loadState()
-  state.userName ??= await userName(callTool)
+  if (source.parse(source.dir).length)
+    state.userName ??= await userName(callTool)
   const memories = source.parse(source.dir, state.userName)
   const result: MemorySyncResult = {
     total: memories.length,
@@ -90,7 +91,7 @@ export async function syncMemories(
         saveState(state)
         continue
       }
-      await callTool("notion-update-page", {
+      await callTool("update-page", {
         page_id: prev.pageId,
         command: "replace_content",
         new_str: body,
@@ -107,7 +108,7 @@ export async function syncMemories(
         result.skippedExisting++
         continue
       }
-      const created = (await callTool("notion-create-pages", {
+      const created = (await callTool("create-pages", {
         parent: "memory",
         pages: [
           {
@@ -142,26 +143,28 @@ export async function syncMemories(
   }
 
   if (result.updated)
-    await callTool("notion-finish-revision", {
+    await callTool("finish-revision", {
       title: `Update memories from ${source.name}`,
       description: `${source.name} updated ${result.updated} memor${result.updated === 1 ? "y" : "ies"}.`,
-    })
+    }).catch((e: unknown) =>
+      log("memories: could not name the revision:", String(e))
+    )
   saveState(state)
   log(`memories: ${JSON.stringify(result)}`)
   return result
 }
 
 async function userName(callTool: CallTool): Promise<string | undefined> {
-  const self = (await callTool("notion-get-self", {}).catch(
-    () => undefined
-  )) as { user?: { name?: string } } | undefined
+  const self = (await callTool("get-self", {}).catch(() => undefined)) as
+    | { user?: { name?: string } }
+    | undefined
   return self?.user?.name?.split(/\s+/)[0] || undefined
 }
 
 // Titles of the user's existing memories. Uses the SQL view of the Memories data source,
 // which can lag behind recent writes; the plugin's own pages are tracked by ID instead.
 async function memoryTitles(callTool: CallTool): Promise<string[]> {
-  const fetched = await callTool("notion-fetch", { id: "memory" })
+  const fetched = await callTool("fetch", { id: "memory" })
   const dataSource = JSON.stringify(fetched).match(
     /collection:\/\/[0-9a-f-]{36}/
   )?.[0]
@@ -169,7 +172,7 @@ async function memoryTitles(callTool: CallTool): Promise<string[]> {
     throw new Error(
       "Notion Memories are not available for this connection (fetch id: memory)"
     )
-  const res = (await callTool("notion-query-data-sources", {
+  const res = (await callTool("query-data-sources", {
     data: {
       mode: "sql",
       data_source_urls: [dataSource],
@@ -184,7 +187,7 @@ async function fetchPage(
   callTool: CallTool,
   pageId: string
 ): Promise<{ deleted: boolean; hash: string }> {
-  const fetched = (await callTool("notion-fetch", { id: pageId })) as {
+  const fetched = (await callTool("fetch", { id: pageId })) as {
     text?: string
   }
   const text = fetched.text ?? ""

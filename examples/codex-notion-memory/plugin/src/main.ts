@@ -8,11 +8,13 @@
 //   node src/main.ts status                      memories the plugin manages
 import { spawn } from "node:child_process"
 import fs from "node:fs"
+import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { claudeSource, isClaudeMemoryFile } from "./claude.ts"
 import { codexSource, watchMemories } from "./codex.ts"
 import {
   AGENT,
+  AGENT_HOME,
   type Config,
   DATA_DIR,
   LOG_FILE,
@@ -101,6 +103,8 @@ async function main(): Promise<void> {
 function handleHook(event: string | undefined): void {
   // The worker's own `codex app-server` can start sessions too. Never recurse.
   if (process.env.NOTION_MEMORY_WORKER) return
+  // No memory files exist yet, so do not start a worker.
+  if (!hasMemoryFiles()) return
   let input: HookInput = {}
   try {
     input = JSON.parse(fs.readFileSync(0, "utf8") || "{}")
@@ -136,26 +140,42 @@ function handleHook(event: string | undefined): void {
   log(`hook ${event}: session=${input.session_id} -> worker pid ${child.pid}`)
 }
 
+function hasMemoryFiles(): boolean {
+  if (AGENT === "claude") return fs.existsSync(claudeSource.dir)
+  return (
+    fs.existsSync(path.join(AGENT_HOME, "memories_1.sqlite")) ||
+    fs.existsSync(codexSource.dir)
+  )
+}
+
 // Connects to Notion MCP: through the server Codex is already signed in to, or, in Claude
-// Code, directly with the plugin's own sign-in.
+// Code, directly with the plugin's own sign-in. The connection starts on the first tool
+// call, so a worker that finds nothing new never connects.
 async function withNotion(
   config: Config,
   cwd: string | undefined,
   fn: (callTool: CallTool) => Promise<void>
 ): Promise<void> {
   if (AGENT === "claude") {
-    const mcp = await NotionMcpHttp.connect(config.mcpUrl)
-    return fn(mcp.callTool)
+    let connection: Promise<NotionMcpHttp> | undefined
+    return fn(async (tool, args) => {
+      connection ??= NotionMcpHttp.connect(config.mcpUrl)
+      return (await connection).callTool(tool, args)
+    })
   }
-  const mcp = await CodexNotionMcp.connect({
-    codexPath: config.codexPath,
-    cwd: cwd || process.cwd(),
-    server: config.mcpServer,
-  })
+  let connection: Promise<CodexNotionMcp> | undefined
+  const callTool: CallTool = async (tool, args) => {
+    connection ??= CodexNotionMcp.connect({
+      codexPath: config.codexPath,
+      cwd: cwd || process.cwd(),
+      server: config.mcpServer,
+    })
+    return (await connection).callTool(tool, args)
+  }
   try {
-    await fn(mcp.callTool)
+    await fn(callTool)
   } finally {
-    mcp.close()
+    if (connection) (await connection.catch(() => undefined))?.close()
   }
 }
 

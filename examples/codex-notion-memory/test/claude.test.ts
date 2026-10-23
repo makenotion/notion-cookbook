@@ -83,7 +83,7 @@ test("writes Claude Code memories incrementally and never deletes", async () => 
   assert.equal(second.unchanged, 2)
   assert.equal(second.noLongerInAgent, 1)
   assert.match(profile?.content ?? "", /twelve years/)
-  assert.ok(notion.calls.includes("notion-finish-revision"))
+  assert.ok(notion.calls.includes("finish-revision"))
   // The dropped memory stays in Notion; the plugin only stops managing it.
   assert.equal(notion.pages.size, 4)
   assert.equal(Object.keys(loadState().memories).length, 3)

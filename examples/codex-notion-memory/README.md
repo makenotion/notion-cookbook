@@ -7,6 +7,9 @@ the same preferences and project context that the agent learned. The same
 plugin directory installs into both; this page describes Codex first, and
 [Claude Code](#claude-code) covers what differs there.
 
+This standalone plugin is distributed from Notion Cookbook through the bundled
+marketplace. Its source, releases, and installation instructions live here.
+
 It writes through [Notion MCP](https://developers.notion.com/docs/mcp), the
 same tools and the same `parent: "memory"` write that the
 [Notion memory setup prompt](https://developers.notion.com/prompts/setup) asks
@@ -89,14 +92,17 @@ codex mcp login notion
 ```
 
 If you already have a Notion MCP server configured in Codex, the plugin uses
-that connection instead.
+that connection instead. It can also resolve tools from an already-connected
+Notion app on `codex_apps`; this package does not register a hosted app.
+The hosted app route has offline tool-resolution coverage but has not been
+verified with a live connection.
 
 ### 3. Trust the hooks
 
 The plugin works through two Codex hooks, `SessionStart` and `Stop`. The next
 time you start Codex it asks you to review them. Trust them to enable imports.
-Codex asks again whenever the installed plugin changes. Until then the hooks
-are skipped and Codex shows "plugin contents changed; hook approval required".
+New or changed hook definitions must be reviewed again. Until trusted, hooks
+are skipped. In the CLI, open `/hooks` to review and trust them.
 
 ### 4. Preview, then use Codex
 
@@ -119,7 +125,7 @@ Codex has no hook for "memories updated", so the plugin watches for it:
 SessionStart or Stop hook
   └─ node plugin/src/main.ts hook <event>          (returns immediately)
        └─ detached worker: node plugin/src/main.ts worker <event>
-            ├─ codex app-server → ephemeral thread → Notion MCP server
+            ├─ when a write is needed: codex app-server → ephemeral thread → Notion tools
             ├─ import memories once (no-op when nothing changed)
             └─ every 5 s, up to 10 min after SessionStart / 5 min after Stop:
                  ├─ is a memory job running in ~/.codex/memories_1.sqlite? (read-only)
@@ -129,7 +135,11 @@ SessionStart or Stop hook
 
 The worker calls Notion MCP tools through Codex's `mcpServer/tool/call`
 app-server method, on an ephemeral thread. No model runs, and ephemeral threads
-are not fed back into Codex memories. An import uses these tools:
+are not fed back into Codex memories. The connection is lazy: an empty or
+unchanged import does not start an app-server after the user name is cached.
+The hook starts no worker when neither the memory directory nor database
+exists; this is a file-presence check, not a check of the current feature flag.
+An import uses these tools (hosted app names are resolved separately):
 
 | Tool                        | Used for                                              |
 | --------------------------- | ----------------------------------------------------- |
@@ -276,9 +286,6 @@ npm run status    # memories the plugin manages
 - **Another agent:** add a `MemorySource` like `codexSource` or
   `claudeSource` that parses the agent's memory files. Writing, duplicate
   checks, and edit protection stay the same.
-- **Official Notion plugin:** the hooks, `src/`, and the skill can be added to
-  the official Codex Notion plugin as they are, since it already bundles the
-  same MCP server.
 
 ## Verification
 
@@ -292,8 +299,9 @@ npm test
 The tests run offline against sample Codex memory files in
 `test/fixtures/memories/`, Claude Code memory files in `test/fixtures/claude/`,
 an in-memory Notion MCP stand-in, and a local OAuth and MCP server for the
-Claude Code sign-in. They cover
-topic mapping, placeholders, incremental writes, duplicate titles, keeping
+Claude Code sign-in. They cover tool-name resolution for MCP and hosted app
+connections, topic mapping, placeholders, incremental writes, duplicate titles,
+keeping
 pages edited or deleted in Notion, and never deleting.
 
 ## Troubleshooting
@@ -301,8 +309,8 @@ pages edited or deleted in Notion, and never deleting.
 - **Nothing imported:** run `npm run preview`. An empty list means Codex has
   not written memories yet. Check `[features] memories = true` and give it
   time.
-- **`no connected Notion MCP server` in the log:** run `codex mcp login notion`
-  and check `codex mcp list`.
+- **`no connected Notion server` in the log:** connect Notion in Codex. For
+  the bundled MCP server, run `codex mcp login notion` and check `codex mcp list`.
 - **`spawn codex ENOENT` in the log:** set `codexPath` to the full path of the
   Codex executable.
 - **`Notion Memories are not available`:** the connected workspace does not
