@@ -22,13 +22,21 @@ export interface State {
   memories: Record<string, MemoryState>
 }
 
-export const CODEX_HOME =
-  process.env.CODEX_HOME || path.join(os.homedir(), ".codex")
+export type Agent = "codex" | "claude"
+
+// The same plugin directory installs into Codex and Claude Code. Each agent's hooks set
+// NOTION_MEMORY_AGENT, and config, state, and logs live in that agent's home directory.
+export const AGENT: Agent =
+  process.env.NOTION_MEMORY_AGENT === "claude" ? "claude" : "codex"
+export const AGENT_HOME =
+  AGENT === "claude"
+    ? process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude")
+    : process.env.CODEX_HOME || path.join(os.homedir(), ".codex")
 export const CONFIG_FILE =
   process.env.NOTION_MEMORY_CONFIG ||
-  path.join(CODEX_HOME, "notion-memory.json")
+  path.join(AGENT_HOME, "notion-memory.json")
 // Not $PLUGIN_DATA: hooks and manual commands from the skill must share one state file.
-export const DATA_DIR = path.join(CODEX_HOME, "notion-memory")
+export const DATA_DIR = path.join(AGENT_HOME, "notion-memory")
 export const LOG_FILE = path.join(DATA_DIR, "notion-memory.log")
 const STATE_FILE = path.join(DATA_DIR, "state.json")
 const LOCK_DIR = path.join(DATA_DIR, "lock")

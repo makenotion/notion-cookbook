@@ -4,15 +4,17 @@ import os from "node:os"
 import path from "node:path"
 import { test } from "node:test"
 import { fileURLToPath } from "node:url"
-import type { NotionClient } from "../plugin/src/notion.ts"
+import { fakeNotion } from "./fakeNotion.ts"
 
-// The plugin resolves CODEX_HOME at import time, so point it at a temp dir first.
+// The plugin resolves its paths at import time, so point them at a temp dir first.
 const home = fs.mkdtempSync(path.join(os.tmpdir(), "codex-notion-memory-"))
+process.env.NOTION_MEMORY_AGENT = "codex"
 process.env.CODEX_HOME = home
 const FIXTURES = fileURLToPath(new URL("fixtures/memories", import.meta.url))
-const { parseCodexMemories, syncMemories } = await import(
-  "../plugin/src/memories.ts"
+const { codexSource, parseCodexMemories } = await import(
+  "../plugin/src/codex.ts"
 )
+const { syncMemories } = await import("../plugin/src/memories.ts")
 const { loadState } = await import("../plugin/src/config.ts")
 
 test("parses Codex memory files into typed memories", () => {
@@ -49,52 +51,19 @@ test("returns nothing for missing or placeholder memory files", () => {
   assert.deepEqual(parseCodexMemories(path.join(dir, "missing")), [])
 })
 
-// In-memory stand-in for the Notion API calls the memory sync makes.
-function fakeNotion() {
-  const pages = new Map<
-    string,
-    { last_edited_time: string; in_trash: boolean; title: string }
-  >()
-  let next = 0
-  const client = {
-    async request(method: string, url: string, body: any) {
-      assert.equal(`${method} ${url}`, "POST /v1/tools/run")
-      assert.equal(body.create_pages.parent, "memory")
-      const page = body.create_pages.pages[0]
-      assert.equal(page.properties.Source, "Codex")
-      const id = `page-${++next}`
-      pages.set(id, {
-        last_edited_time: "t0",
-        in_trash: false,
-        title: page.properties.title,
-      })
-      return { pages: [{ id }] }
-    },
-    async getPage(id: string) {
-      return { id, ...pages.get(id) }
-    },
-    async trashPage(id: string) {
-      const page = pages.get(id)
-      if (page) page.in_trash = true
-      return { id }
-    },
-  }
-  return { pages, client: client as unknown as NotionClient }
-}
-
 test("syncs memories incrementally and keeps pages edited in Notion", async () => {
   const dir = path.join(home, "memories")
   fs.cpSync(FIXTURES, dir, { recursive: true })
-  const { pages, client } = fakeNotion()
+  const { pages, client } = fakeNotion("Codex")
 
-  assert.deepEqual(await syncMemories(client), {
+  assert.deepEqual(await syncMemories(client, codexSource), {
     total: 6,
     created: 6,
     updated: 0,
     removed: 0,
     skippedEdited: 0,
   })
-  const again = await syncMemories(client)
+  const again = await syncMemories(client, codexSource)
   assert.equal(again.created + again.updated + again.removed, 0)
 
   // The user edits the "keep answers short" memory in Notion, then Codex rewrites it.
@@ -114,7 +83,7 @@ test("syncs memories incrementally and keeps pages edited in Notion", async () =
       .replace(/^- “never commit.*\n/m, "")
   )
 
-  const result = await syncMemories(client)
+  const result = await syncMemories(client, codexSource)
   assert.equal(result.skippedEdited, 1)
   assert.equal(result.removed, 1)
   assert.equal(pages.get(edited?.pageId ?? "")?.in_trash, false)

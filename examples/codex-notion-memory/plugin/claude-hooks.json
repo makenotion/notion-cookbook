@@ -1,0 +1,38 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "NOTION_MEMORY_AGENT=claude node \"${CLAUDE_PLUGIN_ROOT}/src/main.ts\" hook session-start",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "NOTION_MEMORY_AGENT=claude node \"${CLAUDE_PLUGIN_ROOT}/src/main.ts\" hook post-tool-use",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "NOTION_MEMORY_AGENT=claude node \"${CLAUDE_PLUGIN_ROOT}/src/main.ts\" hook stop",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
