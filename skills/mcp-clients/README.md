@@ -36,27 +36,6 @@ The instructions use tool names such as `Notion:notion-search`. Your client may
 expose a different server prefix or tool namespace. Use the corresponding tool
 from your connected Notion MCP server and follow its available input schema.
 
-## Plugin onboarding
-
-`setup` is the onboarding skill for the ChatGPT and Codex plugin. It runs the
-same instructions as the copy-paste setup prompt: read
-<https://developers.notion.com/prompts/setup> and follow it. To run it when a
-user installs the plugin or chooses **Set up**, include the `setup` directory in
-the plugin's `skills/` folder and declare it in the plugin manifest:
-
-```json
-{
-  "extensions": {
-    "com.openai": {
-      "onboardingSkill": "./skills/setup/SKILL.md"
-    }
-  }
-}
-```
-
-The path is relative to the plugin root. See
-[Add an onboarding skill](https://developers.openai.com/plugins/build/plugins#add-an-onboarding-skill).
-
 ## Directory structure
 
 ```text
