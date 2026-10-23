@@ -31,7 +31,11 @@ if (existsSync(path) && !process.argv.includes("--overwrite")) {
     `${path} already exists; use --overwrite to reset local preview data.`
   )
 } else {
-  const stages = ["Backlog", "In progress", "Done"]
+  const stageOptions = [
+    { name: "Backlog", color: "gray" },
+    { name: "In progress", color: "blue" },
+    { name: "Done", color: "green" },
+  ]
   const rows = Array.from({ length: count }, (_, index) => {
     const theme = themes[index % themes.length]
     if (!theme) throw new Error("Missing sample theme")
@@ -40,7 +44,9 @@ if (existsSync(path) && !process.argv.includes("--overwrite")) {
       name: `${theme[0]} ${String(index + 1).padStart(4, "0")}`,
       summary: theme[1],
       stage:
-        stages[(index + Math.floor(index / themes.length)) % stages.length],
+        stageOptions[
+          (index + Math.floor(index / themes.length)) % stageOptions.length
+        ]?.name,
       due: {
         type: "date",
         start_date: `2026-11-${String((index % 28) + 1).padStart(2, "0")}`,
@@ -62,9 +68,9 @@ if (existsSync(path) && !process.argv.includes("--overwrite")) {
           ...itemsSource.properties,
           stage: {
             ...itemsSource.properties.stage,
-            options: stages.map((name, index) => ({
+            options: stageOptions.map((option, index) => ({
               id: `stage-${index}`,
-              name,
+              ...option,
             })),
           },
         },

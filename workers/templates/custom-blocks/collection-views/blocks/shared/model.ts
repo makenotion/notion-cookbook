@@ -36,6 +36,16 @@ export type Item = {
   rating: number | undefined
 }
 export type Stage = { name: string; color: string }
+export type StageTheme =
+  | "gray"
+  | "brown"
+  | "orange"
+  | "yellow"
+  | "green"
+  | "blue"
+  | "purple"
+  | "pink"
+  | "red"
 export const MAX_ROWS = 999
 
 export function queryOptions(
@@ -115,6 +125,12 @@ export function stagesFor(
   ]
 }
 
+export function stageColorsFor(
+  stages: Stage[]
+): ReadonlyMap<string, StageTheme> {
+  return new Map(stages.map(({ name, color }) => [name, stageTheme(color)]))
+}
+
 export function stageProperty(
   stage: string,
   type: "select" | "status"
@@ -151,6 +167,24 @@ export function imageUrl(
 
 function text(value: NotionDataSourceValue | undefined): string {
   return typeof value === "string" ? value : ""
+}
+
+function stageTheme(color: string): StageTheme {
+  const theme = color.replace(/_background$/, "")
+  switch (theme) {
+    case "gray":
+    case "brown":
+    case "orange":
+    case "yellow":
+    case "green":
+    case "blue":
+    case "purple":
+    case "pink":
+    case "red":
+      return theme
+    default:
+      return "gray"
+  }
 }
 
 function readCreatedAt(

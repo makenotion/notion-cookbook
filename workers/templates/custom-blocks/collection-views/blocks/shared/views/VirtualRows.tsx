@@ -259,7 +259,7 @@ function CollectionItem({
 								<ItemButtons item={item} actions={actions} />
 							</>
 						) : column.key === "stage" ? (
-							<StageChip name={item.stage} />
+							<StageChip name={item.stage} colors={actions.stageColors} />
 						) : column.key === "due" ? (
 							<DueDate value={item.due} />
 						) : column.key === "owner" ? (
@@ -288,7 +288,7 @@ function CollectionItem({
 					<ItemTitle item={item} actions={actions} />
 					<ItemButtons item={item} actions={actions} />
 					<div className="card-properties">
-						<StageChip name={item.stage} />
+						<StageChip name={item.stage} colors={actions.stageColors} />
 						<DueDate value={item.due} />
 						<Owners ids={item.owners} names={actions.owners} />
 						<Rating value={item.rating} />

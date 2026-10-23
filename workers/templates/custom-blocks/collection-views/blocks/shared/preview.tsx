@@ -24,14 +24,19 @@ const themes = [
 	"Usability sessions",
 	"Welcome guide",
 ]
-const stages = ["Backlog", "In progress", "Done"]
+const stageOptions: { name: string; color: "gray" | "blue" | "green" }[] = [
+	{ name: "Backlog", color: "gray" },
+	{ name: "In progress", color: "blue" },
+	{ name: "Done", color: "green" },
+]
+const stages = stageOptions.map((option) => option.name)
 const fields = ["name", "stage", "summary", "due", "owner", "image", "rating"]
 const schemas: { [key: string]: NotionPropertySchema } = {
 	name: { name: "Name", type: "title" },
 	stage: {
 		name: "Stage",
 		type: "select",
-		options: stages.map((name) => ({ id: name, name })),
+		options: stageOptions.map((option) => ({ id: option.name, ...option })),
 	},
 	summary: { name: "Summary", type: "rich_text" },
 	due: { name: "Due", type: "date" },

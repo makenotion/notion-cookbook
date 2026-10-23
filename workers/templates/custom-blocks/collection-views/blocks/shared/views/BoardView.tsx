@@ -70,16 +70,18 @@ function BoardColumn({ stage, items, actions }: BoardColumnProps) {
 			ref={ref}
 			className="board-column"
 			data-stage={stage.name || "none"}
-			data-bg-theme={
-				stage.color === "default"
-					? "gray"
-					: stage.color.replace("_background", "")
-			}
+			data-bg-theme={actions.stageColors.get(stage.name) ?? "gray"}
 			data-over={isDropTarget}
 			aria-label={`${stage.name || "No stage"} column`}
 		>
 			<h2>
-				<span>{stage.name ? <StageChip name={stage.name} /> : "No Stage"}</span>
+				<span>
+					{stage.name ? (
+						<StageChip name={stage.name} colors={actions.stageColors} />
+					) : (
+						"No Stage"
+					)}
+				</span>
 				<span className="muted">{items.length} loaded</span>
 			</h2>
 			<div
@@ -144,7 +146,7 @@ function BoardCard({ item, actions }: BoardCardProps) {
 				</button>
 			</div>
 			<div className="card-properties">
-				<StageChip name={item.stage} />
+				<StageChip name={item.stage} colors={actions.stageColors} />
 				<DueDate value={item.due} />
 				<Owners ids={item.owners} names={actions.owners} />
 				<Rating value={item.rating} />

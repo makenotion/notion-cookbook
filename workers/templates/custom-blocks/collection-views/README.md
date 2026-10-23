@@ -160,6 +160,11 @@ reading its semantic key in `readItem`, then composing it into the relevant view
 Keep supported server-side sorts in `queryOptions`; do not sort only the loaded
 subset while implying a database-wide order.
 
+Stage chips and Board backgrounds use the bound Select or Status option colors,
+including renamed options. SDK `_background` colors map to their NDS theme;
+default, missing, and unsupported colors use gray. Preview fixtures declare
+their sample colors explicitly.
+
 Fixed row/card heights keep virtualization predictable. Summary remains editable
 in the property dialog; use the editor or open the page for longer text. If you make rows variable height,
 use TanStack Virtual's measurement API and verify scrolling with long content.
@@ -183,6 +188,10 @@ not claim successful mutations on seeded rows. It saves screenshots and a JSON
 report to `/tmp/collection-views-evidence` by default; set `EVIDENCE_DIR` or
 `DEV_SHELL_URL` to override. Failures throw and retain evidence. Automated browser
 checks are not manual testing.
+
+Published dev shell 0.1.104 drops option colors from local seed schemas, so its
+chips use the neutral fallback. Verify configured colors in local Notion; the
+simulated preview retains its explicit sample colors.
 
 ### Verify against local Notion
 

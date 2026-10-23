@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import type { ItemActions } from "./Collection"
-import type { Item } from "./model"
+import type { Item, StageTheme } from "./model"
 import { Icon } from "./Icons"
 
 type ItemProps = { item: Item; actions: ItemActions }
@@ -17,11 +17,10 @@ export function ItemTitle({ item, actions }: ItemProps) {
 		</button>
 	)
 }
-type StageChipProps = { name: string }
-export function StageChip({ name }: StageChipProps) {
+type StageChipProps = { name: string; colors: ReadonlyMap<string, StageTheme> }
+export function StageChip({ name, colors }: StageChipProps) {
 	if (!name) return undefined
-	const color =
-		name === "Done" ? "green" : name === "In progress" ? "blue" : "gray"
+	const color = colors.get(name) ?? "gray"
 	return (
 		<span className="chip" data-bg-theme={color} data-content-theme={color}>
 			{name}
@@ -31,7 +30,7 @@ export function StageChip({ name }: StageChipProps) {
 export function ItemMeta({ item, actions }: ItemProps) {
 	return (
 		<div className="item-meta">
-			<StageChip name={item.stage} />
+			<StageChip name={item.stage} colors={actions.stageColors} />
 			<DueDate value={item.due} />
 			<Owners ids={item.owners} names={actions.owners} />
 			<Rating value={item.rating} />

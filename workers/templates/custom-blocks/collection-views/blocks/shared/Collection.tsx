@@ -5,8 +5,14 @@ import type {
 } from "@notionhq/custom-blocks"
 import { performAction } from "./actions"
 import type { ActionResult } from "./actions"
-import { MAX_ROWS, nextLimit, stagesFor, stageProperty } from "./model"
-import type { Item, Query, View } from "./model"
+import {
+	MAX_ROWS,
+	nextLimit,
+	stageColorsFor,
+	stagesFor,
+	stageProperty,
+} from "./model"
+import type { Item, Query, StageTheme, View } from "./model"
 import { BoardView } from "./views/BoardView"
 import { VirtualRows } from "./views/VirtualRows"
 import { DEFAULT_COLUMNS, Header } from "./Header"
@@ -20,6 +26,7 @@ export type ItemActions = {
 	pending: boolean
 	owners: ReadonlyMap<string, string>
 	stages: string[]
+	stageColors: ReadonlyMap<string, StageTheme>
 }
 type CollectionProps = { view: View; useSource: CollectionSourceHook }
 
@@ -88,6 +95,7 @@ export function Collection({ view, useSource }: CollectionProps) {
 		pending,
 		owners: source.owners,
 		stages: stages.map((stage) => stage.name),
+		stageColors: stageColorsFor(stages),
 	}
 
 	async function save(
