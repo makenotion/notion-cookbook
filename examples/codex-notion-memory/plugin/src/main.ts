@@ -1,13 +1,15 @@
-// Entry point for the Codex hooks and for manual commands.
+// Mirrors Codex memories into Notion Memories. Entry point for the hooks and manual commands.
 //
-//   node src/main.ts hook <session-start|stop>   called by Codex (reads hook JSON on stdin)
-//   node src/main.ts sync                        import Codex memories now
-//   node src/main.ts preview [--dir <path>]      offline: print the memories it would write
-//   node src/main.ts status                      memories the plugin manages
+//   node src/main.ts hook <session-start|stop>   called by Codex hooks
+//   node src/main.ts sync                        write Codex memories now
+//   node src/main.ts preview [--dir <path>]      offline: what it would write
+//   node src/main.ts status                      memories it manages
 import { spawn } from "node:child_process"
 import fs from "node:fs"
+import path from "node:path"
 import { fileURLToPath } from "node:url"
 import {
+  CODEX_HOME,
   type Config,
   DATA_DIR,
   LOG_FILE,
@@ -16,7 +18,7 @@ import {
   log,
   withLock,
 } from "./config.ts"
-import { CodexNotionMcp } from "./mcp.ts"
+import { type CallTool, CodexNotionMcp } from "./mcp.ts"
 import {
   memoriesDir,
   parseCodexMemories,
@@ -51,14 +53,14 @@ async function main(): Promise<void> {
       return handleHook(args[0])
     case "worker": {
       const event = args[0] === "stop" ? "stop" : "session-start"
-      return withNotion(config, option("--cwd"), async (mcp) => {
-        await withLock(() => syncMemories(mcp.callTool))
-        await watchMemories(mcp.callTool, WATCH[event])
+      return withNotion(config, option("--cwd"), async (callTool) => {
+        await withLock(() => syncMemories(callTool))
+        await watchMemories(callTool, WATCH[event])
       })
     }
     case "sync":
-      return withNotion(config, undefined, async (mcp) => {
-        const result = await withLock(() => syncMemories(mcp.callTool))
+      return withNotion(config, undefined, async (callTool) => {
+        const result = await withLock(() => syncMemories(callTool))
         console.log(JSON.stringify(result))
       })
     case "preview": {
@@ -85,6 +87,12 @@ async function main(): Promise<void> {
 function handleHook(event: string | undefined): void {
   // The worker's own `codex app-server` can start sessions too. Never recurse.
   if (process.env.NOTION_MEMORY_WORKER) return
+  // No Codex memory files exist yet, so do not start a worker.
+  if (
+    !fs.existsSync(path.join(CODEX_HOME, "memories_1.sqlite")) &&
+    !fs.existsSync(memoriesDir())
+  )
+    return
   let input: HookInput = {}
   try {
     input = JSON.parse(fs.readFileSync(0, "utf8") || "{}")
@@ -114,21 +122,26 @@ function handleHook(event: string | undefined): void {
   log(`hook ${event}: session=${input.session_id} -> worker pid ${child.pid}`)
 }
 
-// Connects to the Notion MCP server that Codex is already signed in to.
+// Connects to the Notion server that Codex is already signed in to. The connection starts
+// on the first tool call, so a worker that finds nothing new never starts `codex app-server`.
 async function withNotion(
   config: Config,
   cwd: string | undefined,
-  fn: (mcp: CodexNotionMcp) => Promise<void>
+  fn: (callTool: CallTool) => Promise<void>
 ): Promise<void> {
-  const mcp = await CodexNotionMcp.connect({
-    codexPath: config.codexPath,
-    cwd: cwd || process.cwd(),
-    server: config.mcpServer,
-  })
+  let connection: Promise<CodexNotionMcp> | undefined
+  const callTool: CallTool = async (tool, args) => {
+    connection ??= CodexNotionMcp.connect({
+      codexPath: config.codexPath,
+      cwd: cwd || process.cwd(),
+      server: config.mcpServer,
+    })
+    return (await connection).callTool(tool, args)
+  }
   try {
-    await fn(mcp)
+    await fn(callTool)
   } finally {
-    mcp.close()
+    if (connection) (await connection.catch(() => undefined))?.close()
   }
 }
 

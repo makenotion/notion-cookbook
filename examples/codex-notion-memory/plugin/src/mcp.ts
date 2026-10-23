@@ -1,10 +1,15 @@
-// Calls Notion MCP tools through Codex's own MCP client, so the plugin never handles a Notion
-// token: Codex owns the OAuth connection to mcp.notion.com. The worker starts
-// `codex app-server`, opens an ephemeral thread (no model call, and ephemeral threads never
-// feed Codex's memory pipeline), and uses `mcpServer/tool/call`.
+// Calls Notion MCP tools through Codex's own MCP client, so these scripts never handle a
+// Notion token: Codex owns the connection. The worker starts `codex app-server`, opens an
+// ephemeral thread (no model call, and ephemeral threads never feed Codex's memory
+// pipeline), and uses `mcpServer/tool/call`.
+//
+// Resolve tools from the bundled `notion` MCP server or an already-connected Notion
+// app on `codex_apps`. This standalone plugin does not register a hosted app. Tool names
+// differ in prefix and separators, so callers use logical names such as "create-pages".
 import { type ChildProcess, spawn } from "node:child_process"
 import readline from "node:readline"
 
+// `tool` is a logical Notion MCP tool name such as "create-pages" or "fetch".
 export type CallTool = (tool: string, args: unknown) => Promise<unknown>
 
 interface RpcResponse {
@@ -26,14 +31,14 @@ interface ToolResult {
 }
 
 const REQUEST_TIMEOUT_MS = 60_000
-// Hosted Notion MCP presents its tools with a `notion-` prefix.
-const PROBE_TOOL = "notion-create-pages"
+const PROBE_TOOL = "create-pages"
 
 export class CodexNotionMcp {
   private child: ChildProcess
   private pending = new Map<number, (message: RpcResponse) => void>()
   private nextId = 0
   private threadId = ""
+  private tools = new Map<string, string>()
   server = ""
 
   private constructor(codexPath: string) {
@@ -73,7 +78,7 @@ export class CodexNotionMcp {
       })) as { thread?: { id?: string } }
       mcp.threadId = thread.thread?.id ?? ""
       if (!mcp.threadId) throw new Error("codex app-server returned no thread")
-      mcp.server = await mcp.findNotionServer(opts.server)
+      await mcp.findNotionServer(opts.server)
       return mcp
     } catch (e) {
       mcp.close()
@@ -82,10 +87,12 @@ export class CodexNotionMcp {
   }
 
   readonly callTool: CallTool = async (tool, args) => {
+    const name = this.tools.get(squash(tool))
+    if (!name) throw new Error(`${this.server} has no Notion ${tool} tool`)
     const result = (await this.rpc("mcpServer/tool/call", {
       threadId: this.threadId,
       server: this.server,
-      tool,
+      tool: name,
       arguments: args,
     })) as ToolResult
     const text = (result.content ?? []).map((part) => part.text ?? "").join("")
@@ -101,26 +108,28 @@ export class CodexNotionMcp {
     this.child.kill()
   }
 
-  private async findNotionServer(preferred?: string): Promise<string> {
+  private async findNotionServer(preferred?: string): Promise<void> {
     const status = (await this.rpc("mcpServerStatus/list", {
       threadId: this.threadId,
     })) as { data?: McpServerStatus[] }
-    const servers = (status.data ?? []).filter(
-      (s) => s.tools && PROBE_TOOL in s.tools
-    )
+    const candidates = (status.data ?? []).flatMap((server) => {
+      const tools = notionTools(server)
+      return tools.has(squash(PROBE_TOOL)) ? [{ server, tools }] : []
+    })
     const match =
-      servers.find((s) => s.name === preferred) ??
-      servers.find((s) => s.name === "notion") ??
-      servers[0]
+      candidates.find((c) => c.server.name === preferred) ??
+      candidates.find((c) => c.server.name === "notion") ??
+      candidates[0]
     if (!match) {
       const names = (status.data ?? [])
         .map((s) => `${s.name} (${s.runtimeStatus})`)
         .join(", ")
       throw new Error(
-        `no connected Notion MCP server exposes ${PROBE_TOOL}; found: ${names || "none"}. Run \`codex mcp login notion\`.`
+        `no connected Notion server exposes ${PROBE_TOOL}; found: ${names || "none"}. Connect Notion in Codex first.`
       )
     }
-    return match.name
+    this.server = match.server.name
+    this.tools = match.tools
   }
 
   private rpc(method: string, params: unknown): Promise<unknown> {
@@ -145,4 +154,28 @@ export class CodexNotionMcp {
   private notify(method: string): void {
     this.child.stdin!.write(`${JSON.stringify({ jsonrpc: "2.0", method })}\n`)
   }
+}
+
+// Maps logical tool names to the server's tool names. Hosted Notion MCP names its tools
+// `notion-create-pages`; the Notion app on `codex_apps` uses a connector prefix and
+// underscores. On servers that also host other apps, only tools with the same prefix as the
+// Notion create-pages tool count.
+export function notionTools(server: {
+  name: string
+  tools?: Record<string, unknown>
+}): Map<string, string> {
+  const names = Object.keys(server.tools ?? {})
+  const probe = names.find((n) => /notion.*create.?pages$/i.test(n))
+  const out = new Map<string, string>()
+  if (!probe) return out
+  const prefix = squash(probe).slice(0, -squash(PROBE_TOOL).length)
+  for (const name of names) {
+    const key = squash(name)
+    if (key.startsWith(prefix)) out.set(key.slice(prefix.length), name)
+  }
+  return out
+}
+
+function squash(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, "")
 }

@@ -13,6 +13,31 @@ const { parseCodexMemories, syncMemories } = await import(
   "../plugin/src/memories.ts"
 )
 const { loadState } = await import("../plugin/src/config.ts")
+const { notionTools } = await import("../plugin/src/mcp.ts")
+
+test("finds Notion tools on the MCP server and on the Notion app", () => {
+  const mcp = notionTools({
+    name: "notion",
+    tools: {
+      "notion-create-pages": {},
+      "notion-fetch": {},
+      "notion-update-page": {},
+    },
+  })
+  assert.equal(mcp.get("createpages"), "notion-create-pages")
+  assert.equal(mcp.get("updatepage"), "notion-update-page")
+  const apps = notionTools({
+    name: "codex_apps",
+    tools: {
+      notion_notion_create_pages: {},
+      notion_notion_fetch: {},
+      google_drive_fetch: {},
+    },
+  })
+  assert.equal(apps.get("fetch"), "notion_notion_fetch")
+  assert.equal(apps.size, 2)
+  assert.equal(notionTools({ name: "other", tools: { fetch: {} } }).size, 0)
+})
 
 test("parses Codex memory files into one memory per topic", () => {
   const memories = parseCodexMemories(FIXTURES, "Casey")
@@ -72,9 +97,9 @@ function fakeNotionMcp(existing: Partial<FakePage>[] = []) {
   async function callTool(tool: string, args: any): Promise<unknown> {
     calls.push(tool)
     switch (tool) {
-      case "notion-get-self":
+      case "get-self":
         return { user: { name: "Casey Boyer" } }
-      case "notion-fetch": {
+      case "fetch": {
         if (args.id === "memory")
           return { text: `<data-source url="${DATA_SOURCE}">` }
         const page = pages.get(args.id)
@@ -87,10 +112,10 @@ function fakeNotionMcp(existing: Partial<FakePage>[] = []) {
           text: `<page url="https://notion.so/${page.id}"${page.deleted ? " deleted" : ""}>\n<properties>\n${properties}\n</properties>\n<content>\n${page.content}\n</content>\n</page>`,
         }
       }
-      case "notion-query-data-sources":
+      case "query-data-sources":
         assert.deepEqual(args.data.data_source_urls, [DATA_SOURCE])
         return { results: [...pages.values()] }
-      case "notion-create-pages": {
+      case "create-pages": {
         assert.equal(args.parent, "memory")
         const [page] = args.pages
         assert.equal(page.properties.Source, undefined)
@@ -106,14 +131,14 @@ function fakeNotionMcp(existing: Partial<FakePage>[] = []) {
           ],
         }
       }
-      case "notion-update-page": {
+      case "update-page": {
         const page = pages.get(args.page_id)
         assert.ok(page, `unknown page ${args.page_id}`)
         assert.equal(args.command, "replace_content")
         page.content = args.new_str
         return {}
       }
-      case "notion-finish-revision":
+      case "finish-revision":
         return {}
       default:
         throw new Error(`unexpected tool ${tool}`)
@@ -148,8 +173,8 @@ test("writes memories incrementally and never deletes", async () => {
   notion.calls.length = 0
   const again = await syncMemories(notion.callTool)
   assert.equal(again.unchanged, 2)
-  assert.ok(!notion.calls.includes("notion-create-pages"))
-  assert.ok(!notion.calls.includes("notion-update-page"))
+  assert.ok(!notion.calls.includes("create-pages"))
+  assert.ok(!notion.calls.includes("update-page"))
 
   // Codex rewrites its profile: the plugin updates the same page.
   const summary = path.join(dir, "memory_summary.md")
@@ -158,7 +183,7 @@ test("writes memories incrementally and never deletes", async () => {
   const updated = await syncMemories(notion.callTool)
   assert.equal(updated.updated, 1)
   assert.match(profile?.content ?? "", /Rust developer/)
-  assert.ok(notion.calls.includes("notion-finish-revision"))
+  assert.ok(notion.calls.includes("finish-revision"))
 
   // Casey edits the profile in Notion. Codex changes after that leave it alone.
   profile!.content += "\nAlso writes Python."
@@ -179,7 +204,7 @@ test("writes memories incrementally and never deletes", async () => {
   fs.appendFileSync(memoryFile, "- Use `node --watch` while iterating\n")
   notion.calls.length = 0
   assert.equal((await syncMemories(notion.callTool)).changedInNotion, 2)
-  assert.ok(!notion.calls.includes("notion-create-pages"))
+  assert.ok(!notion.calls.includes("create-pages"))
 
   // Codex drops the project: the plugin forgets it and deletes nothing.
   fs.writeFileSync(memoryFile, "")
