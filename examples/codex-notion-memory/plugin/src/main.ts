@@ -53,6 +53,13 @@ async function main(): Promise<void> {
       return handleHook(args[0])
     case "worker": {
       const event = args[0] === "stop" ? "stop" : "session-start"
+      const cwd = option("--cwd") || process.cwd()
+      if (!(await CodexNotionMcp.memoriesEnabled(config.codexPath, cwd))) {
+        log(
+          "memories: automatic sync skipped because Codex memories are disabled"
+        )
+        return
+      }
       return withNotion(config, option("--cwd"), async (callTool) => {
         await withLock(() => syncMemories(callTool))
         await watchMemories(callTool, WATCH[event])
