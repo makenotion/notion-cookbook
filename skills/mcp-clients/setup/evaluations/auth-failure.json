@@ -1,0 +1,15 @@
+{
+  "name": "Stop when Notion is not connected",
+  "skills": ["notion-setup"],
+  "query": "Help me get set up with Notion.",
+  "context": {
+    "tools": ["notion-search", "web-fetch"],
+    "tool_errors": {
+      "notion-search": "401 Unauthorized: reconnect Notion"
+    }
+  },
+  "success_criteria": [
+    "Asks the user to connect or reconnect Notion.",
+    "Does not claim setup is complete or proceed with the guide's write steps."
+  ]
+}

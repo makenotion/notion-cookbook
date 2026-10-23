@@ -1,0 +1,13 @@
+{
+  "name": "Ask for the guide when web fetch is unavailable",
+  "skills": ["notion-setup"],
+  "query": "Set up Notion",
+  "context": {
+    "tools": ["notion-search"]
+  },
+  "success_criteria": [
+    "Confirms the Notion connection with a read-only call.",
+    "Asks the user to open https://developers.notion.com/prompts/setup and paste its contents.",
+    "Does not invent setup steps from memory."
+  ]
+}

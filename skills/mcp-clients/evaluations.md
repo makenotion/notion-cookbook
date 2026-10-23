@@ -98,7 +98,7 @@ quality regression before recommending an efficiency improvement.
 
 ## Test skill selection separately
 
-With all six skills available, check which skill is selected for representative
+With all seven skills available, check which skill is selected for representative
 requests. Explicitly invoking a skill tests execution, not automatic discovery.
 
 | Request                                                      | Expected selection     |
@@ -114,6 +114,8 @@ requests. Explicitly invoking a skill tests execution, not automatic discovery.
 | Create implementation tasks from this spec                   | Spec to implementation |
 | Rewrite this one sentence in a warmer tone                   | None of these skills   |
 | What is 12 multiplied by 8?                                  | None of these skills   |
+| Help me get set up with Notion                               | Setup                  |
+| Search Notion for our Q3 planning doc                        | None of these skills   |
 
 Composite requests may legitimately use more than one skill. Check that each
 selected skill contributes to the requested outcome instead of repeating work.

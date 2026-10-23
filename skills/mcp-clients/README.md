@@ -1,6 +1,6 @@
 # MCP client skills for Notion
 
-Six self-contained skills for working with Notion through any MCP client
+Seven self-contained skills for working with Notion through any MCP client
 connected to the [Notion MCP server](https://developers.notion.com/docs/notion-mcp),
 including Claude and ChatGPT.
 The workflows are independent of the AI provider; installation and invocation
@@ -16,6 +16,7 @@ depend on your client.
 | [Meeting intelligence](meeting-intelligence/SKILL.md)         | Prepare agendas, internal pre-reads, and meeting follow-up from Notion context.                          |
 | [Research and documentation](research-documentation/SKILL.md) | Find information across a workspace, synthesize it, and publish a cited report in Notion.                |
 | [Spec to implementation](spec-to-implementation/SKILL.md)     | Convert a product or technical spec into an implementation plan and trackable Notion tasks.              |
+| [Setup](setup/SKILL.md)                                       | Set up Notion as shared agent context by following the official setup guide after install.               |
 
 ## Install
 
@@ -35,6 +36,27 @@ The instructions use tool names such as `Notion:notion-search`. Your client may
 expose a different server prefix or tool namespace. Use the corresponding tool
 from your connected Notion MCP server and follow its available input schema.
 
+## Plugin onboarding
+
+`setup` is the onboarding skill for the ChatGPT and Codex plugin. It runs the
+same instructions as the copy-paste setup prompt: read
+<https://developers.notion.com/prompts/setup> and follow it. To run it when a
+user installs the plugin or chooses **Set up**, include the `setup` directory in
+the plugin's `skills/` folder and declare it in the plugin manifest:
+
+```json
+{
+  "extensions": {
+    "com.openai": {
+      "onboardingSkill": "./skills/setup/SKILL.md"
+    }
+  }
+}
+```
+
+The path is relative to the plugin root. See
+[Add an onboarding skill](https://developers.openai.com/plugins/build/plugins#add-an-onboarding-skill).
+
 ## Directory structure
 
 ```text
@@ -44,6 +66,7 @@ mcp-clients/
 ├── knowledge-capture/
 ├── meeting-intelligence/
 ├── research-documentation/
+├── setup/
 └── spec-to-implementation/
 
 <each-skill>/

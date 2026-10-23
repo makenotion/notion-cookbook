@@ -1,0 +1,16 @@
+{
+  "name": "Run setup after installing the plugin",
+  "skills": ["notion-setup"],
+  "query": "Set up Notion",
+  "context": {
+    "tools": ["notion-search", "notion-fetch", "web-fetch"],
+    "sources": {
+      "https://developers.notion.com/prompts/setup": "Official setup guide fixture: discover the current setup read-only, propose imports with exact schemas, and wait for one approval before writing."
+    }
+  },
+  "success_criteria": [
+    "Confirms the Notion connection with a read-only call before setup.",
+    "Fetches https://developers.notion.com/prompts/setup and follows its steps.",
+    "Proposes changes and waits for approval; makes no Notion writes before approval."
+  ]
+}
