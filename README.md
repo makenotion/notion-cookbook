@@ -160,6 +160,10 @@ find and inspect an issue in Sentry, then declare an incident in PagerDuty.
 | ---------------------------------------------------- | ----------------------------------------------------- | ----------- |
 | Verify ticket events and upsert tickets and comments | [Zendesk webhook](workers/templates/zendesk-webhook/) | Zendesk     |
 
+## Custom blocks
+
+Build editable database interfaces with [Collection views](workers/templates/custom-blocks/collection-views/): Table, Board, Gallery, List, and Feed in one Worker. Custom blocks require private-alpha access.
+
 ## More resources
 
 - [Developer guides](docs/) — including the
