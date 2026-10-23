@@ -4,13 +4,13 @@
     {
       "id": "codex-notion-memory",
       "title": "Codex Notion memory",
-      "summary": "Codex plugin that imports the memories Codex builds about you into Notion Memories, keeping your Notion edits.",
+      "summary": "Codex plugin that mirrors the memories Codex builds about you into Notion Memories through Notion MCP, keeping your Notion edits.",
       "path": "examples/codex-notion-memory",
       "kind": "api-example",
       "status": "ready",
       "language": "typescript",
       "runtime": "node",
-      "integrations": ["notion-api", "codex"],
+      "integrations": ["notion-mcp", "codex"],
       "entrypoints": ["plugin/src/main.ts"],
       "commands": {
         "install": "npm install",

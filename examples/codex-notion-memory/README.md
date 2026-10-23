@@ -1,43 +1,52 @@
 # Codex Notion Memory
 
-A [Codex](https://developers.openai.com/codex) plugin that brings the memories
-Codex builds about you into your Notion Memories. When Codex finishes updating
-its memories, the plugin imports them with **Source = Codex**, so Notion Agent
-knows the same preferences and project context that Codex learned.
+A [Codex](https://developers.openai.com/codex) plugin that mirrors the memories
+Codex builds about you into your Notion Memories, so Notion Agent knows the
+same preferences and project context that Codex learned.
 
-Use it when you work in both Codex and Notion and want one place to see, edit,
-and reuse what your agents remember about you.
+It writes through [Notion MCP](https://developers.notion.com/docs/mcp), the
+same tools and the same `parent: "memory"` write that the
+[Notion memory setup prompt](https://developers.notion.com/prompts/setup) asks
+an agent to use. The difference is who decides to write: with the prompt, the
+model has to remember to save memories, and it cannot see what Codex learns in
+the background. The plugin reacts to Codex's own memory updates and writes the
+same result every time.
 
 ## What it does
 
-Codex memories are written by Codex itself. With `[features] memories = true`,
-Codex extracts notes from your idle sessions in the background and consolidates
-them into `~/.codex/memories/memory_summary.md` and `MEMORY.md`. The plugin
-never reads your session transcripts; it only reads those two files, and trusts
-Codex to have decided what belongs in them.
+With `[features] memories = true`, Codex extracts notes from your idle sessions
+in the background and consolidates them into `~/.codex/memories/memory_summary.md`
+and `MEMORY.md`. The plugin only reads those two files. It never reads your
+session transcripts and trusts Codex to have decided what belongs in them.
 
-| Codex memory file                       | Notion memory                                       |
-| --------------------------------------- | --------------------------------------------------- |
-| `memory_summary.md` › `User Profile`    | One **Profile** memory                              |
-| `User preferences` bullets (both files) | One **Preference** memory per bullet                |
-| `MEMORY.md` › each `# Task Group`       | One **Work** memory with scope, tasks, and know-how |
+It follows the Notion memory guide (`notion://docs/memory`): one memory per
+topic, a title that names the topic, a **Type**, the details in the page body,
+and your name instead of "the user".
 
-Preferences are titled with your own words when Codex quoted you, and a
-preference that appears in both files is imported once.
+| Codex memory file                        | Notion memory                                           |
+| ---------------------------------------- | ------------------------------------------------------- |
+| `memory_summary.md` › `User Profile`     | **Role and background** (Profile)                       |
+| `memory_summary.md` › `User preferences` | **Coding workflow preferences** (Preference)            |
+| `MEMORY.md` › each `# Task Group`        | One **Work** memory per project: scope, tasks, know-how |
 
-Imports are incremental:
+Writes are incremental and conservative:
 
-- unchanged memories are skipped;
-- a memory Codex rewrote replaces its previous page;
-- a memory Codex dropped is moved to the trash;
-- a memory you edited in Notion is never overwritten or removed. Your edit wins.
-  Notion records edit times to the minute, so an edit made in the same minute
-  as the import may go unnoticed.
+- Unchanged memories are skipped. A memory Codex rewrote updates its page as
+  one Notion revision.
+- Before creating a memory, the plugin looks for an existing memory with the
+  same title. If one exists, it leaves that memory alone instead of adding a
+  duplicate.
+- Before updating a page, it reads it back. If you edited or deleted it in
+  Notion, your version wins and the plugin never touches that memory again.
+- It never deletes. When Codex drops a memory, the plugin stops managing it.
+- It does not change your About page.
 
 ## Prerequisites
 
 - Codex CLI or the Codex app with plugin support (tested with
-  `codex-cli 0.164.0`).
+  `codex-cli 0.164.0`). The worker runs `codex app-server`, so the `codex`
+  command must be on the `PATH` that Codex hooks use. Otherwise set
+  `codexPath` in `~/.codex/notion-memory.json` or `CODEX_PATH`.
 - Codex memories turned on in `~/.codex/config.toml`:
 
   ```toml
@@ -45,46 +54,16 @@ Imports are incremental:
   memories = true
   ```
 
-- Node.js 22.18 or newer on the `PATH` that Codex uses. The plugin runs its
-  TypeScript sources directly with Node's built-in type stripping, so there is
-  no build step and no runtime dependency.
-- A Notion token that acts as you. See [Token](#token).
-
-## Token
-
-> [!WARNING]
-> Notion does not have a public API for Notion Memories yet. The plugin uses
-> the `create_pages` tool of `POST /v1/tools/run` with `parent: "memory"`, which
-> writes to the Memories of the user behind the token. It only accepts a user
-> connection in a workspace where personal memories are available. Internal
-> integration tokens are rejected with `Personal memories require a user
-connection`. Treat this recipe as a preview of that capability.
+- Node.js 22.18 or newer. The plugin runs its TypeScript sources directly with
+  Node's built-in type stripping, so there is no build step and no runtime
+  dependency.
+- A Notion workspace where Notion Memories are available to MCP clients.
 
 ## Setup
 
-### 1. Configure the token
+### 1. Install the plugin
 
-The plugin reads `~/.codex/notion-memory.json` (or
-`$CODEX_HOME/notion-memory.json`):
-
-```sh
-cp notion-memory.example.json ~/.codex/notion-memory.json
-chmod 600 ~/.codex/notion-memory.json
-# Edit token
-```
-
-| Key       | Environment variable  | Meaning                                           |
-| --------- | --------------------- | ------------------------------------------------- |
-| `token`   | `NOTION_API_TOKEN`    | Notion token that acts as you. Required.          |
-| `baseUrl` | `NOTION_API_BASE_URL` | API origin. Defaults to `https://api.notion.com`. |
-
-Environment variables win over the file. Codex hooks inherit the environment of
-the Codex process, so the file is usually the simpler choice. `.env.example`
-lists the same names for reference; the plugin does not load `.env` files.
-
-### 2. Install the plugin
-
-Add this directory as a local Codex marketplace and install the plugin from it:
+Add this directory as a local Codex marketplace and install the plugin:
 
 ```sh
 git clone https://github.com/makenotion/notion-cookbook.git
@@ -92,31 +71,42 @@ codex plugin marketplace add ./notion-cookbook/examples/codex-notion-memory
 codex plugin add notion-memory@notion-cookbook
 ```
 
-You can also open `/plugins` inside Codex and install **Notion Memory** from the
+You can also open `/plugins` in Codex and install **Notion Memory** from the
 **Notion Cookbook** marketplace.
+
+### 2. Connect Notion
+
+The plugin bundles the same Notion MCP server as the official Codex Notion
+plugin (`https://mcp.notion.com/mcp`). Codex runs the OAuth flow and keeps the
+credentials. The plugin never sees a Notion token. Sign in when Codex asks
+during install, or run:
+
+```sh
+codex mcp login notion
+```
+
+If you already have a Notion MCP server configured in Codex, the plugin uses
+that connection instead.
 
 ### 3. Trust the hooks
 
 The plugin works through two Codex hooks, `SessionStart` and `Stop`. The next
 time you start Codex it asks you to review them. Trust them to enable imports.
-Codex asks again whenever the installed plugin changes, including after an
-update. Until you trust them again, the hooks are skipped and Codex shows
-"plugin contents changed; hook approval required".
+Codex asks again whenever the installed plugin changes. Until then the hooks
+are skipped and Codex shows "plugin contents changed; hook approval required".
 
 ### 4. Preview, then use Codex
 
-Check what would be imported, without calling Notion:
+See what the plugin would write, without calling Notion:
 
 ```sh
 npm run preview
 ```
 
 Then keep using Codex. Codex only consolidates memories from sessions that have
-been idle for a while, so the first import can take hours. After it runs, open
-your Notion Memories and filter by **Source = Codex**.
-
-Ask Codex "sync my memories to Notion" to use the bundled `notion-memory` skill
-for a manual import.
+been idle for a while, so the first import can take hours. Ask Codex "sync my
+memories to Notion" to use the bundled `notion-memory` skill for a manual
+import.
 
 ## How it works
 
@@ -126,6 +116,7 @@ Codex has no hook for "memories updated", so the plugin watches for it:
 SessionStart or Stop hook
   └─ node plugin/src/main.ts hook <event>          (returns immediately)
        └─ detached worker: node plugin/src/main.ts worker <event>
+            ├─ codex app-server → ephemeral thread → Notion MCP server
             ├─ import memories once (no-op when nothing changed)
             └─ every 5 s, up to 10 min after SessionStart / 5 min after Stop:
                  ├─ is a memory job running in ~/.codex/memories_1.sqlite? (read-only)
@@ -133,52 +124,79 @@ SessionStart or Stop hook
                  └─ changed and no job running → import
 ```
 
-Hooks block Codex while they run, so the hook only spawns a detached Node.js
-worker (`child.unref()`) and exits. The worker keeps running after the hook
-returns, even if Codex exits. If no memory job starts shortly after the hook (2
-minutes after `SessionStart`, 15 seconds after `Stop`), the worker stops early.
+The worker calls Notion MCP tools through Codex's `mcpServer/tool/call`
+app-server method, on an ephemeral thread. No model runs, and ephemeral threads
+are not fed back into Codex memories. An import uses these tools:
 
-The worker writes to `~/.codex/notion-memory/notion-memory.log`. A lock
-directory in `~/.codex/notion-memory/` serializes workers, so overlapping hooks
-never create the same memory twice. The mapping from Codex memory to Notion
-page is stored in `~/.codex/notion-memory/state.json`. Errors are logged and
-never fail the hook.
+| Tool                        | Used for                                              |
+| --------------------------- | ----------------------------------------------------- |
+| `notion-get-self`           | Your first name, used instead of "the user" (cached). |
+| `notion-fetch` `memory`     | The Memories data source.                             |
+| `notion-query-data-sources` | Titles of existing memories, to avoid duplicates.     |
+| `notion-create-pages`       | New memories, with `parent: "memory"`.                |
+| `notion-fetch` page         | Reading a page back before updating it.               |
+| `notion-update-page`        | `replace_content` for memories Codex rewrote.         |
+| `notion-finish-revision`    | Naming the revision that holds the updates.           |
+
+Hooks block Codex while they run, so the hook only spawns a detached worker and
+exits. The worker's own `codex app-server` runs with `NOTION_MEMORY_WORKER=1`,
+and the hook does nothing when it sees that variable, so it never recurses.
+
+The worker logs to `~/.codex/notion-memory/notion-memory.log`. A lock directory
+there serializes workers, so overlapping hooks never create the same memory
+twice. The mapping from Codex memory to Notion page is stored in
+`~/.codex/notion-memory/state.json`. Errors are logged and never fail the hook.
+
+> [!NOTE]
+> `codex app-server` is marked experimental, and `mcpServer/tool/call` may
+> change between Codex releases.
 
 ## Code map
 
-| Path                               | Purpose                                                                 |
-| ---------------------------------- | ----------------------------------------------------------------------- |
-| `.agents/plugins/marketplace.json` | Local Codex marketplace that lists the plugin.                          |
-| `plugin/.codex-plugin/plugin.json` | Plugin manifest: hooks, skill, and display metadata.                    |
-| `plugin/hooks.json`                | `SessionStart` and `Stop` hooks.                                        |
-| `plugin/skills/notion-memory/`     | Skill Codex uses for manual imports and status.                         |
-| `plugin/src/main.ts`               | Entrypoint: hook handling, detached workers, and manual commands.       |
-| `plugin/src/memories.ts`           | Parses Codex memory files, imports them, and watches for Codex updates. |
-| `plugin/src/notion.ts`             | Minimal Notion API client with retries.                                 |
-| `plugin/src/config.ts`             | Configuration, state, logging, and the cross-process lock.              |
+| Path                               | Purpose                                                           |
+| ---------------------------------- | ----------------------------------------------------------------- |
+| `.agents/plugins/marketplace.json` | Local Codex marketplace that lists the plugin.                    |
+| `plugin/.codex-plugin/plugin.json` | Plugin manifest: hooks, MCP server, skill, and display metadata.  |
+| `plugin/.mcp.json`                 | Notion MCP server, identical to the official Codex Notion plugin. |
+| `plugin/hooks.json`                | `SessionStart` and `Stop` hooks.                                  |
+| `plugin/skills/notion-memory/`     | Skill Codex uses for manual imports and status.                   |
+| `plugin/src/main.ts`               | Entrypoint: hook handling, detached workers, and manual commands. |
+| `plugin/src/mcp.ts`                | Calls Notion MCP tools through `codex app-server`.                |
+| `plugin/src/memories.ts`           | Maps Codex memory files to Notion memories and writes them.       |
+| `plugin/src/config.ts`             | Configuration, state, logging, and the cross-process lock.        |
 
-The plugin uses `fetch` instead of `@notionhq/client` on purpose: Codex copies
-the plugin directory into its cache without running `npm install`, so the
-plugin must run with no dependencies.
+Codex copies the plugin directory into its cache without running
+`npm install`, so the plugin has no runtime dependencies.
+
+## Configuration
+
+Optional. `~/.codex/notion-memory.json` (or `$NOTION_MEMORY_CONFIG`):
+
+| Key         | Environment variable | Meaning                                                      |
+| ----------- | -------------------- | ------------------------------------------------------------ |
+| `codexPath` | `CODEX_PATH`         | Codex executable. Defaults to `codex`.                       |
+| `mcpServer` | `NOTION_MCP_SERVER`  | Codex MCP server to use. Defaults to the one named `notion`. |
 
 ## Manual commands
 
 Run from this directory, or from the installed plugin root with `src/main.ts`:
 
 ```sh
-npm run preview   # offline: what would be imported
-npm run sync      # import now
-npm run status    # memory pages managed by the plugin
+npm run preview   # offline: the memories the plugin would write
+npm run sync      # write now
+npm run status    # memories the plugin manages
 ```
 
 ## Extension points
 
-- **Different mapping:** change `parseSummary` and `parseMemoryFile` in
-  `memories.ts`, for example to import `## General Tips` as well.
+- **Different mapping:** change `parseCodexMemories` in `memories.ts`, for
+  example to import `## General Tips` as well.
 - **Another agent:** point `memoriesDir` at another agent's memory files and
-  write a parser for their format; the import and edit protection stay the
-  same.
-- **Longer or shorter watching:** adjust `WATCH` in `main.ts`.
+  write a parser for their format. Writing, duplicate checks, and edit
+  protection stay the same.
+- **Official Notion plugin:** the hooks, `src/`, and the skill can be added to
+  the official Codex Notion plugin as they are, since it already bundles the
+  same MCP server.
 
 ## Verification
 
@@ -190,17 +208,20 @@ npm test
 ```
 
 The tests run offline against sample Codex memory files in
-`test/fixtures/memories/`. They cover parsing, de-duplication, placeholder
-handling, and incremental import, including keeping a memory edited in Notion,
-against an in-memory Notion stand-in.
+`test/fixtures/memories/` and an in-memory Notion MCP stand-in. They cover
+topic mapping, placeholders, incremental writes, duplicate titles, keeping
+pages edited or deleted in Notion, and never deleting.
 
 ## Troubleshooting
 
 - **Nothing imported:** run `npm run preview`. An empty list means Codex has
-  not written memories yet; check `[features] memories = true` and give it
+  not written memories yet. Check `[features] memories = true` and give it
   time.
-- **Errors in the log:** check `~/.codex/notion-memory/notion-memory.log`.
-  `no Notion token` means the config file was not found. `Personal memories
-require a user connection` means the token is an integration token.
+- **`no connected Notion MCP server` in the log:** run `codex mcp login notion`
+  and check `codex mcp list`.
+- **`spawn codex ENOENT` in the log:** set `codexPath` to the full path of the
+  Codex executable.
+- **`Notion Memories are not available`:** the connected workspace does not
+  offer Memories to MCP clients yet.
 - **Hooks never run:** the log has no `hook` lines. Restart Codex and trust the
   Notion Memory hooks when it asks you to review them.

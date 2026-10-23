@@ -4,7 +4,6 @@ import os from "node:os"
 import path from "node:path"
 import { test } from "node:test"
 import { fileURLToPath } from "node:url"
-import type { NotionClient } from "../plugin/src/notion.ts"
 
 // The plugin resolves CODEX_HOME at import time, so point it at a temp dir first.
 const home = fs.mkdtempSync(path.join(os.tmpdir(), "codex-notion-memory-"))
@@ -15,27 +14,23 @@ const { parseCodexMemories, syncMemories } = await import(
 )
 const { loadState } = await import("../plugin/src/config.ts")
 
-test("parses Codex memory files into typed memories", () => {
-  const memories = parseCodexMemories(FIXTURES)
+test("parses Codex memory files into one memory per topic", () => {
+  const memories = parseCodexMemories(FIXTURES, "Casey")
   assert.deepEqual(
     memories.map((m) => [m.type, m.title]),
     [
-      ["Profile", "Codex user profile"],
-      [
-        "Preference",
-        "I always want node:test, zero dependencies and no semicolons.",
-      ],
-      ["Preference", "Keep answers short"],
-      ["Preference", "Never commit or push without asking me first"],
+      ["Profile", "Role and background"],
+      ["Preference", "Coding workflow preferences"],
       ["Work", "Small Node.js CLI utilities"],
-      [
-        "Preference",
-        "When a fix is small, verify it with a one-line `node -e` check",
-      ],
     ]
   )
-  const work = memories.find((m) => m.type === "Work")
-  assert.match(work?.content ?? "", /Scope: Node\.js command-line tools/)
+  const [profile, preferences, work] = memories
+  assert.match(profile.content, /^Casey is a TypeScript developer/)
+  assert.match(preferences.content, /keep answers short/)
+  assert.match(work.content, /Scope: Node\.js command-line tools/)
+  assert.match(work.content, /verify it with a one-line `node -e` check/)
+  // Preferences from the global summary are not repeated in the project memory.
+  assert.doesNotMatch(work.content, /zero dependencies/)
   assert.doesNotMatch(JSON.stringify(memories), /\[Task \d+\]/)
 })
 
@@ -49,78 +44,146 @@ test("returns nothing for missing or placeholder memory files", () => {
   assert.deepEqual(parseCodexMemories(path.join(dir, "missing")), [])
 })
 
-// In-memory stand-in for the Notion API calls the memory sync makes.
-function fakeNotion() {
-  const pages = new Map<
-    string,
-    { last_edited_time: string; in_trash: boolean; title: string }
-  >()
-  let next = 0
-  const client = {
-    async request(method: string, url: string, body: any) {
-      assert.equal(`${method} ${url}`, "POST /v1/tools/run")
-      assert.equal(body.create_pages.parent, "memory")
-      const page = body.create_pages.pages[0]
-      assert.equal(page.properties.Source, "Codex")
-      const id = `page-${++next}`
-      pages.set(id, {
-        last_edited_time: "t0",
-        in_trash: false,
-        title: page.properties.title,
-      })
-      return { pages: [{ id }] }
-    },
-    async getPage(id: string) {
-      return { id, ...pages.get(id) }
-    },
-    async trashPage(id: string) {
-      const page = pages.get(id)
-      if (page) page.in_trash = true
-      return { id }
-    },
-  }
-  return { pages, client: client as unknown as NotionClient }
+interface FakePage {
+  id: string
+  Title: string
+  Type?: string
+  content: string
+  deleted?: boolean
 }
 
-test("syncs memories incrementally and keeps pages edited in Notion", async () => {
+// In-memory stand-in for the Notion MCP tools the sync calls.
+function fakeNotionMcp(existing: Partial<FakePage>[] = []) {
+  const DATA_SOURCE = "collection://00000000-0000-0000-0000-000000000001"
+  const pages = new Map<string, FakePage>()
+  const calls: string[] = []
+  const add = (page: Partial<FakePage>) => {
+    const id = `page-${pages.size + 1}`
+    pages.set(id, {
+      id,
+      Title: "",
+      content: "",
+      ...page,
+    })
+    return id
+  }
+  existing.forEach(add)
+
+  async function callTool(tool: string, args: any): Promise<unknown> {
+    calls.push(tool)
+    switch (tool) {
+      case "notion-get-self":
+        return { user: { name: "Casey Boyer" } }
+      case "notion-fetch": {
+        if (args.id === "memory")
+          return { text: `<data-source url="${DATA_SOURCE}">` }
+        const page = pages.get(args.id)
+        assert.ok(page, `unknown page ${args.id}`)
+        const properties = JSON.stringify({
+          Title: page.Title,
+          Type: page.Type,
+        })
+        return {
+          text: `<page url="https://notion.so/${page.id}"${page.deleted ? " deleted" : ""}>\n<properties>\n${properties}\n</properties>\n<content>\n${page.content}\n</content>\n</page>`,
+        }
+      }
+      case "notion-query-data-sources":
+        assert.deepEqual(args.data.data_source_urls, [DATA_SOURCE])
+        return { results: [...pages.values()] }
+      case "notion-create-pages": {
+        assert.equal(args.parent, "memory")
+        const [page] = args.pages
+        assert.equal(page.properties.Source, undefined)
+        return {
+          pages: [
+            {
+              id: add({
+                Title: page.properties.title,
+                Type: page.properties.Type,
+                content: page.content,
+              }),
+            },
+          ],
+        }
+      }
+      case "notion-update-page": {
+        const page = pages.get(args.page_id)
+        assert.ok(page, `unknown page ${args.page_id}`)
+        assert.equal(args.command, "replace_content")
+        page.content = args.new_str
+        return {}
+      }
+      case "notion-finish-revision":
+        return {}
+      default:
+        throw new Error(`unexpected tool ${tool}`)
+    }
+  }
+  return { pages, calls, callTool }
+}
+
+test("writes memories incrementally and never deletes", async () => {
   const dir = path.join(home, "memories")
   fs.cpSync(FIXTURES, dir, { recursive: true })
-  const { pages, client } = fakeNotion()
+  const notion = fakeNotionMcp([
+    { Title: "Coding workflow preferences", Type: "Preference" },
+  ])
 
-  assert.deepEqual(await syncMemories(client), {
-    total: 6,
-    created: 6,
+  // An existing memory on the same topic wins over a second copy.
+  assert.deepEqual(await syncMemories(notion.callTool), {
+    total: 3,
+    created: 2,
     updated: 0,
-    removed: 0,
-    skippedEdited: 0,
+    unchanged: 0,
+    changedInNotion: 0,
+    skippedExisting: 1,
+    noLongerInCodex: 0,
   })
-  const again = await syncMemories(client)
-  assert.equal(again.created + again.updated + again.removed, 0)
-
-  // The user edits the "keep answers short" memory in Notion, then Codex rewrites it.
-  const edited = Object.values(loadState().memories).find(
-    (m) => m.title === "Keep answers short"
+  const profile = [...notion.pages.values()].find(
+    (p) => p.Title === "Role and background"
   )
-  pages.get(edited?.pageId ?? "")!.last_edited_time = "t1"
+  assert.equal(profile?.Type, "Profile")
+  assert.match(profile?.content ?? "", /^Casey is a TypeScript developer/)
+
+  notion.calls.length = 0
+  const again = await syncMemories(notion.callTool)
+  assert.equal(again.unchanged, 2)
+  assert.ok(!notion.calls.includes("notion-create-pages"))
+  assert.ok(!notion.calls.includes("notion-update-page"))
+
+  // Codex rewrites its profile: the plugin updates the same page.
   const summary = path.join(dir, "memory_summary.md")
-  fs.writeFileSync(
-    summary,
-    fs
-      .readFileSync(summary, "utf8")
-      .replace(
-        "give concise completion reports",
-        "answer in two sentences or fewer"
-      )
-      .replace(/^- “never commit.*\n/m, "")
-  )
+  const original = fs.readFileSync(summary, "utf8")
+  fs.writeFileSync(summary, original.replace("TypeScript", "Rust"))
+  const updated = await syncMemories(notion.callTool)
+  assert.equal(updated.updated, 1)
+  assert.match(profile?.content ?? "", /Rust developer/)
+  assert.ok(notion.calls.includes("notion-finish-revision"))
 
-  const result = await syncMemories(client)
-  assert.equal(result.skippedEdited, 1)
-  assert.equal(result.removed, 1)
-  assert.equal(pages.get(edited?.pageId ?? "")?.in_trash, false)
-  assert.equal(
-    [...pages.values()].find((p) => p.title.startsWith("Never commit"))
-      ?.in_trash,
-    true
+  // Casey edits the profile in Notion. Codex changes after that leave it alone.
+  profile!.content += "\nAlso writes Python."
+  fs.writeFileSync(summary, original.replace("TypeScript", "Go"))
+  const kept = await syncMemories(notion.callTool)
+  assert.equal(kept.changedInNotion, 1)
+  assert.match(profile?.content ?? "", /Rust developer/)
+  fs.writeFileSync(summary, original.replace("TypeScript", "Zig"))
+  await syncMemories(notion.callTool)
+  assert.match(profile?.content ?? "", /Rust developer/)
+
+  // Casey deletes the project memory in Notion. The plugin does not bring it back.
+  const work = [...notion.pages.values()].find(
+    (p) => p.Title === "Small Node.js CLI utilities"
   )
+  work!.deleted = true
+  const memoryFile = path.join(dir, "MEMORY.md")
+  fs.appendFileSync(memoryFile, "- Use `node --watch` while iterating\n")
+  notion.calls.length = 0
+  assert.equal((await syncMemories(notion.callTool)).changedInNotion, 2)
+  assert.ok(!notion.calls.includes("notion-create-pages"))
+
+  // Codex drops the project: the plugin forgets it and deletes nothing.
+  fs.writeFileSync(memoryFile, "")
+  const dropped = await syncMemories(notion.callTool)
+  assert.equal(dropped.noLongerInCodex, 1)
+  assert.deepEqual(Object.keys(loadState().memories), ["profile"])
 })
