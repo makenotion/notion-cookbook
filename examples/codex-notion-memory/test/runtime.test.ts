@@ -43,7 +43,7 @@ test(
       fs.readFileSync(path.join(recipe, "plugin/src/main.ts"), "utf8")
     )
     const server = appServer(binary, env, f.root)
-    t.after(() => server.close())
+    f.cleanupBeforeFiles(() => server.close())
     await server.call("initialize", {
       clientInfo: { name: "notion-memory-runtime-test", version: "0.1.0" },
       capabilities: { experimentalApi: true },

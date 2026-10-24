@@ -1,14 +1,17 @@
 import crypto from "node:crypto"
+import { DatabaseSync } from "node:sqlite"
 import fs from "node:fs"
 import path from "node:path"
 import {
   CODEX_HOME,
+  loadConfig,
   loadState,
   log,
   saveState,
   sleep,
   withLock,
 } from "./config.ts"
+import { archiveMemories, memorySources } from "./archive.ts"
 import type { CallTool } from "./mcp.ts"
 
 // Codex memories (`[features] memories = true`) are written by Codex itself, in the
@@ -18,7 +21,7 @@ import type { CallTool } from "./mcp.ts"
 // the Notion memory guide (notion://docs/memory): one topic per memory, a topic title, a
 // Type, details in the body, and no Source property.
 
-export type MemoryType = "Profile" | "Preference" | "Work"
+export type MemoryType = "Profile" | "Preference" | "Work" | "Notes"
 
 export interface CodexMemory {
   key: string
@@ -43,7 +46,11 @@ const PROFILE_TITLE = "Role and background"
 const PREFERENCES_TITLE = "Coding workflow preferences"
 
 export function memoriesDir(): string {
-  return path.join(CODEX_HOME, "memories")
+  const home = loadConfig().sourceHome || CODEX_HOME
+  return path.join(
+    home,
+    fs.existsSync(path.join(home, "memories_v2")) ? "memories_v2" : "memories"
+  )
 }
 
 // Pure: reads the Codex memory files in `dir` and returns one memory per topic.
@@ -132,9 +139,12 @@ export async function syncMemories(
   callTool: CallTool
 ): Promise<MemorySyncResult> {
   const state = loadState()
-  if (parseCodexMemories(memoriesDir()).length)
+  const config = loadConfig()
+  if (!config.sourceArchive && parseCodexMemories(memoriesDir()).length)
     state.userName ??= await userName(callTool)
-  const memories = parseCodexMemories(memoriesDir(), state.userName)
+  const memories = config.sourceArchive
+    ? archiveMemories(memorySources(config.sourceHome || CODEX_HOME))
+    : parseCodexMemories(memoriesDir(), state.userName)
   const result: MemorySyncResult = {
     total: memories.length,
     created: 0,
@@ -246,28 +256,24 @@ export async function syncMemories(
 // and the memory files, and imports as soon as a consolidation run finishes.
 export async function watchMemories(
   callTool: CallTool,
-  opts: { startWindowMs: number; maxMs: number }
+  opts: { maxMs: number; initialHash?: string }
 ): Promise<void> {
   const started = Date.now()
-  let lastHash = memoryFilesHash()
-  let sawRunning = false
+  let lastHash = opts.initialHash ?? memoryFilesHash()
   while (Date.now() - started < opts.maxMs) {
     await sleep(POLL_MS)
     const running = await memoryJobRunning()
-    sawRunning ||= running
     const hash = memoryFilesHash()
     if (hash !== lastHash && !running) {
       log("memories: Codex updated its memory files, importing")
       await withLock(() => syncMemories(callTool))
       lastHash = hash
     }
-    if (!running && (sawRunning || Date.now() - started > opts.startWindowMs))
-      return
   }
 }
 
 async function userName(callTool: CallTool): Promise<string | undefined> {
-  const self = (await callTool("get-self", {}).catch(() => undefined)) as
+  const self = (await callTool("get-self", {})) as
     | { user?: { name?: string } }
     | undefined
   return self?.user?.name?.split(/\s+/)[0] || undefined
@@ -303,7 +309,8 @@ async function fetchPage(
     text?: string
   }
   const text = fetched.text ?? ""
-  const tag = text.match(/<page\b[^>]*>/)?.[0] ?? ""
+  const tag = text.match(/<page\b[^>]*>/)?.[0]
+  if (!tag) throw new Error(`invalid page readback: ${pageId}`)
   let properties: Record<string, unknown> = {}
   try {
     properties = JSON.parse(
@@ -326,10 +333,15 @@ function personalize(text: string, name: string | undefined): string {
 }
 
 async function memoryJobRunning(): Promise<boolean> {
-  const db = path.join(CODEX_HOME, "memories_1.sqlite")
+  const home = loadConfig().sourceHome || CODEX_HOME
+  return ["memories_1.sqlite", "memories_v2_1.sqlite"].some((name) =>
+    jobRunning(path.join(home, name))
+  )
+}
+
+function jobRunning(db: string): boolean {
   if (!fs.existsSync(db)) return false
   try {
-    const { DatabaseSync } = await import("node:sqlite")
     const conn = new DatabaseSync(db, { readOnly: true })
     try {
       return (
@@ -349,7 +361,16 @@ async function memoryJobRunning(): Promise<boolean> {
   }
 }
 
-function memoryFilesHash(): string {
+export function memoryFilesHash(): string {
+  const config = loadConfig()
+  if (config.sourceArchive)
+    return sha1(
+      JSON.stringify(
+        memorySources(config.sourceHome || CODEX_HOME).map(
+          ({ path, sha256 }) => [path, sha256]
+        )
+      )
+    )
   return sha1(
     ["MEMORY.md", "memory_summary.md"]
       .map((f) => readIfExists(path.join(memoriesDir(), f)))

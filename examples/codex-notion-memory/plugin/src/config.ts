@@ -6,8 +6,12 @@ import type { MemoryType } from "./memories.ts"
 export interface Config {
   // Codex executable used to start `codex app-server`.
   codexPath: string
+  nodePath?: string
   // Name of the Notion MCP server in Codex. Detected automatically when unset.
   mcpServer?: string
+  sourceHome?: string
+  sourceArchive?: boolean
+  expectedWorkspaceId?: string
 }
 
 export interface MemoryState {
@@ -33,7 +37,8 @@ export const CONFIG_FILE =
   process.env.NOTION_MEMORY_CONFIG ||
   path.join(CODEX_HOME, "notion-memory.json")
 // Not $PLUGIN_DATA: hooks and manual commands from the skill must share one state file.
-export const DATA_DIR = path.join(CODEX_HOME, "notion-memory")
+export const DATA_DIR =
+  process.env.NOTION_MEMORY_DATA || path.join(CODEX_HOME, "notion-memory")
 export const LOG_FILE = path.join(DATA_DIR, "notion-memory.log")
 const STATE_FILE = path.join(DATA_DIR, "state.json")
 const LOCK_DIR = path.join(DATA_DIR, "lock")
@@ -45,7 +50,11 @@ export function loadConfig(): Config {
     file = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8"))
   return {
     codexPath: process.env.CODEX_PATH || file.codexPath || "codex",
+    nodePath: file.nodePath,
     mcpServer: process.env.NOTION_MCP_SERVER || file.mcpServer,
+    sourceHome: file.sourceHome,
+    sourceArchive: file.sourceArchive,
+    expectedWorkspaceId: file.expectedWorkspaceId,
   }
 }
 
@@ -87,9 +96,14 @@ export async function withLock<T>(fn: () => Promise<T>): Promise<T> {
       await sleep(200)
     }
   }
+  const heartbeat = setInterval(() => {
+    const now = new Date()
+    fs.utimesSync(LOCK_DIR, now, now)
+  }, 30_000)
   try {
     return await fn()
   } finally {
+    clearInterval(heartbeat)
     fs.rmSync(LOCK_DIR, { recursive: true, force: true })
   }
 }

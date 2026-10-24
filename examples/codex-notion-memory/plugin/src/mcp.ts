@@ -114,6 +114,7 @@ export class CodexNotionMcp {
     codexPath: string
     cwd: string
     server?: string
+    expectedWorkspaceId?: string
   }): Promise<CodexNotionMcp> {
     const mcp = new CodexNotionMcp(opts.codexPath)
     try {
@@ -125,6 +126,21 @@ export class CodexNotionMcp {
       mcp.threadId = thread.thread?.id ?? ""
       if (!mcp.threadId) throw new Error("codex app-server returned no thread")
       await mcp.findNotionServer(opts.server)
+      if (opts.expectedWorkspaceId) {
+        const self = await mcp.callTool("get-self", {})
+        if (
+          !self ||
+          typeof self !== "object" ||
+          !("workspace" in self) ||
+          !self.workspace ||
+          typeof self.workspace !== "object" ||
+          !("id" in self.workspace) ||
+          self.workspace.id !== opts.expectedWorkspaceId
+        )
+          throw new Error(
+            "Notion workspace does not match expectedWorkspaceId; refusing sync"
+          )
+      }
       return mcp
     } catch (e) {
       mcp.close()
@@ -162,10 +178,9 @@ export class CodexNotionMcp {
       const tools = notionTools(server)
       return tools.has(squash(PROBE_TOOL)) ? [{ server, tools }] : []
     })
-    const match =
-      candidates.find((c) => c.server.name === preferred) ??
-      candidates.find((c) => c.server.name === "notion") ??
-      candidates[0]
+    const match = preferred
+      ? candidates.find((c) => c.server.name === preferred)
+      : (candidates.find((c) => c.server.name === "notion") ?? candidates[0])
     if (!match) {
       const names = (status.data ?? [])
         .map((s) => `${s.name} (${s.runtimeStatus})`)

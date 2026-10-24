@@ -18,8 +18,10 @@ import {
   log,
   withLock,
 } from "./config.ts"
+import { archiveMemories, memorySources, verifyArchive } from "./archive.ts"
 import { type CallTool, CodexNotionMcp } from "./mcp.ts"
 import {
+  memoryFilesHash,
   memoriesDir,
   parseCodexMemories,
   syncMemories,
@@ -33,11 +35,10 @@ interface HookInput {
 
 const MAIN = fileURLToPath(import.meta.url)
 // Codex starts its memory pipeline when a session starts and again after turns, so the
-// plugin watches after both hooks. Without a running job inside `startWindowMs`, the
-// watcher gives up early.
+// plugin watches for the full bounded window after both hooks.
 const WATCH = {
-  "session-start": { startWindowMs: 120_000, maxMs: 600_000 },
-  stop: { startWindowMs: 15_000, maxMs: 300_000 },
+  "session-start": { maxMs: 600_000 },
+  stop: { maxMs: 300_000 },
 }
 
 async function main(): Promise<void> {
@@ -61,8 +62,9 @@ async function main(): Promise<void> {
         return
       }
       return withNotion(config, option("--cwd"), async (callTool) => {
+        const initialHash = memoryFilesHash()
         await withLock(() => syncMemories(callTool))
-        await watchMemories(callTool, WATCH[event])
+        await watchMemories(callTool, { ...WATCH[event], initialHash })
       })
     }
     case "sync":
@@ -70,12 +72,43 @@ async function main(): Promise<void> {
         const result = await withLock(() => syncMemories(callTool))
         console.log(JSON.stringify(result))
       })
+    case "verify": {
+      if (!config.sourceArchive)
+        throw new Error("verify requires sourceArchive mode")
+      return withNotion(config, undefined, async (callTool) => {
+        const result = await withLock(() =>
+          verifyArchive(
+            callTool,
+            memorySources(config.sourceHome || CODEX_HOME),
+            loadState()
+          )
+        )
+        console.log(JSON.stringify(result))
+      })
+    }
+    case "inventory": {
+      const sources = memorySources(config.sourceHome || CODEX_HOME)
+      console.log(
+        JSON.stringify(
+          {
+            sources: sources.map(({ path, sha256, text }) => ({
+              path,
+              sha256,
+              bytes: Buffer.byteLength(text),
+            })),
+            pages: archiveMemories(sources).length,
+          },
+          null,
+          2
+        )
+      )
+      return
+    }
     case "preview": {
       const name = loadState().userName
-      const memories = parseCodexMemories(
-        option("--dir") ?? memoriesDir(),
-        name
-      )
+      const memories = config.sourceArchive
+        ? archiveMemories(memorySources(config.sourceHome || CODEX_HOME))
+        : parseCodexMemories(option("--dir") ?? memoriesDir(), name)
       console.log(JSON.stringify(memories, null, 2))
       return
     }
@@ -142,6 +175,7 @@ async function withNotion(
       codexPath: config.codexPath,
       cwd: cwd || process.cwd(),
       server: config.mcpServer,
+      expectedWorkspaceId: config.expectedWorkspaceId,
     })
     return (await connection).callTool(tool, args)
   }

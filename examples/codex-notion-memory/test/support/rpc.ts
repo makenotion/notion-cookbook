@@ -17,6 +17,7 @@ export function appServer(binary: string, env: NodeJS.ProcessEnv, cwd: string) {
   const child = spawn(binary, ["app-server"], {
     env,
     cwd,
+    detached: process.platform !== "win32",
     stdio: ["pipe", "pipe", "pipe"],
   })
   const pending = new Map<
@@ -74,8 +75,15 @@ export function appServer(binary: string, env: NodeJS.ProcessEnv, cwd: string) {
       return result
     },
     close() {
-      child.kill()
       lines.close()
+      child.stdin.destroy()
+      child.stdout.destroy()
+      child.stderr.destroy()
+      if (process.platform !== "win32" && child.pid) {
+        try {
+          process.kill(-child.pid, "SIGKILL")
+        } catch {}
+      } else child.kill("SIGKILL")
     },
   }
 }

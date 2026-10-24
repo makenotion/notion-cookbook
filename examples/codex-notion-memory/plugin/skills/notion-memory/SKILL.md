@@ -5,9 +5,12 @@ description: Write Codex memories to Notion Memories on demand, preview what wou
 
 # Notion Memory
 
-The plugin already works automatically: after Codex updates its memory files in
-`~/.codex/memories/`, a hook worker writes them to the user's Notion Memories
-through the Notion MCP server that Codex is signed in to.
+Trusted SessionStart and Stop hooks start bounded watchers. Changes after a
+watcher exits wait for the next hook or explicit sync. Topic mode prefers
+`memories_v2/` when present but does not cover all retained sources. For “all
+memories,” use explicitly authorized `sourceArchive` mode and run `inventory`
+and `verify`; never report a topic-only projection as full coverage. Pin the
+intended MCP server and `expectedWorkspaceId` before a local-only import.
 
 Use the bundled entrypoint for manual actions. Resolve `src/main.ts` relative to
 this skill's plugin root (two directories up from this file). It needs Node.js
@@ -16,6 +19,9 @@ this skill's plugin root (two directories up from this file). It needs Node.js
 - Write Codex memories now: `node <plugin-root>/src/main.ts sync`
 - Preview what would be written, without calling Notion:
   `node <plugin-root>/src/main.ts preview`
+- Inventory full sources without printing their content:
+  `node <plugin-root>/src/main.ts inventory`
+- Read every archived source page back: `node <plugin-root>/src/main.ts verify`
 - Show the memories the plugin manages: `node <plugin-root>/src/main.ts status`
 
 `sync` prints counts. `changedInNotion` memories were edited or deleted in
