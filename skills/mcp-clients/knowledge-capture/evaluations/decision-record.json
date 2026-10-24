@@ -1,0 +1,29 @@
+{
+  "name": "Capture decision in an existing database",
+  "skills": ["notion-knowledge-capture"],
+  "query": "Document our database decision in https://notion.so/decisions.",
+  "context": {
+    "conversation": "Maya and Lee agreed on October 1, 2026 to use PostgreSQL rather than MongoDB for the billing service because transactions and joins matter more than flexible document shape. They accepted schema migration overhead. Hosting provider is undecided.",
+    "sources": {
+      "https://notion.so/decisions": {
+        "data_source_id": "decisions-source",
+        "properties": {
+          "Decision": "title",
+          "State": ["Proposed", "Accepted"],
+          "Deciders": "people"
+        },
+        "users": {
+          "Maya": "maya-id",
+          "Lee": "lee-id"
+        }
+      }
+    },
+    "tools": ["fetch", "create-pages"]
+  },
+  "success_criteria": [
+    "Fetches the supplied database directly and uses its data source and actual schema.",
+    "Preserves the choice, alternatives, rationale, migration trade-off, date, and deciders.",
+    "Leaves the hosting provider unresolved; does not invent a decision.",
+    "Sets State to Accepted and returns the created record link without unnecessary destination questions."
+  ]
+}

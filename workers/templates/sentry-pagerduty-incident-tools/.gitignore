@@ -1,0 +1,11 @@
+# Secrets and generated Worker state
+.env
+workers.json
+workers.*.json
+
+# Build output and dependencies
+dist/
+node_modules/
+
+# Keep installs reproducible for this production write tool.
+!package-lock.json

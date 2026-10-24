@@ -1,0 +1,27 @@
+{
+  "name": "@notion-cookbook/github-draft-release-tools",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "check": "tsc --project tsconfig.test.json",
+    "format": "prettier --write \"**/*.{md,json,ts}\"",
+    "format:check": "prettier --check \"**/*.{md,json,ts}\"",
+    "test": "node --import tsx --test test/*.test.ts"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.9.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "prettier": "3.6.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.8.0"
+  },
+  "dependencies": {
+    "@notionhq/workers": "^0.4.0",
+    "@octokit/auth-app": "^8.2.0",
+    "@octokit/request": "^10.0.11"
+  }
+}

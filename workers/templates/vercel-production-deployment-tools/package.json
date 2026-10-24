@@ -1,0 +1,25 @@
+{
+  "name": "@notion-cookbook/vercel-production-deployment-tools",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "check": "tsc --noEmit",
+    "test": "tsx --test test/*.test.ts",
+    "format": "prettier --write README.md src/**/*.ts test/**/*.ts package.json tsconfig.json",
+    "format:check": "prettier --check README.md src/**/*.ts test/**/*.ts package.json tsconfig.json"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.9.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "prettier": "3.6.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.8.0"
+  },
+  "dependencies": {
+    "@notionhq/workers": "^0.4.0"
+  }
+}

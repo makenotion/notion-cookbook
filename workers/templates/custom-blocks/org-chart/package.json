@@ -1,0 +1,35 @@
+{
+  "name": "@notion-cookbook/org-chart",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "check": "tsc --noEmit && tsc -p blocks/org-chart/tsconfig.json --noEmit",
+    "test": "tsx --test test/*.test.ts"
+  },
+  "engines": {
+    "node": ">=22.12.0",
+    "npm": ">=10.9.2"
+  },
+  "devDependencies": {
+    "@notionhq/custom-blocks-dev-shell": "^0.1.98",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4"
+  },
+  "dependencies": {
+    "@notionhq/custom-blocks": "^0.2.22",
+    "@notionhq/workers": "^0.9.3",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "fsevents@2.3.3": true
+  }
+}

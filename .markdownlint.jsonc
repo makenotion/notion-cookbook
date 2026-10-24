@@ -9,6 +9,10 @@
   // Disabled: Notion-flavored markdown uses HTML for mentions, spans, underlines
   "MD033": false,
 
+  // MD010/no-hard-tabs - Hard tabs
+  // Disabled: Notion-flavored markdown nests child blocks (columns, toggles) with tabs
+  "MD010": false,
+
   // MD041/first-line-heading - First line in file should be a top level heading
   // Disabled: Some files start with metadata or front matter
   "MD041": false,
@@ -20,6 +24,12 @@
   // MD022/blanks-around-headings - Headings should be surrounded by blank lines
   // Disabled: Tightly packed content in skills and examples for conciseness
   "MD022": false,
+
+  // MD024/no-duplicate-heading - Multiple headings with the same content
+  // Relaxed to siblings only: reference docs repeat the same subsection names
+  // under each pattern they document, which is not ambiguous across parents
+  "MD024": { "siblings_only": true },
+
 
   // MD031/blanks-around-fences - Fenced code blocks should be surrounded by blank lines
   // Disabled: Skills documentation uses inline code blocks in workflows

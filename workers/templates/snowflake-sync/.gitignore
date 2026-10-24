@@ -1,0 +1,12 @@
+# Secrets — never commit these
+.env
+workers.json
+workers.*.json
+
+# Private keys — never commit these
+*.p8
+rsa_key*
+
+# Build output and dependencies
+dist/
+node_modules/

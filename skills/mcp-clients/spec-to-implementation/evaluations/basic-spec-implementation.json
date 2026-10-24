@@ -1,0 +1,18 @@
+{
+  "name": "Plan from a spec without task creation",
+  "skills": ["notion-spec-to-implementation"],
+  "query": "Create an implementation plan for https://notion.so/auth-spec under https://notion.so/engineering. Do not create tasks yet.",
+  "context": {
+    "sources": {
+      "https://notion.so/auth-spec": "Add email/password login and logout. Password hashes must use the approved library. Acceptance: correct credentials sign in, wrong credentials give a generic error, logout invalidates the session. Password reset is out of scope. Session expiry policy is undecided.",
+      "https://notion.so/engineering": "Engineering project area."
+    },
+    "tools": ["fetch", "search", "create-pages", "update-page"]
+  },
+  "success_criteria": [
+    "Creates one plan covering login, logout, password hashing, and tests for all three acceptance criteria.",
+    "Preserves password reset as out of scope and session expiry as unresolved.",
+    "Links to the spec and uses the supplied destination without unnecessary discovery.",
+    "Creates no task pages, changes no status to In Progress, and invents no timeline commitments."
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "name": "Create linked tasks using the actual schema",
+  "skills": ["notion-spec-to-implementation"],
+  "query": "Read https://notion.so/payment-spec and create implementation tasks in https://notion.so/tasks.",
+  "context": {
+    "sources": {
+      "https://notion.so/payment-spec": "Support checkout with idempotency keys and signed payment webhooks. Acceptance: repeating checkout does not double charge; invalid signatures are rejected; replayed webhook events do not duplicate fulfillment. Refunds are out of scope.",
+      "https://notion.so/tasks": {
+        "data_source_id": "tasks-source",
+        "properties": {
+          "Task": "title",
+          "Stage": ["Backlog", "Doing", "Done"],
+          "Depends on": "relation to tasks-source"
+        },
+        "existing_tasks": []
+      }
+    },
+    "tools": ["fetch", "query-data-sources", "create-pages", "update-page"]
+  },
+  "success_criteria": [
+    "Covers checkout idempotency, webhook signature validation, replay handling, and their tests with explicit acceptance criteria.",
+    "Uses Task and Stage from the actual schema and a valid data source parent.",
+    "Uses task IDs for task relations, not a spec ID in a relation targeting the task database.",
+    "Links tasks to the spec, preserves refunds as out of scope, and returns created task links.",
+    "Does not invent owners or dates, require a fixed task count, or mark work as started."
+  ]
+}

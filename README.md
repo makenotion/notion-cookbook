@@ -1,53 +1,177 @@
 # Notion cookbook
 
-A collection of guides, examples, and resources for building with Notion's developer platform.
+Working examples, guides, and agent skills for building with the Notion API
+and [Notion Workers](https://developers.notion.com/docs/workers). Every example
+is self-contained: choose a task, open its README, and run it from its own
+directory.
 
-This repository is a community hub for learning how to build with Notion, whether you're using the API, MCP, or other tools in the ecosystem. You'll find working code examples, AI skills, and references to help you get started.
+## What do you want to build?
 
-## What's inside
+- **Learn the Notion API:** start with
+  [Introduction to the Notion API](examples/intro-to-notion-api/), then explore
+  [block text parsing](examples/parse-text-from-any-block-type/) or
+  [large data source queries](examples/query-large-data-sources/).
+- **Build an API integration:** create a
+  [web form](examples/web-form-with-express/), connect
+  [GitHub issues](examples/notion-github-sync/), or send
+  [email notifications](examples/database-email-update/).
+- **Bring external data into Notion:** use a Worker sync for
+  [GitHub issues and pull requests](workers/templates/github-sync/),
+  [GitHub stars](workers/templates/github-stars-sync/), [HubSpot](workers/templates/hubspot-sync/),
+  [Intercom](workers/templates/intercom-sync/),
+  [Linear](workers/templates/linear-sync/), [PagerDuty](workers/templates/pagerduty-sync/),
+  [Readwise and Reader](workers/templates/readwise-sync/),
+  [Salesforce](workers/templates/salesforce-sync/), [Sentry](workers/templates/sentry-sync/),
+  [Todoist](workers/templates/todoist-sync/), [Zendesk](workers/templates/zendesk-sync/) and more.
+- **Give a Notion Agent a reliable new capability:** execute a repeatable API
+  workflow in one tool call, or connect to [Airflow](workers/templates/airflow/), [Vega-lite charts](workers/templates/chart-generator/),
+  [CloudWatch Logs](workers/templates/cloudwatch-logs/),
+  [Postgres](workers/templates/postgres-query/), [Snowflake query](workers/templates/snowflake-query/), [PowerPoint creator](workers/templates/powerpoint-creator/), [Vercel](workers/templates/vercel-production-deployment-tools/), and more.
+- **React to external events:** receive and verify
+  [Zendesk webhooks](workers/templates/zendesk-webhook/).
 
-### Examples
+## Quickstarts
 
-Ready-to-run code samples showing how to integrate with Notion's API:
+### Using this cookbook with a coding agent
 
-- **[JavaScript examples](examples/javascript/)**: Integrations built with Notion's official JavaScript SDK, from basic API calls to full web applications
+Tell the agent the outcome or integration you need, then point it to:
 
-Future additions will include examples for other languages and frameworks.
+- [`catalog.json`](catalog.json), the machine-readable index of every runnable
+  project and its supported commands.
+- [`AGENTS.md`](AGENTS.md), the canonical instructions for finding, running,
+  adapting, adding, and validating recipes.
+- The selected project's README and entrypoint, which are authoritative for its
+  setup and implementation.
 
-### Skills
+For example: "Use `catalog.json` to find the Linear sync recipe. Explain its
+data flow, adapt it to include issue labels, and run its offline checks."
 
-AI-powered workflows for common Notion tasks:
+### Run an API example
 
-- **[Claude skills](skills/claude/)**: Skills that use Claude with Notion MCP to automate documentation, meeting prep, research, and more
+The introductory example is the best first project. Create a
+[Notion integration](https://www.notion.com/my-integrations), share a test page
+with it, then:
 
-As the AI ecosystem grows, we'll add skills for other providers.
+```sh
+git clone https://github.com/makenotion/notion-cookbook.git
+cd notion-cookbook/examples/intro-to-notion-api
+npm install
+cp .env.example .env
+# Add NOTION_API_KEY and NOTION_PAGE_ID to .env
+npm run basic:1
+```
 
-### Documentation
+Other API examples use different scripts and may require additional services.
+Use the command in the selected example's README rather than assuming
+`npm start`.
 
-The `docs/` directory is reserved for Notion's core developer documentation, which will be migrated here in the future. For now, visit [developers.notion.com](https://developers.notion.com) for API references and guides.
+### Deploy a Worker
 
-## Getting started
+The DuckDB query Worker is self-contained and needs no secrets:
 
-### Running examples
+```sh
+npm install --global ntn
+git clone https://github.com/makenotion/notion-cookbook.git
+cd notion-cookbook/workers/templates/duckdb-query
+npm install
+npm run check
+npm test
+ntn login
+ntn workers deploy --name duckdb-query
+```
 
-Each example includes its own README with setup instructions. In general:
+After deployment, add the Worker to a custom agent under **Tools and access >
+Add connection**. Other Workers may need service credentials or database
+configuration; follow their READMEs.
 
-1. Clone this repository
-2. Navigate to the example you want to try
-3. Install dependencies with `npm install`
-4. Follow the example's README for configuration and usage
+## API examples
 
-### Using skills
+These examples use the official JavaScript SDK and run locally with Node.js.
+See the [API examples guide](examples/) for shared setup information.
 
-Skills are designed to work with Claude and the Notion MCP server. See the [skills documentation](skills/README.md) for setup instructions.
+| Task                                                         | Example                                                                    | Integrations         |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------- | -------------------- |
+| Learn blocks, pages, databases, queries, and file uploads    | [Introduction to the Notion API](examples/intro-to-notion-api/)            | Notion API           |
+| Send an email when a database status changes                 | [Database email update](examples/database-email-update/)                   | Notion API, SendGrid |
+| Fill a database with correctly typed sample rows             | [Generate random data](examples/generate-random-data/)                     | Notion API           |
+| Copy GitHub issues into a Notion database                    | [Notion–GitHub issue sync](examples/notion-github-sync/)                   | Notion API, GitHub   |
+| Update Notion tasks when linked pull requests close or merge | [Notion task–GitHub PR sync](examples/notion-task-github-pr-sync/)         | Notion API, GitHub   |
+| Extract plain text from Notion blocks                        | [Parse text from any block type](examples/parse-text-from-any-block-type/) | Notion API           |
+| Read beyond the 10,000-row query limit                       | [Query large data sources](examples/query-large-data-sources/)             | Notion API           |
+| Create databases, pages, blocks, and comments from a web UI  | [Web form with Express](examples/web-form-with-express/)                   | Notion API, Express  |
 
-## Contributing
+## Worker examples
 
-We welcome contributions from the community. Whether you want to add a new example, improve documentation, or share a useful skill, check out [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Workers are server-side extensions deployed to Notion. A **sync** maintains a
+managed Notion database, a **tool** gives a Notion Agent a callable capability,
+and a **webhook** handles events from another service. See the complete
+[Workers guide](workers/) for setup and deployment.
 
-## Resources
+### Default template
 
-- [Notion API documentation](https://developers.notion.com)
+| Task                                         | Worker                                                        |
+| -------------------------------------------- | ------------------------------------------------------------- |
+| Scaffold a new Worker from the base template | [Default Worker template](workers/templates/workers-default/) |
+
+### Sync external data into Notion
+
+| Task                                                                 | Worker                                                                | Source      |
+| -------------------------------------------------------------------- | --------------------------------------------------------------------- | ----------- |
+| Learn the sync pattern with seeded, in-memory data                   | [DuckDB sync](workers/templates/duckdb-sync/)                         | DuckDB      |
+| Turn starred repositories into a research library                    | [GitHub stars sync](workers/templates/github-stars-sync/)             | GitHub      |
+| Sync issues and pull requests                                        | [GitHub sync](workers/templates/github-sync/)                         | GitHub      |
+| Sync contacts, deals, and companies                                  | [HubSpot sync](workers/templates/hubspot-sync/)                       | HubSpot     |
+| Sync companies, contacts, conversations, and tickets                 | [Intercom sync](workers/templates/intercom-sync/)                     | Intercom    |
+| Sync issues, sprints, analytics, and projects                        | [Jira sync](workers/templates/jira-sync/)                             | Jira Cloud  |
+| Sync projects, issues, and initiatives                               | [Linear sync](workers/templates/linear-sync/)                         | Linear      |
+| Monitor PagerDuty incidents and service readiness in Notion          | [PagerDuty sync](workers/templates/pagerduty-sync/)                   | PagerDuty   |
+| Turn saved sources and highlights into project evidence              | [Raindrop.io research library sync](workers/templates/raindrop-sync/) | Raindrop.io |
+| Build a related reading library and highlight knowledge base         | [Readwise and Reader sync](workers/templates/readwise-sync/)          | Readwise    |
+| Sync accounts and opportunities                                      | [Salesforce sync](workers/templates/salesforce-sync/)                 | Salesforce  |
+| Coordinate issue triage, service risk, and rollout health            | [Sentry sync](workers/templates/sentry-sync/)                         | Sentry      |
+| Sync the result of a warehouse query                                 | [Snowflake sync](workers/templates/snowflake-sync/)                   | Snowflake   |
+| Sync open tasks and project summaries with recent completion context | [Todoist sync](workers/templates/todoist-sync/)                       | Todoist     |
+| Sync an employee-facing directory                                    | [Workday employee directory sync](workers/templates/workday-sync/)    | Workday     |
+| Sync related tickets, users, organizations, and metrics              | [Zendesk sync](workers/templates/zendesk-sync/)                       | Zendesk     |
+
+### Add tools to a Notion Agent
+
+An agent tool can coordinate a workflow across multiple apps. For example, the
+[Sentry to PagerDuty incident tools](workers/templates/sentry-pagerduty-incident-tools/)
+find and inspect an issue in Sentry, then declare an incident in PagerDuty.
+
+| Task                                                | Worker                                                                                      | Integration         |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------- |
+| Inspect DAGs, runs, tasks, and logs                 | [Airflow](workers/templates/airflow/)                                                       | Apache Airflow      |
+| Render and insert Vega-Lite charts                  | [Chart generator](workers/templates/chart-generator/)                                       | Vega-Lite           |
+| Browse log groups, streams, and events              | [CloudWatch Logs](workers/templates/cloudwatch-logs/)                                       | AWS CloudWatch Logs |
+| Learn the database-query pattern with seeded data   | [DuckDB query](workers/templates/duckdb-query/)                                             | DuckDB              |
+| Review and publish an existing draft release        | [GitHub draft release tools](workers/templates/github-draft-release-tools/)                 | GitHub              |
+| Query a database with read-only SQL                 | [Postgres query](workers/templates/postgres-query/)                                         | PostgreSQL          |
+| Turn a Notion page into PowerPoint slides (`.pptx`) | [PowerPoint creator](workers/templates/powerpoint-creator/)                                 | Notion, PowerPoint  |
+| Find Sentry issues and declare PagerDuty incidents  | [Sentry to PagerDuty incident tools](workers/templates/sentry-pagerduty-incident-tools/)    | Sentry, PagerDuty   |
+| Query a warehouse with read-only SQL                | [Snowflake query](workers/templates/snowflake-query/)                                       | Snowflake           |
+| Learn the database-query pattern with seeded data   | [SQLite query](workers/templates/sqlite-query/)                                             | SQLite              |
+| Inspect, promote, or roll back a Vercel deployment  | [Vercel production deployment tools](workers/templates/vercel-production-deployment-tools/) | Notion, Vercel      |
+
+### Handle webhooks
+
+| Task                                                 | Worker                                                | Integration |
+| ---------------------------------------------------- | ----------------------------------------------------- | ----------- |
+| Verify ticket events and upsert tickets and comments | [Zendesk webhook](workers/templates/zendesk-webhook/) | Zendesk     |
+
+## More resources
+
+- [Developer guides](docs/) — including the
+  [Notion MCP client integration guide](docs/mcp-client-integration.md)
+- [Agent skills](skills/) — reusable Notion workflows for any MCP client
+- [Notion developer documentation](https://developers.notion.com)
+- [Notion API reference](https://developers.notion.com/reference)
+- [Contributing](CONTRIBUTING.md) — add or improve an example, Worker, skill, or
+  guide
+
+## Community
+
 - [Notion Developers Slack](https://join.slack.com/t/notiondevs/shared_invite/zt-20b5996xv-DzJdLiympy6jP0GGzu3AMg)
 - [Stack Overflow](https://stackoverflow.com/questions/tagged/notion-api)
 

@@ -3,7 +3,11 @@
 /build
 
 /examples/**/package-lock.json
+/workers/**/package-lock.json
 /examples/**/.env
+/workers.json
+/workers/**/workers.json
+/workers/**/workers.*.json
 
 .vscode
 .zed
@@ -156,4 +160,3 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
-

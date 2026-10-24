@@ -1,0 +1,20 @@
+{
+  "name": "Decision meeting with both documents",
+  "skills": ["notion-meeting-intelligence"],
+  "query": "Prepare a 45-minute migration decision meeting on October 6, 2026 for Maya and Lee. Save both an internal pre-read and an agenda under https://notion.so/engineering-meetings. Start with https://notion.so/migration.",
+  "context": {
+    "sources": {
+      "https://notion.so/engineering-meetings": "Internal Engineering meeting area; both attendees have access.",
+      "https://notion.so/migration": "Decision pending: optimize MongoDB in two weeks or migrate to PostgreSQL in six weeks. PostgreSQL supports the required joins. The plan requires no downtime. See https://notion.so/migration-risk.",
+      "https://notion.so/migration-risk": "Team has limited PostgreSQL operations experience. A staging rehearsal is required; rollback approach is unresolved."
+    },
+    "tools": ["fetch", "create-pages"]
+  },
+  "success_criteria": [
+    "Creates both requested documents in the supplied internal location and returns their links.",
+    "Preserves both options, estimates, no-downtime constraint, experience gap, rehearsal requirement, and unresolved rollback.",
+    "Separates sourced facts from recommendations and cites supporting pages.",
+    "Agenda fits 45 minutes; pre-read supports the decision with trade-offs.",
+    "Links the documents where appropriate for their shared internal audience without sending messages."
+  ]
+}

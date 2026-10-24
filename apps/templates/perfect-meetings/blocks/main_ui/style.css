@@ -1,0 +1,664 @@
+/* Notion design tokens only (@notionhq/apps/nds.css). Hues come from a
+   data-theme attribute, which remaps the --content-* and --bg-* tokens to
+   that color in light and dark mode. */
+
+/* body sits outside NotionTokenScope, where the tokens are defined, so it
+   needs a fallback; .card gets the real token. */
+body {
+  margin: 0;
+  background: transparent;
+  font-family: var(--font-sans, system-ui, sans-serif);
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 0;
+}
+
+.card {
+  width: 100%;
+  box-sizing: border-box;
+  color: var(--content-primary);
+  background: var(--bg-base);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-10);
+  padding: var(--spacing-16);
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
+  font-weight: var(--font-weight-regular);
+}
+
+.muted {
+  margin: 0;
+  color: var(--content-secondary);
+}
+
+.icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-12);
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.meta {
+  color: var(--content-secondary);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+}
+
+.title {
+  margin: 0 0 var(--spacing-4);
+  font-size: var(--text-title);
+  line-height: var(--text-title--line-height);
+  font-weight: var(--font-weight-semibold);
+}
+
+.actions {
+  display: flex;
+  gap: var(--spacing-8);
+  align-items: center;
+}
+
+/* Buttons are flat until hovered. */
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-4);
+  border: 1px solid var(--border-primary);
+  background: transparent;
+  color: var(--content-primary);
+  border-radius: var(--radius-6);
+  padding: var(--spacing-4) var(--spacing-8);
+  font: inherit;
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.button:hover {
+  background: var(--bg-hover);
+}
+
+.button:active {
+  background: var(--bg-pressed);
+}
+
+/* The single primary action. data-theme="blue" makes the strong
+   interactive background Notion blue. */
+.button-primary {
+  border-color: transparent;
+  background: var(--bg-interactive-strong);
+  color: var(--content-on-interactive-strong);
+}
+
+.button-primary:hover {
+  background: var(--bg-interactive-strong-hover);
+}
+
+.button-primary:active {
+  background: var(--bg-interactive-strong-pressed);
+}
+
+.button:disabled,
+.button:disabled:hover {
+  cursor: default;
+  border-color: var(--border-primary);
+  background: var(--bg-muted);
+  color: var(--content-disabled);
+}
+
+.button:focus-visible,
+.event:focus-visible {
+  outline: 2px solid var(--border-interactive-primary);
+  outline-offset: 1px;
+}
+
+/* Status pills: a muted background with darker text of the same hue. */
+.pill {
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+  font-weight: var(--font-weight-medium);
+  border-radius: var(--radius-full);
+  padding: var(--spacing-2) var(--spacing-8);
+  background: var(--bg-muted);
+  color: var(--content-secondary);
+  white-space: nowrap;
+}
+
+/* An inline notice, colored by data-theme. */
+.note {
+  display: flex;
+  gap: var(--spacing-8);
+  align-items: flex-start;
+  margin: var(--spacing-12) 0 0;
+  padding: var(--spacing-8) var(--spacing-12);
+  border-radius: var(--radius-8);
+  background: var(--bg-muted);
+  color: var(--content-primary);
+}
+
+.note .icon {
+  margin-top: var(--spacing-2);
+  color: var(--content-secondary);
+}
+
+.note-action {
+  margin-left: auto;
+  flex: none;
+  padding: 0 var(--spacing-8);
+}
+
+.note-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* Setup, progress, and empty states */
+
+.status-line {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-8);
+  margin: 0;
+  color: var(--content-secondary);
+}
+
+.spinner {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--border-primary);
+  border-top-color: var(--content-secondary);
+  animation: spin 0.9s linear infinite;
+}
+
+.progress {
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: var(--bg-muted);
+  overflow: hidden;
+}
+
+.progress-bar {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--content-secondary);
+  transition: width 0.3s ease;
+}
+
+.setup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-12);
+  margin-top: var(--spacing-4);
+}
+
+/* shadcn surfaces use the surrounding Notion token scope in both themes. */
+.setup-shell {
+  padding: 0;
+  border: none;
+}
+
+.setup-welcome {
+  width: 100%;
+  max-width: none;
+  margin: 8px auto;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  border-color: var(--border-primary);
+  box-shadow: none;
+}
+
+.setup-welcome .welcome-header {
+  display: block;
+  padding: 24px 24px 20px;
+  gap: 0;
+}
+
+.welcome-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.welcome-icon {
+  display: inline-flex;
+  padding: 9px;
+  border: 1px solid var(--border-primary);
+  border-radius: 10px;
+  background: var(--bg-muted);
+  color: var(--content-secondary);
+}
+
+.welcome-badge {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--content-secondary);
+  border-radius: 5px;
+}
+
+.welcome-title {
+  margin: 0 0 10px;
+  font-size: 23px;
+  line-height: 1.25;
+  letter-spacing: -0.025em;
+  font-weight: 600;
+  text-wrap: balance;
+}
+
+.welcome-description {
+  margin: 0;
+  max-width: 420px;
+  color: var(--content-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.welcome-content {
+  padding: 0 24px 24px;
+}
+
+.setup-stages {
+  list-style: none;
+  padding: 18px 16px;
+  margin: 0;
+  background: var(--bg-muted);
+  border-radius: 8px;
+}
+
+.setup-stage {
+  display: flex;
+  gap: 12px;
+  position: relative;
+  padding-bottom: 18px;
+}
+
+.setup-stage:last-child {
+  padding-bottom: 0;
+}
+
+.setup-stage:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 13px;
+  top: 31px;
+  bottom: 4px;
+  width: 1px;
+  background: var(--border-primary);
+}
+
+.stage-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border: 1px solid var(--border-primary);
+  border-radius: 7px;
+  background: var(--bg-base);
+  color: var(--content-secondary);
+}
+
+.stage-body {
+  min-width: 0;
+  flex: 1;
+  padding-top: 2px;
+}
+
+.stage-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 20px;
+}
+
+.stage-title {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.stage-body .meta {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--content-tertiary);
+}
+
+.stage-badge {
+  margin-left: auto;
+  padding: 0 5px;
+  font-size: 10px;
+  border-radius: 4px;
+  font-weight: 400;
+}
+
+.stage-spinner {
+  flex: none;
+  color: var(--content-secondary);
+  animation: spin 1.3s linear infinite;
+}
+
+.stage-progress {
+  max-width: 240px;
+  height: 3px;
+  margin-top: 8px;
+  background: var(--border-primary);
+}
+
+.stage-progress [data-slot="progress-indicator"] {
+  background: var(--content-secondary);
+}
+
+.welcome-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.welcome-instruction {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12px;
+  color: var(--content-secondary);
+}
+
+.setup-begin {
+  font-size: 13px;
+  gap: 14px;
+  border-radius: 6px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.welcome-footer {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 16px 24px;
+  background: var(--bg-muted);
+  border-top: 1px solid var(--border-primary);
+  color: var(--content-tertiary);
+}
+
+.welcome-footer svg {
+  flex: none;
+  margin-top: 3px;
+}
+
+.welcome-footer p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.welcome-footer strong {
+  color: var(--content-secondary);
+  font-weight: 500;
+}
+
+@media (max-width: 420px) {
+  .setup-welcome .welcome-header {
+    padding: 20px 16px 16px;
+  }
+  .welcome-content {
+    padding: 0 16px 20px;
+  }
+  .welcome-footer {
+    padding: 14px 16px;
+  }
+  .welcome-title {
+    font-size: 21px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-spinner {
+    animation: none;
+  }
+  [data-slot="progress-indicator"] {
+    transition: none;
+  }
+}
+
+/* Loading skeleton */
+
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-8);
+  padding: var(--spacing-4) 0;
+}
+
+.skeleton-line {
+  display: block;
+  height: 12px;
+  width: 100%;
+  border-radius: var(--radius-4);
+  background: var(--bg-muted);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.skeleton-line:nth-child(3) {
+  width: 80%;
+}
+
+.skeleton-line:nth-child(4) {
+  width: 60%;
+}
+
+.skeleton-title {
+  height: 18px;
+  width: 40%;
+  margin-bottom: var(--spacing-4);
+}
+
+.research-line {
+  margin-top: var(--spacing-4);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-line,
+  .spinner {
+    animation: none;
+  }
+}
+
+/* Company and person cards */
+
+.section {
+  margin: var(--spacing-16) 0 var(--spacing-8);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+  font-weight: var(--font-weight-medium);
+  color: var(--content-secondary);
+}
+
+/* Day view */
+
+.all-day {
+  display: flex;
+  gap: var(--spacing-8);
+  align-items: flex-start;
+  margin-top: var(--spacing-12);
+  padding-bottom: var(--spacing-8);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.all-day-events {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+
+.all-day-events .event {
+  position: static;
+}
+
+.gutter-label {
+  width: 52px;
+  flex: none;
+  font-size: var(--text-body-xs);
+  line-height: var(--text-body-xs--line-height);
+  font-weight: var(--font-weight-medium);
+  color: var(--content-tertiary);
+  text-align: right;
+}
+
+.timeline {
+  margin-top: var(--spacing-12);
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.timeline-inner {
+  position: relative;
+}
+
+.hour {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px solid var(--border-primary);
+}
+
+.hour:first-child {
+  border-top-color: transparent;
+}
+
+.hour .gutter-label {
+  position: absolute;
+  left: 0;
+  top: -7px;
+  padding-right: var(--spacing-8);
+  box-sizing: border-box;
+  background: var(--bg-base);
+}
+
+/* data-theme="blue" on .events tints these tokens blue. */
+.events {
+  position: absolute;
+  inset: 0 0 0 60px;
+}
+
+.event {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+  border: none;
+  border-radius: var(--radius-4);
+  padding: var(--spacing-2) var(--spacing-8);
+  background: var(--bg-interactive-primary-translucent);
+  color: var(--content-primary);
+  font: inherit;
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+  text-align: left;
+  cursor: pointer;
+}
+
+.event:hover {
+  background: var(--bg-interactive-primary-translucent-hover);
+}
+
+.event:active {
+  background: var(--bg-interactive-primary-translucent-pressed);
+}
+
+.event-compact {
+  flex-direction: row;
+  gap: var(--spacing-4);
+  align-items: center;
+}
+
+.event-title {
+  font-weight: var(--font-weight-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.event-time {
+  color: var(--content-secondary);
+  white-space: nowrap;
+}
+
+.event-past {
+  opacity: 0.55;
+}
+
+.event-highlight,
+.event-highlight:hover {
+  background: var(--bg-interactive-strong);
+  color: var(--content-on-interactive-strong);
+  z-index: 1;
+}
+
+.event-highlight:active {
+  background: var(--bg-interactive-strong-pressed);
+}
+
+.event-highlight .event-time {
+  color: inherit;
+  opacity: 0.85;
+}
+
+/* data-theme="red" on .now makes the strong background red. */
+.now {
+  position: absolute;
+  left: -6px;
+  right: 0;
+  height: 2px;
+  background: var(--bg-interactive-strong);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.now::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  background: var(--bg-interactive-strong);
+}

@@ -1,42 +1,73 @@
-# Examples
+# Notion API examples
 
-This directory contains working code examples that demonstrate how to build integrations with Notion's API.
+Local TypeScript recipes built directly with the
+[Notion API](https://developers.notion.com/reference) and the official
+[JavaScript SDK](https://github.com/makenotion/notion-sdk-js). Each direct child
+of this directory is a self-contained project with its own dependencies,
+configuration, and README.
 
-## Available examples
+## Choose an example
 
-### JavaScript
+### Learn the API
 
-The [javascript](javascript/) directory includes examples built with Notion's official JavaScript SDK:
+| Example                                                           | What it demonstrates                                                                              |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| [Introduction to the Notion API](intro-to-notion-api/)            | A progressive tour of blocks, pages, databases, queries, templates, and file uploads. Start here. |
+| [Parse text from any block type](parse-text-from-any-block-type/) | Recursively retrieve page content and extract available plain text from different block shapes.   |
+| [Query large data sources](query-large-data-sources/)             | Read beyond the 10,000-row per-query limit by splitting work into `created_time` windows.         |
 
-- **[intro-to-notion-api](javascript/intro-to-notion-api/)**: Learn the basics with simple examples of creating blocks, databases, and pages
-- **[database-email-update](javascript/database-email-update/)**: Watch a database for changes and send email notifications
-- **[generate-random-data](javascript/generate-random-data/)**: Populate a database with sample data for testing
-- **[notion-github-sync](javascript/notion-github-sync/)**: Sync GitHub issues to a Notion database
-- **[notion-task-github-pr-sync](javascript/notion-task-github-pr-sync/)**: Connect Notion tasks to GitHub pull requests
-- **[parse-text-from-any-block-type](javascript/parse-text-from-any-block-type/)**: Extract text content from different block types
-- **[web-form-with-express](javascript/web-form-with-express/)**: Build a web form that submits data to Notion
+### Build integrations and apps
 
-## Running an example
+| Example                                                   | What it demonstrates                                                                   |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| [Database email update](database-email-update/)           | Poll a database for status changes and send notifications through SendGrid.            |
+| [Generate random data](generate-random-data/)             | Inspect a database schema and create correctly typed sample rows.                      |
+| [Notion–GitHub issue sync](notion-github-sync/)           | Copy issues from one GitHub repository into a Notion database.                         |
+| [Notion task–GitHub PR sync](notion-task-github-pr-sync/) | Update Notion tasks when a linked GitHub pull request closes or merges.                |
+| [Web form with Express](web-form-with-express/)           | Use an Express app and browser forms to create databases, pages, blocks, and comments. |
 
-Each example has its own README with specific instructions. Generally you'll need to:
+## General setup
 
-1. Create a [Notion integration](https://www.notion.com/my-integrations)
-2. Share your test page or database with the integration
-3. Set up environment variables (usually in a `.env` file)
-4. Install dependencies with `npm install`
-5. Run the example
+Use the selected example's README as the source of truth. The common flow is:
 
-## Contributing examples
+1. Install the Node.js version required by its `package.json`.
+2. Create a [Notion integration](https://www.notion.com/my-integrations).
+3. Share the page or database used by the example with that integration.
+4. From the example directory, run `npm install`.
+5. Copy its environment template to `.env` when one is provided and add the
+   required values.
+6. Run the exact package script documented by the example.
 
-Have an example you'd like to share? See [CONTRIBUTING.md](../CONTRIBUTING.md) for guidelines on adding examples.
+The examples do not all use the same environment-template filename or run
+script. Do not assume `npm start`; inspect the README and `package.json` first.
 
-When adding an example:
+## A known-good first run
 
-- Include a clear README explaining what it does and how to use it
-- Add any necessary configuration files (package.json, tsconfig.json, etc.)
-- Make sure it's tested and works as documented
-- Keep it focused on demonstrating a specific technique or integration
+```sh
+cd examples/intro-to-notion-api
+npm install
+cp .env.example .env
+# Add NOTION_API_KEY and NOTION_PAGE_ID to .env
+npm run basic:1
+```
 
-## Other languages
+## Adapting an example
 
-Currently we only have JavaScript examples, but we'd love to add examples in other languages. If you've built something in Python, Ruby, Go, or another language, please contribute!
+Keep the original project runnable while you work:
+
+1. Read its README, `package.json`, and TypeScript entrypoint.
+2. Identify the smallest API call or transformation that needs to change.
+3. Preserve environment-variable names unless the new behavior needs a new
+   value; document every new variable.
+4. Run that project's documented command and type-check it before relying on a
+   live result.
+
+An agent can locate these projects and their supported commands through the
+root [`catalog.json`](../catalog.json). See [`AGENTS.md`](../AGENTS.md) for the
+repository-wide agent workflow.
+
+## Contributing
+
+New API recipes belong directly under `examples/<task-name>/`; do not add a
+language-only nesting layer. Read the [contribution guide](../CONTRIBUTING.md)
+for the required files, catalog metadata, and validation steps.

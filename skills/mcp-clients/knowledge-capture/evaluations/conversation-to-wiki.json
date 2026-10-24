@@ -1,0 +1,22 @@
+{
+  "name": "Save conversation to wiki",
+  "skills": ["notion-knowledge-capture"],
+  "query": "Save our deployment discussion to the team wiki.",
+  "context": {
+    "conversation": "Maya: Deploy with npm ci, npm test, then npm run deploy. Verify /health returns 200. If health fails, run npm run rollback. Lee: Do not run deployment before the migration finishes. Maya: Agreed.",
+    "search_results": [
+      {
+        "id": "wiki",
+        "title": "Engineering Wiki",
+        "content": "Deployment guides are child pages here. No existing deployment guide."
+      }
+    ],
+    "tools": ["search", "fetch", "create-pages"]
+  },
+  "success_criteria": [
+    "Saves a how-to under the Engineering Wiki and returns the created page link.",
+    "Preserves all four commands exactly, the migration prerequisite, health verification, and rollback condition.",
+    "Does not invent deployment infrastructure, owners, or additional operational steps.",
+    "Does not reorganize the wiki or require a particular heading sequence to pass."
+  ]
+}
