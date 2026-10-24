@@ -1,34 +1,34 @@
 import crypto from "node:crypto"
-import { DatabaseSync } from "node:sqlite"
 import fs from "node:fs"
-import path from "node:path"
-import {
-  CODEX_HOME,
-  loadConfig,
-  loadState,
-  log,
-  saveState,
-  sleep,
-  withLock,
-} from "./config.ts"
-import { archiveMemories, memorySources } from "./archive.ts"
+import { loadState, log, saveState } from "./config.ts"
 import type { CallTool } from "./mcp.ts"
 
-// Codex memories (`[features] memories = true`) are written by Codex itself, in the
-// background: phase 1 extracts notes from idle sessions, phase 2 consolidates them into
-// $CODEX_HOME/memories/memory_summary.md and MEMORY.md. This module turns those files into
-// Notion memories and writes them with the same Notion MCP tools any agent uses, following
-// the Notion memory guide (notion://docs/memory): one topic per memory, a topic title, a
-// Type, details in the body, and no Source property.
+// Writes an agent's memories to the user's Notion Memories with the same Notion MCP tools
+// any agent uses, following the Notion memory guide (notion://docs/memory): one topic per
+// memory, a topic title, a Type, details in the body, and no Source property. Each agent
+// has a MemorySource that parses its own memory files (codex.ts, claude.ts).
 
 export type MemoryType = "Profile" | "Preference" | "Work" | "Notes"
 
-export interface CodexMemory {
+export interface AgentMemory {
   key: string
   type: MemoryType
   title: string
   content: string
   from: string
+}
+
+export interface MemorySource {
+  // Agent name, used in the memory body and the revision title.
+  name: "Codex" | "Claude Code"
+  // Read on every sync, because the agent's memory location can change between syncs.
+  dir(): string
+  // Pure: reads the memory files in `dir` and returns one memory per topic.
+  parse(dir: string, userName?: string): AgentMemory[]
+  // Whether memories mention the user, so the first sync looks up the user's name.
+  usesUserName(): boolean
+  // Logged when the source has no memories.
+  emptyHint: string
 }
 
 export interface MemorySyncResult {
@@ -38,113 +38,19 @@ export interface MemorySyncResult {
   unchanged: number
   changedInNotion: number
   skippedExisting: number
-  noLongerInCodex: number
+  noLongerInAgent: number
 }
 
-const POLL_MS = 5000
-const PROFILE_TITLE = "Role and background"
-const PREFERENCES_TITLE = "Coding workflow preferences"
-
-export function memoriesDir(): string {
-  const home = loadConfig().sourceHome || CODEX_HOME
-  return path.join(
-    home,
-    fs.existsSync(path.join(home, "memories_v2")) ? "memories_v2" : "memories"
-  )
-}
-
-// Pure: reads the Codex memory files in `dir` and returns one memory per topic.
-export function parseCodexMemories(
-  dir: string,
-  userName?: string
-): CodexMemory[] {
-  const summary = readIfExists(path.join(dir, "memory_summary.md"))
-  const memoryFile = readIfExists(path.join(dir, "MEMORY.md"))
-  const out: CodexMemory[] = []
-  const seenPreferences: string[] = []
-
-  for (const section of sections(summary, 2)) {
-    if (/^user profile/i.test(section.title) && isReal(section.body))
-      out.push({
-        key: "profile",
-        type: "Profile",
-        title: PROFILE_TITLE,
-        content: unwrap(section.body),
-        from: "`memory_summary.md` › User Profile",
-      })
-    if (/^user preferences/i.test(section.title)) {
-      const prefs = bullets(section.body).filter(isReal)
-      seenPreferences.push(...prefs.map(preferenceKey))
-      if (prefs.length)
-        out.push({
-          key: "preferences",
-          type: "Preference",
-          title: PREFERENCES_TITLE,
-          content: prefs.map((p) => `- ${p}`).join("\n"),
-          from: "`memory_summary.md` › User preferences",
-        })
-    }
-  }
-
-  for (const group of sections(memoryFile, 1)) {
-    const name = group.title.replace(/^Task Group:\s*/i, "").trim()
-    const parts = sections(group.body, 2)
-    const scope = group.body.match(/^scope:\s*(.+)$/m)?.[1]
-    const appliesTo = group.body.match(/^applies_to:\s*(.+)$/m)?.[1]
-    const tasks = parts
-      .filter((s) => /^task \d+/i.test(s.title))
-      .map((s) => s.title.replace(/^Task \d+:\s*/i, ""))
-    const knowledge = parts.filter((s) =>
-      /^(reusable knowledge|failures)/i.test(s.title)
-    )
-    // Preferences already in the global summary are not repeated per project.
-    const prefs = parts
-      .filter((s) => /^user preferences/i.test(s.title))
-      .flatMap((s) => bullets(s.body))
-      .filter(
-        (p) =>
-          isReal(p) &&
-          !seenPreferences.some((k) => overlaps(k, preferenceKey(p)))
-      )
-    const blocks = [
-      scope && `Scope: ${scope}`,
-      appliesTo && `Applies to: ${appliesTo}`,
-      tasks.length && `Recent tasks:\n${tasks.map((t) => `- ${t}`).join("\n")}`,
-      prefs.length && `Preferences:\n${prefs.map((p) => `- ${p}`).join("\n")}`,
-      ...knowledge.map(
-        (k) =>
-          `${k.title}:\n${bullets(k.body)
-            .map((b) => `- ${b}`)
-            .join("\n")}`
-      ),
-    ].filter(Boolean)
-    if (tasks.length || knowledge.length || prefs.length)
-      out.push({
-        key: `work:${normalizeKey(name)}`,
-        type: "Work",
-        title: name,
-        content: blocks.join("\n\n"),
-        from: `\`MEMORY.md\` › ${group.title}`,
-      })
-  }
-
-  return out.map((m) => ({
-    ...m,
-    content: personalize(m.content.replace(/\s*\[Task \d+\]/g, ""), userName),
-  }))
-}
-
-// Writes changed Codex memories to the user's Notion Memories through Notion MCP.
+// Writes changed agent memories to the user's Notion Memories through Notion MCP.
 export async function syncMemories(
-  callTool: CallTool
+  callTool: CallTool,
+  source: MemorySource
 ): Promise<MemorySyncResult> {
   const state = loadState()
-  const config = loadConfig()
-  if (!config.sourceArchive && parseCodexMemories(memoriesDir()).length)
+  const dir = source.dir()
+  if (source.usesUserName() && source.parse(dir).length)
     state.userName ??= await userName(callTool)
-  const memories = config.sourceArchive
-    ? archiveMemories(memorySources(config.sourceHome || CODEX_HOME))
-    : parseCodexMemories(memoriesDir(), state.userName)
+  const memories = source.parse(dir, state.userName)
   const result: MemorySyncResult = {
     total: memories.length,
     created: 0,
@@ -152,10 +58,10 @@ export async function syncMemories(
     unchanged: 0,
     changedInNotion: 0,
     skippedExisting: 0,
-    noLongerInCodex: 0,
+    noLongerInAgent: 0,
   }
   if (!memories.length) {
-    log("memories: none in", memoriesDir(), "(is [features] memories = true?)")
+    log("memories: none in", dir, `(${source.emptyHint})`)
     saveState(state)
     return result
   }
@@ -172,7 +78,7 @@ export async function syncMemories(
       result.unchanged++
       continue
     }
-    const body = `${memory.content}\n\nFrom Codex memories (${memory.from}).`
+    const body = `${memory.content}\n\nFrom ${source.name} memories (${memory.from}).`
 
     if (prev) {
       // Only overwrite the page if it is still exactly what the plugin wrote.
@@ -230,46 +136,26 @@ export async function syncMemories(
     saveState(state)
   }
 
-  // Codex dropped these. Deleting a memory needs the user's confirmation, so the plugin
+  // The agent dropped these. Deleting a memory needs the user's confirmation, so the plugin
   // only stops managing them.
   const live = new Set(memories.map((m) => m.key))
   for (const key of Object.keys(state.memories)) {
     if (live.has(key)) continue
-    log("memories: Codex no longer has", state.memories[key].title)
+    log(`memories: ${source.name} no longer has`, state.memories[key].title)
     delete state.memories[key]
-    result.noLongerInCodex++
+    result.noLongerInAgent++
   }
 
   if (result.updated)
     await callTool("finish-revision", {
-      title: "Update memories from Codex",
-      description: `Codex updated ${result.updated} memor${result.updated === 1 ? "y" : "ies"}.`,
+      title: `Update memories from ${source.name}`,
+      description: `${source.name} updated ${result.updated} memor${result.updated === 1 ? "y" : "ies"}.`,
     }).catch((e: unknown) =>
       log("memories: could not name the revision:", String(e))
     )
   saveState(state)
   log(`memories: ${JSON.stringify(result)}`)
   return result
-}
-
-// Codex has no hook for "memories updated", so a hook worker watches Codex's own job table
-// and the memory files, and imports as soon as a consolidation run finishes.
-export async function watchMemories(
-  callTool: CallTool,
-  opts: { maxMs: number; initialHash?: string }
-): Promise<void> {
-  const started = Date.now()
-  let lastHash = opts.initialHash ?? memoryFilesHash()
-  while (Date.now() - started < opts.maxMs) {
-    await sleep(POLL_MS)
-    const running = await memoryJobRunning()
-    const hash = memoryFilesHash()
-    if (hash !== lastHash && !running) {
-      log("memories: Codex updated its memory files, importing")
-      await withLock(() => syncMemories(callTool))
-      lastHash = hash
-    }
-  }
 }
 
 async function userName(callTool: CallTool): Promise<string | undefined> {
@@ -325,119 +211,25 @@ async function fetchPage(
 }
 
 // The Notion memory guide asks for the user's name instead of "the user".
-function personalize(text: string, name: string | undefined): string {
+export function personalize(text: string, name: string | undefined): string {
   if (!name) return text
   return text
     .replace(/\b([Tt])he user's\b/g, `${name}'s`)
     .replace(/\b[Tt]he user\b/g, name)
 }
 
-async function memoryJobRunning(): Promise<boolean> {
-  const home = loadConfig().sourceHome || CODEX_HOME
-  return ["memories_1.sqlite", "memories_v2_1.sqlite"].some((name) =>
-    jobRunning(path.join(home, name))
-  )
-}
-
-function jobRunning(db: string): boolean {
-  if (!fs.existsSync(db)) return false
-  try {
-    const conn = new DatabaseSync(db, { readOnly: true })
-    try {
-      return (
-        conn
-          .prepare("SELECT 1 FROM jobs WHERE status = 'running' LIMIT 1")
-          .all().length > 0
-      )
-    } finally {
-      conn.close()
-    }
-  } catch (e) {
-    log(
-      "memories: job table unavailable:",
-      e instanceof Error ? e.message : String(e)
-    )
-    return false
-  }
-}
-
-export function memoryFilesHash(): string {
-  const config = loadConfig()
-  if (config.sourceArchive)
-    return sha1(
-      JSON.stringify(
-        memorySources(config.sourceHome || CODEX_HOME).map(
-          ({ path, sha256 }) => [path, sha256]
-        )
-      )
-    )
-  return sha1(
-    ["MEMORY.md", "memory_summary.md"]
-      .map((f) => readIfExists(path.join(memoriesDir(), f)))
-      .join("\0")
-  )
-}
-
-function sections(
-  text: string,
-  level: number
-): { title: string; body: string }[] {
-  const heading = new RegExp(`^${"#".repeat(level)} (.+)$`, "gm")
-  const out: { title: string; body: string }[] = []
-  let prev: { title: string; end: number } | undefined
-  for (const match of text.matchAll(heading)) {
-    const index = match.index ?? 0
-    if (prev) out.push({ title: prev.title, body: text.slice(prev.end, index) })
-    prev = { title: match[1].trim(), end: index + match[0].length }
-  }
-  if (prev) out.push({ title: prev.title, body: text.slice(prev.end) })
-  return out
-}
-
-// Codex hard-wraps prose. Notion would keep each line break, so join wrapped lines.
-function unwrap(text: string): string {
-  return text
-    .trim()
-    .split(/\n\s*\n/)
-    .map((p) => p.replace(/\s*\n\s*/g, " "))
-    .join("\n\n")
-}
-
-function bullets(section: string): string[] {
-  return section
-    .split("\n")
-    .filter((l) => /^\s*- /.test(l))
-    .map((l) => l.replace(/^\s*- /, "").trim())
-    .filter(Boolean)
-}
-
-// Codex seeds memory files with placeholder text such as "No preferences recorded yet."
-function isReal(content: string): boolean {
-  const text = content.trim()
-  return text.length >= 12 && !/^(no|not)\b[^.]*\b(yet|recorded)\b/i.test(text)
-}
-
-// The same preference often appears in both files with different wording around a quote.
-function preferenceKey(bullet: string): string {
-  return normalizeKey(bullet.match(/[“"]([^”"]{8,})[”"]/)?.[1] ?? bullet)
-}
-
-function overlaps(a: string, b: string): boolean {
-  return a.includes(b) || b.includes(a)
-}
-
 function sameTitle(a: string | undefined, b: string): boolean {
   return normalizeKey(a ?? "") === normalizeKey(b)
 }
 
-function normalizeKey(text: string): string {
+export function normalizeKey(text: string): string {
   return text
     .toLowerCase()
     .replace(/\[task \d+\]/g, "")
     .replace(/[^a-z0-9]/g, "")
 }
 
-function readIfExists(file: string): string {
+export function readIfExists(file: string): string {
   try {
     return fs.readFileSync(file, "utf8")
   } catch {
@@ -445,6 +237,6 @@ function readIfExists(file: string): string {
   }
 }
 
-function sha1(text: string): string {
+export function sha1(text: string): string {
   return crypto.createHash("sha1").update(text).digest("hex")
 }

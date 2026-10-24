@@ -4,13 +4,13 @@
     {
       "id": "codex-notion-memory",
       "title": "Codex Notion memory",
-      "summary": "Codex plugin that mirrors topics or complete retained memory sources into Notion through MCP, verifies archive readback, and preserves Notion edits.",
+      "summary": "Codex and Claude Code plugin that mirrors agent memories, or complete retained Codex memory sources, into Notion through MCP and preserves Notion edits.",
       "path": "examples/codex-notion-memory",
       "kind": "api-example",
       "status": "ready",
       "language": "typescript",
       "runtime": "node",
-      "integrations": ["notion-mcp", "codex"],
+      "integrations": ["notion-mcp", "codex", "claude-code"],
       "entrypoints": ["plugin/src/main.ts"],
       "commands": {
         "install": "npm install",

@@ -4,7 +4,11 @@ const os = require("node:os")
 const path = require("node:path")
 const { spawnSync } = require("node:child_process")
 
-const home = process.env.CODEX_HOME || path.join(os.homedir(), ".codex")
+// Claude Code's hooks set NOTION_MEMORY_AGENT=claude; config lives in that agent's home.
+const home =
+  process.env.NOTION_MEMORY_AGENT === "claude"
+    ? process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude")
+    : process.env.CODEX_HOME || path.join(os.homedir(), ".codex")
 const file =
   process.env.NOTION_MEMORY_CONFIG || path.join(home, "notion-memory.json")
 try {

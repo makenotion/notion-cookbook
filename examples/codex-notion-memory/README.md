@@ -1,8 +1,11 @@
 # Codex Notion Memory
 
-A [Codex](https://developers.openai.com/codex) plugin that mirrors the memories
-Codex builds about you into your Notion Memories, so Notion Agent knows the
-same preferences and project context that Codex learned.
+A [Codex](https://developers.openai.com/codex) and
+[Claude Code](https://code.claude.com) plugin that mirrors the memories your
+coding agent builds about you into your Notion Memories, so Notion Agent knows
+the same preferences and project context that the agent learned. The same
+plugin directory installs into both; this page describes Codex first, and
+[Claude Code](#claude-code) covers what differs there.
 
 This standalone plugin is distributed from Notion Cookbook through the bundled
 marketplace. Its source, releases, and installation instructions live here.
@@ -11,8 +14,8 @@ It writes through [Notion MCP](https://developers.notion.com/docs/mcp), the
 same tools and the same `parent: "memory"` write that the
 [Notion memory setup prompt](https://developers.notion.com/prompts/setup) asks
 an agent to use. The difference is who decides to write: with the prompt, the
-model has to remember to save memories, and it cannot see what Codex learns in
-the background. The plugin reacts to Codex's own memory updates and writes the
+model has to remember to save memories, and it cannot see what the agent saves
+on its own. The plugin reacts to the agent's own memory updates and writes the
 same result every time.
 
 ## What it does
@@ -212,24 +215,114 @@ twice. The mapping from Codex memory to Notion page is stored in
 > `codex app-server` is marked experimental, and `mcpServer/tool/call` may
 > change between Codex releases.
 
+## Claude Code
+
+Claude Code's [auto memory](https://code.claude.com/docs/en/memory) keeps one
+Markdown file per memory in `~/.claude/projects/<project>/memory/`, with a
+`name`, `description`, and `type` in its frontmatter. `MEMORY.md` in the same
+directory is only an index, so the plugin skips it. Each file is already one
+topic, so each becomes one Notion memory: the title comes from `name`, and the
+body starts with the `description`.
+
+| Claude Code memory `type` | Notion memory                         |
+| ------------------------- | ------------------------------------- |
+| `user`                    | **Profile**                           |
+| `feedback`                | **Preference**                        |
+| `project`                 | **Work**, noting the project it is in |
+| `reference`               | **Notes**                             |
+
+Writing, duplicate checks, and edit protection are the same as for Codex. The
+plugin reads memories from every project, so run the preview first if some
+projects hold memories you don't want in Notion. If you set
+`autoMemoryDirectory` in `~/.claude/settings.json`, it reads that directory
+instead.
+
+Automatic syncs follow Claude Code's own auto memory switch, decided the way
+Claude Code decides it: `CLAUDE_CODE_DISABLE_AUTO_MEMORY` (including from a
+settings `env` block), then bare mode, then `autoMemoryEnabled` from managed,
+the session project's local and shared, or user settings. When it is off, hooks
+start no worker. A manual `sync` still imports the files that are there.
+
+### Setup
+
+```sh
+claude plugin marketplace add ./notion-cookbook/examples/codex-notion-memory
+claude plugin install notion-memory@notion-cookbook
+```
+
+Inside Claude Code, `/plugin` does the same. Then sign in to Notion MCP once
+and preview:
+
+```sh
+cd notion-cookbook/examples/codex-notion-memory
+NOTION_MEMORY_AGENT=claude node plugin/src/main.ts login
+NOTION_MEMORY_AGENT=claude npm run preview
+```
+
+Restart Claude Code to load the hooks.
+
+### Signing in
+
+Claude Code can't call its own MCP connections without a model turn, so the
+plugin connects to `https://mcp.notion.com/mcp` itself. `login` registers an
+OAuth client, opens Notion's consent page in your browser, and receives the
+redirect on `127.0.0.1`. The tokens are stored in
+`~/.claude/notion-memory/oauth.json`, readable only by you, and refreshed
+automatically. Delete that file to sign out.
+
+### How it works
+
+Claude Code writes memories with its own Write and Edit tools, so the plugin
+doesn't need to watch for changes:
+
+```text
+PostToolUse hook (Write|Edit on ~/.claude/projects/*/memory/*.md)
+SessionStart or Stop hook
+  └─ NOTION_MEMORY_AGENT=claude node plugin/hook.cjs <event>   (returns immediately)
+       └─ detached worker: Notion MCP over HTTP → import memories once
+```
+
+`PostToolUse` imports a memory as soon as Claude saves it. `SessionStart` and
+`Stop` catch changes made any other way, such as a memory deleted with `rm`. A
+hook starts no worker when there are no memories, auto memory is off, or you
+have not signed in yet; the last two are logged. Every request to Notion has a
+60-second timeout, and a worker connects only when a memory changed. A
+worker holds the lock while it is connected, so overlapping hooks never refresh
+the OAuth token at the same time. State, tokens, and logs live in
+`~/.claude/notion-memory/`, separate from Codex's.
+
+Set `NOTION_MEMORY_AGENT=claude` for every manual command, and use `mcpUrl` or
+`NOTION_MCP_URL` in `~/.claude/notion-memory.json` to point at another Notion
+MCP endpoint. `nodePath` works there too, for hooks that inherit an older Node.
+
 ## Code map
 
-| Path                               | Purpose                                                                 |
-| ---------------------------------- | ----------------------------------------------------------------------- |
-| `.agents/plugins/marketplace.json` | Local Codex marketplace that lists the plugin.                          |
-| `plugin/.codex-plugin/plugin.json` | Plugin manifest: hooks, MCP server, skill, and display metadata.        |
-| `plugin/.mcp.json`                 | Notion MCP server, identical to the official Codex Notion plugin.       |
-| `plugin/hooks.json`                | `SessionStart` and `Stop` hooks.                                        |
-| `plugin/skills/notion-memory/`     | Skill Codex uses for manual imports and status.                         |
-| `plugin/hook.cjs`                  | Selects the configured Node runtime before loading TypeScript.          |
-| `plugin/src/archive.ts`            | Complete retained-source inventory, encoding and readback verification. |
-| `plugin/src/main.ts`               | Entrypoint: hook handling, detached workers, and manual commands.       |
-| `plugin/src/mcp.ts`                | Calls Notion MCP tools through `codex app-server`.                      |
-| `plugin/src/memories.ts`           | Maps Codex memory files to Notion memories and writes them.             |
-| `plugin/src/config.ts`             | Configuration, state, logging, and the cross-process lock.              |
+| Path                                | Purpose                                                                 |
+| ----------------------------------- | ----------------------------------------------------------------------- |
+| `.agents/plugins/marketplace.json`  | Local Codex marketplace that lists the plugin.                          |
+| `.claude-plugin/marketplace.json`   | Local Claude Code marketplace that lists the plugin.                    |
+| `plugin/.codex-plugin/plugin.json`  | Codex manifest: hooks, MCP server, skill, and display metadata.         |
+| `plugin/.claude-plugin/plugin.json` | Claude Code manifest.                                                   |
+| `plugin/codex-mcp.json`             | Notion MCP server, identical to the official Codex Notion plugin.       |
+| `plugin/hooks.json`                 | Codex `SessionStart` and `Stop` hooks.                                  |
+| `plugin/claude-hooks.json`          | Claude Code `SessionStart`, `PostToolUse`, and `Stop` hooks.            |
+| `plugin/hook.cjs`                   | Selects the configured Node runtime before loading TypeScript.          |
+| `plugin/skills/notion-memory/`      | Skill both agents use for manual imports and status.                    |
+| `plugin/src/main.ts`                | Entrypoint: hook handling, detached workers, and manual commands.       |
+| `plugin/src/memories.ts`            | Writes parsed memories to Notion with duplicate checks.                 |
+| `plugin/src/codex.ts`               | Maps Codex memory files to memories and watches for updates.            |
+| `plugin/src/archive.ts`             | Complete retained-source inventory, encoding and readback verification. |
+| `plugin/src/claude.ts`              | Maps Claude Code auto memory files to memories.                         |
+| `plugin/src/mcp.ts`                 | Calls Notion MCP tools through `codex app-server`.                      |
+| `plugin/src/notionMcp.ts`           | Calls Notion MCP over HTTP with its own OAuth, for Claude Code.         |
+| `plugin/src/config.ts`              | Configuration, state, logging, and the cross-process lock.              |
+
+The Codex MCP server is in `codex-mcp.json` rather than `.mcp.json` because
+Claude Code loads a plugin's `.mcp.json` automatically, which would add a
+second, unauthenticated Notion server to every Claude Code session.
 
 The installed `plugin/package.json` declares ESM and the Node requirement.
-Codex copies the plugin directory into its cache without running
+Both agents copy the plugin directory into their cache without running
 `npm install`, so the plugin has no runtime dependencies.
 
 ## Configuration
@@ -259,11 +352,11 @@ node plugin/src/main.ts verify     # read every archive page back and compare it
 
 ## Extension points
 
-- **Different mapping:** change `parseCodexMemories` in `memories.ts`, for
-  example to import `## General Tips` as well.
-- **Another agent:** point `memoriesDir` at another agent's memory files and
-  write a parser for their format. Writing, duplicate checks, and edit
-  protection stay the same.
+- **Different mapping:** change `parseCodexMemories` in `codex.ts`, for
+  example to import `## General Tips` as well, or `TYPES` in `claude.ts`.
+- **Another agent:** add a `MemorySource` like `codexSource` or
+  `claudeSource` that parses the agent's memory files. Writing, duplicate
+  checks, and edit protection stay the same.
 
 ## Verification
 
@@ -282,6 +375,14 @@ exercise concurrent syncs, external edits/deletions, detached hooks, watching a
 synthetic SQLite consolidation job, missing runtime binaries, unauthorized or
 disconnected servers, and disabled memories with retained files.
 
+Claude Code gets the same treatment against a local stand-in for
+mcp.notion.com (OAuth refresh and Streamable HTTP MCP over the same synthetic
+pages): the copied artifact's manifest and hooks, hook commands run exactly as
+written in `claude-hooks.json`, restarts, concurrent syncs, Notion edits and
+deletions, the auto memory switch (env, user, and project settings), missing
+memories or sign-in, expired sign-in, tool errors, an unreachable server, a
+custom `autoMemoryDirectory`, and the `login` flow itself.
+
 To also install through the real Codex CLI and call a local MCP stand-in:
 
 ```sh
@@ -298,8 +399,16 @@ when `CODEX_TEST_BINARY` is absent. To exercise the actual 60-second RPC timeout
 NOTION_TEST_SLOW=1 CODEX_TEST_BINARY="$(command -v codex)" npm test
 ```
 
-The dedicated GitHub workflow runs the runtime test with Codex CLI 0.149.1 on
-Node 22.18.0 and 22.23.4. This is runtime integration coverage, not desktop UI E2E.
+To install through the real Claude Code CLI into an empty, temporary
+`CLAUDE_CONFIG_DIR`, check that it loads no plugin MCP server, and run the
+installed cache's `SessionStart` hook against the local stand-in:
+
+```sh
+CLAUDE_TEST_BINARY="$(command -v claude)" npm test
+```
+
+The dedicated GitHub workflow runs both runtime tests, with Codex CLI 0.149.1
+and Claude Code 2.1.296, on Node 22.18.0 and 22.23.4. This is runtime integration coverage, not desktop UI E2E.
 Desktop installation prompts, OAuth consent, and trust/decline clicks still need
 a separately permitted UI test environment. Fresh OAuth and live Notion tests
 are deliberately excluded from account-free CI.

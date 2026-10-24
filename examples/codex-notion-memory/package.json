@@ -2,7 +2,7 @@
   "name": "@notion-cookbook/codex-notion-memory",
   "version": "0.2.0",
   "private": true,
-  "description": "Codex plugin that mirrors Codex memories into Notion Memories through Notion MCP.",
+  "description": "Codex and Claude Code plugin that mirrors agent memories into Notion Memories through Notion MCP.",
   "type": "module",
   "engines": {
     "node": ">=22.18"

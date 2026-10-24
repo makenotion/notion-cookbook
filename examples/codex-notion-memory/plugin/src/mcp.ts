@@ -25,7 +25,7 @@ interface McpServerStatus {
   tools?: Record<string, unknown>
 }
 
-interface ToolResult {
+export interface ToolResult {
   content?: { type: string; text?: string }[]
   isError?: boolean
 }
@@ -157,13 +157,7 @@ export class CodexNotionMcp {
       tool: name,
       arguments: args,
     })) as ToolResult
-    const text = (result.content ?? []).map((part) => part.text ?? "").join("")
-    if (result.isError) throw new Error(`${tool}: ${text.slice(0, 500)}`)
-    try {
-      return JSON.parse(text)
-    } catch {
-      return text
-    }
+    return toolResultValue(tool, result)
   }
 
   close(): void {
@@ -238,6 +232,18 @@ export function notionTools(server: {
   return out
 }
 
-function squash(name: string): string {
+// A tool's text content, parsed as JSON when it is JSON.
+export function toolResultValue(tool: string, result: ToolResult): unknown {
+  const text = (result.content ?? []).map((part) => part.text ?? "").join("")
+  if (result.isError) throw new Error(`${tool}: ${text.slice(0, 500)}`)
+  try {
+    return JSON.parse(text)
+  } catch {
+    return text
+  }
+}
+
+// Key for matching tool names across prefixes and separators.
+export function squash(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]/g, "")
 }

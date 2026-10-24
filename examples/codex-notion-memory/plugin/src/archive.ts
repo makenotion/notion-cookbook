@@ -4,7 +4,7 @@ import path from "node:path"
 import { DatabaseSync } from "node:sqlite"
 import type { CallTool } from "./mcp.ts"
 import type { State } from "./config.ts"
-import type { CodexMemory } from "./memories.ts"
+import type { AgentMemory } from "./memories.ts"
 
 export interface MemorySource {
   path: string
@@ -45,7 +45,7 @@ export function memorySources(home: string): MemorySource[] {
   return sources.sort((a, b) => a.path.localeCompare(b.path))
 }
 
-export function archiveMemories(sources: MemorySource[]): CodexMemory[] {
+export function archiveMemories(sources: MemorySource[]): AgentMemory[] {
   return sources.flatMap((entry) => {
     // Count Unicode code points so chunk boundaries never split a surrogate pair.
     const chars = Array.from(entry.text)

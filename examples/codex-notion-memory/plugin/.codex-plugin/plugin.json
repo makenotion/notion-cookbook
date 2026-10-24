@@ -4,7 +4,7 @@
   "description": "Mirror the memories Codex builds about you into Notion Memories, through Notion MCP.",
   "skills": "./skills/",
   "hooks": "./hooks.json",
-  "mcpServers": "./.mcp.json",
+  "mcpServers": "./codex-mcp.json",
   "interface": {
     "displayName": "Notion Memory",
     "shortDescription": "Bring Codex memories into Notion Memories",
