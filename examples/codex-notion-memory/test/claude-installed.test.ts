@@ -131,7 +131,16 @@ test("hooks run from claude-hooks.json import on memory writes and ignore other 
   fs.rmSync(path.join(f.memoryDir, "reference_dashboards.md"))
   assert.equal((await f.hook("Stop")).code, 0)
   await waitFor(() => /"noLongerInAgent":1/.test(f.log()), 10_000)
-  assert.equal(f.pages().length, FIXTURE_COUNT, "the plugin never deletes")
+  // The removed memory moves under a new private archive page; nothing is trashed.
+  const root = f
+    .pages()
+    .find((p) => p.title === "Claude Code memory source archive")
+  assert.ok(root)
+  const removed = f.pages().filter((p) => p.parent === root.id)
+  assert.equal(removed.length, 1)
+  assert.match(String(removed[0].content), /removed from Claude Code/)
+  assert.equal(f.pages().length, FIXTURE_COUNT + 1)
+  assert.ok(!f.pages().some((p) => p.deleted))
 })
 
 test("disabled Claude Code auto memory with retained files does not auto-sync", async (t) => {

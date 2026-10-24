@@ -26,10 +26,14 @@ export interface MemoryState {
   pageHash?: string
   // Set once the page was edited or deleted in Notion. The plugin never touches it again.
   released?: "edited" | "deleted"
+  destination?: "memory" | "archive"
+  pendingMove?: boolean
 }
 
 export interface State {
   memories: Record<string, MemoryState>
+  archives?: Record<string, MemoryState>
+  archiveRoot?: { pageId: string; url: string }
   userName?: string
 }
 

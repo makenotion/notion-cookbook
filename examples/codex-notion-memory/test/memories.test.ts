@@ -11,9 +11,8 @@ const home = fs.mkdtempSync(path.join(os.tmpdir(), "codex-notion-memory-"))
 process.env.NOTION_MEMORY_AGENT = "codex"
 process.env.CODEX_HOME = home
 const FIXTURES = fileURLToPath(new URL("fixtures/memories", import.meta.url))
-const { codexSource, parseCodexMemories } = await import(
-  "../plugin/src/codex.ts"
-)
+const { codexSource } = await import("../plugin/src/codex.ts")
+const { parseCodexMemories } = await import("../plugin/src/knowledge.ts")
 const { syncMemories } = await import("../plugin/src/memories.ts")
 const { notionTools } = await import("../plugin/src/mcp.ts")
 const { loadState } = await import("../plugin/src/config.ts")
@@ -49,10 +48,11 @@ test("parses Codex memory files into one memory per topic", () => {
     [
       ["Profile", "Role and background"],
       ["Preference", "Coding workflow preferences"],
+      ["Preference", "Working practices"],
       ["Work", "Small Node.js CLI utilities"],
     ]
   )
-  const [profile, preferences, work] = memories
+  const [profile, preferences, , work] = memories
   assert.match(profile.content, /^Casey is a TypeScript developer/)
   assert.match(preferences.content, /keep answers short/)
   assert.match(work.content, /Scope: Node\.js command-line tools/)
@@ -81,8 +81,8 @@ test("writes memories incrementally and never deletes", async () => {
 
   // An existing memory on the same topic wins over a second copy.
   assert.deepEqual(await syncMemories(notion.callTool, codexSource), {
-    total: 3,
-    created: 2,
+    total: 4,
+    created: 3,
     updated: 0,
     unchanged: 0,
     changedInNotion: 0,
@@ -97,7 +97,7 @@ test("writes memories incrementally and never deletes", async () => {
 
   notion.calls.length = 0
   const again = await syncMemories(notion.callTool, codexSource)
-  assert.equal(again.unchanged, 2)
+  assert.equal(again.unchanged, 3)
   assert.ok(!notion.calls.includes("create-pages"))
   assert.ok(!notion.calls.includes("update-page"))
 
@@ -137,6 +137,9 @@ test("writes memories incrementally and never deletes", async () => {
   // Codex drops the project: the plugin forgets it and deletes nothing.
   fs.writeFileSync(memoryFile, "")
   const dropped = await syncMemories(notion.callTool, codexSource)
-  assert.equal(dropped.noLongerInAgent, 1)
-  assert.deepEqual(Object.keys(loadState().memories), ["profile"])
+  assert.equal(dropped.noLongerInAgent, 0)
+  assert.equal(
+    loadState().memories["work:smallnodejscliutilities"].released,
+    "deleted"
+  )
 })

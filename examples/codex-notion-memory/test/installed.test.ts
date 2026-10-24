@@ -37,7 +37,7 @@ test("plugin artifact resolves its manifest, MCP, hooks and skill without depend
     path.join(recipe, "test/fixtures/memories"),
   ])
   assert.equal(result.code, 0, result.stderr)
-  assert.equal(JSON.parse(result.stdout).length, 3)
+  assert.equal(JSON.parse(result.stdout).length, 4)
   assert.deepEqual(f.calls(), [])
 })
 
@@ -46,11 +46,11 @@ test("installed entrypoint persists across processes, skips unchanged writes, an
   f.seed()
   let result = await f.exec(["sync"])
   assert.equal(result.code, 0, result.stderr)
-  assert.equal(JSON.parse(result.stdout).created, 3)
+  assert.equal(JSON.parse(result.stdout).created, 4)
   const before = f.calls().length
   result = await f.exec(["sync"])
   assert.equal(result.code, 0, result.stderr)
-  assert.equal(JSON.parse(result.stdout).unchanged, 3)
+  assert.equal(JSON.parse(result.stdout).unchanged, 4)
   assert.equal(f.calls().length, before, "unchanged process must not connect")
   const summary = path.join(f.home, "memories/memory_summary.md")
   fs.writeFileSync(
@@ -60,7 +60,7 @@ test("installed entrypoint persists across processes, skips unchanged writes, an
   result = await f.exec(["sync"])
   assert.equal(result.code, 0, result.stderr)
   assert.equal(JSON.parse(result.stdout).updated, 1)
-  assert.equal(f.pages().length, 3)
+  assert.equal(f.pages().length, 4)
   assert.match(
     String(f.pages().find((p) => p.title === "Role and background")?.content),
     /Rust developer/
@@ -73,8 +73,8 @@ test("overlapping installed sync processes create each topic only once", async (
   f.seed()
   const results = await Promise.all([f.exec(["sync"]), f.exec(["sync"])])
   results.forEach((r) => assert.equal(r.code, 0, r.stderr))
-  assert.equal(f.pages().length, 3)
-  assert.equal(f.calls().filter((c) => c === "create-pages").length, 3)
+  assert.equal(f.pages().length, 4)
+  assert.equal(f.calls().filter((c) => c === "create-pages").length, 4)
 })
 
 test("user edits and deletions survive subsequent process restarts", async (t) => {
@@ -188,7 +188,7 @@ test("disabled memory with retained files must not auto-sync", async (t) => {
   await waitFor(
     () =>
       fs.existsSync(f.logFile) &&
-      /disabled|"created":3/.test(fs.readFileSync(f.logFile, "utf8"))
+      /disabled|"created":4/.test(fs.readFileSync(f.logFile, "utf8"))
   )
   assert.deepEqual(
     f.pages(),
@@ -213,7 +213,7 @@ test(
     await waitFor(
       () =>
         fs.existsSync(f.logFile) &&
-        /"created":3/.test(fs.readFileSync(f.logFile, "utf8"))
+        /"created":4/.test(fs.readFileSync(f.logFile, "utf8"))
     )
     const summary = path.join(f.home, "memories/memory_summary.md")
     fs.writeFileSync(
@@ -227,7 +227,7 @@ test(
     )
     db.exec("UPDATE jobs SET status = 'done'")
     await waitFor(() => f.calls().includes("update-page"), 10_000)
-    assert.equal(f.pages().length, 3)
+    assert.equal(f.pages().length, 4)
     assert.match(
       String(f.pages().find((p) => p.title === "Role and background")?.content),
       /Rust developer/
@@ -297,14 +297,16 @@ test("complete source archive reads back across processes and detects content lo
   const first = await f.exec(["sync"])
   assert.equal(first.code, 0, first.stderr)
   const result = JSON.parse(first.stdout)
-  assert.equal(result.created, 3)
+  assert.equal(result.created, 7)
   const verify = await f.exec(["verify"])
   assert.equal(verify.code, 0, verify.stderr)
   assert.equal(JSON.parse(verify.stdout).verified, 3)
   const again = await f.exec(["sync"])
-  assert.equal(JSON.parse(again.stdout).unchanged, 3)
+  assert.equal(JSON.parse(again.stdout).unchanged, 7)
   const pages = f.pages()
-  pages[0].content = '```json\n{"private":"synthetic-sensitive-marker\n```'
+  const archive = pages.find((p) => String(p.title).startsWith("Codex source:"))
+  assert.ok(archive)
+  archive.content = '```json\n{"private":"synthetic-sensitive-marker\n```'
   f.savePages(pages)
   const lost = await f.exec(["verify"])
   assert.equal(lost.code, 1)

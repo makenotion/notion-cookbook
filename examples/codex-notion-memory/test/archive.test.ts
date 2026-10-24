@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import crypto from "node:crypto"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -50,7 +51,13 @@ test("archive covers both generations, extensions and database memories without 
           JSON.parse(m.content.split("```json\n")[1].split("\n```")[0])
         )
       assert.equal(parts.map((p) => p.text).join(""), source.text)
-      assert.ok(parts.every((p) => p.sha256 === source.sha256))
+      assert.ok(
+        parts.every(
+          (p) =>
+            p.sha256 ===
+            crypto.createHash("sha256").update(p.text).digest("hex")
+        )
+      )
     }
     assert.deepEqual(memorySources(home), sources)
     assert.ok(memories.every((m) => m.content.length < 30_000))

@@ -58,7 +58,7 @@ test("recognizes only auto memory files from hook input", () => {
   assert.equal(isClaudeMemoryFile(""), false)
 })
 
-test("writes Claude Code memories incrementally and never deletes", async () => {
+test("writes Claude Code memories incrementally and retracts removed ones", async () => {
   const notion = fakeNotionMcp()
   const first = await syncMemories(notion.callTool, claudeSource)
   assert.equal(first.created, 4)
@@ -84,7 +84,20 @@ test("writes Claude Code memories incrementally and never deletes", async () => 
   assert.equal(second.noLongerInAgent, 1)
   assert.match(profile?.content ?? "", /twelve years/)
   assert.ok(notion.calls.includes("finish-revision"))
-  // The dropped memory stays in Notion; the plugin only stops managing it.
-  assert.equal(notion.pages.size, 4)
+  // The dropped memory moves out of Memories under a private archive page and its text
+  // is cleared. Nothing is trashed.
+  const root = [...notion.pages.values()].find(
+    (p) => p.Title === "Claude Code memory source archive"
+  )
+  assert.equal(root?.parent, "private")
+  const removed = [...notion.pages.values()].filter(
+    (p) => p.parent === root?.id
+  )
+  assert.equal(removed.length, 1)
+  assert.match(
+    removed[0].content,
+    /^This projection was removed from Claude Code\./
+  )
+  assert.ok(![...notion.pages.values()].some((p) => p.deleted))
   assert.equal(Object.keys(loadState().memories).length, 3)
 })

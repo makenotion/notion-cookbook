@@ -20,35 +20,39 @@ same result every time.
 
 ## What it does
 
-With `[features] memories = true`, Codex extracts notes from your idle sessions
-in the background and consolidates them into `~/.codex/memories/memory_summary.md`
-and `MEMORY.md`. By default the plugin maps these two files into topics. Newer Codex builds use
-`memories_v2/`; the plugin prefers that directory when present. Topic mode only
-extracts Profile/Preference sections from a v2 summary and does not import its
-rollout summaries. Use complete source archive mode below to preserve all retained
-memory content. Neither mode reads session transcripts.
+Codex extracts and consolidates memories in the background. The plugin projects
+its consolidated `memory_summary.md` and, when present, `MEMORY.md` into current
+Notion topics. It prefers `memories_v2/` only when its summary exists. It does
+not infer new facts or call a model.
 
-It follows the Notion memory guide (`notion://docs/memory`): one memory per
-topic, a title that names the topic, a **Type**, the details in the page body,
-and your name instead of "the user".
+| Consolidated source             | Active Notion memory                                                                                  |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| User Profile                    | Role and background (Profile)                                                                         |
+| User preferences                | Coding workflow preferences (Preference)                                                              |
+| General Tips                    | Working practices (Preference)                                                                        |
+| What's in Memory topic headings | One Work page per consolidated topic                                                                  |
+| MEMORY.md groups                | Durable preferences, reusable knowledge and lessons; task history and retrieval metadata are excluded |
 
-| Codex memory file                        | Notion memory                                           |
-| ---------------------------------------- | ------------------------------------------------------- |
-| `memory_summary.md` › `User Profile`     | **Role and background** (Profile)                       |
-| `memory_summary.md` › `User preferences` | **Coding workflow preferences** (Preference)            |
-| `MEMORY.md` › each `# Task Group`        | One **Work** memory per project: scope, tasks, know-how |
+Raw extraction records, rollout summaries and source files are supporting evidence,
+not active memories. With the optional archive enabled, they live under a separate
+private **Codex memory source archive** page. Current knowledge links to that archive.
+This is a projection of consolidated knowledge, not a claim to re-extract every
+fact from historical evidence.
 
-Writes are incremental and conservative:
+| Source change                                         | Sync behavior                                                                   |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Append or override a topic                            | Update the same managed page; no semantic merge or duplicate append             |
+| New topic                                             | Create one page with a stable key derived from its topic heading                |
+| Removed topic, including an explicitly empty source   | Move the unedited managed page out of Memories and clear its old knowledge text |
+| Entire source file unexpectedly missing or unreadable | Fail rather than interpreting a transient read failure as a mass deletion       |
+| Notion page edited or deleted externally              | Release it from sync; never overwrite or resurrect the user's version           |
+| Identically titled page not owned by this plugin      | Leave it alone                                                                  |
 
-- Unchanged memories are skipped. A memory Codex rewrote updates its page as
-  one Notion revision.
-- Before creating a memory, the plugin looks for an existing memory with the
-  same title. If one exists, it leaves that memory alone instead of adding a
-  duplicate.
-- Before updating a page, it reads it back. If you edited or deleted it in
-  Notion, your version wins and the plugin never touches that memory again.
-- It never deletes. When Codex drops a memory, the plugin stops managing it.
-- It does not change your About page.
+Retraction is not a permanent erase of Notion history: it clears the plugin-owned
+projection after moving it out of active Memories. The source archive can still
+contain historical supporting evidence; this is not a cross-system privacy erasure
+operation. The plugin never automatically confirms Trash requests or edits About.
+Failed moves stop the sync and preserve a retryable state; they are not bypassed.
 
 ## Prerequisites
 
@@ -100,26 +104,30 @@ Notion app on `codex_apps`; this package does not register a hosted app.
 The hosted app route has offline tool-resolution coverage but has not been
 verified with a live connection.
 
-### Complete source archive mode
+### Optional source archive and 0.2 migration
 
-For an explicitly authorized full import, set `sourceArchive: true` in the
-plugin configuration. It mirrors every non-hidden Markdown file recursively in
-both `memories/` and `memories_v2/`, including summaries, raw memories, rollout
-summaries, extensions, automation notes and memory skills. It also reads every
-`stage1_outputs` row from both memory SQLite databases, retaining `thread_id`,
-`raw_memory`, `rollout_summary` and `rollout_slug`. Git internals, temporary files,
-symlinks, job bookkeeping and usage counters are excluded. Unreadable sources
-fail the import rather than silently disappearing.
+For an explicitly authorized full source backup, set `sourceArchive: true`.
+This is **additive**: it keeps current knowledge in Memories and complete retained
+sources outside Memories. The inventory includes non-hidden Markdown in
+`memories/` and `memories_v2/` plus SQLite `stage1_outputs` extraction rows.
+Git internals, symlinks, temporary files, job state and transcripts are excluded.
+Unreadable sources fail the run.
 
-Each source becomes Notes pages with deterministic keys, 4,000 Unicode code
-points per page, and a full-source SHA-256. The JSON `text` field round-trips the
-original text. Markdown-significant punctuation is Unicode-escaped because live
-Notion conversion can otherwise remove characters even inside code blocks.
-`verify` decodes and compares every payload, and fails without printing contents.
-The archive preserves complete sources rather than claiming a lossy topic
-projection covers all memories. Its size includes overlapping retained records.
+Archive parts are 4,000 Unicode code points. Each part has a source path, part
+number and its own SHA-256. An append updates only the previous tail and new parts;
+unchanged prefix parts stay unchanged. Removed parts have their obsolete text
+cleared. `inventory` reports full-source hashes; `verify` reads and compares every
+expected part. Archive metadata is Unicode-escaped to survive Markdown conversion.
 
-Pin a destination for sensitive or local-only imports:
+Version 0.3 migrates plugin-owned 0.2 `archive:*` pages using their stored page IDs
+and ownership hashes. It moves them to the private archive before writing the new
+projections. It leaves externally edited/deleted pages alone. Interrupted moves
+are journaled so retry can recognize an already-moved page. Back up the state file
+before a migration. If the normal move-pages tool refuses the operation, stop and
+report the failure; do not copy credentials, forge deletion confirmation, or
+manually rewrite Notion storage.
+
+Pin the destination for local-only imports:
 
 ```json
 {
@@ -129,11 +137,10 @@ Pin a destination for sensitive or local-only imports:
 }
 ```
 
-Register that server with `codex mcp add notion-local --url <local-MCP-URL>` and
-complete Codex’s normal OAuth flow. An explicit server never falls back to
-another connection. `get-self` checks the expected workspace on each connection.
-Credentials remain with Codex. `NOTION_MEMORY_DATA` can isolate test state from
-the normal mapping without copying credentials or changing real memory files.
+Register it with `codex mcp add notion-local --url <local-MCP-URL>` and complete
+Codex's normal OAuth flow. An explicit server never falls back. `get-self` checks
+the workspace before writes. Credentials remain with Codex. `NOTION_MEMORY_DATA`
+isolates test mapping state without copying credentials or changing real sources.
 
 ### 3. Trust the hooks
 
@@ -231,7 +238,10 @@ body starts with the `description`.
 | `project`                 | **Work**, noting the project it is in |
 | `reference`               | **Notes**                             |
 
-Writing, duplicate checks, and edit protection are the same as for Codex. The
+Writing, duplicate checks, edit protection, and retraction are the same as for
+Codex: when Claude Code deletes a memory file, the unedited managed page moves
+out of Memories under a private **Claude Code memory source archive** page and
+its text is cleared. There is no source archive mode for Claude Code. The
 plugin reads memories from every project, so run the preview first if some
 projects hold memories you don't want in Notion. If you set
 `autoMemoryDirectory` in `~/.claude/settings.json`, it reads that directory
@@ -309,8 +319,10 @@ MCP endpoint. `nodePath` works there too, for hooks that inherit an older Node.
 | `plugin/hook.cjs`                   | Selects the configured Node runtime before loading TypeScript.          |
 | `plugin/skills/notion-memory/`      | Skill both agents use for manual imports and status.                    |
 | `plugin/src/main.ts`                | Entrypoint: hook handling, detached workers, and manual commands.       |
-| `plugin/src/memories.ts`            | Writes parsed memories to Notion with duplicate checks.                 |
-| `plugin/src/codex.ts`               | Maps Codex memory files to memories and watches for updates.            |
+| `plugin/src/memories.ts`            | Shared sync entry: each agent's memory source, then reconcile.          |
+| `plugin/src/reconcile.ts`           | Creates, updates, retracts and migrates managed projections.            |
+| `plugin/src/codex.ts`               | Codex source selection and the watcher for completed updates.           |
+| `plugin/src/knowledge.ts`           | Projects consolidated Codex topics without extraction logs.             |
 | `plugin/src/archive.ts`             | Complete retained-source inventory, encoding and readback verification. |
 | `plugin/src/claude.ts`              | Maps Claude Code auto memory files to memories.                         |
 | `plugin/src/mcp.ts`                 | Calls Notion MCP tools through `codex app-server`.                      |
@@ -329,14 +341,14 @@ Both agents copy the plugin directory into their cache without running
 
 Optional. `~/.codex/notion-memory.json` (or `$NOTION_MEMORY_CONFIG`):
 
-| Key                   | Environment variable | Meaning                                                                |
-| --------------------- | -------------------- | ---------------------------------------------------------------------- |
-| `nodePath`            | —                    | Node executable for hooks when their inherited PATH has an older Node. |
-| `sourceHome`          | —                    | Read memory sources from this Codex home; defaults to `CODEX_HOME`.    |
-| `sourceArchive`       | —                    | Opt in to complete retained memory sources; defaults to false.         |
-| `expectedWorkspaceId` | —                    | Refuse writes when `get-self` does not match this workspace.           |
-| `codexPath`           | `CODEX_PATH`         | Codex executable. Defaults to `codex`.                                 |
-| `mcpServer`           | `NOTION_MCP_SERVER`  | Codex MCP server to use. Defaults to the one named `notion`.           |
+| Key                   | Environment variable | Meaning                                                                        |
+| --------------------- | -------------------- | ------------------------------------------------------------------------------ |
+| `nodePath`            | —                    | Node executable for hooks when their inherited PATH has an older Node.         |
+| `sourceHome`          | —                    | Read memory sources from this Codex home; defaults to `CODEX_HOME`.            |
+| `sourceArchive`       | —                    | Add complete sources in a private archive outside Memories; defaults to false. |
+| `expectedWorkspaceId` | —                    | Refuse writes when `get-self` does not match this workspace.                   |
+| `codexPath`           | `CODEX_PATH`         | Codex executable. Defaults to `codex`.                                         |
+| `mcpServer`           | `NOTION_MCP_SERVER`  | Codex MCP server to use. Defaults to the one named `notion`.                   |
 
 ## Manual commands
 

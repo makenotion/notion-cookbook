@@ -138,8 +138,18 @@ async function main(): Promise<void> {
       return login(config.mcpUrl, openBrowser)
     case "preview": {
       const name = loadState().userName
-      const memories = SOURCE.parse(option("--dir") ?? SOURCE.dir(), name)
-      console.log(JSON.stringify(memories, null, 2))
+      const knowledge = SOURCE.parse(option("--dir") ?? SOURCE.dir(), name)
+      const archive = SOURCE.archive()
+      const preview = archive
+        ? {
+            knowledge,
+            archive: {
+              sources: memorySources(config.sourceHome || AGENT_HOME).length,
+              pages: archive.length,
+            },
+          }
+        : knowledge
+      console.log(JSON.stringify(preview, null, 2))
       return
     }
     case "status":

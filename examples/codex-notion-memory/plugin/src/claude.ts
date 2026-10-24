@@ -38,9 +38,9 @@ const CUSTOM_DIR = customMemoryDir()
 export const claudeSource: MemorySource = {
   name: "Claude Code",
   dir: () => CUSTOM_DIR ?? PROJECTS_DIR,
+  hasSource: (dir) => fs.existsSync(dir),
   parse: parseClaudeMemories,
-  usesUserName: () => true,
-  emptyHint: "has Claude Code saved any auto memories yet?",
+  archive: () => undefined,
 }
 
 // Reads ~/.claude/projects/*/memory/, or a flat memory directory such as a custom
