@@ -40,12 +40,16 @@ export function invoke(name, args) {
         text: `<page${page.deleted ? " deleted" : ""}>${page.parent !== "memory" && page.parent !== "private" ? `<parent-page url="https://notion.so/${page.parent}"/>` : ""}<properties>${JSON.stringify({ Title: page.title, Type: page.type })}</properties><content>${page.content}</content></page>`,
       }
     }
-    case "query-data-sources":
+    case "query-data-sources": {
+      const offset = Number(args.data.query.match(/OFFSET (\d+)/)?.[1] ?? 0)
+      const limit = Number(args.data.query.match(/LIMIT (\d+)/)?.[1] ?? 200)
       return {
         results: state.pages
           .filter((p) => p.parent === "memory" && !p.deleted)
+          .slice(offset, offset + limit)
           .map((p) => ({ Title: p.title })),
       }
+    }
     case "create-pages": {
       assert.ok(
         args.parent === "memory" ||

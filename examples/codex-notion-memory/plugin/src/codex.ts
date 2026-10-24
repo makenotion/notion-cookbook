@@ -2,7 +2,14 @@ import fs from "node:fs"
 import path from "node:path"
 import { DatabaseSync } from "node:sqlite"
 import { archiveMemories, memorySources } from "./archive.ts"
-import { AGENT_HOME, loadConfig, log, sleep, withLock } from "./config.ts"
+import {
+  AGENT_HOME,
+  loadConfig,
+  loadState,
+  log,
+  sleep,
+  withLock,
+} from "./config.ts"
 import type { CallTool } from "./mcp.ts"
 import { parseCodexMemories } from "./knowledge.ts"
 import {
@@ -23,8 +30,8 @@ const POLL_MS = 5000
 export const codexSource: MemorySource = {
   name: "Codex",
   dir: memoriesDir,
-  hasSource: (dir) =>
-    ["memory_summary.md", "MEMORY.md"].some((name) =>
+  sourceFiles: (dir) =>
+    ["memory_summary.md", "MEMORY.md"].filter((name) =>
       fs.existsSync(path.join(dir, name))
     ),
   parse: parseCodexMemories,
@@ -38,9 +45,13 @@ export const codexSource: MemorySource = {
 
 export function memoriesDir(): string {
   const home = loadConfig().sourceHome || AGENT_HOME
+  const v2 = path.join(home, "memories_v2")
+  // Stay on memories_v2 once synced from it, so a missing summary there fails the
+  // missing-source guard instead of silently switching directories.
   return path.join(
     home,
-    fs.existsSync(path.join(home, "memories_v2", "memory_summary.md"))
+    loadState().knowledgeDir === v2 ||
+      fs.existsSync(path.join(v2, "memory_summary.md"))
       ? "memories_v2"
       : "memories"
   )

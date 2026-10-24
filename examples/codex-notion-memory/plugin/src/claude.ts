@@ -38,7 +38,8 @@ const CUSTOM_DIR = customMemoryDir()
 export const claudeSource: MemorySource = {
   name: "Claude Code",
   dir: () => CUSTOM_DIR ?? PROJECTS_DIR,
-  hasSource: (dir) => fs.existsSync(dir),
+  // Individual memory files come and go, so only the directory itself counts.
+  sourceFiles: (dir) => (fs.existsSync(dir) ? ["."] : []),
   parse: parseClaudeMemories,
   archive: () => undefined,
 }

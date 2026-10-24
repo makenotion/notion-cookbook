@@ -1,6 +1,6 @@
 import crypto from "node:crypto"
 import fs from "node:fs"
-import { loadState } from "./config.ts"
+import { loadState, saveState } from "./config.ts"
 import type { CallTool } from "./mcp.ts"
 import { syncProjection } from "./reconcile.ts"
 
@@ -25,9 +25,10 @@ export interface MemorySource {
   name: "Codex" | "Claude Code"
   // Read on every sync, because the agent's memory location can change between syncs.
   dir(): string
-  // Whether the agent's memory files exist. When they are missing the plugin refuses to
-  // retract memories it wrote earlier, since a moved or unreadable directory is not a removal.
-  hasSource(dir: string): boolean
+  // The source files present in `dir` whose disappearance means the source is unreadable
+  // rather than emptied. When none exist, or one seen on the last sync is gone, the plugin
+  // refuses to retract memories it wrote earlier.
+  sourceFiles(dir: string): string[]
   // Pure: reads the memory files in `dir` and returns one memory per topic.
   parse(dir: string, userName?: string): AgentMemory[]
   // Retained sources to back up under a separate private archive, when enabled.
@@ -51,22 +52,31 @@ export async function syncMemories(
 ): Promise<MemorySyncResult> {
   const state = loadState()
   const dir = source.dir()
-  const hasSource = source.hasSource(dir)
+  const files = source.sourceFiles(dir)
+  const hasSource = files.length > 0
   if (
-    !hasSource &&
-    Object.keys(state.memories).some((key) => !key.startsWith("archive:"))
+    (!hasSource &&
+      Object.keys(state.memories).some((key) => !key.startsWith("archive:"))) ||
+    (state.knowledgeDir === dir &&
+      state.knowledgeFiles?.some((name) => !files.includes(name)))
   )
     throw new Error(
       "Consolidated source files are missing; refusing to retract memories"
     )
   if (hasSource) state.userName ??= await userName(callTool)
-  return syncProjection(
+  const result = await syncProjection(
     callTool,
     state,
     source.name,
     source.parse(dir, state.userName),
     source.archive()
   )
+  if (hasSource) {
+    state.knowledgeDir = dir
+    state.knowledgeFiles = files
+    saveState(state)
+  }
+  return result
 }
 
 async function userName(callTool: CallTool): Promise<string | undefined> {

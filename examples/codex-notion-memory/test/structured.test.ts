@@ -6,6 +6,75 @@ import { test } from "node:test"
 import { fixture } from "./support/harness.ts"
 import { archiveMemories, memorySources } from "../plugin/src/archive.ts"
 
+test("a missing active v2 summary never falls back to stale v1 knowledge", async (t) => {
+  const f = fixture(t)
+  f.seed()
+  fs.mkdirSync(path.join(f.home, "memories_v2"))
+  const summary = path.join(f.home, "memories_v2/memory_summary.md")
+  fs.writeFileSync(
+    summary,
+    "## User Profile\n\nCasey works on the active v2 project.\n"
+  )
+  assert.equal((await f.exec(["sync"])).code, 0)
+  fs.unlinkSync(summary)
+  const result = await f.exec(["sync"])
+  assert.equal(result.code, 1, "must fail instead of importing stale v1")
+  assert.match(result.stderr, /source files are missing/)
+  assert.equal(f.pages().filter((p) => p.parent === "memory").length, 1)
+  assert.match(
+    String(f.pages().find((p) => p.title === "Role and background")?.content),
+    /active v2 project/
+  )
+})
+
+test("duplicate checks page beyond the first 200 records and preserve an unowned topic", async (t) => {
+  const f = fixture(t)
+  f.seed()
+  const pages = Array.from({ length: 205 }, (_, i) => ({
+    id: `foreign-${i}`,
+    title: i === 204 ? "Role and background" : `Foreign ${i}`,
+    type: "Profile",
+    parent: "memory",
+    content: "External content must remain untouched.",
+  }))
+  f.savePages(pages)
+  const result = await f.exec(["sync"])
+  assert.equal(result.code, 0, result.stderr)
+  assert.equal(JSON.parse(result.stdout).skippedExisting, 1)
+  assert.equal(JSON.parse(result.stdout).created, 3)
+  assert.equal(
+    f.pages().find((p) => p.id === "foreign-204")?.content,
+    "External content must remain untouched."
+  )
+  assert.ok(f.calls().filter((c) => c === "query-data-sources").length >= 2)
+})
+
+test("enabling an archive updates evidence links even when knowledge text is unchanged", async (t) => {
+  const f = fixture(t)
+  f.seed()
+  assert.equal((await f.exec(["sync"])).code, 0)
+  assert.ok(
+    f
+      .pages()
+      .filter((p) => p.parent === "memory")
+      .every((p) => !String(p.content).includes("Source evidence:"))
+  )
+  fs.writeFileSync(
+    path.join(f.home, "notion-memory.json"),
+    JSON.stringify({ sourceArchive: true })
+  )
+  const result = await f.exec(["sync"])
+  assert.equal(result.code, 0, result.stderr)
+  assert.equal(JSON.parse(result.stdout).updated, 4)
+  assert.ok(
+    f
+      .pages()
+      .filter((p) => p.parent === "memory")
+      .every((p) => String(p.content).includes("Source evidence:"))
+  )
+  assert.equal(JSON.parse((await f.exec(["sync"])).stdout).updated, 0)
+})
+
 test("only consolidated topics enter Memories; raw sources go under a private archive", async (t) => {
   const f = fixture(t)
   f.seed()
