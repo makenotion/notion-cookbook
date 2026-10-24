@@ -7,6 +7,7 @@ import {
   loadConfig,
   loadState,
   log,
+  saveState,
   sleep,
   withLock,
 } from "./config.ts"
@@ -43,14 +44,14 @@ export interface MemorySyncResult {
 }
 
 const POLL_MS = 5000
-const PROFILE_TITLE = "Role and background"
-const PREFERENCES_TITLE = "Coding workflow preferences"
 
 export function memoriesDir(): string {
   const home = loadConfig().sourceHome || CODEX_HOME
+  const v2 = path.join(home, "memories_v2")
   return path.join(
     home,
-    fs.existsSync(path.join(home, "memories_v2", "memory_summary.md"))
+    loadState().knowledgeDir === v2 ||
+      fs.existsSync(path.join(v2, "memory_summary.md"))
       ? "memories_v2"
       : "memories"
   )
@@ -65,18 +66,21 @@ export async function syncMemories(
   const state = loadState()
   const config = loadConfig()
   const dir = memoriesDir()
-  const hasSource = ["memory_summary.md", "MEMORY.md"].some((name) =>
+  const files = ["memory_summary.md", "MEMORY.md"].filter((name) =>
     fs.existsSync(path.join(dir, name))
   )
+  const hasSource = files.length > 0
   if (
-    !hasSource &&
-    Object.keys(state.memories).some((key) => !key.startsWith("archive:"))
+    (!hasSource &&
+      Object.keys(state.memories).some((key) => !key.startsWith("archive:"))) ||
+    (state.knowledgeDir === dir &&
+      state.knowledgeFiles?.some((name) => !files.includes(name)))
   )
     throw new Error(
       "Consolidated source files are missing; refusing to retract memories"
     )
   if (hasSource) state.userName ??= await userName(callTool)
-  return syncProjection(
+  const result = await syncProjection(
     callTool,
     state,
     parseCodexMemories(dir, state.userName),
@@ -84,6 +88,12 @@ export async function syncMemories(
       ? archiveMemories(memorySources(config.sourceHome || CODEX_HOME))
       : undefined
   )
+  if (hasSource) {
+    state.knowledgeDir = dir
+    state.knowledgeFiles = files
+    saveState(state)
+  }
+  return result
 }
 
 // Codex has no hook for "memories updated", so a hook worker watches Codex's own job table

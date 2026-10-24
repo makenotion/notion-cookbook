@@ -32,6 +32,8 @@ export interface State {
   memories: Record<string, MemoryState>
   archives?: Record<string, MemoryState>
   archiveRoot?: { pageId: string; url: string }
+  knowledgeDir?: string
+  knowledgeFiles?: string[]
   userName?: string
 }
 

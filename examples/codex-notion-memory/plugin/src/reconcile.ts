@@ -121,7 +121,12 @@ export async function syncProjection(
         saveState(state)
       }
     for (const memory of memories) {
-      const hash = digest(`${memory.title}\n${memory.content}`)
+      const evidence =
+        destination === "memory" && archive && state.archiveRoot
+          ? `\n\nSource evidence: <mention-page url="${state.archiveRoot.url}"/>`
+          : ""
+      const content = `${memory.content}\n\nFrom Codex memories (${memory.from}).${evidence}`
+      const hash = digest(`${memory.title}\n${content}`)
       const previous = entries[memory.key]
       if (previous?.released) {
         result.changedInNotion++
@@ -131,11 +136,6 @@ export async function syncProjection(
         result.unchanged++
         continue
       }
-      const evidence =
-        destination === "memory" && state.archiveRoot
-          ? `\n\nSource evidence: <mention-page url="${state.archiveRoot.url}"/>`
-          : ""
-      const content = `${memory.content}\n\nFrom Codex memories (${memory.from}).${evidence}`
       if (previous) {
         if (release(previous, await snapshot(call, previous.pageId))) {
           result.changedInNotion++
@@ -330,7 +330,7 @@ async function memoryTitles(call: CallTool): Promise<string[]> {
       data: {
         mode: "sql",
         data_source_urls: [collection],
-        query: `SELECT "Title" FROM "${collection}" LIMIT 200 OFFSET ${offset}`,
+        query: `SELECT "Title" FROM "${collection}" ORDER BY url LIMIT 200 OFFSET ${offset}`,
       },
     })
     if (!isObject(response) || !Array.isArray(response.results))
