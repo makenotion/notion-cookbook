@@ -4,7 +4,7 @@
     {
       "id": "codex-notion-memory",
       "title": "Codex Notion memory",
-      "summary": "Codex and Claude Code plugin that mirrors the memories your coding agent builds about you into Notion Memories through Notion MCP, keeping your Notion edits.",
+      "summary": "Codex and Claude Code plugin that mirrors agent memories into Notion through MCP, honors the memory setting for automatic imports, and preserves Notion edits.",
       "path": "examples/codex-notion-memory",
       "kind": "api-example",
       "status": "ready",

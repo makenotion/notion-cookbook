@@ -135,10 +135,14 @@ SessionStart or Stop hook
 
 The worker calls Notion MCP tools through Codex's `mcpServer/tool/call`
 app-server method, on an ephemeral thread. No model runs, and ephemeral threads
-are not fed back into Codex memories. The connection is lazy: an empty or
-unchanged import does not start an app-server after the user name is cached.
-The hook starts no worker when neither the memory directory nor database
-exists; this is a file-presence check, not a check of the current feature flag.
+are not fed back into Codex memories. The Notion connection is lazy: an empty
+or unchanged import does not connect after the user name is cached.
+The hook starts no worker when neither the memory directory nor database exists.
+Before an automatic import, the worker reads effective Codex configuration using
+`config/read`, without creating a thread. When memories are disabled, it logs a
+skip and exits even if old files remain. Manual `sync` is an explicit import and
+can still read retained files. An active watcher checks the setting at startup;
+disable the plugin or stop its workers to stop an already-running watch window.
 An import uses these tools (hosted app names are resolved separately):
 
 | Tool                        | Used for                                              |
@@ -257,6 +261,7 @@ The Codex MCP server is in `codex-mcp.json` rather than `.mcp.json` because
 Claude Code loads a plugin's `.mcp.json` automatically, which would add a
 second, unauthenticated Notion server to every Claude Code session.
 
+The installed `plugin/package.json` declares ESM and the Node requirement.
 Both agents copy the plugin directory into their cache without running
 `npm install`, so the plugin has no runtime dependencies.
 
@@ -296,13 +301,43 @@ npm run check
 npm test
 ```
 
-The tests run offline against sample Codex memory files in
-`test/fixtures/memories/`, Claude Code memory files in `test/fixtures/claude/`,
-an in-memory Notion MCP stand-in, and a local OAuth and MCP server for the
-Claude Code sign-in. They cover tool-name resolution for MCP and hosted app
-connections, topic mapping, placeholders, incremental writes, duplicate titles,
-keeping
-pages edited or deleted in Notion, and never deleting.
+The default tests need no account, credentials, model, or external service.
+They cover parsing and duplicate checks, then launch real Node processes from
+a copied plugin artifact with no runtime dependencies and a path containing spaces.
+The app-server stand-in stores synthetic pages across process restarts. Tests
+exercise concurrent syncs, external edits/deletions, detached hooks, watching a
+synthetic SQLite consolidation job, missing runtime binaries, unauthorized or
+disconnected servers, and disabled memories with retained files. For Claude
+Code, they cover auto memory parsing, the PostToolUse path filter, and the
+OAuth sign-in and MCP client against a local OAuth and MCP server.
+
+To also install through the real Codex CLI and call a local MCP stand-in:
+
+```sh
+CODEX_TEST_BINARY="$(command -v codex)" npm test
+```
+
+That test uses an empty, temporary `CODEX_HOME`, installs through the supported
+marketplace CLI, checks the installed cache and untrusted hook status, and syncs
+through the real app-server and a stdio MCP fixture. It does not copy credentials,
+trust hooks, call a model, or connect to production Notion. It is explicitly skipped
+when `CODEX_TEST_BINARY` is absent. To exercise the actual 60-second RPC timeout:
+
+```sh
+NOTION_TEST_SLOW=1 CODEX_TEST_BINARY="$(command -v codex)" npm test
+```
+
+The dedicated GitHub workflow runs the runtime test with Codex CLI 0.149.1 on
+Node 22.18.0 and 22.23.4. This is runtime integration coverage, not desktop UI E2E.
+Desktop installation prompts, OAuth consent, and trust/decline clicks still need
+a separately permitted UI test environment. Fresh OAuth and live Notion tests
+are deliberately excluded from account-free CI.
+
+For a live test, use only a dedicated test workspace or an explicitly authorized
+development connection, preview synthetic input first, verify the workspace ID,
+and verify only pages created by that run. Never seed CI with personal memories
+or copy OAuth credentials. Treat read/auth failures as blockers rather than
+switching to another connection or a replacement authentication client.
 
 ## Troubleshooting
 

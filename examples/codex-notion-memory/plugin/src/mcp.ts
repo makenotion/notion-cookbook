@@ -39,6 +39,7 @@ export class CodexNotionMcp {
   private nextId = 0
   private threadId = ""
   private tools = new Map<string, string>()
+  private failure?: Error
   server = ""
 
   private constructor(codexPath: string) {
@@ -46,6 +47,11 @@ export class CodexNotionMcp {
       stdio: ["pipe", "pipe", "ignore"],
       env: { ...process.env, NOTION_MEMORY_WORKER: "1" },
     })
+    this.child.on("error", (error) => this.fail(error))
+    this.child.on("exit", (code, signal) =>
+      this.fail(new Error(`codex app-server exited (${signal ?? code})`))
+    )
+    this.child.stdin!.on("error", (error) => this.fail(error))
     readline
       .createInterface({ input: this.child.stdout! })
       .on("line", (line) => {
@@ -61,6 +67,49 @@ export class CodexNotionMcp {
       })
   }
 
+  private fail(error: Error): void {
+    this.failure ??= error
+    for (const callback of this.pending.values())
+      callback({ error: { message: error.message } })
+    this.pending.clear()
+  }
+
+  private async initialize(): Promise<void> {
+    await this.rpc("initialize", {
+      clientInfo: { name: "notion-memory", version: "0.1.0" },
+    })
+    this.notify("initialized")
+  }
+
+  // Read effective config without creating a thread or connecting to Notion.
+  static async memoriesEnabled(
+    codexPath: string,
+    cwd: string
+  ): Promise<boolean> {
+    const mcp = new CodexNotionMcp(codexPath)
+    try {
+      await mcp.initialize()
+      const result: unknown = await mcp.rpc("config/read", {
+        cwd,
+        includeLayers: false,
+      })
+      if (!result || typeof result !== "object" || !("config" in result))
+        return false
+      const config = result.config
+      if (!config || typeof config !== "object" || !("features" in config))
+        return false
+      const features = config.features
+      return (
+        !!features &&
+        typeof features === "object" &&
+        "memories" in features &&
+        features.memories === true
+      )
+    } finally {
+      mcp.close()
+    }
+  }
+
   static async connect(opts: {
     codexPath: string
     cwd: string
@@ -68,10 +117,7 @@ export class CodexNotionMcp {
   }): Promise<CodexNotionMcp> {
     const mcp = new CodexNotionMcp(opts.codexPath)
     try {
-      await mcp.rpc("initialize", {
-        clientInfo: { name: "notion-memory", version: "0.1.0" },
-      })
-      mcp.notify("initialized")
+      await mcp.initialize()
       const thread = (await mcp.rpc("thread/start", {
         ephemeral: true,
         cwd: opts.cwd,
@@ -127,6 +173,7 @@ export class CodexNotionMcp {
   }
 
   private rpc(method: string, params: unknown): Promise<unknown> {
+    if (this.failure) return Promise.reject(this.failure)
     const id = ++this.nextId
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
