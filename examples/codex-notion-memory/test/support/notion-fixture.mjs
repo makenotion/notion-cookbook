@@ -7,6 +7,7 @@ export const toolNames = [
   "query-data-sources",
   "create-pages",
   "update-page",
+  "move-pages",
   "finish-revision",
 ]
 const collection = "collection://00000000-0000-0000-0000-000000000001"
@@ -36,13 +37,21 @@ export function invoke(name, args) {
       const page = state.pages.find((p) => p.id === args.id)
       assert.ok(page, "unknown fixture page")
       return {
-        text: `<page${page.deleted ? " deleted" : ""}><properties>${JSON.stringify({ Title: page.title, Type: page.type })}</properties><content>${page.content}</content></page>`,
+        text: `<page${page.deleted ? " deleted" : ""}>${page.parent !== "memory" && page.parent !== "private" ? `<parent-page url="https://notion.so/${page.parent}"/>` : ""}<properties>${JSON.stringify({ Title: page.title, Type: page.type })}</properties><content>${page.content}</content></page>`,
       }
     }
     case "query-data-sources":
-      return { results: state.pages.map((p) => ({ Title: p.title })) }
+      return {
+        results: state.pages
+          .filter((p) => p.parent === "memory" && !p.deleted)
+          .map((p) => ({ Title: p.title })),
+      }
     case "create-pages": {
-      assert.equal(args.parent, "memory")
+      assert.ok(
+        args.parent === "memory" ||
+          args.parent?.page_id ||
+          args.creation_mode === "draft"
+      )
       const pages = args.pages.map((p) => {
         assert.equal(p.properties.Source, undefined)
         const page = {
@@ -50,9 +59,13 @@ export function invoke(name, args) {
           title: p.properties.title,
           type: p.properties.Type,
           content: p.content,
+          parent:
+            args.parent === "memory"
+              ? "memory"
+              : (args.parent?.page_id ?? "private"),
         }
         state.pages.push(page)
-        return { id: page.id }
+        return { id: page.id, url: `https://notion.so/${page.id}` }
       })
       save()
       return { pages }
@@ -63,6 +76,20 @@ export function invoke(name, args) {
       assert.equal(args.command, "replace_content")
       page.content = args.new_str
       save()
+      return {}
+    }
+    case "move-pages": {
+      if (process.env.FIXTURE_FAILURE === "move-denied")
+        throw new Error("fixture move forbidden")
+      for (const id of args.page_or_database_ids) {
+        const page = state.pages.find((p) => p.id === id)
+        assert.ok(page)
+        page.parent = args.new_parent.page_id
+        delete page.type
+      }
+      save()
+      if (process.env.FIXTURE_FAILURE === "move-interrupted")
+        throw new Error("fixture interrupted after move")
       return {}
     }
     case "finish-revision":

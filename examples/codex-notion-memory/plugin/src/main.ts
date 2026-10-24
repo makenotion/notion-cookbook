@@ -106,10 +106,22 @@ async function main(): Promise<void> {
     }
     case "preview": {
       const name = loadState().userName
-      const memories = config.sourceArchive
-        ? archiveMemories(memorySources(config.sourceHome || CODEX_HOME))
-        : parseCodexMemories(option("--dir") ?? memoriesDir(), name)
-      console.log(JSON.stringify(memories, null, 2))
+      const knowledge = parseCodexMemories(
+        option("--dir") ?? memoriesDir(),
+        name
+      )
+      const preview = config.sourceArchive
+        ? {
+            knowledge,
+            archive: {
+              sources: memorySources(config.sourceHome || CODEX_HOME).length,
+              pages: archiveMemories(
+                memorySources(config.sourceHome || CODEX_HOME)
+              ).length,
+            },
+          }
+        : knowledge
+      console.log(JSON.stringify(preview, null, 2))
       return
     }
     case "status":

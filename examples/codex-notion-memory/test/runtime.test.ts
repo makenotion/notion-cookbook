@@ -81,11 +81,33 @@ test(
       )
     const first = await execute()
     assert.equal(first.code, 0, first.stderr)
-    assert.equal(JSON.parse(first.stdout).created, 3)
+    assert.equal(JSON.parse(first.stdout).created, 4)
     const second = await execute()
     assert.equal(second.code, 0, second.stderr)
-    assert.equal(JSON.parse(second.stdout).unchanged, 3)
-    assert.equal(f.pages().length, 3)
+    assert.equal(JSON.parse(second.stdout).unchanged, 4)
+    assert.equal(f.pages().length, 4)
+    const summary = path.join(f.home, "memories/memory_summary.md")
+    fs.writeFileSync(
+      summary,
+      fs.readFileSync(summary, "utf8").replace("TypeScript", "Rust")
+    )
+    const changed = await execute()
+    assert.equal(changed.code, 0, changed.stderr)
+    assert.equal(JSON.parse(changed.stdout).updated, 1)
+    assert.match(
+      String(f.pages().find((p) => p.title === "Role and background")?.content),
+      /Rust developer/
+    )
+    fs.writeFileSync(
+      summary,
+      fs
+        .readFileSync(summary, "utf8")
+        .replace(/## User preferences[\s\S]*?(?=## General Tips)/, "")
+    )
+    const removed = await execute()
+    assert.equal(removed.code, 0, removed.stderr)
+    assert.equal(JSON.parse(removed.stdout).noLongerInCodex, 1)
+    assert.equal(f.pages().filter((p) => p.parent === "memory").length, 3)
     // Directly exercise the installed worker's disabled-config guard. No hooks are trusted.
     const disabled = await run(
       process.execPath,

@@ -4,7 +4,7 @@
     {
       "id": "codex-notion-memory",
       "title": "Codex Notion memory",
-      "summary": "Codex plugin that mirrors topics or complete retained memory sources into Notion through MCP, verifies archive readback, and preserves Notion edits.",
+      "summary": "Codex plugin that syncs consolidated knowledge into Notion Memories, retracts removed topics, and keeps optional source archives separate.",
       "path": "examples/codex-notion-memory",
       "kind": "api-example",
       "status": "ready",

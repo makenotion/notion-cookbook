@@ -59,7 +59,14 @@ export function archiveMemories(sources: MemorySource[]): CodexMemory[] {
         (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`
       )
       const payload = JSON.stringify(
-        { source: entry.path, part, parts: count, sha256: entry.sha256 },
+        {
+          source: entry.path,
+          part,
+          sha256: crypto
+            .createHash("sha256")
+            .update(chars.slice(index * 4000, part * 4000).join(""))
+            .digest("hex"),
+        },
         null,
         2
       ).replace(/\n}$/, `,\n  "text": ${text}\n}`)
@@ -67,7 +74,7 @@ export function archiveMemories(sources: MemorySource[]): CodexMemory[] {
         key: `archive:${entry.path}:${part}`,
         type: "Notes",
         title: `Codex source: ${entry.path} [${part}]`,
-        content: `Complete Codex memory source, part ${part} of ${count}. The JSON text field preserves the original text.\n\n\`\`\`json\n${payload}\n\`\`\``,
+        content: `Codex source archive, part ${part}. The JSON text field preserves the original text.\n\n\`\`\`json\n${payload}\n\`\`\``,
         from: entry.path,
       }
     })
@@ -115,7 +122,7 @@ export async function verifyArchive(
   for (let i = 0; i < memories.length; i += 6) {
     await Promise.all(
       memories.slice(i, i + 6).map(async (memory) => {
-        const entry = state.memories[memory.key]
+        const entry = (state.archives ?? state.memories)[memory.key]
         if (!entry || entry.released)
           throw new Error(`unmanaged source page: ${memory.key}`)
         const fetched = await callTool("fetch", { id: entry.pageId })
