@@ -37,6 +37,7 @@ export const TOKEN_FILE = path.join(DATA_DIR, "oauth.json")
 const PROTOCOL_VERSION = "2025-06-18"
 const LOGIN_TIMEOUT_MS = 5 * 60_000
 const REFRESH_MARGIN_MS = 60_000
+const REQUEST_TIMEOUT_MS = 60_000
 
 export class NotionMcpHttp {
   private tokens: OAuthTokens
@@ -105,6 +106,7 @@ export class NotionMcpHttp {
   ): Promise<RpcMessage | undefined> {
     const res = await fetch(this.tokens.mcpUrl, {
       method: "POST",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json, text/event-stream",
@@ -279,6 +281,7 @@ async function requestTokens(
 ): Promise<OAuthTokens> {
   const res = await fetch(base.tokenEndpoint, {
     method: "POST",
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       ...grant,
@@ -338,7 +341,9 @@ function sseMessages(text: string): RpcMessage[] {
 }
 
 async function getJson(url: string): Promise<unknown> {
-  const res = await fetch(url)
+  const res = await fetch(url, {
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  })
   if (!res.ok) throw new Error(`GET ${url} -> ${res.status}`)
   return res.json()
 }
@@ -346,6 +351,7 @@ async function getJson(url: string): Promise<unknown> {
 async function postJson(url: string, body: unknown): Promise<unknown> {
   const res = await fetch(url, {
     method: "POST",
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   })

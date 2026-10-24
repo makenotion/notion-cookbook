@@ -11,9 +11,10 @@ import {
 } from "./memories.ts"
 
 // Claude Code's auto memory keeps one Markdown file per memory in
-// ~/.claude/projects/<project>/memory/, with `name`, `description`, and `type` in its
-// frontmatter. MEMORY.md in the same directory is only an index of those files. Each file
-// is already one topic, so each becomes one Notion memory.
+// ~/.claude/projects/<project>/memory/, or in one `autoMemoryDirectory` when the user set
+// it, with `name`, `description`, and `type` in its frontmatter. MEMORY.md in the same
+// directory is only an index of those files. Each file is already one topic, so each
+// becomes one Notion memory.
 
 const TYPES: Record<string, MemoryType> = {
   user: "Profile",
@@ -22,23 +23,46 @@ const TYPES: Record<string, MemoryType> = {
   reference: "Notes",
 }
 
+const PROJECTS_DIR = path.join(AGENT_HOME, "projects")
+// Settings files Claude Code reads, highest precedence first. `autoMemoryDirectory` is
+// ignored in checked-in project settings, as Claude Code does.
+const MANAGED_SETTINGS =
+  process.platform === "darwin"
+    ? "/Library/Application Support/ClaudeCode/managed-settings.json"
+    : process.platform === "win32"
+      ? "C:\\Program Files\\ClaudeCode\\managed-settings.json"
+      : "/etc/claude-code/managed-settings.json"
+const USER_SETTINGS = path.join(AGENT_HOME, "settings.json")
+const CUSTOM_DIR = customMemoryDir()
+
 export const claudeSource: MemorySource = {
   name: "Claude Code",
-  dir: path.join(AGENT_HOME, "projects"),
+  dir: CUSTOM_DIR ?? PROJECTS_DIR,
   parse: parseClaudeMemories,
   emptyHint: "has Claude Code saved any auto memories yet?",
 }
 
+// Reads ~/.claude/projects/*/memory/, or a flat memory directory such as a custom
+// `autoMemoryDirectory`.
 export function parseClaudeMemories(
-  projectsDir: string,
+  dir: string,
   userName?: string
 ): AgentMemory[] {
+  const flat = listDir(dir).some((f) => f.endsWith(".md"))
+  const dirs = flat
+    ? [{ project: path.basename(dir), memoryDir: dir }]
+    : listDir(dir).map((project) => ({
+        project,
+        memoryDir: path.join(dir, project, "memory"),
+      }))
   const out: AgentMemory[] = []
-  for (const project of listDir(projectsDir)) {
-    const dir = path.join(projectsDir, project, "memory")
-    for (const file of listDir(dir)) {
+  for (const { project, memoryDir } of dirs) {
+    for (const file of listDir(memoryDir)) {
       if (!file.endsWith(".md") || file === "MEMORY.md") continue
-      const memory = parseMemoryFile(readIfExists(path.join(dir, file)), file)
+      const memory = parseMemoryFile(
+        readIfExists(path.join(memoryDir, file)),
+        file
+      )
       if (!memory) continue
       out.push({
         ...memory,
@@ -53,15 +77,61 @@ export function parseClaudeMemories(
 
 // True when a Write or Edit from a PostToolUse hook touched an auto memory file.
 export function isClaudeMemoryFile(file: string): boolean {
-  const rel = path.relative(claudeSource.dir, path.resolve(file))
-  const parts = rel.split(path.sep)
-  return (
-    parts.length === 3 &&
-    parts[0] !== ".." &&
-    parts[1] === "memory" &&
-    parts[2].endsWith(".md") &&
-    parts[2] !== "MEMORY.md"
-  )
+  const parts = path
+    .relative(claudeSource.dir, path.resolve(file))
+    .split(path.sep)
+  const name = parts.at(-1) ?? ""
+  if (parts[0] === ".." || !name.endsWith(".md") || name === "MEMORY.md")
+    return false
+  return CUSTOM_DIR
+    ? parts.length === 1
+    : parts.length === 3 && parts[1] === "memory"
+}
+
+// Whether Claude Code's auto memory is on, the way Claude Code decides it:
+// CLAUDE_CODE_DISABLE_AUTO_MEMORY wins, then bare mode, then `autoMemoryEnabled` from the
+// most specific settings file that sets it. Hooks inherit the settings' `env` block, so
+// an env var set there counts too. `cwd` adds that project's settings.
+export function claudeMemoriesEnabled(cwd: string | undefined): boolean {
+  const env = process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY?.trim().toLowerCase()
+  if (env && ["1", "true", "yes", "on"].includes(env)) return false
+  if (env && ["0", "false", "no", "off"].includes(env)) return true
+  if (process.env.CLAUDE_CODE_SIMPLE) return false
+  const files = [
+    MANAGED_SETTINGS,
+    ...(cwd
+      ? [
+          path.join(cwd, ".claude", "settings.local.json"),
+          path.join(cwd, ".claude", "settings.json"),
+        ]
+      : []),
+    USER_SETTINGS,
+  ]
+  for (const file of files) {
+    const value = readSettings(file).autoMemoryEnabled
+    if (typeof value === "boolean") return value
+  }
+  return true
+}
+
+function customMemoryDir(): string | undefined {
+  for (const file of [MANAGED_SETTINGS, USER_SETTINGS]) {
+    const value = readSettings(file).autoMemoryDirectory
+    if (typeof value === "string" && value.trim())
+      return path.resolve(value.trim().replace(/^~(?=$|\/)/, os.homedir()))
+  }
+  return undefined
+}
+
+function readSettings(file: string): Record<string, unknown> {
+  try {
+    const value: unknown = JSON.parse(fs.readFileSync(file, "utf8"))
+    return value && typeof value === "object" && !Array.isArray(value)
+      ? { ...value }
+      : {}
+  } catch {
+    return {}
+  }
 }
 
 function parseMemoryFile(

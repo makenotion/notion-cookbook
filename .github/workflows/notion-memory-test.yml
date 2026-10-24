@@ -28,17 +28,20 @@ jobs:
       - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af
         with:
           node-version: ${{ matrix.node }}
-      - name: Install test dependencies and pinned Codex CLI
+      - name: Install test dependencies and pinned Codex and Claude Code CLIs
         working-directory: examples/codex-notion-memory
         run: |
           npm install
           npm install --prefix "$RUNNER_TEMP/codex-runtime" @openai/codex@0.149.1
-      - name: Typecheck and test the installed plugin through real Codex
+          npm install --prefix "$RUNNER_TEMP/claude-runtime" @anthropic-ai/claude-code@2.1.296
+      - name: Typecheck and test the installed plugin through real Codex and Claude Code
         working-directory: examples/codex-notion-memory
         env:
           CODEX_TEST_BINARY: ${{ runner.temp }}/codex-runtime/node_modules/.bin/codex
+          CLAUDE_TEST_BINARY: ${{ runner.temp }}/claude-runtime/node_modules/.bin/claude
         run: |
           "$CODEX_TEST_BINARY" --version
+          "$CLAUDE_TEST_BINARY" --version
           node --version
           npm run check
           npm test

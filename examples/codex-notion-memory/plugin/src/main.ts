@@ -10,7 +10,11 @@ import { spawn } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { claudeSource, isClaudeMemoryFile } from "./claude.ts"
+import {
+  claudeMemoriesEnabled,
+  claudeSource,
+  isClaudeMemoryFile,
+} from "./claude.ts"
 import { codexSource, watchMemories } from "./codex.ts"
 import {
   AGENT,
@@ -25,7 +29,7 @@ import {
 } from "./config.ts"
 import { type CallTool, CodexNotionMcp } from "./mcp.ts"
 import { syncMemories } from "./memories.ts"
-import { login, NotionMcpHttp, openBrowser } from "./notionMcp.ts"
+import { login, NotionMcpHttp, openBrowser, TOKEN_FILE } from "./notionMcp.ts"
 
 interface HookInput {
   session_id?: string
@@ -59,12 +63,19 @@ async function main(): Promise<void> {
       // Claude Code writes memories with its own tools, so the PostToolUse hook already
       // fires on every change and there is nothing to watch. Its worker holds the lock
       // while connected, because refreshing the OAuth token must not race.
-      if (AGENT === "claude")
+      if (AGENT === "claude") {
+        if (!claudeMemoriesEnabled(option("--cwd"))) {
+          log(
+            "memories: automatic sync skipped because Claude Code auto memory is disabled"
+          )
+          return
+        }
         return withLock(() =>
           withNotion(config, undefined, async (callTool) => {
             await syncMemories(callTool, SOURCE)
           })
         )
+      }
       const cwd = option("--cwd") || process.cwd()
       if (!(await CodexNotionMcp.memoriesEnabled(config.codexPath, cwd))) {
         log(
@@ -127,6 +138,7 @@ function handleHook(event: string | undefined): void {
     !isClaudeMemoryFile(input.tool_input?.file_path ?? "")
   )
     return
+  if (AGENT === "claude" && !claudeReady(event, input.cwd)) return
   fs.mkdirSync(DATA_DIR, { recursive: true })
   const out = fs.openSync(LOG_FILE, "a")
   // The watcher reads Codex's job table with node:sqlite, which warns on Node 22.
@@ -148,11 +160,30 @@ function handleHook(event: string | undefined): void {
 }
 
 function hasMemoryFiles(): boolean {
-  if (AGENT === "claude") return fs.existsSync(claudeSource.dir)
+  if (AGENT === "claude") return claudeSource.parse(claudeSource.dir).length > 0
   return (
     fs.existsSync(path.join(AGENT_HOME, "memories_1.sqlite")) ||
     fs.existsSync(codexSource.dir)
   )
+}
+
+// A Claude Code hook starts a worker only when auto memory is on for the session's project
+// and the plugin is signed in to Notion.
+function claudeReady(
+  event: string | undefined,
+  cwd: string | undefined
+): boolean {
+  if (!claudeMemoriesEnabled(cwd)) {
+    log(`hook ${event}: Claude Code auto memory is disabled, skipping`)
+    return false
+  }
+  if (!fs.existsSync(TOKEN_FILE)) {
+    log(
+      `hook ${event}: not signed in to Notion MCP; run \`NOTION_MEMORY_AGENT=claude node src/main.ts login\``
+    )
+    return false
+  }
+  return true
 }
 
 // Connects to Notion MCP: through the server Codex is already signed in to, or, in Claude

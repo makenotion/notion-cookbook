@@ -186,7 +186,15 @@ body starts with the `description`.
 
 Writing, duplicate checks, and edit protection are the same as for Codex. The
 plugin reads memories from every project, so run the preview first if some
-projects hold memories you don't want in Notion.
+projects hold memories you don't want in Notion. If you set
+`autoMemoryDirectory` in `~/.claude/settings.json`, it reads that directory
+instead.
+
+Automatic syncs follow Claude Code's own auto memory switch, decided the way
+Claude Code decides it: `CLAUDE_CODE_DISABLE_AUTO_MEMORY` (including from a
+settings `env` block), then bare mode, then `autoMemoryEnabled` from managed,
+the session project's local and shared, or user settings. When it is off, hooks
+start no worker. A manual `sync` still imports the files that are there.
 
 ### Setup
 
@@ -229,6 +237,9 @@ SessionStart or Stop hook
 
 `PostToolUse` imports a memory as soon as Claude saves it. `SessionStart` and
 `Stop` catch changes made any other way, such as a memory deleted with `rm`. A
+hook starts no worker when there are no memories, auto memory is off, or you
+have not signed in yet; the last two are logged. Every request to Notion has a
+60-second timeout, and a worker connects only when a memory changed. A
 worker holds the lock while it is connected, so overlapping hooks never refresh
 the OAuth token at the same time. State, tokens, and logs live in
 `~/.claude/notion-memory/`, separate from Codex's.
@@ -307,9 +318,15 @@ a copied plugin artifact with no runtime dependencies and a path containing spac
 The app-server stand-in stores synthetic pages across process restarts. Tests
 exercise concurrent syncs, external edits/deletions, detached hooks, watching a
 synthetic SQLite consolidation job, missing runtime binaries, unauthorized or
-disconnected servers, and disabled memories with retained files. For Claude
-Code, they cover auto memory parsing, the PostToolUse path filter, and the
-OAuth sign-in and MCP client against a local OAuth and MCP server.
+disconnected servers, and disabled memories with retained files.
+
+Claude Code gets the same treatment against a local stand-in for
+mcp.notion.com (OAuth refresh and Streamable HTTP MCP over the same synthetic
+pages): the copied artifact's manifest and hooks, hook commands run exactly as
+written in `claude-hooks.json`, restarts, concurrent syncs, Notion edits and
+deletions, the auto memory switch (env, user, and project settings), missing
+memories or sign-in, expired sign-in, tool errors, an unreachable server, a
+custom `autoMemoryDirectory`, and the `login` flow itself.
 
 To also install through the real Codex CLI and call a local MCP stand-in:
 
@@ -327,8 +344,16 @@ when `CODEX_TEST_BINARY` is absent. To exercise the actual 60-second RPC timeout
 NOTION_TEST_SLOW=1 CODEX_TEST_BINARY="$(command -v codex)" npm test
 ```
 
-The dedicated GitHub workflow runs the runtime test with Codex CLI 0.149.1 on
-Node 22.18.0 and 22.23.4. This is runtime integration coverage, not desktop UI E2E.
+To install through the real Claude Code CLI into an empty, temporary
+`CLAUDE_CONFIG_DIR`, check that it loads no plugin MCP server, and run the
+installed cache's `SessionStart` hook against the local stand-in:
+
+```sh
+CLAUDE_TEST_BINARY="$(command -v claude)" npm test
+```
+
+The dedicated GitHub workflow runs both runtime tests, with Codex CLI 0.149.1
+and Claude Code 2.1.296, on Node 22.18.0 and 22.23.4. This is runtime integration coverage, not desktop UI E2E.
 Desktop installation prompts, OAuth consent, and trust/decline clicks still need
 a separately permitted UI test environment. Fresh OAuth and live Notion tests
 are deliberately excluded from account-free CI.
