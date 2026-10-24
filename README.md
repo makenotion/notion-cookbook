@@ -13,8 +13,9 @@ directory.
   [large data source queries](examples/query-large-data-sources/).
 - **Build an API integration:** create a
   [web form](examples/web-form-with-express/), connect
-  [GitHub issues](examples/notion-github-sync/), or send
-  [email notifications](examples/database-email-update/).
+  [GitHub issues](examples/notion-github-sync/), send
+  [email notifications](examples/database-email-update/), or bring
+  [Codex memories](examples/codex-notion-memory/) into Notion.
 - **Bring external data into Notion:** use a Worker sync for
   [GitHub issues and pull requests](workers/templates/github-sync/),
   [GitHub stars](workers/templates/github-stars-sync/), [HubSpot](workers/templates/hubspot-sync/),
@@ -92,6 +93,7 @@ See the [API examples guide](examples/) for shared setup information.
 | Task                                                         | Example                                                                    | Integrations         |
 | ------------------------------------------------------------ | -------------------------------------------------------------------------- | -------------------- |
 | Learn blocks, pages, databases, queries, and file uploads    | [Introduction to the Notion API](examples/intro-to-notion-api/)            | Notion API           |
+| Bring Codex memories into Notion Memories                    | [Codex Notion memory](examples/codex-notion-memory/)                       | Notion MCP, Codex    |
 | Send an email when a database status changes                 | [Database email update](examples/database-email-update/)                   | Notion API, SendGrid |
 | Fill a database with correctly typed sample rows             | [Generate random data](examples/generate-random-data/)                     | Notion API           |
 | Copy GitHub issues into a Notion database                    | [Notion–GitHub issue sync](examples/notion-github-sync/)                   | Notion API, GitHub   |
