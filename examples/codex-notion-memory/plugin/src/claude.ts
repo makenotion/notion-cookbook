@@ -37,8 +37,9 @@ const CUSTOM_DIR = customMemoryDir()
 
 export const claudeSource: MemorySource = {
   name: "Claude Code",
-  dir: CUSTOM_DIR ?? PROJECTS_DIR,
+  dir: () => CUSTOM_DIR ?? PROJECTS_DIR,
   parse: parseClaudeMemories,
+  usesUserName: () => true,
   emptyHint: "has Claude Code saved any auto memories yet?",
 }
 
@@ -78,7 +79,7 @@ export function parseClaudeMemories(
 // True when a Write or Edit from a PostToolUse hook touched an auto memory file.
 export function isClaudeMemoryFile(file: string): boolean {
   const parts = path
-    .relative(claudeSource.dir, path.resolve(file))
+    .relative(claudeSource.dir(), path.resolve(file))
     .split(path.sep)
   const name = parts.at(-1) ?? ""
   if (parts[0] === ".." || !name.endsWith(".md") || name === "MEMORY.md")

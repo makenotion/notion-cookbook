@@ -90,7 +90,9 @@ export function fixture(t: TestContext) {
     assert.ok(Array.isArray(value))
     return value.map(object)
   }
+  const cleanups: (() => void)[] = []
   t.after(() => {
+    for (const cleanup of cleanups) cleanup()
     if (fs.existsSync(logFile))
       for (const match of fs
         .readFileSync(logFile, "utf8")
@@ -99,9 +101,17 @@ export function fixture(t: TestContext) {
           process.kill(Number(match[1]), "SIGTERM")
         } catch {}
       }
-    fs.rmSync(root, { recursive: true, force: true })
+    fs.rmSync(root, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    })
   })
   return {
+    cleanupBeforeFiles(fn: () => void) {
+      cleanups.push(fn)
+    },
     root,
     home,
     installed,

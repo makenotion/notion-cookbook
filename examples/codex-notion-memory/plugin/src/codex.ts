@@ -1,6 +1,8 @@
 import fs from "node:fs"
 import path from "node:path"
-import { AGENT_HOME, log, sleep, withLock } from "./config.ts"
+import { DatabaseSync } from "node:sqlite"
+import { archiveMemories, memorySources } from "./archive.ts"
+import { AGENT_HOME, loadConfig, log, sleep, withLock } from "./config.ts"
 import type { CallTool } from "./mcp.ts"
 import {
   type AgentMemory,
@@ -15,7 +17,8 @@ import {
 // Codex memories (`[features] memories = true`) are written by Codex itself, in the
 // background: phase 1 extracts notes from idle sessions, phase 2 consolidates them into
 // $CODEX_HOME/memories/memory_summary.md and MEMORY.md. This module turns those files into
-// one memory per topic.
+// one memory per topic, or, in explicit `sourceArchive` mode, archives every retained
+// source (archive.ts).
 
 const POLL_MS = 5000
 const PROFILE_TITLE = "Role and background"
@@ -23,9 +26,23 @@ const PREFERENCES_TITLE = "Coding workflow preferences"
 
 export const codexSource: MemorySource = {
   name: "Codex",
-  dir: path.join(AGENT_HOME, "memories"),
-  parse: parseCodexMemories,
+  dir: memoriesDir,
+  parse: (dir, userName) => {
+    const config = loadConfig()
+    return config.sourceArchive
+      ? archiveMemories(memorySources(config.sourceHome || AGENT_HOME))
+      : parseCodexMemories(dir, userName)
+  },
+  usesUserName: () => !loadConfig().sourceArchive,
   emptyHint: "is [features] memories = true?",
+}
+
+export function memoriesDir(): string {
+  const home = loadConfig().sourceHome || AGENT_HOME
+  return path.join(
+    home,
+    fs.existsSync(path.join(home, "memories_v2")) ? "memories_v2" : "memories"
+  )
 }
 
 export function parseCodexMemories(
@@ -112,31 +129,32 @@ export function parseCodexMemories(
 // and the memory files, and imports as soon as a consolidation run finishes.
 export async function watchMemories(
   callTool: CallTool,
-  opts: { startWindowMs: number; maxMs: number }
+  opts: { maxMs: number; initialHash?: string }
 ): Promise<void> {
   const started = Date.now()
-  let lastHash = memoryFilesHash()
-  let sawRunning = false
+  let lastHash = opts.initialHash ?? memoryFilesHash()
   while (Date.now() - started < opts.maxMs) {
     await sleep(POLL_MS)
     const running = await memoryJobRunning()
-    sawRunning ||= running
     const hash = memoryFilesHash()
     if (hash !== lastHash && !running) {
       log("memories: Codex updated its memory files, importing")
       await withLock(() => syncMemories(callTool, codexSource))
       lastHash = hash
     }
-    if (!running && (sawRunning || Date.now() - started > opts.startWindowMs))
-      return
   }
 }
 
 async function memoryJobRunning(): Promise<boolean> {
-  const db = path.join(AGENT_HOME, "memories_1.sqlite")
+  const home = loadConfig().sourceHome || AGENT_HOME
+  return ["memories_1.sqlite", "memories_v2_1.sqlite"].some((name) =>
+    jobRunning(path.join(home, name))
+  )
+}
+
+function jobRunning(db: string): boolean {
   if (!fs.existsSync(db)) return false
   try {
-    const { DatabaseSync } = await import("node:sqlite")
     const conn = new DatabaseSync(db, { readOnly: true })
     try {
       return (
@@ -156,10 +174,19 @@ async function memoryJobRunning(): Promise<boolean> {
   }
 }
 
-function memoryFilesHash(): string {
+export function memoryFilesHash(): string {
+  const config = loadConfig()
+  if (config.sourceArchive)
+    return sha1(
+      JSON.stringify(
+        memorySources(config.sourceHome || AGENT_HOME).map(
+          ({ path, sha256 }) => [path, sha256]
+        )
+      )
+    )
   return sha1(
     ["MEMORY.md", "memory_summary.md"]
-      .map((f) => readIfExists(path.join(codexSource.dir, f)))
+      .map((f) => readIfExists(path.join(memoriesDir(), f)))
       .join("\0")
   )
 }

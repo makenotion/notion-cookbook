@@ -25,7 +25,7 @@ const { syncMemories } = await import("../plugin/src/memories.ts")
 const { loadState } = await import("../plugin/src/config.ts")
 
 test("parses Claude Code auto memory files, one memory per file", () => {
-  const memories = parseClaudeMemories(claudeSource.dir, "Casey")
+  const memories = parseClaudeMemories(claudeSource.dir(), "Casey")
   assert.deepEqual(
     memories.map((m) => [m.type, m.title]),
     [

@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "NOTION_MEMORY_AGENT=claude node \"${CLAUDE_PLUGIN_ROOT}/src/main.ts\" hook session-start",
+            "command": "NOTION_MEMORY_AGENT=claude node \"${CLAUDE_PLUGIN_ROOT}/hook.cjs\" session-start",
             "timeout": 10
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "NOTION_MEMORY_AGENT=claude node \"${CLAUDE_PLUGIN_ROOT}/src/main.ts\" hook post-tool-use",
+            "command": "NOTION_MEMORY_AGENT=claude node \"${CLAUDE_PLUGIN_ROOT}/hook.cjs\" post-tool-use",
             "timeout": 10
           }
         ]
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "NOTION_MEMORY_AGENT=claude node \"${CLAUDE_PLUGIN_ROOT}/src/main.ts\" hook stop",
+            "command": "NOTION_MEMORY_AGENT=claude node \"${CLAUDE_PLUGIN_ROOT}/hook.cjs\" stop",
             "timeout": 10
           }
         ]

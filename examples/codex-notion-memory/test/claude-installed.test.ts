@@ -31,7 +31,7 @@ test("Claude Code artifact resolves its manifest and hooks and loads no MCP serv
   for (const entries of Object.values(hooks)) {
     const text = JSON.stringify(entries)
     assert.match(text, /NOTION_MEMORY_AGENT=claude/)
-    assert.match(text, /\\"\$\{CLAUDE_PLUGIN_ROOT\}\/src\/main\.ts\\"/)
+    assert.match(text, /\\"\$\{CLAUDE_PLUGIN_ROOT\}\/hook\.cjs\\"/)
   }
   const result = await f.exec([
     "preview",
@@ -269,7 +269,7 @@ test("missing Node is visible at the Claude Code hook command boundary", async (
     "/bin/sh",
     [
       "-c",
-      'NOTION_MEMORY_AGENT=claude node "${CLAUDE_PLUGIN_ROOT}/src/main.ts" hook session-start',
+      'NOTION_MEMORY_AGENT=claude node "${CLAUDE_PLUGIN_ROOT}/hook.cjs" session-start',
     ],
     {
       ...f.env,

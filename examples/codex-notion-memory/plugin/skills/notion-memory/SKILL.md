@@ -5,9 +5,17 @@ description: Write Codex or Claude Code memories to Notion Memories on demand, p
 
 # Notion Memory
 
-The plugin already works automatically: after the agent updates its memory
-files, a hook worker writes them to the user's Notion Memories through Notion
-MCP.
+Codex: trusted SessionStart and Stop hooks start bounded watchers. Changes
+after a watcher exits wait for the next hook or explicit sync. Topic mode
+prefers `memories_v2/` when present but does not cover all retained sources. For
+“all memories,” use explicitly authorized `sourceArchive` mode and run
+`inventory` and `verify`; never report a topic-only projection as full coverage.
+Pin the intended MCP server and `expectedWorkspaceId` before a local-only
+import.
+
+Claude Code: hooks write a memory as soon as Claude saves it, and SessionStart
+and Stop catch other changes. `inventory`, `verify`, and `sourceArchive` are
+Codex-only.
 
 Use the bundled entrypoint for manual actions. Resolve `src/main.ts` relative to
 this skill's plugin root (two directories up from this file). It needs Node.js
@@ -17,6 +25,9 @@ this skill's plugin root (two directories up from this file). It needs Node.js
 - Write memories now: `node <plugin-root>/src/main.ts sync`
 - Preview what would be written, without calling Notion:
   `node <plugin-root>/src/main.ts preview`
+- Inventory full sources without printing their content:
+  `node <plugin-root>/src/main.ts inventory`
+- Read every archived source page back: `node <plugin-root>/src/main.ts verify`
 - Show the memories the plugin manages: `node <plugin-root>/src/main.ts status`
 
 `sync` prints counts. `changedInNotion` memories were edited or deleted in

@@ -22,8 +22,11 @@ same result every time.
 
 With `[features] memories = true`, Codex extracts notes from your idle sessions
 in the background and consolidates them into `~/.codex/memories/memory_summary.md`
-and `MEMORY.md`. The plugin only reads those two files. It never reads your
-session transcripts and trusts Codex to have decided what belongs in them.
+and `MEMORY.md`. By default the plugin maps these two files into topics. Newer Codex builds use
+`memories_v2/`; the plugin prefers that directory when present. Topic mode only
+extracts Profile/Preference sections from a v2 summary and does not import its
+rollout summaries. Use complete source archive mode below to preserve all retained
+memory content. Neither mode reads session transcripts.
 
 It follows the Notion memory guide (`notion://docs/memory`): one memory per
 topic, a title that names the topic, a **Type**, the details in the page body,
@@ -97,6 +100,41 @@ Notion app on `codex_apps`; this package does not register a hosted app.
 The hosted app route has offline tool-resolution coverage but has not been
 verified with a live connection.
 
+### Complete source archive mode
+
+For an explicitly authorized full import, set `sourceArchive: true` in the
+plugin configuration. It mirrors every non-hidden Markdown file recursively in
+both `memories/` and `memories_v2/`, including summaries, raw memories, rollout
+summaries, extensions, automation notes and memory skills. It also reads every
+`stage1_outputs` row from both memory SQLite databases, retaining `thread_id`,
+`raw_memory`, `rollout_summary` and `rollout_slug`. Git internals, temporary files,
+symlinks, job bookkeeping and usage counters are excluded. Unreadable sources
+fail the import rather than silently disappearing.
+
+Each source becomes Notes pages with deterministic keys, 4,000 Unicode code
+points per page, and a full-source SHA-256. The JSON `text` field round-trips the
+original text. Markdown-significant punctuation is Unicode-escaped because live
+Notion conversion can otherwise remove characters even inside code blocks.
+`verify` decodes and compares every payload, and fails without printing contents.
+The archive preserves complete sources rather than claiming a lossy topic
+projection covers all memories. Its size includes overlapping retained records.
+
+Pin a destination for sensitive or local-only imports:
+
+```json
+{
+  "mcpServer": "notion-local",
+  "expectedWorkspaceId": "your-local-workspace-id",
+  "sourceArchive": true
+}
+```
+
+Register that server with `codex mcp add notion-local --url <local-MCP-URL>` and
+complete Codex’s normal OAuth flow. An explicit server never falls back to
+another connection. `get-self` checks the expected workspace on each connection.
+Credentials remain with Codex. `NOTION_MEMORY_DATA` can isolate test state from
+the normal mapping without copying credentials or changing real memory files.
+
 ### 3. Trust the hooks
 
 The plugin works through two Codex hooks, `SessionStart` and `Stop`. The next
@@ -127,9 +165,9 @@ SessionStart or Stop hook
        └─ detached worker: node plugin/src/main.ts worker <event>
             ├─ when a write is needed: codex app-server → ephemeral thread → Notion tools
             ├─ import memories once (no-op when nothing changed)
-            └─ every 5 s, up to 10 min after SessionStart / 5 min after Stop:
-                 ├─ is a memory job running in ~/.codex/memories_1.sqlite? (read-only)
-                 ├─ did MEMORY.md or memory_summary.md change?
+            └─ every 5 s, for 10 min after the initial import / 5 min after Stop:
+                 ├─ is a memory job running in either generation’s SQLite database? (read-only)
+                 ├─ did a selected source change (all archive sources in archive mode)?
                  └─ changed and no job running → import
 ```
 
@@ -137,7 +175,9 @@ The worker calls Notion MCP tools through Codex's `mcpServer/tool/call`
 app-server method, on an ephemeral thread. No model runs, and ephemeral threads
 are not fed back into Codex memories. The Notion connection is lazy: an empty
 or unchanged import does not connect after the user name is cached.
-The hook starts no worker when neither the memory directory nor database exists.
+The hook starts no worker when neither the selected memory directory nor the
+legacy memory database exists. The watcher uses the full window even if no job
+is running. A change during the initial import is checked again afterward.
 Before an automatic import, the worker reads effective Codex configuration using
 `config/read`, without creating a thread. When memories are disabled, it logs a
 skip and exits even if old files remain. Manual `sync` is an explicit import and
@@ -154,6 +194,13 @@ An import uses these tools (hosted app names are resolved separately):
 | `notion-fetch` page         | Reading a page back before updating it.               |
 | `notion-update-page`        | `replace_content` for memories Codex rewrote.         |
 | `notion-finish-revision`    | Naming the revision that holds the updates.           |
+
+Automatic imports are bounded, not an always-on service. Changes after a worker
+exits wait for the next trusted hook (or explicit sync). A consolidation starting
+late or running beyond the window can therefore be delayed; there is no
+"memories updated" hook. Runtime hook dispatch and a normal new consolidation
+need separate live verification: an ephemeral `thread/start` without a model
+turn does not prove either.
 
 Hooks block Codex while they run, so the hook only spawns a detached worker and
 exits. The worker's own `codex app-server` runs with `NOTION_MEMORY_WORKER=1`,
@@ -231,7 +278,7 @@ doesn't need to watch for changes:
 ```text
 PostToolUse hook (Write|Edit on ~/.claude/projects/*/memory/*.md)
 SessionStart or Stop hook
-  └─ NOTION_MEMORY_AGENT=claude node plugin/src/main.ts hook <event>   (returns immediately)
+  └─ NOTION_MEMORY_AGENT=claude node plugin/hook.cjs <event>   (returns immediately)
        └─ detached worker: Notion MCP over HTTP → import memories once
 ```
 
@@ -246,27 +293,29 @@ the OAuth token at the same time. State, tokens, and logs live in
 
 Set `NOTION_MEMORY_AGENT=claude` for every manual command, and use `mcpUrl` or
 `NOTION_MCP_URL` in `~/.claude/notion-memory.json` to point at another Notion
-MCP endpoint.
+MCP endpoint. `nodePath` works there too, for hooks that inherit an older Node.
 
 ## Code map
 
-| Path                                | Purpose                                                           |
-| ----------------------------------- | ----------------------------------------------------------------- |
-| `.agents/plugins/marketplace.json`  | Local Codex marketplace that lists the plugin.                    |
-| `.claude-plugin/marketplace.json`   | Local Claude Code marketplace that lists the plugin.              |
-| `plugin/.codex-plugin/plugin.json`  | Codex manifest: hooks, MCP server, skill, and display metadata.   |
-| `plugin/.claude-plugin/plugin.json` | Claude Code manifest.                                             |
-| `plugin/codex-mcp.json`             | Notion MCP server, identical to the official Codex Notion plugin. |
-| `plugin/hooks.json`                 | Codex `SessionStart` and `Stop` hooks.                            |
-| `plugin/claude-hooks.json`          | Claude Code `SessionStart`, `PostToolUse`, and `Stop` hooks.      |
-| `plugin/skills/notion-memory/`      | Skill both agents use for manual imports and status.              |
-| `plugin/src/main.ts`                | Entrypoint: hook handling, detached workers, and manual commands. |
-| `plugin/src/memories.ts`            | Writes parsed memories to Notion with duplicate checks.           |
-| `plugin/src/codex.ts`               | Maps Codex memory files to memories and watches for updates.      |
-| `plugin/src/claude.ts`              | Maps Claude Code auto memory files to memories.                   |
-| `plugin/src/mcp.ts`                 | Calls Notion MCP tools through `codex app-server`.                |
-| `plugin/src/notionMcp.ts`           | Calls Notion MCP over HTTP with its own OAuth, for Claude Code.   |
-| `plugin/src/config.ts`              | Configuration, state, logging, and the cross-process lock.        |
+| Path                                | Purpose                                                                 |
+| ----------------------------------- | ----------------------------------------------------------------------- |
+| `.agents/plugins/marketplace.json`  | Local Codex marketplace that lists the plugin.                          |
+| `.claude-plugin/marketplace.json`   | Local Claude Code marketplace that lists the plugin.                    |
+| `plugin/.codex-plugin/plugin.json`  | Codex manifest: hooks, MCP server, skill, and display metadata.         |
+| `plugin/.claude-plugin/plugin.json` | Claude Code manifest.                                                   |
+| `plugin/codex-mcp.json`             | Notion MCP server, identical to the official Codex Notion plugin.       |
+| `plugin/hooks.json`                 | Codex `SessionStart` and `Stop` hooks.                                  |
+| `plugin/claude-hooks.json`          | Claude Code `SessionStart`, `PostToolUse`, and `Stop` hooks.            |
+| `plugin/hook.cjs`                   | Selects the configured Node runtime before loading TypeScript.          |
+| `plugin/skills/notion-memory/`      | Skill both agents use for manual imports and status.                    |
+| `plugin/src/main.ts`                | Entrypoint: hook handling, detached workers, and manual commands.       |
+| `plugin/src/memories.ts`            | Writes parsed memories to Notion with duplicate checks.                 |
+| `plugin/src/codex.ts`               | Maps Codex memory files to memories and watches for updates.            |
+| `plugin/src/archive.ts`             | Complete retained-source inventory, encoding and readback verification. |
+| `plugin/src/claude.ts`              | Maps Claude Code auto memory files to memories.                         |
+| `plugin/src/mcp.ts`                 | Calls Notion MCP tools through `codex app-server`.                      |
+| `plugin/src/notionMcp.ts`           | Calls Notion MCP over HTTP with its own OAuth, for Claude Code.         |
+| `plugin/src/config.ts`              | Configuration, state, logging, and the cross-process lock.              |
 
 The Codex MCP server is in `codex-mcp.json` rather than `.mcp.json` because
 Claude Code loads a plugin's `.mcp.json` automatically, which would add a
@@ -280,10 +329,14 @@ Both agents copy the plugin directory into their cache without running
 
 Optional. `~/.codex/notion-memory.json` (or `$NOTION_MEMORY_CONFIG`):
 
-| Key         | Environment variable | Meaning                                                      |
-| ----------- | -------------------- | ------------------------------------------------------------ |
-| `codexPath` | `CODEX_PATH`         | Codex executable. Defaults to `codex`.                       |
-| `mcpServer` | `NOTION_MCP_SERVER`  | Codex MCP server to use. Defaults to the one named `notion`. |
+| Key                   | Environment variable | Meaning                                                                |
+| --------------------- | -------------------- | ---------------------------------------------------------------------- |
+| `nodePath`            | —                    | Node executable for hooks when their inherited PATH has an older Node. |
+| `sourceHome`          | —                    | Read memory sources from this Codex home; defaults to `CODEX_HOME`.    |
+| `sourceArchive`       | —                    | Opt in to complete retained memory sources; defaults to false.         |
+| `expectedWorkspaceId` | —                    | Refuse writes when `get-self` does not match this workspace.           |
+| `codexPath`           | `CODEX_PATH`         | Codex executable. Defaults to `codex`.                                 |
+| `mcpServer`           | `NOTION_MCP_SERVER`  | Codex MCP server to use. Defaults to the one named `notion`.           |
 
 ## Manual commands
 
@@ -293,6 +346,8 @@ Run from this directory, or from the installed plugin root with `src/main.ts`:
 npm run preview   # offline: the memories the plugin would write
 npm run sync      # write now
 npm run status    # memories the plugin manages
+node plugin/src/main.ts inventory  # archive source paths, sizes and SHA-256; no contents
+node plugin/src/main.ts verify     # read every archive page back and compare its payload
 ```
 
 ## Extension points

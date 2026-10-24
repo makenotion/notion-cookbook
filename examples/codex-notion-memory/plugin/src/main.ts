@@ -5,6 +5,7 @@
 //   node src/main.ts login                       Claude Code only: sign in to Notion MCP
 //   node src/main.ts sync                        import the agent's memories now
 //   node src/main.ts preview [--dir <path>]      offline: print the memories it would write
+//   node src/main.ts inventory | verify          Codex sourceArchive mode only
 //   node src/main.ts status                      memories the plugin manages
 import { spawn } from "node:child_process"
 import fs from "node:fs"
@@ -15,7 +16,8 @@ import {
   claudeSource,
   isClaudeMemoryFile,
 } from "./claude.ts"
-import { codexSource, watchMemories } from "./codex.ts"
+import { archiveMemories, memorySources, verifyArchive } from "./archive.ts"
+import { codexSource, memoryFilesHash, watchMemories } from "./codex.ts"
 import {
   AGENT,
   AGENT_HOME,
@@ -40,11 +42,10 @@ interface HookInput {
 const MAIN = fileURLToPath(import.meta.url)
 const SOURCE = AGENT === "claude" ? claudeSource : codexSource
 // Codex starts its memory pipeline when a session starts and again after turns, so the
-// plugin watches after both hooks. Without a running job inside `startWindowMs`, the
-// watcher gives up early.
+// plugin watches for the full bounded window after both hooks.
 const WATCH = {
-  "session-start": { startWindowMs: 120_000, maxMs: 600_000 },
-  stop: { startWindowMs: 15_000, maxMs: 300_000 },
+  "session-start": { maxMs: 600_000 },
+  stop: { maxMs: 300_000 },
 }
 
 async function main(): Promise<void> {
@@ -84,8 +85,9 @@ async function main(): Promise<void> {
         return
       }
       return withNotion(config, option("--cwd"), async (callTool) => {
+        const initialHash = memoryFilesHash()
         await withLock(() => syncMemories(callTool, SOURCE))
-        await watchMemories(callTool, WATCH[event])
+        await watchMemories(callTool, { ...WATCH[event], initialHash })
       })
     }
     case "sync":
@@ -94,6 +96,40 @@ async function main(): Promise<void> {
           console.log(JSON.stringify(await syncMemories(callTool, SOURCE)))
         })
       )
+    case "verify": {
+      if (AGENT !== "codex" || !config.sourceArchive)
+        throw new Error("verify requires Codex sourceArchive mode")
+      return withNotion(config, undefined, async (callTool) => {
+        const result = await withLock(() =>
+          verifyArchive(
+            callTool,
+            memorySources(config.sourceHome || AGENT_HOME),
+            loadState()
+          )
+        )
+        console.log(JSON.stringify(result))
+      })
+    }
+    case "inventory": {
+      if (AGENT !== "codex")
+        throw new Error("inventory is for Codex memory sources")
+      const sources = memorySources(config.sourceHome || AGENT_HOME)
+      console.log(
+        JSON.stringify(
+          {
+            sources: sources.map(({ path, sha256, text }) => ({
+              path,
+              sha256,
+              bytes: Buffer.byteLength(text),
+            })),
+            pages: archiveMemories(sources).length,
+          },
+          null,
+          2
+        )
+      )
+      return
+    }
     case "login":
       if (AGENT !== "claude") {
         console.log("Codex signs in itself: run `codex mcp login notion`.")
@@ -102,7 +138,7 @@ async function main(): Promise<void> {
       return login(config.mcpUrl, openBrowser)
     case "preview": {
       const name = loadState().userName
-      const memories = SOURCE.parse(option("--dir") ?? SOURCE.dir, name)
+      const memories = SOURCE.parse(option("--dir") ?? SOURCE.dir(), name)
       console.log(JSON.stringify(memories, null, 2))
       return
     }
@@ -160,10 +196,11 @@ function handleHook(event: string | undefined): void {
 }
 
 function hasMemoryFiles(): boolean {
-  if (AGENT === "claude") return claudeSource.parse(claudeSource.dir).length > 0
+  if (AGENT === "claude")
+    return claudeSource.parse(claudeSource.dir()).length > 0
   return (
     fs.existsSync(path.join(AGENT_HOME, "memories_1.sqlite")) ||
-    fs.existsSync(codexSource.dir)
+    fs.existsSync(codexSource.dir())
   )
 }
 
@@ -207,6 +244,7 @@ async function withNotion(
       codexPath: config.codexPath,
       cwd: cwd || process.cwd(),
       server: config.mcpServer,
+      expectedWorkspaceId: config.expectedWorkspaceId,
     })
     return (await connection).callTool(tool, args)
   }

@@ -262,3 +262,52 @@ test("missing Node is visible at the actual hook command boundary", async (t) =>
   assert.equal(result.code, 127)
   assert.match(result.stderr, /node.*not found/)
 })
+
+test("an explicit destination never falls back and workspace mismatch writes nothing", async (t) => {
+  for (const config of [
+    { mcpServer: "missing-local" },
+    { mcpServer: "notion", expectedWorkspaceId: "expected-local" },
+  ]) {
+    const f = fixture(t)
+    f.seed()
+    fs.writeFileSync(
+      path.join(f.home, "notion-memory.json"),
+      JSON.stringify(config)
+    )
+    const result = await f.exec(["sync"])
+    assert.equal(result.code, 1)
+    assert.deepEqual(f.pages(), [])
+  }
+})
+
+test("complete source archive reads back across processes and detects content loss", async (t) => {
+  const f = fixture(t)
+  f.seed()
+  fs.mkdirSync(path.join(f.home, "memories_v2/rollout_summaries"), {
+    recursive: true,
+  })
+  fs.writeFileSync(
+    path.join(f.home, "memories_v2/rollout_summaries/example.md"),
+    "Preserve {duration:2}] and ``` exactly.\n"
+  )
+  fs.writeFileSync(
+    path.join(f.home, "notion-memory.json"),
+    JSON.stringify({ sourceArchive: true })
+  )
+  const first = await f.exec(["sync"])
+  assert.equal(first.code, 0, first.stderr)
+  const result = JSON.parse(first.stdout)
+  assert.equal(result.created, 3)
+  const verify = await f.exec(["verify"])
+  assert.equal(verify.code, 0, verify.stderr)
+  assert.equal(JSON.parse(verify.stdout).verified, 3)
+  const again = await f.exec(["sync"])
+  assert.equal(JSON.parse(again.stdout).unchanged, 3)
+  const pages = f.pages()
+  pages[0].content = '```json\n{"private":"synthetic-sensitive-marker\n```'
+  f.savePages(pages)
+  const lost = await f.exec(["verify"])
+  assert.equal(lost.code, 1)
+  assert.match(lost.stderr, /source readback mismatch/)
+  assert.doesNotMatch(lost.stderr, /duration|synthetic-sensitive-marker/)
+})

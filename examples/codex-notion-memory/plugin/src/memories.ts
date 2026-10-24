@@ -21,9 +21,12 @@ export interface AgentMemory {
 export interface MemorySource {
   // Agent name, used in the memory body and the revision title.
   name: "Codex" | "Claude Code"
-  dir: string
+  // Read on every sync, because the agent's memory location can change between syncs.
+  dir(): string
   // Pure: reads the memory files in `dir` and returns one memory per topic.
   parse(dir: string, userName?: string): AgentMemory[]
+  // Whether memories mention the user, so the first sync looks up the user's name.
+  usesUserName(): boolean
   // Logged when the source has no memories.
   emptyHint: string
 }
@@ -44,9 +47,10 @@ export async function syncMemories(
   source: MemorySource
 ): Promise<MemorySyncResult> {
   const state = loadState()
-  if (source.parse(source.dir).length)
+  const dir = source.dir()
+  if (source.usesUserName() && source.parse(dir).length)
     state.userName ??= await userName(callTool)
-  const memories = source.parse(source.dir, state.userName)
+  const memories = source.parse(dir, state.userName)
   const result: MemorySyncResult = {
     total: memories.length,
     created: 0,
@@ -57,7 +61,7 @@ export async function syncMemories(
     noLongerInAgent: 0,
   }
   if (!memories.length) {
-    log("memories: none in", source.dir, `(${source.emptyHint})`)
+    log("memories: none in", dir, `(${source.emptyHint})`)
     saveState(state)
     return result
   }
@@ -155,7 +159,7 @@ export async function syncMemories(
 }
 
 async function userName(callTool: CallTool): Promise<string | undefined> {
-  const self = (await callTool("get-self", {}).catch(() => undefined)) as
+  const self = (await callTool("get-self", {})) as
     | { user?: { name?: string } }
     | undefined
   return self?.user?.name?.split(/\s+/)[0] || undefined
@@ -191,7 +195,8 @@ async function fetchPage(
     text?: string
   }
   const text = fetched.text ?? ""
-  const tag = text.match(/<page\b[^>]*>/)?.[0] ?? ""
+  const tag = text.match(/<page\b[^>]*>/)?.[0]
+  if (!tag) throw new Error(`invalid page readback: ${pageId}`)
   let properties: Record<string, unknown> = {}
   try {
     properties = JSON.parse(
