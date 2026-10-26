@@ -74,6 +74,8 @@ interface FakePage {
   id: string
   Title: string
   Type?: string
+  Source?: string
+  lastUpdatedBy?: string
   content: string
   deleted?: boolean
 }
@@ -108,6 +110,8 @@ function fakeNotionMcp(existing: Partial<FakePage>[] = []) {
         const properties = JSON.stringify({
           Title: page.Title,
           Type: page.Type,
+          Source: page.Source,
+          "Last updated by": page.lastUpdatedBy,
         })
         return {
           text: `<page url="https://notion.so/${page.id}"${page.deleted ? " deleted" : ""}>\n<properties>\n${properties}\n</properties>\n<content>\n${page.content}\n</content>\n</page>`,
@@ -119,13 +123,15 @@ function fakeNotionMcp(existing: Partial<FakePage>[] = []) {
       case "create-pages": {
         assert.equal(args.parent, "memory")
         const [page] = args.pages
-        assert.equal(page.properties.Source, undefined)
+        assert.equal(page.properties.Source, "Codex")
         return {
           pages: [
             {
               id: add({
                 Title: page.properties.title,
                 Type: page.properties.Type,
+                Source: page.properties.Source,
+                lastUpdatedBy: page.properties["Last updated by"],
                 content: page.content,
               }),
             },
@@ -135,6 +141,12 @@ function fakeNotionMcp(existing: Partial<FakePage>[] = []) {
       case "update-page": {
         const page = pages.get(args.page_id)
         assert.ok(page, `unknown page ${args.page_id}`)
+        if (args.command === "update_properties") {
+          if (args.properties.Source !== undefined)
+            page.Source = args.properties.Source
+          page.lastUpdatedBy = args.properties["Last updated by"]
+          return {}
+        }
         assert.equal(args.command, "replace_content")
         page.content = args.new_str
         return {}

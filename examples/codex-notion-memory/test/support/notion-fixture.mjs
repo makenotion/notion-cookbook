@@ -37,7 +37,7 @@ export function invoke(name, args) {
       const page = state.pages.find((p) => p.id === args.id)
       assert.ok(page, "unknown fixture page")
       return {
-        text: `<page${page.deleted ? " deleted" : ""}>${page.parent !== "memory" && page.parent !== "private" ? `<parent-page url="https://notion.so/${page.parent}"/>` : ""}<properties>${JSON.stringify({ Title: page.title, Type: page.type })}</properties><content>${page.content}</content></page>`,
+        text: `<page${page.deleted ? " deleted" : ""}>${page.parent !== "memory" && page.parent !== "private" ? `<parent-page url="https://notion.so/${page.parent}"/>` : ""}<properties>${JSON.stringify({ Title: page.title, Type: page.type, Source: page.source, "Last updated by": page.lastUpdatedBy })}</properties><content>${page.content}</content></page>`,
       }
     }
     case "query-data-sources": {
@@ -57,11 +57,16 @@ export function invoke(name, args) {
           args.creation_mode === "draft"
       )
       const pages = args.pages.map((p) => {
-        assert.equal(p.properties.Source, undefined)
+        assert.equal(
+          p.properties.Source,
+          args.parent === "memory" ? "Codex" : undefined
+        )
         const page = {
           id: `synthetic-${state.pages.length + 1}`,
           title: p.properties.title,
           type: p.properties.Type,
+          source: p.properties.Source,
+          lastUpdatedBy: p.properties["Last updated by"],
           content: p.content,
           parent:
             args.parent === "memory"
@@ -77,6 +82,14 @@ export function invoke(name, args) {
     case "update-page": {
       const page = state.pages.find((p) => p.id === args.page_id)
       assert.ok(page, "unknown fixture page")
+      if (args.command === "update_properties") {
+        if (args.properties.Source !== undefined)
+          page.source = args.properties.Source
+        if (args.properties["Last updated by"] !== undefined)
+          page.lastUpdatedBy = args.properties["Last updated by"]
+        save()
+        return {}
+      }
       assert.equal(args.command, "replace_content")
       page.content = args.new_str
       save()

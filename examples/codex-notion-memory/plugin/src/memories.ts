@@ -21,7 +21,7 @@ import { syncProjection } from "./reconcile.ts"
 // $CODEX_HOME/memories/memory_summary.md and MEMORY.md. This module turns those files into
 // Notion memories and writes them with the same Notion MCP tools any agent uses, following
 // the Notion memory guide (notion://docs/memory): one topic per memory, a topic title, a
-// Type, details in the body, and no Source property.
+// Type, Codex attribution, and details in the body.
 
 export type MemoryType = "Profile" | "Preference" | "Work" | "Notes"
 
