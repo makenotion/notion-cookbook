@@ -68,6 +68,19 @@ test("installed entrypoint persists across processes, skips unchanged writes, an
   assert.ok(!f.calls().includes("turn/start"))
 })
 
+test("successful MCP writes with a separate notice persist without duplicate retries", async (t) => {
+  const f = fixture(t)
+  f.seed()
+  const result = await f.exec(["sync"], { FIXTURE_NOTICE: "true" })
+  assert.equal(result.code, 0, result.stderr)
+  assert.equal(JSON.parse(result.stdout).created, 4)
+  assert.match(result.stderr, /Synthetic workspace quota notice/)
+  const again = await f.exec(["sync"])
+  assert.equal(again.code, 0, again.stderr)
+  assert.equal(JSON.parse(again.stdout).unchanged, 4)
+  assert.equal(f.pages().length, 4)
+})
+
 test("overlapping installed sync processes create each topic only once", async (t) => {
   const f = fixture(t)
   f.seed()

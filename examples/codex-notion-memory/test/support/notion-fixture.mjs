@@ -106,7 +106,12 @@ export function invoke(name, args) {
 export function toolResult(name, args) {
   try {
     return {
-      content: [{ type: "text", text: JSON.stringify(invoke(name, args)) }],
+      content: [
+        { type: "text", text: JSON.stringify(invoke(name, args)) },
+        ...(process.env.FIXTURE_NOTICE
+          ? [{ type: "text", text: "Synthetic workspace quota notice" }]
+          : []),
+      ],
     }
   } catch (error) {
     return { isError: true, content: [{ type: "text", text: error.message }] }

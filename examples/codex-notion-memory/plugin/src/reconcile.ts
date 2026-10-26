@@ -123,7 +123,7 @@ export async function syncProjection(
     for (const memory of memories) {
       const evidence =
         destination === "memory" && archive && state.archiveRoot
-          ? `\n\nSource evidence: <mention-page url="${state.archiveRoot.url}"/>`
+          ? `\n\nSource evidence: [Codex memory source archive](${state.archiveRoot.url})`
           : ""
       const content = `${memory.content}\n\nFrom Codex memories (${memory.from}).${evidence}`
       const hash = digest(`${memory.title}\n${content}`)
