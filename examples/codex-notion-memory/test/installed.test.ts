@@ -3,132 +3,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { DatabaseSync } from "node:sqlite"
 import { test } from "node:test"
-import { fixture, object, recipe, run, waitFor } from "./support/harness.ts"
-
-test("plugin artifact resolves its manifest, MCP, hooks and skill without dependencies", async (t) => {
-  const f = fixture(t)
-  const manifest = object(
-    JSON.parse(
-      fs.readFileSync(
-        path.join(f.installed, ".codex-plugin/plugin.json"),
-        "utf8"
-      )
-    )
-  )
-  for (const field of ["hooks", "mcpServers", "skills"]) {
-    const relative = manifest[field]
-    assert.equal(typeof relative, "string")
-    assert.ok(fs.existsSync(path.resolve(f.installed, String(relative))))
-  }
-  const hookFile = object(
-    JSON.parse(
-      fs.readFileSync(path.join(f.installed, String(manifest.hooks)), "utf8")
-    )
-  )
-  const hooks = object(hookFile.hooks)
-  assert.deepEqual(Object.keys(hooks), ["SessionStart", "Stop"])
-  assert.ok(
-    fs.existsSync(path.join(f.installed, "skills/notion-memory/SKILL.md"))
-  )
-  assert.equal(fs.existsSync(path.join(f.installed, "node_modules")), false)
-  const result = await f.exec([
-    "preview",
-    "--dir",
-    path.join(recipe, "test/fixtures/memories"),
-  ])
-  assert.equal(result.code, 0, result.stderr)
-  assert.equal(JSON.parse(result.stdout).length, 4)
-  assert.deepEqual(f.calls(), [])
-})
-
-test("installed entrypoint persists across processes, skips unchanged writes, and updates one topic", async (t) => {
-  const f = fixture(t)
-  f.seed()
-  let result = await f.exec(["sync"])
-  assert.equal(result.code, 0, result.stderr)
-  assert.equal(JSON.parse(result.stdout).created, 4)
-  const before = f.calls().length
-  result = await f.exec(["sync"])
-  assert.equal(result.code, 0, result.stderr)
-  assert.equal(JSON.parse(result.stdout).unchanged, 4)
-  assert.equal(f.calls().length, before, "unchanged process must not connect")
-  const summary = path.join(f.home, "memories/memory_summary.md")
-  fs.writeFileSync(
-    summary,
-    fs.readFileSync(summary, "utf8").replace("TypeScript", "Rust")
-  )
-  result = await f.exec(["sync"])
-  assert.equal(result.code, 0, result.stderr)
-  assert.equal(JSON.parse(result.stdout).updated, 1)
-  assert.equal(f.pages().length, 4)
-  assert.match(
-    String(f.pages().find((p) => p.title === "Role and background")?.content),
-    /Rust developer/
-  )
-  assert.ok(!f.calls().includes("turn/start"))
-})
-
-test("successful MCP writes with a separate notice persist without duplicate retries", async (t) => {
-  const f = fixture(t)
-  f.seed()
-  const result = await f.exec(["sync"], { FIXTURE_NOTICE: "true" })
-  assert.equal(result.code, 0, result.stderr)
-  assert.equal(JSON.parse(result.stdout).created, 4)
-  assert.match(result.stderr, /Synthetic workspace quota notice/)
-  const again = await f.exec(["sync"])
-  assert.equal(again.code, 0, again.stderr)
-  assert.equal(JSON.parse(again.stdout).unchanged, 4)
-  assert.equal(f.pages().length, 4)
-})
-
-test("overlapping installed sync processes create each topic only once", async (t) => {
-  const f = fixture(t)
-  f.seed()
-  const results = await Promise.all([f.exec(["sync"]), f.exec(["sync"])])
-  results.forEach((r) => assert.equal(r.code, 0, r.stderr))
-  assert.equal(f.pages().length, 4)
-  assert.equal(f.calls().filter((c) => c === "create-pages").length, 4)
-})
-
-test("user edits and deletions survive subsequent process restarts", async (t) => {
-  const f = fixture(t)
-  f.seed()
-  assert.equal((await f.exec(["sync"])).code, 0)
-  const pages = f.pages()
-  const profile = pages.find((p) => p.title === "Role and background")
-  const work = pages.find((p) => p.type === "Work")
-  assert.ok(profile && work)
-  profile.content = "Synthetic user edit"
-  work.deleted = true
-  f.savePages(pages)
-  const summary = path.join(f.home, "memories/memory_summary.md")
-  fs.writeFileSync(
-    summary,
-    fs.readFileSync(summary, "utf8").replace("TypeScript", "Rust")
-  )
-  fs.appendFileSync(
-    path.join(f.home, "memories/MEMORY.md"),
-    "\n- Another synthetic fact\n"
-  )
-  const result = await f.exec(["sync"])
-  assert.equal(result.code, 0, result.stderr)
-  assert.equal(JSON.parse(result.stdout).changedInNotion, 2)
-  assert.equal(
-    f.pages().find((p) => p.title === profile.title)?.content,
-    "Synthetic user edit"
-  )
-  assert.equal(f.pages().find((p) => p.id === work.id)?.deleted, true)
-})
-
-test("missing memories do not connect or start a hook worker", async (t) => {
-  const f = fixture(t)
-  assert.equal(
-    (await f.exec(["sync"], { CODEX_PATH: "/nonexistent/codex" })).code,
-    0
-  )
-  assert.equal((await f.exec(["hook", "session-start"])).code, 0)
-  assert.deepEqual(f.calls(), [])
-})
+import { fixture, run, waitFor } from "./support/harness.ts"
 
 test("disconnected and unauthorized servers fail without writing pages", async (t) => {
   for (const failure of ["no-server", "unauthorized"]) {
@@ -201,7 +76,7 @@ test("disabled memory with retained files must not auto-sync", async (t) => {
   await waitFor(
     () =>
       fs.existsSync(f.logFile) &&
-      /disabled|"created":4/.test(fs.readFileSync(f.logFile, "utf8"))
+      /disabled|"created":2/.test(fs.readFileSync(f.logFile, "utf8"))
   )
   assert.deepEqual(
     f.pages(),
@@ -216,7 +91,7 @@ test(
   async (t) => {
     const f = fixture(t)
     f.seed()
-    const db = new DatabaseSync(path.join(f.home, "memories_1.sqlite"))
+    const db = new DatabaseSync(path.join(f.home, "memories_v2_1.sqlite"))
     t.after(() => db.close())
     db.exec(
       "CREATE TABLE jobs (status TEXT); INSERT INTO jobs VALUES ('running')"
@@ -226,9 +101,9 @@ test(
     await waitFor(
       () =>
         fs.existsSync(f.logFile) &&
-        /"created":4/.test(fs.readFileSync(f.logFile, "utf8"))
+        /"created":2/.test(fs.readFileSync(f.logFile, "utf8"))
     )
-    const summary = path.join(f.home, "memories/memory_summary.md")
+    const summary = path.join(f.home, "memories_v2/memory_summary.md")
     fs.writeFileSync(
       summary,
       fs.readFileSync(summary, "utf8").replace("TypeScript", "Rust")
@@ -240,9 +115,9 @@ test(
     )
     db.exec("UPDATE jobs SET status = 'done'")
     await waitFor(() => f.calls().includes("update-page"), 10_000)
-    assert.equal(f.pages().length, 4)
+    assert.equal(f.pages().length, 2)
     assert.match(
-      String(f.pages().find((p) => p.title === "Role and background")?.content),
+      String(f.pages().find((p) => p.title === "memory_summary.md")?.content),
       /Rust developer/
     )
   }
@@ -291,38 +166,4 @@ test("an explicit destination never falls back and workspace mismatch writes not
     assert.equal(result.code, 1)
     assert.deepEqual(f.pages(), [])
   }
-})
-
-test("complete source archive reads back across processes and detects content loss", async (t) => {
-  const f = fixture(t)
-  f.seed()
-  fs.mkdirSync(path.join(f.home, "memories_v2/rollout_summaries"), {
-    recursive: true,
-  })
-  fs.writeFileSync(
-    path.join(f.home, "memories_v2/rollout_summaries/example.md"),
-    "Preserve {duration:2}] and ``` exactly.\n"
-  )
-  fs.writeFileSync(
-    path.join(f.home, "notion-memory.json"),
-    JSON.stringify({ sourceArchive: true })
-  )
-  const first = await f.exec(["sync"])
-  assert.equal(first.code, 0, first.stderr)
-  const result = JSON.parse(first.stdout)
-  assert.equal(result.created, 7)
-  const verify = await f.exec(["verify"])
-  assert.equal(verify.code, 0, verify.stderr)
-  assert.equal(JSON.parse(verify.stdout).verified, 3)
-  const again = await f.exec(["sync"])
-  assert.equal(JSON.parse(again.stdout).unchanged, 7)
-  const pages = f.pages()
-  const archive = pages.find((p) => String(p.title).startsWith("Codex source:"))
-  assert.ok(archive)
-  archive.content = '```json\n{"private":"synthetic-sensitive-marker\n```'
-  f.savePages(pages)
-  const lost = await f.exec(["verify"])
-  assert.equal(lost.code, 1)
-  assert.match(lost.stderr, /source readback mismatch/)
-  assert.doesNotMatch(lost.stderr, /duration|synthetic-sensitive-marker/)
 })

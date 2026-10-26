@@ -2,14 +2,12 @@
 //
 //   node src/main.ts hook <session-start|stop>   called by Codex hooks
 //   node src/main.ts sync                        write Codex memories now
-//   node src/main.ts preview [--dir <path>]      offline: what it would write
+//   node src/main.ts preview      offline: what it would write
 //   node src/main.ts status                      memories it manages
 import { spawn } from "node:child_process"
 import fs from "node:fs"
-import path from "node:path"
 import { fileURLToPath } from "node:url"
 import {
-  CODEX_HOME,
   type Config,
   DATA_DIR,
   LOG_FILE,
@@ -18,12 +16,12 @@ import {
   log,
   withLock,
 } from "./config.ts"
-import { archiveMemories, memorySources, verifyArchive } from "./archive.ts"
 import { type CallTool, CodexNotionMcp } from "./mcp.ts"
 import {
   memoryFilesHash,
   memoriesDir,
-  parseCodexMemories,
+  memoryFiles,
+  verifyMemories,
   syncMemories,
   watchMemories,
 } from "./memories.ts"
@@ -72,65 +70,20 @@ async function main(): Promise<void> {
         const result = await withLock(() => syncMemories(callTool))
         console.log(JSON.stringify(result))
       })
-    case "verify": {
-      if (!config.sourceArchive)
-        throw new Error("verify requires sourceArchive mode")
+    case "verify":
       return withNotion(config, undefined, async (callTool) => {
-        const result = await withLock(() =>
-          verifyArchive(
-            callTool,
-            memorySources(config.sourceHome || CODEX_HOME),
-            loadState()
-          )
+        console.log(
+          JSON.stringify(await withLock(() => verifyMemories(callTool)))
         )
-        console.log(JSON.stringify(result))
       })
-    }
-    case "inventory": {
-      const sources = memorySources(config.sourceHome || CODEX_HOME)
-      console.log(
-        JSON.stringify(
-          {
-            sources: sources.map(({ path, sha256, text }) => ({
-              path,
-              sha256,
-              bytes: Buffer.byteLength(text),
-            })),
-            pages: archiveMemories(sources).length,
-          },
-          null,
-          2
-        )
-      )
+    case "preview":
+      console.log(JSON.stringify(memoryFiles(), null, 2))
       return
-    }
-    case "preview": {
-      const name = loadState().userName
-      const knowledge = parseCodexMemories(
-        option("--dir") ?? memoriesDir(),
-        name
-      )
-      const preview = config.sourceArchive
-        ? {
-            knowledge,
-            archive: {
-              sources: memorySources(config.sourceHome || CODEX_HOME).length,
-              pages: archiveMemories(
-                memorySources(config.sourceHome || CODEX_HOME)
-              ).length,
-            },
-          }
-        : knowledge
-      console.log(JSON.stringify(preview, null, 2))
-      return
-    }
     case "status":
       console.log(JSON.stringify(loadState(), null, 2))
       return
     default:
-      console.log(
-        "usage: node src/main.ts sync | preview [--dir <path>] | status"
-      )
+      console.log("usage: node src/main.ts sync | preview | verify | status")
   }
 }
 
@@ -140,11 +93,7 @@ function handleHook(event: string | undefined): void {
   // The worker's own `codex app-server` can start sessions too. Never recurse.
   if (process.env.NOTION_MEMORY_WORKER) return
   // No Codex memory files exist yet, so do not start a worker.
-  if (
-    !fs.existsSync(path.join(CODEX_HOME, "memories_1.sqlite")) &&
-    !fs.existsSync(memoriesDir())
-  )
-    return
+  if (!fs.existsSync(memoriesDir())) return
   let input: HookInput = {}
   try {
     input = JSON.parse(fs.readFileSync(0, "utf8") || "{}")

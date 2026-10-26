@@ -122,7 +122,7 @@ export function fixture(t: TestContext) {
     seed() {
       fs.cpSync(
         path.join(recipe, "test/fixtures/memories"),
-        path.join(home, "memories"),
+        path.join(home, "memories_v2"),
         { recursive: true }
       )
     },

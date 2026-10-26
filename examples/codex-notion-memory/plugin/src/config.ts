@@ -1,7 +1,6 @@
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import type { MemoryType } from "./memories.ts"
 
 export interface Config {
   // Codex executable used to start `codex app-server`.
@@ -10,33 +9,19 @@ export interface Config {
   // Name of the Notion MCP server in Codex. Detected automatically when unset.
   mcpServer?: string
   sourceHome?: string
-  sourceArchive?: boolean
   expectedWorkspaceId?: string
 }
 
-export interface MemoryState {
-  hash: string
-  title: string
-  type: MemoryType
-  pageId: string
-  // Hash of the page as Notion returned it right after the plugin wrote it. A different
-  // page later means someone edited it in Notion.
-  pageHash?: string
-  // Set once the page was edited or deleted in Notion. The plugin never touches it again.
-  released?: "edited" | "deleted"
-  destination?: "memory" | "archive"
-  pendingMove?: boolean
-  // Applied to managed knowledge pages; source archives are ordinary pages.
-  attribution?: "Codex"
-}
-
 export interface State {
-  memories: Record<string, MemoryState>
-  archives?: Record<string, MemoryState>
-  archiveRoot?: { pageId: string; url: string }
-  knowledgeDir?: string
-  knowledgeFiles?: string[]
-  userName?: string
+  files: Record<
+    string,
+    {
+      hash: string
+      pageId: string
+      pageHash: string
+      released?: boolean
+    }
+  >
 }
 
 export const CODEX_HOME =
@@ -61,17 +46,20 @@ export function loadConfig(): Config {
     nodePath: file.nodePath,
     mcpServer: process.env.NOTION_MCP_SERVER || file.mcpServer,
     sourceHome: file.sourceHome,
-    sourceArchive: file.sourceArchive,
     expectedWorkspaceId: file.expectedWorkspaceId,
   }
 }
 
 export function loadState(): State {
-  try {
-    return JSON.parse(fs.readFileSync(STATE_FILE, "utf8"))
-  } catch {
-    return { memories: {} }
-  }
+  if (!fs.existsSync(STATE_FILE)) return { files: {} }
+  const state = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"))
+  if (
+    !state.files ||
+    typeof state.files !== "object" ||
+    Array.isArray(state.files)
+  )
+    throw new Error("Invalid file mapping state; use a fresh state.json")
+  return state
 }
 
 export function saveState(state: State): void {

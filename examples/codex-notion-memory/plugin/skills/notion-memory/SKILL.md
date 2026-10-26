@@ -1,41 +1,26 @@
 ---
 name: notion-memory
-description: Write Codex memories to Notion Memories on demand, preview what would be written, or show which memories the plugin manages. Use when the user asks to sync, save, or check their Codex memories in Notion.
+description: Copy current Codex memory Markdown files into Notion Memories, preview the files, or verify managed pages. Use when the user asks to sync or check Codex memories in Notion.
 ---
 
 # Notion Memory
 
-Trusted SessionStart and Stop hooks start bounded watchers. Changes after a
-watcher exits wait for the next hook or explicit sync. Only consolidated topics
-from memory_summary.md and MEMORY.md become active Notion Memories. Raw extraction
-records and rollout summaries never become active topics. Explicit sourceArchive
-backs up retained sources under a separate private archive; it does not replace
-the knowledge projection. Run inventory and verify for full-source coverage.
-Pin the intended MCP server and expectedWorkspaceId for a local-only import.
+Use Node.js 22.18+ and the bundled `src/main.ts`, relative to this plugin root
+(two directories above this skill):
 
-A removed managed topic is moved out of Memories and its content is retracted;
-this is not permanent erasure of Notion history or all archived evidence. External
-Notion edits/deletions are never overwritten. Migration moves owned legacy archive
-pages using persisted IDs/hashes. If authentication, readback or move fails, stop
-that channel and report the error rather than using a replacement client.
+- `sync`: copy `memories_v2/memory_summary.md` and optional `MEMORY.md`, one file per page.
+- `preview`: show the source files without connecting to Notion.
+- `verify`: check current source hashes and managed Notion page readbacks.
+- `status`: show the local file-to-page mapping.
 
-Use the bundled entrypoint for manual actions. Resolve `src/main.ts` relative to
-this skill's plugin root (two directories up from this file). It needs Node.js
-22.18 or newer.
+Pass Markdown unchanged. Pages use Type Notes, Source Codex and Last updated by
+Codex. Updates preserve Source. Trusted SessionStart and Stop hooks start bounded
+watchers; later changes wait for the next hook or explicit sync.
 
-- Write Codex memories now: `node <plugin-root>/src/main.ts sync`
-- Preview what would be written, without calling Notion:
-  `node <plugin-root>/src/main.ts preview`
-- Inventory full sources without printing their content:
-  `node <plugin-root>/src/main.ts inventory`
-- Read every archived source page back: `node <plugin-root>/src/main.ts verify`
-- Show the memories the plugin manages: `node <plugin-root>/src/main.ts status`
+Only v2 is supported. If its summary is not ready, report that condition. Existing
+Notion edits and deletions are protected. Missing source files leave existing pages
+alone; an explicitly empty file copies empty content. This is one-way copying.
 
-`sync` prints counts. `changedInNotion` memories were edited or deleted in
-Notion and are left alone on purpose. `skippedExisting` memories already had a
-memory with the same title.
-
-If no server is connected, identify the configured server and report its status.
-Use its normal Codex login flow when authorized. An empty preview may mean no
-consolidated knowledge exists; inspect source availability and feature settings
-without enabling memory or generating new memories just to manufacture a test.
+Use the configured Codex-owned MCP connection and pin the intended workspace for
+local-only imports. If authentication or a tool fails, stop that operation and
+report it. Use the normal login flow when authorized. Keep source files untouched.
