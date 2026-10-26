@@ -132,8 +132,10 @@ async function snapshot(call: CallTool, id: string) {
     text.match(/<properties>\s*([\s\S]*?)\s*<\/properties>/)?.[1] ?? "{}"
   )
   if (!isObject(properties)) throw new Error("Invalid page properties")
-  const content =
-    text.match(/<content>([\s\S]*?)<\/content>/)?.[1]?.trim() ?? ""
+  const start = text.indexOf("<content>")
+  const end = text.lastIndexOf("</content>")
+  if (start < 0 || end < start) throw new Error("Missing page content frame")
+  const content = text.slice(start + "<content>".length, end).trim()
   return {
     deleted: /<page\b[^>]*\sdeleted\b/.test(text),
     hash: digest(

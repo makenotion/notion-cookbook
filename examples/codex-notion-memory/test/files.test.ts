@@ -8,7 +8,7 @@ test("one file becomes one Notes page with unchanged Markdown and Codex attribut
   const f = fixture(t)
   f.seed()
   const text =
-    "# Raw title\n\nThe user said `keep {this}`.\n\n- [Task 42] thread_id=abc123\n\n汉字 🧠\n"
+    "# Raw title\n\nThe user said `keep {this}` and literal `</content>`.\n\n- [Task 42] thread_id=abc123\n\n汉字 🧠\n"
   fs.writeFileSync(path.join(f.home, "memories_v2/memory_summary.md"), text)
   const result = await f.exec(["sync"])
   assert.equal(result.code, 0, result.stderr)
@@ -24,6 +24,12 @@ test("one file becomes one Notes page with unchanged Markdown and Codex attribut
   assert.equal(again.code, 0, again.stderr)
   assert.equal(JSON.parse(again.stdout).unchanged, 2)
   assert.equal(f.pages().length, 2)
+  const pages = f.pages()
+  const edited = pages.find((p) => p.id === page?.id)
+  assert.ok(edited)
+  edited.content = `${text}\nHuman edit after the literal closing tag.`
+  f.savePages(pages)
+  assert.equal((await f.exec(["verify"])).code, 1)
 })
 
 test("append, override and empty content update the same page", async (t) => {
