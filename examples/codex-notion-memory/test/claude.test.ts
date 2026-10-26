@@ -18,33 +18,41 @@ const PROJECT = `${os.homedir().replace(/[^a-zA-Z0-9]/g, "-")}-code-app`
 const MEMORY_DIR = path.join(home, "projects", PROJECT, "memory")
 fs.cpSync(FIXTURES, MEMORY_DIR, { recursive: true })
 
-const { claudeSource, isClaudeMemoryFile, parseClaudeMemories } = await import(
+const { claudeMemoryFiles, claudeSource, isClaudeMemoryFile } = await import(
   "../plugin/src/claude.ts"
 )
 const { syncMemories } = await import("../plugin/src/memories.ts")
 const { loadState } = await import("../plugin/src/config.ts")
 
-test("parses Claude Code auto memory files, one memory per file", () => {
-  const memories = parseClaudeMemories(claudeSource.dir(), "Casey")
+test("lists auto memory files with unchanged Markdown, one page per file", () => {
+  const files = claudeMemoryFiles(path.join(home, "projects"))
   assert.deepEqual(
-    memories.map((m) => [m.type, m.title]),
+    files.map((f) => [f.type, f.title]),
     [
-      ["Preference", "Integration tests real db"],
-      ["Work", "Billing launch freeze"],
-      ["Notes", "Latency dashboard"],
-      ["Profile", "Role and background"],
+      ["Preference", "code-app/feedback_tests.md"],
+      ["Work", "code-app/project_launch.md"],
+      ["Notes", "code-app/reference_dashboards.md"],
+      ["Notes", "code-app/scratch.md"],
+      ["Profile", "code-app/user_role.md"],
     ]
   )
-  const [feedback, , , profile] = memories
-  assert.equal(feedback.key, `claude:${PROJECT}/feedback_tests.md`)
-  assert.equal(feedback.from, "code-app › `feedback_tests.md`")
-  // The description leads the body, with escaped quotes unescaped.
-  assert.match(
+  const [feedback] = files
+  assert.equal(feedback.key, `${PROJECT}/feedback_tests.md`)
+  assert.equal(
     feedback.content,
-    /^Integration tests must hit a "real" database, not mocks\n\nDon't mock/
+    fs.readFileSync(path.join(FIXTURES, "feedback_tests.md"), "utf8")
   )
-  assert.doesNotMatch(feedback.content, /^---|type: feedback/m)
-  assert.match(profile.content, /Casey has ten years of Go/)
+  // A flat custom directory has no project folders.
+  assert.deepEqual(
+    claudeMemoryFiles(FIXTURES).map((f) => f.title),
+    [
+      "feedback_tests.md",
+      "project_launch.md",
+      "reference_dashboards.md",
+      "scratch.md",
+      "user_role.md",
+    ]
+  )
 })
 
 test("recognizes only auto memory files from hook input", () => {
@@ -58,48 +66,31 @@ test("recognizes only auto memory files from hook input", () => {
   assert.equal(isClaudeMemoryFile(""), false)
 })
 
-test("writes Claude Code memories incrementally and retracts removed ones", async () => {
+test("copies Claude Code memory files, updates the same page, and leaves deleted files' pages", async () => {
   const notion = fakeNotionMcp([], "Claude Code")
   const first = await syncMemories(notion.callTool, claudeSource)
-  assert.equal(first.created, 4)
+  assert.equal(first.created, 5)
+  const role = path.join(MEMORY_DIR, "user_role.md")
   const profile = [...notion.pages.values()].find(
-    (p) => p.Title === "Role and background"
+    (p) => p.Title === "code-app/user_role.md"
   )
   assert.equal(profile?.Type, "Profile")
   assert.equal(profile?.Source, "Claude Code")
   assert.equal(profile?.lastUpdatedBy, "Claude Code")
-  // The fake MCP's user is Casey Boyer; memories use the first name.
-  assert.match(profile?.content ?? "", /Casey has ten years of Go/)
-  assert.match(profile?.content ?? "", /From Claude Code memories \(code-app/)
+  assert.equal(profile?.content, fs.readFileSync(role, "utf8"))
 
   // Claude rewrites one memory and deletes another (for example with `rm`).
-  const role = path.join(MEMORY_DIR, "user_role.md")
   fs.writeFileSync(
     role,
     fs.readFileSync(role, "utf8").replace("ten years", "twelve years")
   )
   fs.rmSync(path.join(MEMORY_DIR, "reference_dashboards.md"))
-  notion.calls.length = 0
   const second = await syncMemories(notion.callTool, claudeSource)
   assert.equal(second.updated, 1)
-  assert.equal(second.unchanged, 2)
-  assert.equal(second.noLongerInAgent, 1)
-  assert.match(profile?.content ?? "", /twelve years/)
-  assert.ok(notion.calls.includes("finish-revision"))
-  // The dropped memory moves out of Memories under a private archive page and its text
-  // is cleared. Nothing is trashed.
-  const root = [...notion.pages.values()].find(
-    (p) => p.Title === "Claude Code memory source archive"
-  )
-  assert.equal(root?.parent, "private")
-  const removed = [...notion.pages.values()].filter(
-    (p) => p.parent === root?.id
-  )
-  assert.equal(removed.length, 1)
-  assert.match(
-    removed[0].content,
-    /^This projection was removed from Claude Code\./
-  )
+  assert.equal(second.unchanged, 3)
+  assert.equal(profile?.content, fs.readFileSync(role, "utf8"))
+  // The deleted file's page stays as it was; the plugin never deletes.
+  assert.equal(notion.pages.size, 5)
   assert.ok(![...notion.pages.values()].some((p) => p.deleted))
-  assert.equal(Object.keys(loadState().memories).length, 3)
+  assert.equal(Object.keys(loadState().files).length, 5)
 })

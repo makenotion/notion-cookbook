@@ -7,8 +7,6 @@ interface FakePage {
   Source?: string
   lastUpdatedBy?: string
   content: string
-  // "memory" for the Memories data source, "private" for a draft, or a parent page ID.
-  parent: string
   deleted?: boolean
 }
 
@@ -18,7 +16,6 @@ export function fakeNotionMcp(
   existing: Partial<FakePage>[] = [],
   source: "Codex" | "Claude Code" = "Codex"
 ) {
-  const DATA_SOURCE = "collection://00000000-0000-0000-0000-000000000001"
   const pages = new Map<string, FakePage>()
   const calls: string[] = []
   const add = (page: Partial<FakePage>) => {
@@ -27,7 +24,6 @@ export function fakeNotionMcp(
       id,
       Title: "",
       content: "",
-      parent: "memory",
       ...page,
     })
     return id
@@ -40,8 +36,6 @@ export function fakeNotionMcp(
       case "get-self":
         return { user: { name: "Casey Boyer" } }
       case "fetch": {
-        if (args.id === "memory")
-          return { text: `<data-source url="${DATA_SOURCE}">` }
         const page = pages.get(args.id)
         assert.ok(page, `unknown page ${args.id}`)
         const properties = JSON.stringify({
@@ -50,30 +44,14 @@ export function fakeNotionMcp(
           Source: page.Source,
           "Last updated by": page.lastUpdatedBy,
         })
-        const parent =
-          page.parent === "memory" || page.parent === "private"
-            ? ""
-            : `\n<parent-page url="https://notion.so/${page.parent}"/>`
         return {
-          text: `<page url="https://notion.so/${page.id}"${page.deleted ? " deleted" : ""}>${parent}\n<properties>\n${properties}\n</properties>\n<content>\n${page.content}\n</content>\n</page>`,
+          text: `<page url="https://notion.so/${page.id}"${page.deleted ? " deleted" : ""}>\n<properties>\n${properties}\n</properties>\n<content>\n${page.content}\n</content>\n</page>`,
         }
       }
-      case "query-data-sources":
-        assert.deepEqual(args.data.data_source_urls, [DATA_SOURCE])
-        return {
-          results: [...pages.values()].filter((p) => p.parent === "memory"),
-        }
       case "create-pages": {
-        // Memories go to the Memories data source; the archive root is a private draft.
-        assert.ok(
-          args.parent === "memory" || args.creation_mode === "draft",
-          "page created outside Memories without draft mode"
-        )
+        assert.equal(args.parent, "memory")
         const [page] = args.pages
-        assert.equal(
-          page.properties.Source,
-          args.parent === "memory" ? source : undefined
-        )
+        assert.equal(page.properties.Source, source)
         return {
           pages: [
             {
@@ -83,7 +61,6 @@ export function fakeNotionMcp(
                 Source: page.properties.Source,
                 lastUpdatedBy: page.properties["Last updated by"],
                 content: page.content,
-                parent: args.parent === "memory" ? "memory" : "private",
               }),
             },
           ],
@@ -102,16 +79,6 @@ export function fakeNotionMcp(
         page.content = args.new_str
         return {}
       }
-      case "move-pages": {
-        for (const id of args.page_or_database_ids) {
-          const page = pages.get(id)
-          assert.ok(page, `unknown page ${id}`)
-          page.parent = args.new_parent.page_id
-        }
-        return {}
-      }
-      case "finish-revision":
-        return {}
       default:
         throw new Error(`unexpected tool ${tool}`)
     }

@@ -5,7 +5,8 @@ import { test } from "node:test"
 import { claudeFixture } from "./support/claude-harness.ts"
 import { object, recipe, run, waitFor } from "./support/harness.ts"
 
-const FIXTURE_COUNT = 4
+// Every fixture file except the MEMORY.md index.
+const FIXTURE_COUNT = 5
 
 test("Claude Code artifact resolves its manifest and hooks and loads no MCP server", async (t) => {
   const f = await claudeFixture(t)
@@ -33,11 +34,8 @@ test("Claude Code artifact resolves its manifest and hooks and loads no MCP serv
     assert.match(text, /NOTION_MEMORY_AGENT=claude/)
     assert.match(text, /\\"\$\{CLAUDE_PLUGIN_ROOT\}\/hook\.cjs\\"/)
   }
-  const result = await f.exec([
-    "preview",
-    "--dir",
-    path.dirname(path.join(recipe, "test/fixtures/claude/memory/x")),
-  ])
+  f.seed()
+  const result = await f.exec(["preview"])
   assert.equal(result.code, 0, result.stderr)
   assert.equal(JSON.parse(result.stdout).length, FIXTURE_COUNT)
   assert.deepEqual(f.calls(), [])
@@ -69,8 +67,10 @@ test("Claude Code sync persists across processes, skips unchanged, and updates o
   assert.equal(JSON.parse(result.stdout).updated, 1)
   assert.equal(f.pages().length, FIXTURE_COUNT)
   assert.match(
-    String(f.pages().find((p) => p.title === "Role and background")?.content),
-    /Casey has twelve years/
+    String(
+      f.pages().find((p) => String(p.title).endsWith("/user_role.md"))?.content
+    ),
+    /The user has twelve years/
   )
 })
 
@@ -93,7 +93,7 @@ test("Notion edits and deletions survive later Claude Code syncs", async (t) => 
   f.seed()
   assert.equal((await f.exec(["sync"])).code, 0)
   const pages = f.pages()
-  const profile = pages.find((p) => p.title === "Role and background")
+  const profile = pages.find((p) => String(p.title).endsWith("/user_role.md"))
   const work = pages.find((p) => p.type === "Work")
   assert.ok(profile && work)
   profile.content = "Synthetic user edit"
@@ -129,21 +129,20 @@ test("hooks run from claude-hooks.json import on memory writes and ignore other 
     tool_input: { file_path: path.join(f.memoryDir, "user_role.md") },
   })
   assert.equal(memory.code, 0, memory.stderr)
-  await waitFor(() => /"created":4/.test(f.log()), 10_000)
+  await waitFor(() => /"created":5/.test(f.log()), 10_000)
 
-  // A memory deleted outside Write/Edit is picked up by the Stop hook.
-  fs.rmSync(path.join(f.memoryDir, "reference_dashboards.md"))
+  // A memory changed outside Write/Edit is picked up by the Stop hook.
+  fs.appendFileSync(
+    path.join(f.memoryDir, "reference_dashboards.md"),
+    "More.\n"
+  )
   assert.equal((await f.hook("Stop")).code, 0)
-  await waitFor(() => /"noLongerInAgent":1/.test(f.log()), 10_000)
-  // The removed memory moves under a new private archive page; nothing is trashed.
-  const root = f
-    .pages()
-    .find((p) => p.title === "Claude Code memory source archive")
-  assert.ok(root)
-  const removed = f.pages().filter((p) => p.parent === root.id)
-  assert.equal(removed.length, 1)
-  assert.match(String(removed[0].content), /removed from Claude Code/)
-  assert.equal(f.pages().length, FIXTURE_COUNT + 1)
+  await waitFor(() => /"updated":1/.test(f.log()), 10_000)
+  // A deleted memory file leaves its page alone; the plugin never deletes.
+  fs.rmSync(path.join(f.memoryDir, "reference_dashboards.md"))
+  const result = await f.exec(["sync"])
+  assert.equal(result.code, 0, result.stderr)
+  assert.equal(f.pages().length, FIXTURE_COUNT)
   assert.ok(!f.pages().some((p) => p.deleted))
 })
 
@@ -273,7 +272,7 @@ test("a custom autoMemoryDirectory is read and recognized by the hook", async (t
     tool_input: { file_path: path.join(custom, "user_role.md") },
   })
   assert.equal(hook.code, 0, hook.stderr)
-  await waitFor(() => /"created":4/.test(f.log()), 10_000)
+  await waitFor(() => /"created":5/.test(f.log()), 10_000)
 })
 
 test("missing Node is visible at the Claude Code hook command boundary", async (t) => {

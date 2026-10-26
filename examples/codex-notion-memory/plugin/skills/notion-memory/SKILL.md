@@ -1,52 +1,37 @@
 ---
 name: notion-memory
-description: Write Codex or Claude Code memories to Notion Memories on demand, preview what would be written, or show which memories the plugin manages. Use when the user asks to sync, save, or check their Codex or Claude Code memories in Notion.
+description: Copy current Codex or Claude Code memory Markdown files into Notion Memories, preview the files, or verify managed pages. Use when the user asks to sync or check Codex or Claude Code memories in Notion.
 ---
 
 # Notion Memory
 
-Codex: trusted SessionStart and Stop hooks start bounded watchers. Changes
-after a watcher exits wait for the next hook or explicit sync. Only consolidated
-topics from memory_summary.md and MEMORY.md become active Notion Memories. Raw
-extraction records and rollout summaries never become active topics. Explicit
-sourceArchive backs up retained sources under a separate private archive; it does
-not replace the knowledge projection. Run inventory and verify for full-source
-coverage. Pin the intended MCP server and expectedWorkspaceId for a local-only
-import.
-
-Claude Code: hooks write a memory as soon as Claude saves it, and SessionStart
-and Stop catch other changes. Each auto memory file is one topic. `inventory`,
-`verify`, and `sourceArchive` are Codex-only.
-
-A removed managed topic is moved out of Memories and its content is retracted;
-this is not permanent erasure of Notion history or all archived evidence. External
-Notion edits/deletions are never overwritten. Migration moves owned legacy archive
-pages using persisted IDs/hashes. If authentication, readback or move fails, stop
-that channel and report the error rather than using a replacement client.
-
-Use the bundled entrypoint for manual actions. Resolve `src/main.ts` relative to
-this skill's plugin root (two directories up from this file). It needs Node.js
-22.18 or newer. In Claude Code, prefix every command with
+Use Node.js 22.18+ and the bundled `src/main.ts`, relative to this plugin root
+(two directories above this skill). In Claude Code, prefix every command with
 `NOTION_MEMORY_AGENT=claude`; in Codex, run them as shown.
 
-- Write memories now: `node <plugin-root>/src/main.ts sync`
-- Preview what would be written, without calling Notion:
-  `node <plugin-root>/src/main.ts preview`
-- Inventory full sources without printing their content:
-  `node <plugin-root>/src/main.ts inventory`
-- Read every archived source page back: `node <plugin-root>/src/main.ts verify`
-- Show the memories the plugin manages: `node <plugin-root>/src/main.ts status`
+- `sync`: copy the agent's memory files, one file per page. In Codex that is
+  `memories_v2/memory_summary.md` and optional `MEMORY.md`; in Claude Code, each
+  auto memory file under `~/.claude/projects/*/memory/` except the `MEMORY.md` index.
+- `preview`: show the source files without connecting to Notion.
+- `verify`: check current source hashes and managed Notion page readbacks.
+- `status`: show the local file-to-page mapping.
 
-`sync` prints counts. `changedInNotion` memories were edited or deleted in
-Notion and are left alone on purpose. `skippedExisting` memories already had a
-memory with the same title.
+Pass Markdown unchanged. Codex pages use Type Notes; Claude Code pages take Type
+from the memory's frontmatter `type`. Source and Last updated by name the agent,
+and updates preserve Source. In Codex, trusted SessionStart and Stop hooks start
+bounded watchers; later changes wait for the next hook or explicit sync. In Claude
+Code, hooks copy a memory as soon as Claude saves it, and SessionStart and Stop
+catch other changes.
 
-If no server is connected, identify the configured server and report its status.
-In Codex, use its normal login flow (`codex mcp login notion`) when authorized. In
-Claude Code, ask the user to run
-`NOTION_MEMORY_AGENT=claude node <plugin-root>/src/main.ts login` themselves,
-since it opens a browser for Notion's consent page. An empty preview may mean no
-consolidated knowledge exists, or in Claude Code that auto memory has not saved
-anything under `~/.claude/projects/*/memory/` yet; inspect source availability
-and feature settings without enabling memory or generating new memories just to
-manufacture a test.
+Codex supports only v2. If its summary is not ready, report that condition.
+Existing Notion edits and deletions are protected. Missing source files leave
+existing pages alone; an explicitly empty file copies empty content. This is
+one-way copying.
+
+In Codex, use the configured Codex-owned MCP connection and pin the intended
+workspace for local-only imports. In Claude Code, the plugin signs in itself: if it
+is not signed in, ask the user to run
+`NOTION_MEMORY_AGENT=claude node <plugin-root>/src/main.ts login` themselves, since
+it opens a browser for Notion's consent page. If authentication or a tool fails,
+stop that operation and report it. Use the normal login flow when authorized. Keep
+source files untouched.

@@ -1,26 +1,23 @@
 // Entry point for the Codex and Claude Code hooks and for manual commands. Set
 // NOTION_MEMORY_AGENT=claude to work on Claude Code memories instead of Codex's.
 //
-//   node src/main.ts hook <event>                called by the agent (reads hook JSON on stdin)
-//   node src/main.ts login                       Claude Code only: sign in to Notion MCP
-//   node src/main.ts sync                        import the agent's memories now
-//   node src/main.ts preview [--dir <path>]      offline: print the memories it would write
-//   node src/main.ts inventory | verify          Codex sourceArchive mode only
-//   node src/main.ts status                      memories the plugin manages
+//   node src/main.ts hook <event>      called by the agent's hooks (reads hook JSON on stdin)
+//   node src/main.ts login             Claude Code only: sign in to Notion MCP
+//   node src/main.ts sync              write the agent's memories now
+//   node src/main.ts preview           offline: what it would write
+//   node src/main.ts verify            read every synced page back
+//   node src/main.ts status            memories it manages
 import { spawn } from "node:child_process"
 import fs from "node:fs"
-import path from "node:path"
 import { fileURLToPath } from "node:url"
 import {
   claudeMemoriesEnabled,
   claudeSource,
   isClaudeMemoryFile,
 } from "./claude.ts"
-import { archiveMemories, memorySources, verifyArchive } from "./archive.ts"
-import { codexSource, memoryFilesHash, watchMemories } from "./codex.ts"
+import { codexSource, memoriesDir, watchMemories } from "./codex.ts"
 import {
   AGENT,
-  AGENT_HOME,
   type Config,
   DATA_DIR,
   LOG_FILE,
@@ -30,7 +27,7 @@ import {
   withLock,
 } from "./config.ts"
 import { type CallTool, CodexNotionMcp } from "./mcp.ts"
-import { syncMemories } from "./memories.ts"
+import { memoryFilesHash, syncMemories, verifyMemories } from "./memories.ts"
 import { login, NotionMcpHttp, openBrowser, TOKEN_FILE } from "./notionMcp.ts"
 
 interface HookInput {
@@ -85,8 +82,8 @@ async function main(): Promise<void> {
         return
       }
       return withNotion(config, option("--cwd"), async (callTool) => {
-        const initialHash = memoryFilesHash()
-        await withLock(() => syncMemories(callTool, SOURCE))
+        const initialHash = memoryFilesHash(codexSource)
+        await withLock(() => syncMemories(callTool, codexSource))
         await watchMemories(callTool, { ...WATCH[event], initialHash })
       })
     }
@@ -96,68 +93,27 @@ async function main(): Promise<void> {
           console.log(JSON.stringify(await syncMemories(callTool, SOURCE)))
         })
       )
-    case "verify": {
-      if (AGENT !== "codex" || !config.sourceArchive)
-        throw new Error("verify requires Codex sourceArchive mode")
-      return withNotion(config, undefined, async (callTool) => {
-        const result = await withLock(() =>
-          verifyArchive(
-            callTool,
-            memorySources(config.sourceHome || AGENT_HOME),
-            loadState()
-          )
-        )
-        console.log(JSON.stringify(result))
-      })
-    }
-    case "inventory": {
-      if (AGENT !== "codex")
-        throw new Error("inventory is for Codex memory sources")
-      const sources = memorySources(config.sourceHome || AGENT_HOME)
-      console.log(
-        JSON.stringify(
-          {
-            sources: sources.map(({ path, sha256, text }) => ({
-              path,
-              sha256,
-              bytes: Buffer.byteLength(text),
-            })),
-            pages: archiveMemories(sources).length,
-          },
-          null,
-          2
-        )
+    case "verify":
+      return withLock(() =>
+        withNotion(config, undefined, async (callTool) => {
+          console.log(JSON.stringify(await verifyMemories(callTool, SOURCE)))
+        })
       )
-      return
-    }
     case "login":
       if (AGENT !== "claude") {
         console.log("Codex signs in itself: run `codex mcp login notion`.")
         return
       }
       return login(config.mcpUrl, openBrowser)
-    case "preview": {
-      const name = loadState().userName
-      const knowledge = SOURCE.parse(option("--dir") ?? SOURCE.dir(), name)
-      const archive = SOURCE.archive()
-      const preview = archive
-        ? {
-            knowledge,
-            archive: {
-              sources: memorySources(config.sourceHome || AGENT_HOME).length,
-              pages: archive.length,
-            },
-          }
-        : knowledge
-      console.log(JSON.stringify(preview, null, 2))
+    case "preview":
+      console.log(JSON.stringify(SOURCE.files(), null, 2))
       return
-    }
     case "status":
       console.log(JSON.stringify(loadState(), null, 2))
       return
     default:
       console.log(
-        "usage: node src/main.ts login | sync | preview [--dir <path>] | status"
+        "usage: node src/main.ts login | sync | preview | verify | status"
       )
   }
 }
@@ -206,12 +162,8 @@ function handleHook(event: string | undefined): void {
 }
 
 function hasMemoryFiles(): boolean {
-  if (AGENT === "claude")
-    return claudeSource.parse(claudeSource.dir()).length > 0
-  return (
-    fs.existsSync(path.join(AGENT_HOME, "memories_1.sqlite")) ||
-    fs.existsSync(codexSource.dir())
-  )
+  if (AGENT === "claude") return claudeSource.files().length > 0
+  return fs.existsSync(memoriesDir())
 }
 
 // A Claude Code hook starts a worker only when auto memory is on for the session's project

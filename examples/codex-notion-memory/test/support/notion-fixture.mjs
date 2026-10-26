@@ -1,15 +1,7 @@
 import assert from "node:assert/strict"
 import fs from "node:fs"
 
-export const toolNames = [
-  "get-self",
-  "fetch",
-  "query-data-sources",
-  "create-pages",
-  "update-page",
-  "move-pages",
-  "finish-revision",
-]
+export const toolNames = ["get-self", "fetch", "create-pages", "update-page"]
 const collection = "collection://00000000-0000-0000-0000-000000000001"
 const stateFile = process.env.FIXTURE_STATE
 const callsFile = process.env.FIXTURE_CALLS
@@ -38,16 +30,6 @@ export function invoke(name, args) {
       assert.ok(page, "unknown fixture page")
       return {
         text: `<page${page.deleted ? " deleted" : ""}>${page.parent !== "memory" && page.parent !== "private" ? `<parent-page url="https://notion.so/${page.parent}"/>` : ""}<properties>${JSON.stringify({ Title: page.title, Type: page.type, Source: page.source, "Last updated by": page.lastUpdatedBy })}</properties><content>${page.content}</content></page>`,
-      }
-    }
-    case "query-data-sources": {
-      const offset = Number(args.data.query.match(/OFFSET (\d+)/)?.[1] ?? 0)
-      const limit = Number(args.data.query.match(/LIMIT (\d+)/)?.[1] ?? 200)
-      return {
-        results: state.pages
-          .filter((p) => p.parent === "memory" && !p.deleted)
-          .slice(offset, offset + limit)
-          .map((p) => ({ Title: p.title })),
       }
     }
     case "create-pages": {
@@ -97,22 +79,6 @@ export function invoke(name, args) {
       save()
       return {}
     }
-    case "move-pages": {
-      if (process.env.FIXTURE_FAILURE === "move-denied")
-        throw new Error("fixture move forbidden")
-      for (const id of args.page_or_database_ids) {
-        const page = state.pages.find((p) => p.id === id)
-        assert.ok(page)
-        page.parent = args.new_parent.page_id
-        delete page.type
-      }
-      save()
-      if (process.env.FIXTURE_FAILURE === "move-interrupted")
-        throw new Error("fixture interrupted after move")
-      return {}
-    }
-    case "finish-revision":
-      return {}
     default:
       throw new Error(`unexpected fixture tool: ${tool}`)
   }

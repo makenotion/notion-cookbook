@@ -1,6 +1,6 @@
 {
   "name": "@notion-cookbook/codex-notion-memory",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Codex and Claude Code plugin that mirrors agent memories into Notion Memories through Notion MCP.",
   "type": "module",

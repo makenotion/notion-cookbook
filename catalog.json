@@ -4,7 +4,7 @@
     {
       "id": "codex-notion-memory",
       "title": "Codex Notion memory",
-      "summary": "Codex and Claude Code plugin that syncs agent memories into Notion Memories, retracts removed topics, and keeps optional Codex source archives separate.",
+      "summary": "Codex and Claude Code plugin that copies current memory Markdown into Notion Memories, one file per page, without content transformation.",
       "path": "examples/codex-notion-memory",
       "kind": "api-example",
       "status": "ready",

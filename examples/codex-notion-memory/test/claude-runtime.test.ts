@@ -52,7 +52,7 @@ test(
       { CLAUDE_PLUGIN_ROOT: pluginRoot }
     )
     assert.equal(hook.code, 0, hook.stderr)
-    await waitFor(() => /"created":4/.test(f.log()), 15_000)
-    assert.equal(f.pages().length, 4)
+    await waitFor(() => /"created":5/.test(f.log()), 15_000)
+    assert.equal(f.pages().length, 5)
   }
 )

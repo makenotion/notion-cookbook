@@ -3,18 +3,17 @@ import os from "node:os"
 import path from "node:path"
 import { AGENT_HOME } from "./config.ts"
 import {
-  type AgentMemory,
+  digest,
+  type MemoryFile,
   type MemorySource,
   type MemoryType,
-  personalize,
-  readIfExists,
 } from "./memories.ts"
 
 // Claude Code's auto memory keeps one Markdown file per memory in
 // ~/.claude/projects/<project>/memory/, or in one `autoMemoryDirectory` when the user set
 // it, with `name`, `description`, and `type` in its frontmatter. MEMORY.md in the same
-// directory is only an index of those files. Each file is already one topic, so each
-// becomes one Notion memory.
+// directory is only an index of those files. Each file becomes one page, with its Markdown
+// unchanged and its frontmatter `type` as the page Type.
 
 const TYPES: Record<string, MemoryType> = {
   user: "Profile",
@@ -37,40 +36,37 @@ const CUSTOM_DIR = customMemoryDir()
 
 export const claudeSource: MemorySource = {
   name: "Claude Code",
-  dir: () => CUSTOM_DIR ?? PROJECTS_DIR,
-  // Individual memory files come and go, so only the directory itself counts.
-  sourceFiles: (dir) => (fs.existsSync(dir) ? ["."] : []),
-  parse: parseClaudeMemories,
-  archive: () => undefined,
+  files: () => claudeMemoryFiles(CUSTOM_DIR ?? PROJECTS_DIR),
 }
 
 // Reads ~/.claude/projects/*/memory/, or a flat memory directory such as a custom
 // `autoMemoryDirectory`.
-export function parseClaudeMemories(
-  dir: string,
-  userName?: string
-): AgentMemory[] {
+export function claudeMemoryFiles(dir: string): MemoryFile[] {
   const flat = listDir(dir).some((f) => f.endsWith(".md"))
   const dirs = flat
-    ? [{ project: path.basename(dir), memoryDir: dir }]
+    ? [{ project: undefined, memoryDir: dir }]
     : listDir(dir).map((project) => ({
         project,
         memoryDir: path.join(dir, project, "memory"),
       }))
-  const out: AgentMemory[] = []
+  const out: MemoryFile[] = []
   for (const { project, memoryDir } of dirs) {
     for (const file of listDir(memoryDir)) {
       if (!file.endsWith(".md") || file === "MEMORY.md") continue
-      const memory = parseMemoryFile(
-        readIfExists(path.join(memoryDir, file)),
-        file
-      )
-      if (!memory) continue
+      let content: string
+      try {
+        content = fs.readFileSync(path.join(memoryDir, file), "utf8")
+      } catch {
+        continue
+      }
+      // The same file name can exist in several projects, so the title names the project.
+      const name = project ? `${projectLabel(project)}/${file}` : file
       out.push({
-        ...memory,
-        key: `claude:${project}/${file}`,
-        content: personalize(memory.content, userName),
-        from: `${projectLabel(project)} › \`${file}\``,
+        key: project ? `${project}/${file}` : file,
+        title: name,
+        type: memoryType(content),
+        content,
+        hash: digest(content),
       })
     }
   }
@@ -80,7 +76,7 @@ export function parseClaudeMemories(
 // True when a Write or Edit from a PostToolUse hook touched an auto memory file.
 export function isClaudeMemoryFile(file: string): boolean {
   const parts = path
-    .relative(claudeSource.dir(), path.resolve(file))
+    .relative(CUSTOM_DIR ?? PROJECTS_DIR, path.resolve(file))
     .split(path.sep)
   const name = parts.at(-1) ?? ""
   if (parts[0] === ".." || !name.endsWith(".md") || name === "MEMORY.md")
@@ -136,24 +132,10 @@ function readSettings(file: string): Record<string, unknown> {
   }
 }
 
-function parseMemoryFile(
-  text: string,
-  file: string
-): Pick<AgentMemory, "type" | "title" | "content"> | undefined {
-  const match = text.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/)
-  if (!match) return undefined
-  const meta = frontmatter(match[1])
-  // Older memories put `type` at the top level, newer ones under `metadata`.
-  const type = TYPES[meta.type ?? ""]
-  const body = match[2].trim()
-  if (!type || !body) return undefined
-  return {
-    type,
-    // `name` is a topic slug such as "integration-tests-real-db"; the one-line
-    // `description` is a summary, so it leads the body instead.
-    title: topicTitle(meta.name || file.replace(/\.md$/, "")),
-    content: meta.description ? `${meta.description}\n\n${body}` : body,
-  }
+// Older memories put `type` at the top level, newer ones under `metadata`.
+function memoryType(text: string): MemoryType {
+  const meta = frontmatter(text.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? "")
+  return TYPES[meta.type ?? ""] ?? "Notes"
 }
 
 // Flat `key: value` reader, enough for the frontmatter Claude Code writes. Nested keys
@@ -171,12 +153,6 @@ function unquote(value: string): string {
   if (/^".*"$/.test(value)) return value.slice(1, -1).replace(/\\(.)/g, "$1")
   if (/^'.*'$/.test(value)) return value.slice(1, -1).replace(/''/g, "'")
   return value
-}
-
-function topicTitle(slug: string): string {
-  const words = slug.replace(/^(user|feedback|project|reference)[-_]/, "")
-  const text = words.replace(/[-_]+/g, " ").trim()
-  return text.charAt(0).toUpperCase() + text.slice(1)
 }
 
 // Project directories are the working directory with every non-alphanumeric character
