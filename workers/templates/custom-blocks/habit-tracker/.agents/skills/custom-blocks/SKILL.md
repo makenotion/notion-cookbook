@@ -348,9 +348,14 @@ Definition defaults are shared by instances that inherit them; changing a defaul
 is not the normal way to configure one placement.
 
 Resolve each database to its data-source ID with
-`ntn datasources resolve <database-id>`, then inspect that data source's schema.
+`ntn datasources resolve <database-id>`. Read its schema with
+`ntn api v1/data_sources/<data-source-id>`.
 Match the declared data-source keys and map declared property keys to actual
 property IDs. Do not use property names as IDs or invent a mapping.
+
+The schema returns percent-encoded property IDs. Decode each ID once before using
+it in `property_ids_by_key`: `yG%5DC` becomes `yG]C`, `%5C` becomes `\`, and
+`title` stays `title`. In a JSON file, escape a decoded backslash as `\\`.
 
 If `make --help` lists `--bindings`, write `bindings.json` as an array:
 
@@ -395,9 +400,14 @@ For a custom page, use `v1/pages/<instance-id>` instead. Omit `definition_id` fo
 bindings-only edit. The API also accepts it when it matches the stored definition;
 it rejects a different definition. Read back the instance with
 `ntn api v1/blocks/<instance-id>` or `ntn api v1/pages/<instance-id>` and check the
-definition, data-source IDs, and property mappings. Then verify that the configured
-block renders and its main interaction works. Report any permission, feature-gate,
-or verification failure instead of claiming setup is complete.
+definition, data-source IDs, and saved property mappings. Readback confirms what
+was saved, not whether the mappings are valid: the API accepts unknown property
+IDs. Compare every mapped ID against the decoded schema IDs and confirm that its
+property type matches the declaration. Invalid mappings surface on the instance
+as "Custom block property mappings are invalid", not as a PATCH failure.
+Then verify that the configured block renders and its main interaction works.
+Report any permission, feature-gate, or verification failure instead of claiming
+setup is complete.
 
 [Share the Worker](https://developers.notion.com/workers/guides/sharing-workers) with **Can connect** access when another workspace member must
 insert the block. **Full access** also permits Worker management and deployment.
