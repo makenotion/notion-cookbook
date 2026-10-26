@@ -234,8 +234,16 @@ export function notionTools(server: {
 
 // A tool's text content, parsed as JSON when it is JSON.
 export function toolResultValue(tool: string, result: ToolResult): unknown {
-  const text = (result.content ?? []).map((part) => part.text ?? "").join("")
-  if (result.isError) throw new Error(`${tool}: ${text.slice(0, 500)}`)
+  const texts = (result.content ?? []).flatMap((part) =>
+    part.type === "text" && part.text ? [part.text] : []
+  )
+  if (result.isError)
+    throw new Error(`${tool}: ${texts.join("\n").slice(0, 500)}`)
+  // Notion sends the JSON result first, then optional human-readable notices.
+  // Keep those notices visible without corrupting the machine-readable result.
+  for (const notice of texts.slice(1))
+    console.error(JSON.stringify({ tool, notice }))
+  const text = texts[0] ?? ""
   try {
     return JSON.parse(text)
   } catch {
