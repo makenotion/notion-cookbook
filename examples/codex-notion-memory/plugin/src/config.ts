@@ -28,6 +28,8 @@ export interface MemoryState {
   released?: "edited" | "deleted"
   destination?: "memory" | "archive"
   pendingMove?: boolean
+  // Applied to managed knowledge pages; source archives are ordinary pages.
+  attribution?: "Codex" | "Claude Code"
 }
 
 export interface State {

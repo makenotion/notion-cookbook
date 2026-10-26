@@ -1,15 +1,16 @@
 import crypto from "node:crypto"
 import { log, saveState, type MemoryState, type State } from "./config.ts"
 import type { CallTool } from "./mcp.ts"
-import type { AgentMemory, MemorySyncResult } from "./memories.ts"
+import type { AgentMemory, MemorySource, MemorySyncResult } from "./memories.ts"
 
 type Destination = "memory" | "archive"
 
-// `agent` names where the memories came from in page text, such as "Claude Code".
+// `agent` names where the memories came from: in page text, and as the Source and Last
+// updated by options on knowledge pages.
 export async function syncProjection(
   call: CallTool,
   state: State,
-  agent: string,
+  agent: MemorySource["name"],
   knowledge: AgentMemory[],
   archive?: AgentMemory[]
 ): Promise<MemorySyncResult> {
@@ -132,21 +133,36 @@ export async function syncProjection(
         result.changedInNotion++
         continue
       }
-      if (previous?.hash === hash) {
+      const needsAttribution =
+        destination === "memory" && previous?.attribution !== agent
+      if (previous?.hash === hash && !needsAttribution) {
         result.unchanged++
         continue
       }
       if (previous) {
-        if (release(previous, await snapshot(call, previous.pageId))) {
+        const page = await snapshot(call, previous.pageId)
+        if (release(previous, page)) {
           result.changedInNotion++
           saveState(state)
           continue
         }
-        await call("update-page", {
-          page_id: previous.pageId,
-          command: "replace_content",
-          new_str: content,
-        })
+        if (destination === "memory") {
+          await call("update-page", {
+            page_id: previous.pageId,
+            command: "update_properties",
+            properties: {
+              ...(page.source ? {} : { Source: agent }),
+              "Last updated by": agent,
+            },
+          })
+          previous.attribution = agent
+        }
+        if (previous.hash !== hash)
+          await call("update-page", {
+            page_id: previous.pageId,
+            command: "replace_content",
+            new_str: content,
+          })
         previous.hash = hash
         result.updated++
       } else {
@@ -163,7 +179,12 @@ export async function syncProjection(
             : { page_id: (await root()).pageId }
         const properties =
           destination === "memory"
-            ? { title: memory.title, Type: memory.type }
+            ? {
+                title: memory.title,
+                Type: memory.type,
+                Source: agent,
+                "Last updated by": agent,
+              }
             : { title: memory.title }
         const page = createdPage(
           await call("create-pages", {
@@ -177,6 +198,7 @@ export async function syncProjection(
           type: memory.type,
           pageId: page.pageId,
           destination,
+          ...(destination === "memory" ? { attribution: agent } : {}),
         }
         titles?.push(memory.title)
         result.created++
@@ -263,6 +285,7 @@ export async function snapshot(
   legacyHash: string
   parent?: string
   beforeMoveHashes: string[]
+  source?: string
 }> {
   const result = await call("fetch", { id })
   if (!isObject(result) || typeof result.text !== "string")
@@ -292,6 +315,8 @@ export async function snapshot(
     hash: digest(payload),
     legacyHash: crypto.createHash("sha1").update(payload).digest("hex"),
     parent,
+    source:
+      typeof properties.Source === "string" ? properties.Source : undefined,
     beforeMoveHashes: beforeMoveType
       ? [
           digest(beforePayload),

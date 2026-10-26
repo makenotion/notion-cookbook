@@ -29,6 +29,7 @@ export async function claudeFixture(t: TestContext, failure = "") {
     FIXTURE_STATE: path.join(root, "remote.json"),
     FIXTURE_CALLS: path.join(root, "calls.jsonl"),
     FIXTURE_FAILURE: failure,
+    FIXTURE_SOURCE: "Claude Code",
   }
   const server = spawn(
     process.execPath,

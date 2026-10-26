@@ -6,9 +6,9 @@ import { syncProjection } from "./reconcile.ts"
 
 // Writes an agent's memories to the user's Notion Memories with the same Notion MCP tools
 // any agent uses, following the Notion memory guide (notion://docs/memory): one topic per
-// memory, a topic title, a Type, details in the body, and no Source property. Each agent
-// has a MemorySource that parses its own memory files (codex.ts, claude.ts);
-// reconcile.ts writes them.
+// memory, a topic title, a Type, the agent as Source and Last updated by, and details in
+// the body. Each agent has a MemorySource that parses its own memory files (codex.ts,
+// claude.ts); reconcile.ts writes them.
 
 export type MemoryType = "Profile" | "Preference" | "Work" | "Notes"
 

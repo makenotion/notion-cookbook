@@ -50,6 +50,10 @@ test("Claude Code sync persists across processes, skips unchanged, and updates o
   let result = await f.exec(["sync"])
   assert.equal(result.code, 0, result.stderr)
   assert.equal(JSON.parse(result.stdout).created, FIXTURE_COUNT)
+  for (const page of f.pages()) {
+    assert.equal(page.source, "Claude Code")
+    assert.equal(page.lastUpdatedBy, "Claude Code")
+  }
   const before = f.calls().length
   result = await f.exec(["sync"])
   assert.equal(result.code, 0, result.stderr)

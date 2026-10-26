@@ -39,6 +39,13 @@ private **Codex memory source archive** page. Current knowledge links to that ar
 This is a projection of consolidated knowledge, not a claim to re-extract every
 fact from historical evidence.
 
+New knowledge pages set `Source` and `Last updated by` to `Codex`. Updates keep
+an existing `Source` and set `Last updated by` to `Codex`. The next sync backfills
+missing attribution on older, unedited managed knowledge pages without rewriting
+their content. Unmanaged pages and source archives are left alone. This identifies
+the originating client and the syncing client; it does not imply that a model
+directly authored the Notion write or identify a particular model.
+
 | Source change                                         | Sync behavior                                                                   |
 | ----------------------------------------------------- | ------------------------------------------------------------------------------- |
 | Append or override a topic                            | Update the same managed page; no semantic merge or duplicate append             |
@@ -241,7 +248,8 @@ body starts with the `description`.
 Writing, duplicate checks, edit protection, and retraction are the same as for
 Codex: when Claude Code deletes a memory file, the unedited managed page moves
 out of Memories under a private **Claude Code memory source archive** page and
-its text is cleared. There is no source archive mode for Claude Code. The
+its text is cleared. Attribution uses `Claude Code` for `Source` and `Last
+updated by`. There is no source archive mode for Claude Code. The
 plugin reads memories from every project, so run the preview first if some
 projects hold memories you don't want in Notion. If you set
 `autoMemoryDirectory` in `~/.claude/settings.json`, it reads that directory

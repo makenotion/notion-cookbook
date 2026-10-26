@@ -59,13 +59,15 @@ test("recognizes only auto memory files from hook input", () => {
 })
 
 test("writes Claude Code memories incrementally and retracts removed ones", async () => {
-  const notion = fakeNotionMcp()
+  const notion = fakeNotionMcp([], "Claude Code")
   const first = await syncMemories(notion.callTool, claudeSource)
   assert.equal(first.created, 4)
   const profile = [...notion.pages.values()].find(
     (p) => p.Title === "Role and background"
   )
   assert.equal(profile?.Type, "Profile")
+  assert.equal(profile?.Source, "Claude Code")
+  assert.equal(profile?.lastUpdatedBy, "Claude Code")
   // The fake MCP's user is Casey Boyer; memories use the first name.
   assert.match(profile?.content ?? "", /Casey has ten years of Go/)
   assert.match(profile?.content ?? "", /From Claude Code memories \(code-app/)
