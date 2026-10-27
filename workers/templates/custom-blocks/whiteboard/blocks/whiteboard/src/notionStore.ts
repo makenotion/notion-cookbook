@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { pages } from "@notionhq/custom-blocks"
 import type {
-  NotionDataSourcePage,
+  NotionPage,
+  NotionPagePropertyValue,
   NotionPagePropertyInputValue,
 } from "@notionhq/custom-blocks"
-import { useDataSource } from "@notionhq/custom-blocks/react"
+import { useDataSource } from "./useDataSource"
 import type { BoardItem, WhiteboardStore, SaveState } from "./model"
 import {
   autoLabel,
@@ -13,37 +14,65 @@ import {
   isItemType,
   parsePoints,
 } from "./model"
-import { validateWhiteboardSchema } from "./schema"
+import { validateWhiteboardBindings } from "./schema"
 
 const DATA_SOURCE_KEY = "items"
 const WRITE_DEBOUNCE_MS = 500
 /** Notion rich text segments cap at 2000 chars; stay under it. */
 const TEXT_CHUNK = 1900
+const DATA_SOURCE_OPTIONS = { limit: 999 }
 
 type ItemPatch = Partial<Omit<BoardItem, "id">>
 
-function rowToItem(row: NotionDataSourcePage): BoardItem | null {
-  const p = row.propertiesByKey
-  const type = p.type
+function richTextContent(property: NotionPagePropertyValue | null): string {
+  if (property?.type === "rich_text") {
+    return property.rich_text
+      .map((segment) => segment["plain_text"])
+      .filter((text): text is string => typeof text === "string")
+      .join("")
+  }
+  if (property?.type === "title") {
+    return property.title
+      .map((segment) => segment["plain_text"])
+      .filter((text): text is string => typeof text === "string")
+      .join("")
+  }
+  return ""
+}
+
+function numberValue(row: NotionPage, key: string, fallback: number): number {
+  const property = row.getPropertyByKey(key)
+  return property?.type === "number" &&
+    typeof property.number === "number" &&
+    Number.isFinite(property.number)
+    ? property.number
+    : fallback
+}
+
+function rowToItem(row: NotionPage): BoardItem | null {
+  const typeProperty = row.getPropertyByKey("type")
+  const type =
+    typeProperty?.type === "select" ? typeProperty.select?.name : undefined
   if (!isItemType(type)) return null
-  const num = (v: unknown, fallback: number) =>
-    typeof v === "number" && Number.isFinite(v) ? v : fallback
+  const colorProperty = row.getPropertyByKey("color")
+  const colorValue =
+    colorProperty?.type === "select" ? colorProperty.select?.name : undefined
   return {
     id: row.id,
     type,
-    title: typeof p.title === "string" ? p.title : "",
-    color: isItemColor(p.color)
-      ? p.color
+    title: richTextContent(row.getPropertyByKey("title")),
+    color: isItemColor(colorValue)
+      ? colorValue
       : type === "sticky"
         ? "yellow"
         : "gray",
-    x: num(p.x, 0),
-    y: num(p.y, 0),
-    width: num(p.width, type === "sticky" ? 160 : 0),
-    height: num(p.height, type === "sticky" ? 160 : 0),
-    points: parsePoints(typeof p.points === "string" ? p.points : ""),
-    strokeWidth: num(p.strokeWidth, 2),
-    z: num(p.z, 0),
+    x: numberValue(row, "x", 0),
+    y: numberValue(row, "y", 0),
+    width: numberValue(row, "width", type === "sticky" ? 160 : 0),
+    height: numberValue(row, "height", type === "sticky" ? 160 : 0),
+    points: parsePoints(richTextContent(row.getPropertyByKey("points"))),
+    strokeWidth: numberValue(row, "strokeWidth", 2),
+    z: numberValue(row, "z", 0),
   }
 }
 
@@ -105,10 +134,8 @@ export function useNotionStore(): WhiteboardStore {
     items: rows,
     isLoading,
     error,
-    collectionSchema,
     propertyIdsByKey,
-    propertySchemasByKey,
-  } = useDataSource(DATA_SOURCE_KEY, { limit: 999 })
+  } = useDataSource(DATA_SOURCE_KEY, DATA_SOURCE_OPTIONS)
 
   const [local, setLocal] = useState<BoardItem[] | null>(null)
   const [saveState, setSaveState] = useState<SaveState>("idle")
@@ -130,8 +157,8 @@ export function useNotionStore(): WhiteboardStore {
   const inFlight = useRef(0)
   const errorUntil = useRef(0)
   const idleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const propertyIdsRef = useRef(propertyIdsByKey)
-  propertyIdsRef.current = propertyIdsByKey
+  const pageCache = useRef(new Map<string, NotionPage>())
+  for (const row of rows) pageCache.current.set(row.id, row)
   const localSeq = useRef(0)
   // useDataSource resolves fresh row wrapper objects on every render. Depend on
   // their serializable board values so local reconciliation only runs when the
@@ -144,7 +171,8 @@ export function useNotionStore(): WhiteboardStore {
   // Wait until we have observed the query cycle (or actual rows), then reconcile
   // every live snapshot while preserving local creates and unconfirmed writes.
   useEffect(() => {
-    if (isLoading || error || (!queryStarted.current && rows.length === 0)) return
+    if (isLoading || error || (!queryStarted.current && rows.length === 0))
+      return
 
     const localIdByPageId = new Map<string, string>()
     for (const [localId, pageId] of pageIds.current) {
@@ -256,17 +284,9 @@ export function useNotionStore(): WhiteboardStore {
       if (!patch) return
       pending.current.delete(localId)
 
-      const bySemanticKey = patchToProperties(patch)
-      // pages.update requires raw property ids; resolve via the bound schema.
-      const properties: Record<
-        string,
-        NotionPagePropertyInputValue & { id: string }
-      > = {}
-      for (const [key, value] of Object.entries(bySemanticKey)) {
-        const rawId = propertyIdsRef.current[key]
-        if (rawId) properties[rawId] = { ...value, id: rawId }
-      }
-      if (Object.keys(properties).length === 0) return
+      const page = pageCache.current.get(pageId)
+      if (!page) return
+      const properties = patchToProperties(patch)
 
       const active = activePatches.current.get(localId) ?? []
       activePatches.current.set(localId, [...active, patch])
@@ -282,11 +302,8 @@ export function useNotionStore(): WhiteboardStore {
       }
 
       beginWrite()
-      void pages
-        .update({
-          pageId: pageId as Parameters<typeof pages.get>[0],
-          properties,
-        })
+      void page
+        .updateByKey({ properties })
         .then((result) => {
           clearActivePatch()
           if (result.status === "success") {
@@ -338,10 +355,11 @@ export function useNotionStore(): WhiteboardStore {
           if (result.status === "success") {
             if (pageIds.current.has(localId)) {
               pageIds.current.set(localId, result.page.id)
+              pageCache.current.set(result.page.id, result.page)
               baselines.current.set(localId, { ...withTitle, id: localId })
             } else {
               // Item was deleted while the create was in flight.
-              void pages.archive(result.page.id)
+              void result.page.archive()
             }
             endWrite(true)
           } else {
@@ -390,9 +408,12 @@ export function useNotionStore(): WhiteboardStore {
       const pageId = pageIds.current.get(id)
       pageIds.current.delete(id)
       if (pageId) {
+        const page = pageCache.current.get(pageId)
+        if (!page) return
+        pageCache.current.delete(pageId)
         beginWrite()
-        void pages
-          .archive(pageId as Parameters<typeof pages.get>[0])
+        void page
+          .archive()
           .then((result) => {
             // A row already gone (deleted twice, or removed in Notion)
             // is fine — local state is already reconciled. Stay quiet.
@@ -413,9 +434,7 @@ export function useNotionStore(): WhiteboardStore {
     loadError: error
       ? "Couldn't load the whiteboard database. Map a database to the “items” key in the block settings."
       : null,
-    setupIssues: collectionSchema
-      ? validateWhiteboardSchema(propertySchemasByKey)
-      : [],
+    setupIssues: validateWhiteboardBindings(propertyIdsByKey),
     saveState,
     createItem,
     updateItem,

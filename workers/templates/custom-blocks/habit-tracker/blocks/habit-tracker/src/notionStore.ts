@@ -1,12 +1,10 @@
 import { useCallback, useMemo, useRef, useState } from "react"
 import { pages } from "@notionhq/custom-blocks"
 import type {
-  NotionDataSourcePage,
-  NotionDateValue,
+  NotionPage,
   NotionPageId,
-  NotionRecordPointer,
+  NotionDateInput,
 } from "@notionhq/custom-blocks"
-import { useDataSource } from "@notionhq/custom-blocks/react"
 import type {
   CellKey,
   Habit,
@@ -16,57 +14,77 @@ import type {
 } from "./types"
 import { cellKey, HABIT_COLORS, isHabitColor } from "./types"
 import { todayYmd } from "./dates"
+import { useDataSource } from "./useDataSource"
 
 const HABITS_KEY = "habits"
 const LOG_KEY = "log"
 const ROW_LIMIT = 999
+const DATA_SOURCE_OPTIONS = { limit: ROW_LIMIT }
 
 /**
- * Extract the day key from a Notion date value. `start_date` is already a
- * plain "YYYY-MM-DD" calendar date (datetime variants carry the time in a
- * separate `start_time` field), so this never shifts across timezones the way
- * slicing a UTC ISO timestamp would.
+ * Date-only values use `YYYY-MM-DD`; datetime values use ISO 8601. Keeping the
+ * first ten characters gives both forms the calendar day without timezone shifts.
  */
-function parseDate(value: unknown): string | null {
-  if (value == null || typeof value !== "object") return null
-  const date = value as NotionDateValue
-  if (typeof date.start_date === "string" && date.start_date.length >= 10) {
-    return date.start_date.slice(0, 10)
-  }
-  return null
+function parseDate(value: NotionDateInput | null): string | null {
+  return value?.start.slice(0, 10) ?? null
 }
 
-function parseRelation(value: unknown): string | null {
-  if (!Array.isArray(value) || value.length === 0) return null
-  const first = value[0] as NotionRecordPointer
-  return typeof first?.id === "string" ? first.id : null
+function parseRelation(row: NotionPage): string | null {
+  const property = row.getPropertyByKey("habit")
+  return property?.type === "relation"
+    ? (property.relation[0]?.id ?? null)
+    : null
 }
 
-function parseHabit(row: NotionDataSourcePage): Habit {
-  const props = row.propertiesByKey
-  const name = typeof props.name === "string" ? props.name.trim() : ""
-  const icon = typeof props.icon === "string" ? props.icon.trim() : ""
+function richTextContent(row: NotionPage, key: string): string {
+  const property = row.getPropertyByKey(key)
+  if (property?.type !== "rich_text") return ""
+  return property.rich_text
+    .map((segment) => {
+      const text = segment["plain_text"]
+      return typeof text === "string" ? text : ""
+    })
+    .join("")
+}
+
+function parseHabit(row: NotionPage): Habit {
+  const title = row.getPropertyByKey("name")
+  const name =
+    title?.type === "title"
+      ? title.title
+          .map((segment) => segment["plain_text"])
+          .filter((part): part is string => typeof part === "string")
+          .join("")
+          .trim()
+      : ""
+  const icon = richTextContent(row, "icon").trim()
+  const colorProperty = row.getPropertyByKey("color")
+  const colorValue =
+    colorProperty?.type === "select" ? colorProperty.select?.name : undefined
   // Unknown or missing color -> neutral gray, never a broken slot.
-  const color = isHabitColor(props.color) ? props.color : "gray"
+  const color = isHabitColor(colorValue) ? colorValue : "gray"
   return { id: row.id, name: name || "Untitled", icon, color }
 }
 
-type LogRow = { id: string; key: CellKey }
+type LogRow = { id: NotionPageId; key: CellKey }
 
-function parseLog(row: NotionDataSourcePage): LogRow | null {
-  const date = parseDate(row.propertiesByKey.date)
-  const habitId = parseRelation(row.propertiesByKey.habit)
+function parseLog(row: NotionPage): LogRow | null {
+  const dateProperty = row.getPropertyByKey("date")
+  const date = parseDate(
+    dateProperty?.type === "date" ? dateProperty.date : null
+  )
+  const habitId = parseRelation(row)
   if (!date || !habitId) return null
   return { id: row.id, key: cellKey(habitId, date) }
 }
 
 export function useNotionStore(): HabitStore {
-  const habitsDS = useDataSource(HABITS_KEY, { limit: ROW_LIMIT })
-  const logDS = useDataSource(LOG_KEY, { limit: ROW_LIMIT })
+  const habitsDS = useDataSource(HABITS_KEY, DATA_SOURCE_OPTIONS)
+  const logDS = useDataSource(LOG_KEY, DATA_SOURCE_OPTIONS)
 
   // Optimistic overlay on top of host-delivered rows.
   // addedByKey: cellKey -> created page id ("" while the create is in flight).
-  const [addedByKey, setAddedByKey] = useState<Map<CellKey, string>>(
+  const [addedByKey, setAddedByKey] = useState<Map<CellKey, NotionPageId | "">>(
     () => new Map()
   )
   const [removedKeys, setRemovedKeys] = useState<Set<CellKey>>(() => new Set())
@@ -78,7 +96,7 @@ export function useNotionStore(): HabitStore {
   // Duplicate rows for the same habit+day collapse to one completed cell;
   // all row ids are kept so toggling off deletes every duplicate.
   const serverLogs = useMemo(() => {
-    const byKey = new Map<CellKey, string[]>()
+    const byKey = new Map<CellKey, NotionPageId[]>()
     for (const row of logDS.items) {
       const log = parseLog(row)
       if (!log) continue
@@ -170,12 +188,15 @@ export function useNotionStore(): HabitStore {
         // The create is still in flight; ignore this tap rather than race it.
         return false
       }
-      const ids = new Set<string>(serverLogs.get(key) ?? [])
-      if (localId) ids.add(localId)
+      const ids = new Set<NotionPageId>(serverLogs.get(key) ?? [])
+      if (localId !== undefined) ids.add(localId)
       if (ids.size === 0) return false
       setRemovedKeys((prev) => new Set(prev).add(key))
       const results = await Promise.all(
-        [...ids].map((id) => pages.archive(id as NotionPageId))
+        [...ids].map(async (id) => {
+          const page = await pages.get(id)
+          return page.status === "success" ? page.page.archive() : page
+        })
       )
       if (results.every((r) => r.status === "success")) return true
       // Revert.
@@ -250,15 +271,24 @@ export function useNotionStore(): HabitStore {
 
   let status: StoreStatus = "ready"
   let unboundDetail: string | undefined
-  const dsError = habitsDS.error ?? logDS.error
-  if (dsError) {
-    status = "unbound"
-    unboundDetail = dsError.message
-  } else if (
+  const missingBinding =
+    !habitsDS.propertyIdsByKey.name ||
+    !habitsDS.propertyIdsByKey.icon ||
+    !habitsDS.propertyIdsByKey.color ||
+    !logDS.propertyIdsByKey.name ||
+    !logDS.propertyIdsByKey.date ||
+    !logDS.propertyIdsByKey.habit
+  const dataSourceError = habitsDS.error ?? logDS.error
+  if (
     (habitsDS.isLoading && habitsDS.items.length === 0) ||
     (logDS.isLoading && logDS.items.length === 0)
   ) {
     status = "loading"
+  } else if (dataSourceError || missingBinding) {
+    status = "unbound"
+    unboundDetail =
+      dataSourceError?.message ??
+      "Map the habit and log data sources and their required properties in the block settings."
   }
 
   return useMemo(
