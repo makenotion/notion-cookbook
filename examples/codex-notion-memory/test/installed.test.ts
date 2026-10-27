@@ -114,7 +114,15 @@ test(
       "running consolidation must not import partial files"
     )
     db.exec("UPDATE jobs SET status = 'done'")
-    await waitFor(() => f.calls().includes("update-page"), 10_000)
+    await waitFor(
+      () =>
+        /Rust developer/.test(
+          String(
+            f.pages().find((p) => p.title === "memory_summary.md")?.content
+          )
+        ),
+      10_000
+    )
     assert.equal(f.pages().length, 2)
     assert.match(
       String(f.pages().find((p) => p.title === "memory_summary.md")?.content),
@@ -167,3 +175,34 @@ test("an explicit destination never falls back and workspace mismatch writes not
     assert.deepEqual(f.pages(), [])
   }
 })
+
+test(
+  "worker notices mtime-only changes without replacing the source text",
+  { timeout: 15_000 },
+  async (t) => {
+    const f = fixture(t)
+    f.seed()
+    const started = await f.exec(["hook", "stop"], {}, 3_000)
+    assert.equal(started.code, 0, started.stderr)
+    await waitFor(() => f.pages().length === 2)
+    const page = f.pages().find((item) => item.title === "memory_summary.md")
+    assert.ok(page)
+    const file = path.join(f.home, "memories_v2/memory_summary.md")
+    const original = fs.readFileSync(file, "utf8")
+    const stat = fs.statSync(file)
+    fs.utimesSync(file, stat.atime, new Date(stat.mtimeMs + 10_000))
+    const updatedAt = fs.statSync(file).mtime.toISOString()
+    await waitFor(
+      () =>
+        String(f.pages().find((item) => item.id === page.id)?.content).includes(
+          updatedAt
+        ),
+      10_000
+    )
+    const updated = f.pages().find((item) => item.id === page.id)
+    assert.ok(updated)
+    assert.ok(String(updated.content).endsWith(`\n---\n\n${original}`))
+    assert.equal(f.pages().length, 2)
+    assert.ok(!f.calls().includes("update-data-source"))
+  }
+)

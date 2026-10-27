@@ -2,7 +2,6 @@
 //
 //   node src/main.ts hook <session-start|stop>   called by Codex hooks
 //   node src/main.ts sync                        write Codex memories now
-//   node src/main.ts preview      offline: what it would write
 //   node src/main.ts status                      memories it manages
 import { spawn } from "node:child_process"
 import fs from "node:fs"

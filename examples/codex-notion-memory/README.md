@@ -1,30 +1,80 @@
 # Codex Notion Memory
 
 Copy Codex's current memory Markdown files into Notion Memories, one file per
-page. File names become page titles and Markdown is passed through unchanged.
+page. Relative file paths become page titles. Each page begins with source metadata,
+then a separator and the original Markdown without plugin transformations.
 The plugin calls Notion through Codex's existing MCP connection; it runs no model.
 
 ## Behavior
 
-| Source                              | Notion page         |
-| ----------------------------------- | ------------------- |
-| `memories_v2/memory_summary.md`     | `memory_summary.md` |
-| `memories_v2/MEMORY.md`, if present | `MEMORY.md`         |
+The plugin recursively reads every regular `*.md` file under `memories_v2/`,
+including `rollout_summaries/` and `extensions/`. It skips `.git/`, symbolic links,
+and files with other extensions. Paths use `/` separators and sort before import.
+
+| Source                                              | Notion page                             |
+| --------------------------------------------------- | --------------------------------------- |
+| `memories_v2/memory_summary.md`                     | `memory_summary.md`                     |
+| `memories_v2/rollout_summaries/session.md`          | `rollout_summaries/session.md`          |
+| `memories_v2/extensions/ad_hoc/notes/preference.md` | `extensions/ad_hoc/notes/preference.md` |
+
+`MEMORY.md` is copied if present, but Codex v2 normally does not generate it.
 
 Pages use `Type: Notes`, `Source: Codex`, and `Last updated by: Codex`. Changed files
 replace the same page's body. Updates preserve the original Source. Unchanged
-files require no Notion call. The local state maps file names to page IDs and
-source/readback hashes.
+files require no Notion call. The local state maps relative paths to page IDs and
+source/readback hashes plus a hash of source creation and modification times.
+A source timestamp change updates the same page even if its text is unchanged.
 
 If a managed page was edited or deleted in Notion, the next attempted update
 releases it instead of overwriting or recreating it. Source files stay untouched.
 Missing files leave existing Notion pages alone. A missing required summary stops
-the import; an explicitly empty file copies empty content.
+the import; an explicitly empty file retains the metadata preamble with an empty
+original-content section.
 
 This version only reads v2. It performs no chapter parsing, rewriting, deduplication,
 classification, raw extraction import, source archival, version selection, legacy
 migration, or automatic deletion. Existing unrelated or older pages stay untouched;
 new file pages are created without adopting existing same-title pages.
+
+## Source metadata
+
+The database keeps its existing fields. No source metadata properties are added.
+Each page starts with `# Codex memory source`, a JSON code block, and a separator:
+
+````markdown
+# Codex memory source
+
+```json
+{
+  "Source": "Codex",
+  "Source root": "memories_v2",
+  "Source path": "extensions/ad_hoc/notes/preference.md",
+  "Source created at": "2026-10-26T12:00:00.000Z",
+  "Source updated at": "2026-10-26T13:00:00.000Z",
+  "Synced at": "2026-10-26T13:00:05.000Z",
+  "Synced by": "notion-memory"
+}
+```
+
+---
+
+Original file content starts here.
+````
+
+Creation time uses a valid positive filesystem birth time, otherwise JSON `null`.
+It never substitutes ctime. Modification time uses filesystem mtime. Source root
+and path exclude the absolute home directory. `Synced at` is sampled just before
+the successful write attempt, not at API completion; unchanged files keep their
+previous value. It is excluded from change detection.
+
+The source suffix is passed unchanged, including empty content and whitespace.
+Notion may normalize its imported representation. `Source` identifies Codex memory,
+not the original author of every sentence. `Synced by` identifies this copying
+plugin. Native client attribution remains Codex, while Notion system timestamps
+and caller identities stay managed by Notion.
+
+Existing file mappings without a metadata hash update the same page once to add
+the preamble, subject to the existing protection for human edits.
 
 ## Requirements and setup
 
@@ -74,7 +124,7 @@ jobs in the v2 memory database to finish; database read errors stop the worker.
 There is no continuously running service or native memory-updated event.
 
 Manual `sync` explicitly imports retained files even if automatic memories are
-currently disabled. Workers use a cross-process lock. A source hash skips unchanged
+currently disabled. Workers use a cross-process lock. Source content and metadata hashes skip unchanged
 writes, and a readback hash protects external changes before an update.
 
 ## Commands
@@ -88,10 +138,18 @@ node src/main.ts verify
 node src/main.ts status
 ```
 
-`preview` reads local files only. `verify` compares current source hashes with the
+`preview` reads local files and their filesystem timestamps only. `verify` compares
+current source content and metadata hashes with the
 mapping and fetches every managed page to check its saved readback hash. Notion
 may normalize Markdown formatting; this is not a byte-preserving backup format.
 `sync` prints created/updated/unchanged and externally changed counts.
+
+Known gaps against a full sync inventory are that unsupported formats and missing
+previously synced files are silently skipped. A successful remote write followed
+by failed readback can leave an unrecorded new page, or make a retry mistake the
+plugin's own update for a human edit. The lock prevents overlapping imports but
+does not resolve ambiguous write outcomes. `verify` checks saved readback hashes;
+it does not prove that Notion retained every original source character.
 
 ## Processing points and files
 
@@ -101,7 +159,7 @@ may normalize Markdown formatting; this is not a byte-preserving backup format.
 | SessionStart / Stop registration                               | `plugin/hooks.json`                                         |
 | Select Node runtime                                            | `plugin/hook.cjs`                                           |
 | Manual command, detached worker, feature guard, watch window   | `plugin/src/main.ts`                                        |
-| Read the two current Markdown files unchanged                  | `plugin/src/memories.ts` — `memoryFiles`                    |
+| Recursively read current memory Markdown files unchanged       | `plugin/src/memories.ts` — `memoryFiles`                    |
 | One file / one page, attribution, update protection, readback  | `plugin/src/memories.ts` — `syncMemories`, `verifyMemories` |
 | File polling and v2 job check                                  | `plugin/src/memories.ts` — `watchMemories`                  |
 | Connection, OAuth-owned transport, workspace check, RPC errors | `plugin/src/mcp.ts`                                         |
@@ -117,8 +175,11 @@ npm test
 CODEX_TEST_BINARY="$(command -v codex)" NOTION_TEST_SLOW=1 npm test
 ```
 
-Tests exercise unchanged Markdown, one file per page, same-page updates, empty and
-missing files, external edits/deletions, notices, locks, worker polling and failures.
+Tests exercise nested files, distinct paths with the same basename, unchanged
+Markdown, same-page updates, empty and missing files, excluded links and Git state,
+external edits/deletions, notices, locks, worker polling and failures. Source metadata
+tests cover birth time, metadata-only updates, unchanged-page stability and existing
+mapping backfill.
 The optional runtime test installs the real artifact in an isolated Codex home
 and drives a stdio Notion fixture through the real app-server without a model.
 Desktop trust/OAuth clicks and natural-conversation hook dispatch require separate

@@ -17,23 +17,68 @@ export function memoriesDir(): string {
   return path.join(loadConfig().sourceHome || CODEX_HOME, "memories_v2")
 }
 
-export function memoryFiles(): {
+export interface MemoryFile {
   name: string
   content: string
   hash: string
-}[] {
+  createdAt: string | null
+  updatedAt: string
+  metadataHash: string
+}
+
+export function sourceCreatedAt(birthtimeMs: number): string | null {
+  const date = new Date(birthtimeMs)
+  return birthtimeMs > 0 && Number.isFinite(date.getTime())
+    ? date.toISOString()
+    : null
+}
+
+export function renderMemory(file: MemoryFile, syncedAt: string): string {
+  const metadata = {
+    Source: "Codex",
+    "Source root": "memories_v2",
+    "Source path": file.name,
+    "Source created at": file.createdAt,
+    "Source updated at": file.updatedAt,
+    "Synced at": syncedAt,
+    "Synced by": "notion-memory",
+  }
+  return `# Codex memory source\n\n\`\`\`json\n${JSON.stringify(metadata, null, 2)}\n\`\`\`\n\n---\n\n${file.content}`
+}
+
+export function memoryFiles(): MemoryFile[] {
   const dir = memoriesDir()
   if (!fs.existsSync(path.join(dir, "memory_summary.md")))
     throw new Error("Codex v2 memory_summary.md is not ready")
-  return ["memory_summary.md", "MEMORY.md"]
-    .filter((name) => fs.existsSync(path.join(dir, name)))
-    .map((name) => {
-      const content = fs.readFileSync(path.join(dir, name), "utf8")
-      return { name, content, hash: digest(content) }
-    })
+  const names: string[] = []
+  function visit(relative: string) {
+    for (const entry of fs.readdirSync(path.join(dir, relative), {
+      withFileTypes: true,
+    })) {
+      if (entry.name === ".git") continue
+      const name = path.posix.join(relative, entry.name)
+      if (entry.isDirectory()) visit(name)
+      else if (entry.isFile() && entry.name.endsWith(".md")) names.push(name)
+    }
+  }
+  visit("")
+  return names.sort().map((name) => {
+    const file = path.join(dir, name)
+    const content = fs.readFileSync(file, "utf8")
+    const stat = fs.statSync(file)
+    const createdAt = sourceCreatedAt(stat.birthtimeMs)
+    const updatedAt = stat.mtime.toISOString()
+    return {
+      name,
+      content,
+      hash: digest(content),
+      createdAt,
+      updatedAt,
+      metadataHash: digest(JSON.stringify([createdAt, updatedAt])),
+    }
+  })
 }
 
-// One source file becomes one page. Pass its Markdown through unchanged.
 export async function syncMemories(call: CallTool) {
   const files = memoryFiles()
   const state = loadState()
@@ -50,7 +95,10 @@ export async function syncMemories(call: CallTool) {
       result.changedInNotion++
       continue
     }
-    if (previous?.hash === file.hash) {
+    if (
+      previous?.hash === file.hash &&
+      previous.metadataHash === file.metadataHash
+    ) {
       result.unchanged++
       continue
     }
@@ -63,6 +111,9 @@ export async function syncMemories(call: CallTool) {
         result.changedInNotion++
         continue
       }
+    }
+    const content = renderMemory(file, new Date().toISOString())
+    if (previous) {
       await call("update-page", {
         page_id: previous.pageId,
         command: "update_properties",
@@ -71,7 +122,7 @@ export async function syncMemories(call: CallTool) {
       await call("update-page", {
         page_id: previous.pageId,
         command: "replace_content",
-        new_str: file.content,
+        new_str: content,
       })
       pageId = previous.pageId
       result.updated++
@@ -86,7 +137,7 @@ export async function syncMemories(call: CallTool) {
               Source: "Codex",
               "Last updated by": "Codex",
             },
-            content: file.content,
+            content,
           },
         ],
       })
@@ -101,6 +152,7 @@ export async function syncMemories(call: CallTool) {
     state.files[file.name] = {
       pageId,
       hash: file.hash,
+      metadataHash: file.metadataHash,
       pageHash: (await snapshot(call, pageId)).hash,
     }
     saveState(state)
@@ -114,7 +166,12 @@ export async function verifyMemories(call: CallTool) {
   const state = loadState()
   for (const file of files) {
     const entry = state.files[file.name]
-    if (!entry || entry.released || entry.hash !== file.hash)
+    if (
+      !entry ||
+      entry.released ||
+      entry.hash !== file.hash ||
+      entry.metadataHash !== file.metadataHash
+    )
       throw new Error(`Unsynced file: ${file.name}`)
     const page = await snapshot(call, entry.pageId)
     if (page.deleted || page.hash !== entry.pageHash)
@@ -150,7 +207,13 @@ async function snapshot(call: CallTool, id: string) {
 
 export function memoryFilesHash(): string {
   return digest(
-    JSON.stringify(memoryFiles().map(({ name, hash }) => [name, hash]))
+    JSON.stringify(
+      memoryFiles().map(({ name, hash, metadataHash }) => [
+        name,
+        hash,
+        metadataHash,
+      ])
+    )
   )
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "notion-memory",
-  "version": "0.4.0",
+  "version": "0.4.2",
   "description": "Mirror the memories Codex builds about you into Notion Memories, through Notion MCP.",
   "skills": "./skills/",
   "hooks": "./hooks.json",
