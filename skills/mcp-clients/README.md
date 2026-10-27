@@ -63,6 +63,8 @@ mcp-clients/
 - Treat `evaluations/` as validation material, not runtime instructions.
 - When changing a skill, update its evaluations and follow the repository
   [contributing guide](../../CONTRIBUTING.md).
+- After changing a skill, run `npm run plugins:build` from the repository
+  root. Platform plugins in [`plugins/`](../../plugins/) ship generated copies.
 
 ## Evaluation and maintenance
 
