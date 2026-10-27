@@ -29,7 +29,7 @@ ntn login
 ntn apps deploy --name my-workflow-app
 ```
 
-Apps require Node.js 26 or newer. The `ntn apps` command is experimental and
+Apps require Node.js 26.12.1 or newer. The `ntn apps` command is experimental and
 must be enabled before deployment.
 
 Apps are a private alpha and are not currently open for general contribution.

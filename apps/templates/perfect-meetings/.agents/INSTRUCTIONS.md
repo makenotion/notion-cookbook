@@ -183,7 +183,7 @@ APIs by changing package names. Sync contexts have `notion`, but no workflow
 
 ## Runtime and credentials
 
-Use Node.js 26 or newer and install from the app root. Use `context.notion`
+Use Node.js 26.12.1 or newer and install from the app root. Use `context.notion`
 for Notion API access. Deployed apps receive Notion credentials automatically;
 local execution needs `NOTION_API_TOKEN` in `.env` before making API requests.
 Never commit tokens or generated `dist/` and `.notion/` state.
