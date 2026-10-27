@@ -9,7 +9,7 @@
   },
   "engines": {
     "node": ">=22.23.4",
-    "npm": ">=10.9.2"
+    "npm": ">=10.9.9"
   },
   "dependencies": {
     "@notionhq/workers": ">=0.8.0"

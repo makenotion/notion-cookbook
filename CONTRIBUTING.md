@@ -63,7 +63,7 @@ first so related capabilities sort together. Use one of these catalog kinds:
 
 New Workers should:
 
-- Require Node.js 22.23.4 and npm 10.9.2 or newer.
+- Require Node.js 22.23.4 and npm 10.9.9 or newer.
 - Declare `build`, `check`, and `test` scripts.
 - Depend on `@notionhq/workers` and register capabilities from `src/index.ts`.
 - Include deterministic offline tests that do not require production

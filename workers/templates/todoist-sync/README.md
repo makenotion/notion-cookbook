@@ -9,7 +9,7 @@ links each managed page back to its source record.
 
 ## Quickstart
 
-You need Node.js 22.23.4+, npm 10.9.2+, Notion Workers access, and a Todoist personal
+You need Node.js 22.23.4+, npm 10.9.9+, Notion Workers access, and a Todoist personal
 API token from **Settings > Integrations > Developer**. You also need the
 account's stable `id` from `GET https://api.todoist.com/api/v1/user`.
 

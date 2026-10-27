@@ -5,7 +5,8 @@
   "description": "Retrieve blocks from a Notion page and parse text from any block type.",
   "main": "index.ts",
   "engines": {
-    "node": ">=22.23.4"
+    "node": ">=22.23.4",
+    "npm": ">=10.9.9"
   },
   "scripts": {
     "start": "node --loader ts-node/esm index.ts"

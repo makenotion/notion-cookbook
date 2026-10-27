@@ -34,7 +34,7 @@ writes are skipped.
 
 ## Prerequisites
 
-- Node.js 26.12.1 or newer and the `ntn` CLI.
+- Node.js 26.12.1 or newer, npm 11.20.0 or newer, and the `ntn` CLI.
 - A Statsig **Console API** key with write access. A server secret key does not
   work with the Console API.
 - An existing Statsig segment of type **ID List**. Its ID is shown in the
