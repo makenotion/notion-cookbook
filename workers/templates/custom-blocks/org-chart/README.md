@@ -91,13 +91,12 @@ blocks/org-chart/
   src/
     OrgChart.tsx        Viewport, cards, connectors, search, selection
     tree.ts             Tidy-tree layout (Reingold–Tilford-style) and forest building
-    useNotionPeople.ts  Real data layer (rows + lazy icon resolution)
+    useNotionPeople.ts  Real data layer (rows and page icons)
     mockData.ts         Seeded orgs for standalone development
 ```
 
 ## Limitations
 
-- Avatar resolution issues one `pages.get` per row (fine at org scale; rows
-  cap at 999).
+- The chart loads up to 999 people.
 - Search matches name and role substrings only.
 - Collapse state lives in the session; it isn't persisted to the block.

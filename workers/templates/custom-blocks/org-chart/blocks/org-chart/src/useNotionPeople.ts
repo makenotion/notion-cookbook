@@ -1,5 +1,5 @@
 import { useMemo } from "react"
-import { useDataSource } from "./useDataSource"
+import { useDataSource } from "@notionhq/custom-blocks/react"
 import type { OrgDataState, Person, PersonIcon } from "./types"
 
 const DATA_SOURCE_KEY = "people"

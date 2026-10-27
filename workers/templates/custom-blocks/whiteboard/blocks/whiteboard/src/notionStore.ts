@@ -5,7 +5,7 @@ import type {
   NotionPagePropertyValue,
   NotionPagePropertyInputValue,
 } from "@notionhq/custom-blocks"
-import { useDataSource } from "./useDataSource"
+import { useDataSource } from "@notionhq/custom-blocks/react"
 import type { BoardItem, WhiteboardStore, SaveState } from "./model"
 import {
   autoLabel,
@@ -160,12 +160,6 @@ export function useNotionStore(): WhiteboardStore {
   const pageCache = useRef(new Map<string, NotionPage>())
   for (const row of rows) pageCache.current.set(row.id, row)
   const localSeq = useRef(0)
-  // useDataSource resolves fresh row wrapper objects on every render. Depend on
-  // their serializable board values so local reconciliation only runs when the
-  // actual database snapshot changes.
-  const rowsRevision = rows
-    .map((row) => JSON.stringify(rowToItem(row)))
-    .join("\n")
 
   // The SDK exposes an empty, non-loading snapshot before its query effect runs.
   // Wait until we have observed the query cycle (or actual rows), then reconcile
@@ -206,7 +200,7 @@ export function useNotionStore(): WhiteboardStore {
       )
       return [...synced, ...localOnly].sort((a, b) => a.z - b.z)
     })
-  }, [isLoading, error, rowsRevision])
+  }, [isLoading, error, rows])
 
   useEffect(() => {
     const timerMap = timers.current

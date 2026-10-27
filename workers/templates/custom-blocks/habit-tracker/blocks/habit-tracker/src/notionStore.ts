@@ -14,7 +14,7 @@ import type {
 } from "./types"
 import { cellKey, HABIT_COLORS, isHabitColor } from "./types"
 import { todayYmd } from "./dates"
-import { useDataSource } from "./useDataSource"
+import { useDataSource } from "@notionhq/custom-blocks/react"
 
 const HABITS_KEY = "habits"
 const LOG_KEY = "log"

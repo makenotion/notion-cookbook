@@ -564,17 +564,16 @@ function useLiveQuery(
   React.useEffect(() => {
     dispatch({ type: "resubscribe" })
     let last: Snapshot<Row> = { items: [], isLoading: false }
-    const unsubscribe = customBlock.subscribeToDataSource(
-      {
-        key,
-        options: JSON.parse(identity) as DataSourceQueryOptions,
-        onSnapshot: (snapshot) => {
-          last = snapshot
-          dispatch({ type: "snapshot", snapshot })
-        },
+    const unsubscribe = customBlock.subscribeToDataSource({
+      key,
+      options: JSON.parse(identity) as DataSourceQueryOptions,
+      onSnapshot: (snapshot) => {
+        last = snapshot
+        dispatch({ type: "snapshot", snapshot })
       },
-      (error) => dispatch({ type: "error", error })
-    )
+      onError: (error) =>
+        dispatch({ type: "snapshot", snapshot: { ...last, error } }),
+    })
     const timer = window.setTimeout(
       () => dispatch({ type: "timeout", snapshot: last }),
       10_000
