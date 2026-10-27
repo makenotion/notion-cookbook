@@ -31,6 +31,7 @@ export type QueryState<T> = {
 
 export type QueryEvent<T> =
   | { type: "snapshot"; snapshot: Snapshot<T> }
+  | { type: "error"; error: { message: string } }
   | { type: "resubscribe" }
   /**
    * Fired a while after subscribing. If the query was never seen in flight,
@@ -56,6 +57,13 @@ export function reduceQuery<T>(
   switch (event.type) {
     case "resubscribe":
       return { ...state, phase: "init" }
+    case "error":
+      return {
+        ...state,
+        phase: "settled",
+        error: event.error,
+        loaded: true,
+      }
     case "timeout":
       if (state.phase !== "init") return state
       return settle(state, event.snapshot)

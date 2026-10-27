@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { NotionDataSourcePage } from "@notionhq/apps/custom-blocks"
+import { pageRow } from "./pageFixtures.js"
 import { calendarStatus } from "../blocks/main_ui/dashboardState.js"
 import { researchActivity } from "../blocks/main_ui/derive.js"
 import { STALE_RUN_MS, type LatestRun } from "../blocks/main_ui/state.js"
@@ -96,18 +96,14 @@ describe("calendar health in the returning view", () => {
 
 describe("research activity", () => {
   it("separates stale records from running and queued work without losing the total", () => {
-    const row = (status: string, edited: string): NotionDataSourcePage =>
-      ({
-        id: `${status}-${edited}`,
-        propertiesByKey: { "Research status": status },
-        propertiesById: {
-          last_edited_time: {
-            type: "datetime",
-            start_date: "2026-10-02",
-            start_time: edited,
-          },
-        },
-      }) as unknown as NotionDataSourcePage
+    const row = (status: string, edited: string) =>
+      pageRow(
+        `${status}-${edited}`,
+        { "Research status": status },
+        {
+          last_edited_time: `2026-10-02T${edited}:00Z`,
+        }
+      )
     const counts = researchActivity(
       [
         row("Researching", "17:59"),

@@ -84,6 +84,38 @@ describe("reduceQuery", () => {
     expect(failed).toMatchObject({ loaded: true, hasData: false, items: [] })
   })
 
+  it("keeps the last good rows when the SDK error callback fires", () => {
+    const settled = run([snap(["a"])])
+    const failed = reduceQuery(settled, {
+      type: "error",
+      error: { message: "Database unavailable" },
+    })
+    expect(failed).toMatchObject({
+      phase: "settled",
+      loaded: true,
+      hasData: true,
+      items: ["a"],
+      error: { message: "Database unavailable" },
+    })
+    expect(reduceQuery(failed, snap(["b"]))).toMatchObject({ items: ["b"] })
+    expect(reduceQuery(failed, snap(["b"])).error).toBeUndefined()
+  })
+
+  it("settles an initial SDK callback error without inventing rows", () => {
+    expect(
+      reduceQuery(initialQuery<string>(), {
+        type: "error",
+        error: { message: "No data source binding" },
+      })
+    ).toMatchObject({
+      phase: "settled",
+      loaded: true,
+      hasData: false,
+      items: [],
+      error: { message: "No data source binding" },
+    })
+  })
+
   it("settles on timeout only if the query never showed as loading", () => {
     const timeout = {
       type: "timeout" as const,

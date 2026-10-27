@@ -11,14 +11,13 @@ import {
   RefreshCw,
   UsersRound,
 } from "lucide-react"
-import type { NotionDataSourcePage } from "@notionhq/apps/custom-blocks"
-
 import { Badge } from "./components/ui/badge"
 import { Button } from "./components/ui/button"
 import { Progress } from "./components/ui/progress"
 import { researchActivity } from "./derive"
 import type { CalendarStatus } from "./dashboardState"
 import type { QueryState } from "./live"
+import type { PageRow } from "./meeting"
 import { morningScheduleLabel } from "./setupState"
 
 export function SyncAction({
@@ -138,7 +137,7 @@ function ResearchRow({
   now,
 }: {
   label: "People" | "Companies"
-  query: QueryState<NotionDataSourcePage>
+  query: QueryState<PageRow>
   now: number
 }) {
   const counts = researchActivity(query.items, now)
@@ -225,8 +224,8 @@ export function ActivitySummary({
   status,
   now,
 }: {
-  people: QueryState<NotionDataSourcePage>
-  companies: QueryState<NotionDataSourcePage>
+  people: QueryState<PageRow>
+  companies: QueryState<PageRow>
   status: CalendarStatus
   now: number
 }) {
