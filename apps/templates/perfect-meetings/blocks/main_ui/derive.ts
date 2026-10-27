@@ -1,9 +1,7 @@
-import type {
-  DataSourceQueryOptions,
-  NotionDataSourcePage,
-} from "@notionhq/apps/custom-blocks"
+import type { DataSourceQueryOptions } from "@notionhq/apps/custom-blocks"
 
 import { dayBounds, sortByStart, text } from "./meeting"
+import type { PageRow } from "./meeting"
 import {
   dateMs,
   lastActivityMs,
@@ -65,7 +63,11 @@ export const PEOPLE_QUERY: DataSourceQueryOptions = { limit: 999 }
 export const COMPANIES_QUERY: DataSourceQueryOptions = { limit: 999 }
 
 /** Actual agent status, independent of whether a meeting brief is ready. */
-export function researchCounts(rows: readonly NotionDataSourcePage[]) {
+export function researchCounts(
+  rows: readonly PageRow[],
+  researchStatus: (row: PageRow) => string = (row) =>
+    text(row.getPropertyByKey("Research status"))
+) {
   const counts = {
     total: rows.length,
     researching: 0,
@@ -75,7 +77,7 @@ export function researchCounts(rows: readonly NotionDataSourcePage[]) {
     unrequested: 0,
   }
   for (const row of rows) {
-    switch (text(row.propertiesByKey["Research status"])) {
+    switch (researchStatus(row)) {
       case "Researching":
         counts.researching++
         break
@@ -98,12 +100,16 @@ export function researchCounts(rows: readonly NotionDataSourcePage[]) {
 
 /** Separate stalled records from work that still appears active or queued. */
 export function researchActivity(
-  rows: readonly NotionDataSourcePage[],
-  now: number
+  rows: readonly PageRow[],
+  now: number,
+  researchStatus?: (row: PageRow) => string
 ) {
-  const counts = { ...researchCounts(rows), stalled: 0 }
+  const statusForRow =
+    researchStatus ??
+    ((row: PageRow) => text(row.getPropertyByKey("Research status")))
+  const counts = { ...researchCounts(rows, statusForRow), stalled: 0 }
   for (const row of rows) {
-    const status = text(row.propertiesByKey["Research status"])
+    const status = statusForRow(row)
     const last = lastActivityMs(row)
     if (last === null || now - last <= STALE_RUN_MS) continue
     if (status === "Researching") counts.researching--
@@ -115,22 +121,22 @@ export function researchActivity(
 }
 
 /** The latest run and how many recent runs succeeded (at most 2 counted). */
-export function deriveRuns(rows: readonly NotionDataSourcePage[]): {
+export function deriveRuns(rows: readonly PageRow[]): {
   latestRun: LatestRun | null
   successRuns: number
 } {
   const latest = rows[0]
   const successes = rows.filter(
-    (row) => text(row.propertiesByKey.Status) === RUN.success
+    (row) => text(row.getPropertyByKey("Status")) === RUN.success
   ).length
   return {
     latestRun: latest
       ? {
           id: latest.id,
-          status: text(latest.propertiesByKey.Status) || null,
+          status: text(latest.getPropertyByKey("Status")) || null,
           startedMs: runStartedMs(latest),
-          finishedMs: dateMs(latest.propertiesByKey.Finished),
-          error: text(latest.propertiesByKey.Error),
+          finishedMs: dateMs(latest.getPropertyByKey("Finished")),
+          error: text(latest.getPropertyByKey("Error")),
         }
       : null,
     successRuns: Math.min(successes, 2),
@@ -138,8 +144,10 @@ export function deriveRuns(rows: readonly NotionDataSourcePage[]): {
 }
 
 /** Sorted meetings and the populated signals, from the one Meetings query. */
-export function deriveMeetings(rows: readonly NotionDataSourcePage[]): {
-  meetings: NotionDataSourcePage[]
+export function deriveMeetings<Row extends PageRow>(
+  rows: readonly Row[]
+): {
+  meetings: Row[]
   hasPrepUpdated: boolean
   hasPrepFinished: boolean
 } {
@@ -147,11 +155,11 @@ export function deriveMeetings(rows: readonly NotionDataSourcePage[]): {
   return {
     meetings,
     hasPrepUpdated: meetings.some((row) => {
-      const value = row.propertiesByKey["Prep updated"]
-      return typeof value === "object" && value !== null
+      const value = row.getPropertyByKey("Prep updated")
+      return value?.type === "date" && value.date !== null
     }),
     hasPrepFinished: meetings.some((row) => {
-      const status = text(row.propertiesByKey["Prep status"])
+      const status = text(row.getPropertyByKey("Prep status"))
       return status === PREP.ready || status === PREP.failed
     }),
   }

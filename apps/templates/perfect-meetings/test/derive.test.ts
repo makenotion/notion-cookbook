@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import type { NotionDataSourcePage } from "@notionhq/apps/custom-blocks"
+import { pageRow } from "./pageFixtures.js"
 import {
   MEETINGS_LOOKBACK_DAYS,
   RUNS_QUERY,
@@ -11,17 +11,10 @@ import {
   researchCounts,
 } from "../blocks/main_ui/derive.js"
 
-const row = (id: string, props: Record<string, unknown>) =>
-  ({
-    id,
-    propertiesById: {},
-    propertiesByKey: props,
-  }) as unknown as NotionDataSourcePage
+const row = pageRow
 
 const when = (date: string, time: string) => ({
-  type: "datetime",
-  start_date: date,
-  start_time: time,
+  start: `${date}T${time}:00Z`,
 })
 
 describe("researchCounts", () => {
@@ -116,6 +109,7 @@ describe("deriveMeetings", () => {
       row("early", {
         When: when("2026-09-29", "09:00"),
         "Prep status": "Researching",
+        "Prep updated": { id: "prep-updated-id", type: "date", date: null },
       }),
     ]
     const queued = deriveMeetings(rows)

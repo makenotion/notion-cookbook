@@ -658,7 +658,7 @@ export function Whiteboard({ store }: { store: WhiteboardStore }) {
 		return (
 			<WhiteboardSetup
 				title="Fix the whiteboard database"
-				body="Open this block’s settings and update the mapped properties below. Select option names are case-sensitive."
+				body="Open this block’s settings and map each field to the matching database property."
 				issues={setupIssues}
 			/>
 		);
