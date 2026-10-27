@@ -74,7 +74,6 @@ export function fixture(t: TestContext) {
     FIXTURE_STATE: path.join(root, "remote.json"),
     FIXTURE_CALLS: path.join(root, "calls.jsonl"),
   }
-  const logFile = path.join(home, "notion-memory/notion-memory.log")
   const calls = () =>
     fs.existsSync(env.FIXTURE_CALLS!)
       ? fs
@@ -95,14 +94,6 @@ export function fixture(t: TestContext) {
   const cleanups: (() => void)[] = []
   t.after(() => {
     for (const cleanup of cleanups) cleanup()
-    if (fs.existsSync(logFile))
-      for (const match of fs
-        .readFileSync(logFile, "utf8")
-        .matchAll(/worker pid (\d+)/g)) {
-        try {
-          process.kill(Number(match[1]), "SIGTERM")
-        } catch {}
-      }
     fs.rmSync(root, {
       recursive: true,
       force: true,
@@ -120,7 +111,6 @@ export function fixture(t: TestContext) {
     env,
     calls,
     pages,
-    logFile,
     seed() {
       fs.cpSync(
         path.join(recipe, "test/fixtures/memories"),

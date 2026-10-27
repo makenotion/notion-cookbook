@@ -1,82 +1,19 @@
-import { spawn } from "node:child_process"
-import fs from "node:fs"
-import { fileURLToPath } from "node:url"
-import {
-  type Config,
-  DATA_DIR,
-  LOG_FILE,
-  loadConfig,
-  loadState,
-  log,
-  withLock,
-} from "./config.ts"
+import { type Config, loadConfig, loadState, log, withLock } from "./config.ts"
 import { type CallTool, CodexNotionMcp } from "./mcp.ts"
-import { withWatcher } from "./ownership.ts"
-import {
-  memoryFilesHash,
-  memoriesDir,
-  memoryInventory,
-  verifyMemories,
-  syncMemories,
-  watchMemories,
-} from "./memories.ts"
+import { memoryInventory, verifyMemories, syncMemories } from "./memories.ts"
 
-interface HookInput {
-  session_id?: string
-  cwd?: string
-}
-
-const MAIN = fileURLToPath(import.meta.url)
 async function main(): Promise<void> {
-  const [command, ...args] = process.argv.slice(2)
+  const [command] = process.argv.slice(2)
   const config = loadConfig()
-  const option = (name: string) => {
-    const i = args.indexOf(name)
-    return i >= 0 ? args[i + 1] : undefined
-  }
 
   switch (command) {
-    case "hook":
-      return handleHook(args[0])
-    case "worker": {
-      const event = args[0]
-      if (event !== "stop" && event !== "session-start")
-        throw new Error("Invalid Sync Memory hook event")
-      const cwd = option("--cwd") || process.cwd()
-      return withWatcher(DATA_DIR, event, async (lease) => {
-        const mcp = await CodexNotionMcp.open({
-          codexPath: config.codexPath,
-          cwd,
-          server: config.mcpServer,
-          expectedWorkspaceId: config.expectedWorkspaceId,
-        })
-        try {
-          if (!(await mcp.memoriesEnabled())) {
-            log(
-              "memories: automatic sync skipped because Codex memories are disabled"
-            )
-            return
-          }
-          let initialHash = memoryFilesHash()
-          do {
-            await watchMemories(mcp.callTool, {
-              initialHash,
-              until: lease.until,
-            })
-            initialHash = memoryFilesHash()
-          } while (!lease.finish())
-        } finally {
-          mcp.close()
-        }
-      })
-    }
     case "sync":
-      return withNotion(config, undefined, async (callTool) => {
+      return withNotion(config, async (callTool) => {
         const result = await withLock(() => syncMemories(callTool))
         console.log(JSON.stringify(result))
       })
     case "verify":
-      return withNotion(config, undefined, async (callTool) => {
+      return withNotion(config, async (callTool) => {
         console.log(
           JSON.stringify(await withLock(() => verifyMemories(callTool)))
         )
@@ -87,60 +24,27 @@ async function main(): Promise<void> {
     case "status":
       console.log(JSON.stringify(loadState(), null, 2))
       return
-    default:
+    case undefined:
       console.log(
         "usage: node scripts/main.ts sync | preview | verify | status"
       )
+      return
+    default:
+      throw new Error(`Unknown Sync Memory command: ${command}`)
   }
-}
-
-// Hooks have a short timeout and block Codex while they run, so hand the work to a
-// detached worker process and return immediately. The worker logs to LOG_FILE.
-function handleHook(event: string | undefined): void {
-  // The worker's own `codex app-server` can start sessions too. Never recurse.
-  if (process.env.NOTION_MEMORY_WORKER) return
-  // No Codex memory files exist yet, so do not start a worker.
-  if (!fs.existsSync(memoriesDir())) return
-  let input: HookInput = {}
-  try {
-    input = JSON.parse(fs.readFileSync(0, "utf8") || "{}")
-  } catch (e) {
-    log(
-      `hook ${event}: could not read hook input:`,
-      e instanceof Error ? e.message : String(e)
-    )
-  }
-  fs.mkdirSync(DATA_DIR, { recursive: true })
-  const out = fs.openSync(LOG_FILE, "a")
-  const args = [
-    "--disable-warning=ExperimentalWarning",
-    MAIN,
-    "worker",
-    event ?? "session-start",
-    "--cwd",
-    input.cwd || process.cwd(),
-  ]
-  const child = spawn(process.execPath, args, {
-    detached: true,
-    stdio: ["ignore", out, out],
-    env: { ...process.env, NOTION_MEMORY_WORKER: "1" },
-  })
-  child.unref()
-  log(`hook ${event}: session=${input.session_id} -> worker pid ${child.pid}`)
 }
 
 // Connects to the Notion server that Codex is already signed in to. The connection starts
-// on the first tool call, so an unchanged manual sync starts no app-server.
+// on the first tool call, so an unchanged sync starts no app-server.
 async function withNotion(
   config: Config,
-  cwd: string | undefined,
   fn: (callTool: CallTool) => Promise<void>
 ): Promise<void> {
   let connection: Promise<CodexNotionMcp> | undefined
   const callTool: CallTool = async (tool, args) => {
     connection ??= CodexNotionMcp.open({
       codexPath: config.codexPath,
-      cwd: cwd || process.cwd(),
+      cwd: process.cwd(),
       server: config.mcpServer,
       expectedWorkspaceId: config.expectedWorkspaceId,
     })
@@ -156,8 +60,6 @@ async function withNotion(
 main().catch((e: unknown) => {
   const message = e instanceof Error ? (e.stack ?? e.message) : String(e)
   log("error:", message)
-  // A failing hook must never break the user's Codex session.
-  if (process.argv[2] === "hook") return
   console.error(e instanceof Error ? e.message : message)
   process.exitCode = 1
 })

@@ -7,7 +7,6 @@ import {
   loadState,
   log,
   saveState,
-  sleep,
   withLock,
 } from "./config.ts"
 import type { State } from "./config.ts"
@@ -44,10 +43,6 @@ export function renderMemory(file: MemoryFile, syncedAt: string): string {
     "Synced by": "notion-memory",
   }
   return `# Codex memory source\n\n\`\`\`json\n${JSON.stringify(metadata, null, 2)}\n\`\`\`\n\n---\n\n${file.content}`
-}
-
-export function memoryFiles(): MemoryFile[] {
-  return memoryInventory().files
 }
 
 export function memoryInventory(): {
@@ -288,38 +283,6 @@ async function snapshot(call: CallTool, id: string) {
         content,
       ])
     ),
-  }
-}
-
-export function memoryFilesHash(): string {
-  const { files, unsupported } = memoryInventory()
-  return digest(
-    JSON.stringify([
-      files.map(({ name, hash, metadataHash }) => [name, hash, metadataHash]),
-      unsupported,
-    ])
-  )
-}
-
-export async function watchMemories(
-  call: CallTool,
-  opts: { initialHash: string; until: () => number }
-) {
-  let previous: string | undefined
-  let candidate: string | undefined = opts.initialHash
-  while (Date.now() < opts.until()) {
-    await sleep(5000)
-    if (Date.now() >= opts.until()) break
-    const hash = memoryFilesHash()
-    if (hash === previous) {
-      candidate = undefined
-    } else if (hash === candidate) {
-      await withLock(() => syncMemories(call))
-      previous = hash
-      candidate = undefined
-    } else {
-      candidate = hash
-    }
   }
 }
 

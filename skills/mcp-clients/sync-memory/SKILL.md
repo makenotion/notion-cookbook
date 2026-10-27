@@ -7,6 +7,13 @@ metadata:
 
 # Sync Memory
 
+Before the first import, confirm the source inventory, destination workspace and
+visibility, and approval to copy these files. Reuse prior explicit approval for the
+same scope. The command copies the full inventory; if approval excludes a file,
+stop and report the unsupported narrower scope. Authorization for one import does
+not authorize recurring work. Schedule only when the user separately approves the
+frequency, sources, destination and notifications. This package installs no scheduler.
+
 Use Node.js 22.18+ and the bundled `scripts/main.ts`, relative to this skill directory:
 
 - `sync`: recursively copy every regular `*.md` file under `memories_v2/`, one file per page.
@@ -24,8 +31,8 @@ time and notion-memory as the copier. Never substitute ctime or expose absolute
 source paths. No database properties are added. Source metadata changes update the
 same page; unchanged text and metadata keep Synced at unchanged.
 Pages use Type Notes, Source Codex and Last updated by
-Codex. Updates preserve Source. Trusted SessionStart and Stop hooks start or renew
-one bounded watcher per mapping directory.
+Codex. Updates preserve Source. This desktop-only package runs on explicit
+invocation; it installs no session hooks, watcher, or background service.
 
 Only Codex v2 is supported. Import existing Markdown even without a summary.
 Report the command's unsupported and missing paths. Existing Notion edits and

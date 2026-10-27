@@ -1,7 +1,6 @@
 import assert from "node:assert/strict"
 import { spawn, type ChildProcess } from "node:child_process"
 import fs from "node:fs"
-import crypto from "node:crypto"
 import os from "node:os"
 import path from "node:path"
 import { once } from "node:events"
@@ -80,76 +79,4 @@ test("SIGKILL releases ownership without stale files or reaping", async (t) => {
   assert.deepEqual(fs.readdirSync(root), [])
   second.child.stdin!.write("release")
   await exited(second.child)
-})
-
-test("watcher followers extend one leader and never run their callback", async (t) => {
-  const { withWatcher } = await import("../scripts/ownership.ts")
-  const root = directory(t)
-  let release!: () => void
-  const gate = new Promise<void>((resolve) => (release = resolve))
-  let ready!: (until: () => number) => void
-  const started = new Promise<() => number>((resolve) => (ready = resolve))
-  const leader = withWatcher(root, "stop", async (lease) => {
-    ready(lease.until)
-    await gate
-  })
-  const until = await started
-  const original = until()
-  let followerRan = false
-  await withWatcher(root, "session-start", async () => {
-    followerRan = true
-  })
-  assert.equal(followerRan, false)
-  assert.ok(until() >= original + 299_000)
-  release()
-  await leader
-  await withWatcher(root, "stop", async () => {
-    followerRan = true
-  })
-  assert.equal(followerRan, true)
-})
-
-test("colliding watcher ports cannot acknowledge another source directory", async (t) => {
-  const { withWatcher } = await import("../scripts/ownership.ts")
-  const root = fs.realpathSync(directory(t))
-  const seen = new Map<number, string>()
-  let pair: [string, string] | undefined
-  for (let index = 0; index < 40_001; index++) {
-    const candidate = path.join(root, String(index))
-    const key = crypto
-      .createHash("sha256")
-      .update(`watcher\0${candidate}`)
-      .digest("hex")
-    const port = 20_000 + (parseInt(key.slice(0, 8), 16) % 40_000)
-    const previous = seen.get(port)
-    if (previous) {
-      pair = [previous, candidate]
-      break
-    }
-    seen.set(port, candidate)
-  }
-  assert.ok(pair)
-  for (const item of pair) fs.mkdirSync(item)
-  let release!: () => void
-  const gate = new Promise<void>((resolve) => (release = resolve))
-  let ready!: () => void
-  const started = new Promise<void>((resolve) => (ready = resolve))
-  const leader = withWatcher(pair[0], "stop", async () => {
-    ready()
-    await gate
-  })
-  await started
-  let followerRan = false
-  try {
-    await assert.rejects(
-      withWatcher(pair[1], "session-start", async () => {
-        followerRan = true
-      }),
-      /busy or unresponsive/
-    )
-    assert.equal(followerRan, false)
-  } finally {
-    release()
-    await leader
-  }
 })

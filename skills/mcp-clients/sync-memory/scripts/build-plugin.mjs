@@ -15,7 +15,7 @@ export function buildPlugin(destination) {
     path.join(skill, ".codex-plugin/plugin.json"),
     path.join(root, ".codex-plugin/plugin.json")
   )
-  for (const name of ["SKILL.md", ".mcp.json", "hooks.json", "hook.cjs"]) {
+  for (const name of ["SKILL.md", ".mcp.json"]) {
     fs.copyFileSync(path.join(skill, name), path.join(bundledSkill, name))
   }
   const metadata = JSON.parse(

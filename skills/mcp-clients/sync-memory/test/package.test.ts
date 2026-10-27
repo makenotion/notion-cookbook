@@ -4,7 +4,7 @@ import path from "node:path"
 import { test } from "node:test"
 import { fixture, object, recipe } from "./support/harness.ts"
 
-test("built plugin contains only Sync Memory runtime and resolves its manifest and hooks", (t) => {
+test("built plugin contains only Sync Memory runtime and declares desktop-only execution without hooks", (t) => {
   const f = fixture(t)
   assert.deepEqual(fs.readdirSync(f.installed).sort(), [
     ".codex-plugin",
@@ -26,8 +26,6 @@ test("built plugin contains only Sync Memory runtime and resolves its manifest a
   assert.deepEqual(fs.readdirSync(skill).sort(), [
     ".mcp.json",
     "SKILL.md",
-    "hook.cjs",
-    "hooks.json",
     "package.json",
     "scripts",
   ])
@@ -47,20 +45,15 @@ test("built plugin contains only Sync Memory runtime and resolves its manifest a
   assert.ok(
     fs.existsSync(path.resolve(f.installed, String(manifest.mcpServers)))
   )
-  const hooks = object(
-    JSON.parse(
-      fs.readFileSync(path.resolve(f.installed, String(manifest.hooks)), "utf8")
-    )
+  assert.equal(manifest.requires_local_executor, true)
+  assert.equal(manifest.hooks, undefined)
+  const listing = object(manifest.interface)
+  assert.equal(
+    listing.privacyPolicyURL,
+    "https://privacycenter.notion.so/policies"
   )
-  const definitions = object(hooks.hooks)
-  for (const event of ["SessionStart", "Stop"]) {
-    const groups = definitions[event]
-    assert.ok(Array.isArray(groups))
-    const commands = object(groups[0]).hooks
-    assert.ok(Array.isArray(commands))
-    const command = String(object(commands[0]).command)
-    const match = command.match(/\$PLUGIN_ROOT\/([^" ]+)/)
-    assert.ok(match)
-    assert.ok(fs.existsSync(path.join(f.installed, match[1])))
-  }
+  assert.equal(
+    listing.termsOfServiceURL,
+    "https://notion.notion.site/Terms-and-Privacy-28ffdd083dc3473e9c2da6ec011b58ac"
+  )
 })

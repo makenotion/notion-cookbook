@@ -6,7 +6,6 @@ import { withOwnership } from "./ownership.ts"
 export interface Config {
   // Codex executable used to start `codex app-server`.
   codexPath: string
-  nodePath?: string
   // Name of the Notion MCP server in Codex. Detected automatically when unset.
   mcpServer?: string
   sourceHome?: string
@@ -49,7 +48,7 @@ export const CODEX_HOME =
 export const CONFIG_FILE =
   process.env.NOTION_MEMORY_CONFIG ||
   path.join(CODEX_HOME, "notion-memory.json")
-// Not $PLUGIN_DATA: hooks and manual commands from the skill must share one state file.
+// Keep the mapping namespace stable across plugin upgrades and explicit runs.
 export const DATA_DIR =
   process.env.NOTION_MEMORY_DATA || path.join(CODEX_HOME, "notion-memory")
 export const LOG_FILE = path.join(DATA_DIR, "notion-memory.log")
@@ -61,7 +60,6 @@ export function loadConfig(): Config {
     file = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8"))
   return {
     codexPath: process.env.CODEX_PATH || file.codexPath || "codex",
-    nodePath: file.nodePath,
     mcpServer: process.env.NOTION_MCP_SERVER || file.mcpServer,
     sourceHome: file.sourceHome,
     expectedWorkspaceId: file.expectedWorkspaceId,
@@ -128,8 +126,4 @@ export function log(...parts: unknown[]): void {
 
 export async function withLock<T>(fn: () => Promise<T>): Promise<T> {
   return withOwnership(DATA_DIR, fn)
-}
-
-export function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
 }
