@@ -18,6 +18,6 @@
   },
   "dependencies": {
     "@duckdb/node-api": "^1.5.4-r.1",
-    "@notionhq/workers": ">=0.0.0"
+    "@notionhq/workers": "0.9.5"
   }
 }

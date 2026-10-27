@@ -18,7 +18,7 @@
     "typescript": "^5.8.0"
   },
   "dependencies": {
-    "@notionhq/workers": ">=0.0.0",
+    "@notionhq/workers": "0.9.5",
     "node-sql-parser": "^5.4.0",
     "pg": "^8.13.0"
   }
