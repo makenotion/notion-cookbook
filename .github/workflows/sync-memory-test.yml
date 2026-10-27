@@ -4,14 +4,12 @@ on:
   pull_request:
     paths:
       - ".agents/plugins/marketplace.json"
-      - "skills/.codex-plugin/plugin.json"
       - "skills/mcp-clients/sync-memory/**"
       - ".github/workflows/sync-memory-test.yml"
   push:
     branches: [main]
     paths:
       - ".agents/plugins/marketplace.json"
-      - "skills/.codex-plugin/plugin.json"
       - "skills/mcp-clients/sync-memory/**"
       - ".github/workflows/sync-memory-test.yml"
   workflow_dispatch:
@@ -45,4 +43,5 @@ jobs:
           "$CODEX_TEST_BINARY" --version
           node --version
           npm run check
+          npm run build:plugin
           npm test

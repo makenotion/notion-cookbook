@@ -46,13 +46,16 @@ async function collectFiles(dir, prefix = "") {
   return files.sort()
 }
 
-function readSkillName(skillMarkdown, path) {
+function readSkill(skillMarkdown, path) {
   const frontmatter = /^---\n([\s\S]*?)\n---\n/.exec(skillMarkdown)?.[1]
   const name = frontmatter && /^name:\s*(.+?)\s*$/m.exec(frontmatter)?.[1]
   if (!name || !SKILL_NAME.test(name)) {
     fail(`${path} needs a frontmatter name in lowercase-hyphen form`)
   }
-  return name
+  return {
+    name,
+    requiresClient: /^  requires-client:\s*(\S.*?)\s*$/m.exec(frontmatter)?.[1],
+  }
 }
 
 // Maps each output path, relative to a plugin root, to its contents.
@@ -72,7 +75,8 @@ async function buildExpectedFiles() {
       if (error.code === "ENOENT") continue
       throw error
     }
-    const name = readSkillName(skillMarkdown, skillPath)
+    const { name, requiresClient } = readSkill(skillMarkdown, skillPath)
+    if (requiresClient) continue
     if (sourceByName.has(name)) {
       fail(
         `${skillPath} and ${sourceByName.get(name)} both use the skill name ${JSON.stringify(name)}`

@@ -20,14 +20,29 @@ export function invoke(name, args) {
     ? JSON.parse(fs.readFileSync(stateFile, "utf8"))
     : { pages: [] }
   const save = () => fs.writeFileSync(stateFile, JSON.stringify(state))
+  const importedContent = (content) =>
+    process.env.FIXTURE_NORMALIZE_MARKDOWN
+      ? content.replace(/\r\n/g, "\n")
+      : content
+  const failOnce = (phase) => {
+    if (process.env.FIXTURE_FAIL_ONCE !== phase || state.failedOnce === phase)
+      return
+    state.failedOnce = phase
+    save()
+    throw new Error(`Synthetic ${phase} failure`)
+  }
   switch (tool) {
     case "get-self":
       return { user: { name: "Casey Synthetic" } }
     case "fetch": {
       if (args.id === "memory")
         return { text: `<data-source url="${collection}">` }
+      failOnce("fetch")
+      if (state.failReadback) failOnce(state.failReadback)
       const page = state.pages.find((p) => p.id === args.id)
       assert.ok(page, "unknown fixture page")
+      if (process.env.FIXTURE_READBACK === "malformed")
+        return { text: "<page><content>broken</content></page>" }
       return {
         text: `<page${page.deleted ? " deleted" : ""}>${page.parent !== "memory" && page.parent !== "private" ? `<parent-page url="https://notion.so/${page.parent}"/>` : ""}<properties>${JSON.stringify({ Title: page.title, Type: page.type, Source: page.source, "Last updated by": page.lastUpdatedBy })}</properties><content>${page.content}</content></page>`,
       }
@@ -49,7 +64,7 @@ export function invoke(name, args) {
           type: p.properties.Type,
           source: p.properties.Source,
           lastUpdatedBy: p.properties["Last updated by"],
-          content: p.content,
+          content: importedContent(p.content),
           parent:
             args.parent === "memory"
               ? "memory"
@@ -59,6 +74,7 @@ export function invoke(name, args) {
         return { id: page.id, url: `https://notion.so/${page.id}` }
       })
       save()
+      failOnce("create-response")
       return { pages }
     }
     case "update-page": {
@@ -73,8 +89,11 @@ export function invoke(name, args) {
         return {}
       }
       assert.equal(args.command, "replace_content")
-      page.content = args.new_str
+      page.content = importedContent(args.new_str)
+      if (process.env.FIXTURE_FAIL_ONCE?.startsWith("update-readback"))
+        state.failReadback = process.env.FIXTURE_FAIL_ONCE
       save()
+      failOnce("update-response")
       return {}
     }
     default:

@@ -1,6 +1,8 @@
 ---
 name: sync-memory
-description: Copy current Codex memory Markdown files into Notion Memories, preview the files, or verify managed pages. Use when the user asks to sync or check Codex memories in Notion.
+description: Copy local memory Markdown into Notion Memories, preview the files, or verify managed pages. Use when the user asks to sync or check memory in Notion. The current source adapter requires Codex.
+metadata:
+  requires-client: codex
 ---
 
 # Sync Memory
@@ -22,15 +24,18 @@ time and notion-memory as the copier. Never substitute ctime or expose absolute
 source paths. No database properties are added. Source metadata changes update the
 same page; unchanged text and metadata keep Synced at unchanged.
 Pages use Type Notes, Source Codex and Last updated by
-Codex. Updates preserve Source. Trusted SessionStart and Stop hooks start bounded
-watchers; later changes wait for the next hook or explicit sync.
+Codex. Updates preserve Source. Trusted SessionStart and Stop hooks start or renew
+one bounded watcher per mapping directory.
 
-Only v2 is supported. If its summary is not ready, report that condition. Existing
-Notion edits and deletions are protected. Missing source files leave existing pages
-alone; an explicitly empty file has only the metadata preamble. This is one-way
-copying. Notion may normalize imported Markdown. Verification checks saved page
-readbacks, not byte-identical export. Unsupported formats and missing old paths
-are not yet reported by the command. Do not claim these inventory gaps are covered.
+Only Codex v2 is supported. Import existing Markdown even without a summary.
+Report the command's unsupported and missing paths. Existing Notion edits and
+deletions are protected. Missing source files leave existing pages alone. An
+explicitly empty file has only the metadata preamble. This is one-way copying.
+Notion may normalize imported Markdown. Verification checks saved page readbacks,
+not byte-identical export. Confirmed writes with a pending readback resume by
+reading the same page. If its submitted fingerprint no longer matches, stop for
+reconciliation rather than adopting possible human edits. An unknown write outcome
+also needs reconciliation before retry.
 
 Use the configured Codex-owned MCP connection and pin the intended workspace for
 local-only imports. If authentication or a tool fails, stop that operation and

@@ -72,6 +72,8 @@ mcp-clients/
   [contributing guide](../../CONTRIBUTING.md).
 - After changing a skill, run `npm run plugins:build` from the repository
   root. Platform plugins in [`plugins/`](../../plugins/) ship generated copies.
+- Skills with `metadata.requires-client` use their client-specific package and
+  are excluded from portable platform plugins.
 
 ## Evaluation and maintenance
 

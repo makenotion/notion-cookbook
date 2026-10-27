@@ -40,7 +40,7 @@ test("nested Markdown copies unchanged by relative path and detects new files an
   const preview = await f.exec(["preview"])
   assert.equal(preview.code, 0, preview.stderr)
   assert.deepEqual(
-    JSON.parse(preview.stdout).map((file: { name: string }) => file.name),
+    JSON.parse(preview.stdout).files.map((file: { name: string }) => file.name),
     ["MEMORY.md", ...files.map((file) => file.name), "memory_summary.md"].sort()
   )
   const created = await f.exec(["sync"])
@@ -88,6 +88,11 @@ test("Git state, non-Markdown files and file or directory symlinks are excluded"
     f.pages().map((page) => page.title),
     ["MEMORY.md", "memory_summary.md"]
   )
+  assert.deepEqual(JSON.parse(result.stdout).unsupported, [
+    "linked-directory",
+    "linked.md",
+    "other.txt",
+  ])
 })
 
 test("one file becomes one Notes page with unchanged Markdown and Codex attribution", async (t) => {
@@ -156,19 +161,26 @@ test("manual Notion changes are protected when the source changes", async (t) =>
   assert.deepEqual(f.pages(), pages)
 })
 
-test("missing optional file leaves its existing page alone; absent summary fails without writes", async (t) => {
+test("missing files are reported without deletion and summary is optional", async (t) => {
   const f = fixture(t)
   f.seed()
   assert.equal((await f.exec(["sync"])).code, 0)
   const before = f.pages()
   fs.unlinkSync(path.join(f.home, "memories_v2/MEMORY.md"))
-  assert.equal((await f.exec(["sync"])).code, 0)
+  const missing = await f.exec(["sync"])
+  assert.equal(missing.code, 0)
+  assert.deepEqual(JSON.parse(missing.stdout).missing, ["MEMORY.md"])
   assert.deepEqual(f.pages(), before)
   fs.unlinkSync(path.join(f.home, "memories_v2/memory_summary.md"))
+  fs.writeFileSync(path.join(f.home, "memories_v2/remaining.md"), "remaining")
   const r = await f.exec(["sync"])
-  assert.equal(r.code, 1)
-  assert.match(r.stderr, /not ready/)
-  assert.deepEqual(f.pages(), before)
+  assert.equal(r.code, 0, r.stderr)
+  assert.equal(JSON.parse(r.stdout).created, 1)
+  assert.deepEqual(JSON.parse(r.stdout).missing, [
+    "MEMORY.md",
+    "memory_summary.md",
+  ])
+  assert.equal(f.pages().length, before.length + 1)
 })
 
 test("overlapping processes create one page per file and keep notices separate", async (t) => {
@@ -190,7 +202,7 @@ test("preview is offline and verify detects changed pages", async (t) => {
   f.seed()
   const preview = await f.exec(["preview"])
   assert.equal(preview.code, 0, preview.stderr)
-  assert.equal(JSON.parse(preview.stdout).length, 2)
+  assert.equal(JSON.parse(preview.stdout).files.length, 2)
   assert.deepEqual(f.calls(), [])
   assert.equal((await f.exec(["sync"])).code, 0)
   assert.equal(JSON.parse((await f.exec(["verify"])).stdout).verified, 2)
@@ -216,7 +228,7 @@ test("source metadata stays in the body and metadata-only updates preserve ident
   const stat = fs.statSync(file)
   const preview = await f.exec(["preview"])
   assert.equal(preview.code, 0, preview.stderr)
-  const sources: unknown = JSON.parse(preview.stdout)
+  const sources: unknown = JSON.parse(preview.stdout).files
   assert.ok(Array.isArray(sources))
   const source = sources
     .map(object)
@@ -307,4 +319,189 @@ test("unavailable birth time stays empty rather than falling back to ctime", () 
   for (const value of [0, -1, NaN, Infinity, 9e18])
     assert.equal(sourceCreatedAt(value), null)
   assert.equal(sourceCreatedAt(1_700_000_000_000), "2023-11-14T22:13:20.000Z")
+})
+
+test("acknowledged create survives failed readback without creating duplicates", async (t) => {
+  const f = fixture(t)
+  f.seed()
+  const failed = await f.exec(["sync"], { FIXTURE_FAIL_ONCE: "fetch" })
+  assert.equal(failed.code, 1)
+  assert.equal(f.pages().length, 1)
+  const state = object(
+    JSON.parse(
+      fs.readFileSync(path.join(f.home, "notion-memory/state.json"), "utf8")
+    )
+  )
+  assert.equal(object(object(state.pending)["MEMORY.md"]).phase, "readback")
+  const retried = await f.exec(["sync"])
+  assert.equal(retried.code, 0, retried.stderr)
+  assert.equal(f.pages().length, 2)
+  assert.equal(f.calls().filter((call) => call === "create-pages").length, 2)
+})
+
+for (const operation of ["create", "update"]) {
+  test(`failed ${operation} readback cannot adopt later human edits`, async (t) => {
+    const f = fixture(t)
+    f.seed()
+    const source = path.join(f.home, "memories_v2/MEMORY.md")
+    if (operation === "update") {
+      assert.equal((await f.exec(["sync"])).code, 0)
+      fs.writeFileSync(source, "first local update")
+    }
+    const failed = await f.exec(["sync"], {
+      FIXTURE_FAIL_ONCE: operation === "create" ? "fetch" : "update-readback",
+    })
+    assert.equal(failed.code, 1)
+    const pages = f.pages()
+    const page = pages.find((entry) => entry.title === "MEMORY.md")
+    assert.ok(page)
+    page.content = "Human edit after the failed readback"
+    f.savePages(pages)
+    fs.writeFileSync(source, "newer local update")
+    const writes = () =>
+      f
+        .calls()
+        .filter((call) => call === "create-pages" || call === "update-page")
+        .length
+    const before = writes()
+    const retried = await f.exec(["sync"])
+    assert.equal(retried.code, 1)
+    assert.match(retried.stderr, /readback.*reconcil/i)
+    assert.equal(writes(), before)
+    assert.deepEqual(f.pages(), pages)
+    const state = object(
+      JSON.parse(
+        fs.readFileSync(path.join(f.home, "notion-memory/state.json"), "utf8")
+      )
+    )
+    assert.equal(object(object(state.pending)["MEMORY.md"]).phase, "readback")
+  })
+}
+
+test("acknowledged update survives failed readback and a newer or missing source", async (t) => {
+  const f = fixture(t)
+  f.seed()
+  assert.equal((await f.exec(["sync"])).code, 0)
+  const file = path.join(f.home, "memories_v2/memory_summary.md")
+  const id = f.pages().find((page) => page.title === "memory_summary.md")?.id
+  fs.writeFileSync(file, "first update")
+  const failed = await f.exec(["sync"], {
+    FIXTURE_FAIL_ONCE: "update-readback",
+  })
+  assert.equal(failed.code, 1)
+  assert.equal((await f.exec(["verify"])).code, 1)
+  fs.writeFileSync(file, "second update")
+  const retried = await f.exec(["sync"])
+  assert.equal(retried.code, 0, retried.stderr)
+  assert.equal(JSON.parse(retried.stdout).changedInNotion, 0)
+  assert.equal(
+    copiedPage(f.pages().find((page) => page.id === id)?.content).original,
+    "second update"
+  )
+  fs.writeFileSync(file, "third update")
+  const failedAgain = await f.exec(["sync"], {
+    FIXTURE_FAIL_ONCE: "update-readback-again",
+  })
+  assert.equal(failedAgain.code, 1)
+  fs.unlinkSync(file)
+  const disappeared = await f.exec(["sync"])
+  assert.equal(disappeared.code, 0, disappeared.stderr)
+  assert.deepEqual(JSON.parse(disappeared.stdout).missing, [
+    "memory_summary.md",
+  ])
+  assert.equal(f.pages().length, 2)
+})
+
+test("successful immediate readback accepts Markdown normalization", async (t) => {
+  const f = fixture(t)
+  f.seed()
+  const file = path.join(f.home, "memories_v2/MEMORY.md")
+  for (const text of [
+    "# First\r\n\r\nBody\r\n",
+    "# Second\r\n\r\nUpdated\r\n",
+  ]) {
+    fs.writeFileSync(file, text)
+    const synced = await f.exec(["sync"], {
+      FIXTURE_NORMALIZE_MARKDOWN: "true",
+    })
+    assert.equal(synced.code, 0, synced.stderr)
+    const page = f.pages().find((entry) => entry.title === "MEMORY.md")
+    assert.equal(
+      copiedPage(page?.content).original,
+      text.replace(/\r\n/g, "\n")
+    )
+    const verified = await f.exec(["verify"])
+    assert.equal(verified.code, 0, verified.stderr)
+  }
+  assert.equal(f.pages().length, 2)
+})
+
+test("legacy pending readback without a submitted fingerprint requires reconciliation", async (t) => {
+  const f = fixture(t)
+  f.seed()
+  assert.equal((await f.exec(["sync"], { FIXTURE_FAIL_ONCE: "fetch" })).code, 1)
+  const stateFile = path.join(f.home, "notion-memory/state.json")
+  const state = object(JSON.parse(fs.readFileSync(stateFile, "utf8")))
+  delete object(object(state.pending)["MEMORY.md"]).expectedPageHash
+  fs.writeFileSync(stateFile, JSON.stringify(state))
+  const before = f.pages()
+  const retried = await f.exec(["sync"])
+  assert.equal(retried.code, 1)
+  assert.match(retried.stderr, /readback.*reconcil/i)
+  assert.deepEqual(f.pages(), before)
+  assert.equal(f.calls().filter((call) => call === "create-pages").length, 1)
+})
+
+for (const operation of ["create", "update"]) {
+  test(`lost ${operation} response persists unknown outcome and blocks mutating retries`, async (t) => {
+    const f = fixture(t)
+    f.seed()
+    if (operation === "update") {
+      assert.equal((await f.exec(["sync"])).code, 0)
+      fs.writeFileSync(
+        path.join(f.home, "memories_v2/memory_summary.md"),
+        "updated source"
+      )
+    }
+    const failed = await f.exec(["sync"], {
+      FIXTURE_FAIL_ONCE: `${operation}-response`,
+    })
+    assert.equal(failed.code, 1)
+    const calls = f.calls().length
+    const retried = await f.exec(["sync"])
+    assert.equal(retried.code, 1)
+    assert.match(retried.stderr, /unknown.*(create|update).*reconcile/i)
+    assert.equal(
+      f.calls().length,
+      calls,
+      "unknown outcome sends no further remote calls"
+    )
+  })
+}
+
+test("deleted or malformed pending readback is never confirmed", async (t) => {
+  const f = fixture(t)
+  f.seed()
+  assert.equal((await f.exec(["sync"], { FIXTURE_FAIL_ONCE: "fetch" })).code, 1)
+  const calls = f.calls().filter((call) => call === "create-pages").length
+  assert.equal(
+    (await f.exec(["sync"], { FIXTURE_READBACK: "malformed" })).code,
+    1
+  )
+  const pages = f.pages()
+  pages[0].deleted = true
+  f.savePages(pages)
+  const retry = await f.exec(["sync"])
+  assert.equal(retry.code, 1)
+  assert.match(retry.stderr, /Pending readback page deleted/)
+  const state = object(
+    JSON.parse(
+      fs.readFileSync(path.join(f.home, "notion-memory/state.json"), "utf8")
+    )
+  )
+  assert.equal(object(object(state.pending)["MEMORY.md"]).phase, "readback")
+  assert.equal(
+    f.calls().filter((call) => call === "create-pages").length,
+    calls
+  )
 })

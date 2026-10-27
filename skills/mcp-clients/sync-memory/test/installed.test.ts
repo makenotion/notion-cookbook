@@ -1,7 +1,6 @@
 import assert from "node:assert/strict"
 import fs from "node:fs"
 import path from "node:path"
-import { DatabaseSync } from "node:sqlite"
 import { test } from "node:test"
 import { fixture, run, waitFor } from "./support/harness.ts"
 
@@ -83,25 +82,28 @@ test("disabled memory with retained files must not auto-sync", async (t) => {
     [],
     "automatic hook uploaded retained memories while disabled"
   )
+  assert.equal(f.calls().filter((method) => method === "initialize").length, 1)
+  assert.equal(f.calls().filter((method) => method === "config/read").length, 1)
+  assert.ok(!f.calls().includes("thread/start"))
 })
 
 test(
-  "detached hook watches synthetic consolidation and waits for a running job",
-  { timeout: 25_000 },
+  "detached hook watches stable files without reading Codex private databases",
+  { timeout: 30_000 },
   async (t) => {
     const f = fixture(t)
     f.seed()
-    const db = new DatabaseSync(path.join(f.home, "memories_v2_1.sqlite"))
-    t.after(() => db.close())
-    db.exec(
-      "CREATE TABLE jobs (status TEXT); INSERT INTO jobs VALUES ('running')"
+    fs.writeFileSync(
+      path.join(f.home, "memories_v2_1.sqlite"),
+      "not a database"
     )
     const hook = await f.exec(["hook", "stop"], {}, 3_000)
     assert.equal(hook.code, 0, hook.stderr)
     await waitFor(
       () =>
         fs.existsSync(f.logFile) &&
-        /"created":2/.test(fs.readFileSync(f.logFile, "utf8"))
+        /"created":2/.test(fs.readFileSync(f.logFile, "utf8")),
+      8_000
     )
     const summary = path.join(f.home, "memories_v2/memory_summary.md")
     fs.writeFileSync(
@@ -111,9 +113,8 @@ test(
     await new Promise((resolve) => setTimeout(resolve, 5_500))
     assert.ok(
       !f.calls().includes("update-page"),
-      "running consolidation must not import partial files"
+      "one changed poll must not import an unstable file set"
     )
-    db.exec("UPDATE jobs SET status = 'done'")
     await waitFor(
       () =>
         /Rust developer/.test(
@@ -121,7 +122,7 @@ test(
             f.pages().find((p) => p.title === "memory_summary.md")?.content
           )
         ),
-      10_000
+      12_000
     )
     assert.equal(f.pages().length, 2)
     assert.match(
@@ -149,7 +150,7 @@ test("missing Node is visible at the actual hook command boundary", async (t) =>
     "/bin/sh",
     [
       "-c",
-      'node "$PLUGIN_ROOT/mcp-clients/sync-memory/scripts/main.ts" hook session-start',
+      'node "$PLUGIN_ROOT/skills/sync-memory/scripts/main.ts" hook session-start',
     ],
     {
       ...f.env,
@@ -181,13 +182,13 @@ test("an explicit destination never falls back and workspace mismatch writes not
 
 test(
   "worker notices mtime-only changes without replacing the source text",
-  { timeout: 15_000 },
+  { timeout: 25_000 },
   async (t) => {
     const f = fixture(t)
     f.seed()
     const started = await f.exec(["hook", "stop"], {}, 3_000)
     assert.equal(started.code, 0, started.stderr)
-    await waitFor(() => f.pages().length === 2)
+    await waitFor(() => f.pages().length === 2, 8_000)
     const page = f.pages().find((item) => item.title === "memory_summary.md")
     assert.ok(page)
     const file = path.join(f.home, "memories_v2/memory_summary.md")
@@ -200,12 +201,70 @@ test(
         String(f.pages().find((item) => item.id === page.id)?.content).includes(
           updatedAt
         ),
-      10_000
+      12_000
     )
     const updated = f.pages().find((item) => item.id === page.id)
     assert.ok(updated)
     assert.ok(String(updated.content).endsWith(`\n---\n\n${original}`))
     assert.equal(f.pages().length, 2)
     assert.ok(!f.calls().includes("update-data-source"))
+  }
+)
+
+test("server requests cannot consume client responses with the same ID", async (t) => {
+  const f = fixture(t)
+  f.seed()
+  const result = await f.exec(["sync"], { FIXTURE_SERVER_REQUESTS: "1" })
+  assert.equal(result.code, 0, result.stderr)
+  assert.equal(f.pages().length, 2)
+  assert.ok(f.calls().includes("server-response:server-request:-32601"))
+  assert.ok(f.calls().includes("server-response:1:-32601"))
+})
+
+test(
+  "back-to-back hooks share one watcher and one initialized app-server",
+  { timeout: 25_000 },
+  async (t) => {
+    const f = fixture(t)
+    f.seed()
+    assert.equal(
+      (
+        await f.exec(["hook", "session-start"], {
+          FIXTURE_SERVER_REQUESTS: "1",
+        })
+      ).code,
+      0
+    )
+    await waitFor(() => f.calls().includes("config/read"))
+    await Promise.all(Array.from({ length: 4 }, () => f.exec(["hook", "stop"])))
+    await waitFor(() => f.pages().length === 2, 8_000)
+    assert.equal(
+      f.calls().filter((method) => method === "initialize").length,
+      1
+    )
+    assert.equal(
+      f.calls().filter((method) => method === "config/read").length,
+      1
+    )
+    assert.equal(
+      f.calls().filter((method) => method === "thread/start").length,
+      1
+    )
+    fs.appendFileSync(
+      path.join(f.home, "memories_v2/MEMORY.md"),
+      "\nnew source text\n"
+    )
+    await waitFor(
+      () =>
+        f
+          .pages()
+          .some((page) => String(page.content).includes("new source text")),
+      12_000
+    )
+    assert.equal(
+      f.calls().filter((method) => method === "initialize").length,
+      1
+    )
+    assert.equal(f.pages().length, 2)
   }
 )

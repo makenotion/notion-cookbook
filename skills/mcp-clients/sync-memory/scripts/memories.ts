@@ -1,7 +1,6 @@
 import crypto from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
-import { DatabaseSync } from "node:sqlite"
 import {
   CODEX_HOME,
   loadConfig,
@@ -11,6 +10,7 @@ import {
   sleep,
   withLock,
 } from "./config.ts"
+import type { State } from "./config.ts"
 import type { CallTool } from "./mcp.ts"
 
 export function memoriesDir(): string {
@@ -47,10 +47,18 @@ export function renderMemory(file: MemoryFile, syncedAt: string): string {
 }
 
 export function memoryFiles(): MemoryFile[] {
+  return memoryInventory().files
+}
+
+export function memoryInventory(): {
+  files: MemoryFile[]
+  unsupported: string[]
+} {
   const dir = memoriesDir()
-  if (!fs.existsSync(path.join(dir, "memory_summary.md")))
-    throw new Error("Codex v2 memory_summary.md is not ready")
+  if (!fs.existsSync(dir))
+    throw new Error(`Memory directory does not exist: ${dir}`)
   const names: string[] = []
+  const unsupported: string[] = []
   function visit(relative: string) {
     for (const entry of fs.readdirSync(path.join(dir, relative), {
       withFileTypes: true,
@@ -59,10 +67,11 @@ export function memoryFiles(): MemoryFile[] {
       const name = path.posix.join(relative, entry.name)
       if (entry.isDirectory()) visit(name)
       else if (entry.isFile() && entry.name.endsWith(".md")) names.push(name)
+      else unsupported.push(name)
     }
   }
   visit("")
-  return names.sort().map((name) => {
+  const files = names.sort().map((name) => {
     const file = path.join(dir, name)
     const content = fs.readFileSync(file, "utf8")
     const stat = fs.statSync(file)
@@ -77,12 +86,19 @@ export function memoryFiles(): MemoryFile[] {
       metadataHash: digest(JSON.stringify([createdAt, updatedAt])),
     }
   })
+  return { files, unsupported: unsupported.sort() }
 }
 
 export async function syncMemories(call: CallTool) {
-  const files = memoryFiles()
   const state = loadState()
+  await resolvePending(call, state)
+  const { files, unsupported } = memoryInventory()
+  const present = new Set(files.map((file) => file.name))
   const result = {
+    unsupported,
+    missing: Object.keys(state.files)
+      .filter((name) => !present.has(name))
+      .sort(),
     total: files.length,
     created: 0,
     updated: 0,
@@ -113,57 +129,113 @@ export async function syncMemories(call: CallTool) {
       }
     }
     const content = renderMemory(file, new Date().toISOString())
-    if (previous) {
-      await call("update-page", {
-        page_id: previous.pageId,
-        command: "update_properties",
-        properties: { "Last updated by": "Codex" },
-      })
-      await call("update-page", {
-        page_id: previous.pageId,
-        command: "replace_content",
-        new_str: content,
-      })
-      pageId = previous.pageId
-      result.updated++
-    } else {
-      const result = await call("create-pages", {
-        parent: "memory",
-        pages: [
-          {
-            properties: {
-              title: file.name,
-              Type: "Notes",
-              Source: "Codex",
-              "Last updated by": "Codex",
+    state.pending ??= {}
+    state.pending[file.name] = {
+      phase: "unknown",
+      operation: previous ? "update" : "create",
+      hash: file.hash,
+      metadataHash: file.metadataHash,
+      ...(previous ? { pageId: previous.pageId } : {}),
+    }
+    saveState(state)
+    try {
+      if (previous) {
+        await call("update-page", {
+          page_id: previous.pageId,
+          command: "update_properties",
+          properties: { "Last updated by": "Codex" },
+        })
+        await call("update-page", {
+          page_id: previous.pageId,
+          command: "replace_content",
+          new_str: content,
+        })
+        pageId = previous.pageId
+        result.updated++
+      } else {
+        const result = await call("create-pages", {
+          parent: "memory",
+          pages: [
+            {
+              properties: {
+                title: file.name,
+                Type: "Notes",
+                Source: "Codex",
+                "Last updated by": "Codex",
+              },
+              content,
             },
-            content,
-          },
-        ],
-      })
-      if (!isObject(result) || !Array.isArray(result.pages))
-        throw new Error("create-pages returned no pages")
-      const page: unknown = result.pages[0]
-      if (!isObject(page) || typeof page.id !== "string")
-        throw new Error("create-pages returned no page ID")
-      pageId = page.id
+          ],
+        })
+        if (!isObject(result) || !Array.isArray(result.pages))
+          throw new Error("create-pages returned no pages")
+        const page: unknown = result.pages[0]
+        if (!isObject(page) || typeof page.id !== "string" || !page.id)
+          throw new Error("create-pages returned no page ID")
+        pageId = page.id
+      }
+    } catch (error) {
+      throw new Error(
+        `Unknown ${previous ? "update" : "create"} outcome for ${file.name}${previous ? ` (page ${previous.pageId})` : ""}; reconcile the remote page and state.json before retrying. ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error }
+      )
     }
     if (!previous) result.created++
-    state.files[file.name] = {
+    state.pending[file.name] = {
+      phase: "readback",
+      operation: previous ? "update" : "create",
       pageId,
       hash: file.hash,
       metadataHash: file.metadataHash,
-      pageHash: (await snapshot(call, pageId)).hash,
+      expectedPageHash: digest(
+        JSON.stringify([file.name, "Notes", content.trim()])
+      ),
     }
     saveState(state)
+    await resolvePending(call, state, false)
   }
   log("memories:", result)
   return result
 }
 
+async function resolvePending(call: CallTool, state: State, recovering = true) {
+  const entries = Object.entries(state.pending ?? {})
+  for (const [name, pending] of entries) {
+    if (pending.phase === "unknown")
+      throw new Error(
+        `Unknown ${pending.operation} outcome for ${name}${pending.pageId ? ` (page ${pending.pageId})` : ""}; reconcile the remote page and state.json before retrying. No write was retried.`
+      )
+  }
+  for (const [name, pending] of entries) {
+    if (pending.phase !== "readback") continue
+    const page = await snapshot(call, pending.pageId)
+    if (page.deleted)
+      throw new Error(
+        `Pending readback page deleted: ${name} (${pending.pageId})`
+      )
+    if (recovering && page.hash !== pending.expectedPageHash)
+      throw new Error(
+        `Pending readback differs from the submitted page: ${name} (${pending.pageId}); reconcile the remote page and state.json before retrying. No write was retried.`
+      )
+    state.files[name] = {
+      pageId: pending.pageId,
+      hash: pending.hash,
+      metadataHash: pending.metadataHash,
+      pageHash: page.hash,
+    }
+    delete state.pending![name]
+    saveState(state)
+  }
+}
+
 export async function verifyMemories(call: CallTool) {
-  const files = memoryFiles()
   const state = loadState()
+  const pending = Object.entries(state.pending ?? {})
+  if (pending.length)
+    throw new Error(
+      `Pending writes require sync/reconciliation: ${pending.map(([name, entry]) => `${name} (${entry.phase})`).join(", ")}`
+    )
+  const { files, unsupported } = memoryInventory()
   for (const file of files) {
     const entry = state.files[file.name]
     if (
@@ -177,7 +249,14 @@ export async function verifyMemories(call: CallTool) {
     if (page.deleted || page.hash !== entry.pageHash)
       throw new Error(`Page changed: ${file.name}`)
   }
-  return { verified: files.length }
+  const present = new Set(files.map((file) => file.name))
+  return {
+    verified: files.length,
+    unsupported,
+    missing: Object.keys(state.files)
+      .filter((name) => !present.has(name))
+      .sort(),
+  }
 }
 
 async function snapshot(call: CallTool, id: string) {
@@ -185,10 +264,17 @@ async function snapshot(call: CallTool, id: string) {
   if (!isObject(result) || typeof result.text !== "string")
     throw new Error("Invalid page readback")
   const text = result.text
-  const properties: unknown = JSON.parse(
-    text.match(/<properties>\s*([\s\S]*?)\s*<\/properties>/)?.[1] ?? "{}"
+  const propertiesFrame = text.match(
+    /<properties>\s*([\s\S]*?)\s*<\/properties>/
   )
-  if (!isObject(properties)) throw new Error("Invalid page properties")
+  if (!propertiesFrame) throw new Error("Missing page properties frame")
+  const properties: unknown = JSON.parse(propertiesFrame[1])
+  if (
+    !isObject(properties) ||
+    typeof (properties.Title ?? properties.title) !== "string" ||
+    typeof properties.Type !== "string"
+  )
+    throw new Error("Invalid page properties")
   const start = text.indexOf("<content>")
   const end = text.lastIndexOf("</content>")
   if (start < 0 || end < start) throw new Error("Missing page content frame")
@@ -206,48 +292,34 @@ async function snapshot(call: CallTool, id: string) {
 }
 
 export function memoryFilesHash(): string {
+  const { files, unsupported } = memoryInventory()
   return digest(
-    JSON.stringify(
-      memoryFiles().map(({ name, hash, metadataHash }) => [
-        name,
-        hash,
-        metadataHash,
-      ])
-    )
+    JSON.stringify([
+      files.map(({ name, hash, metadataHash }) => [name, hash, metadataHash]),
+      unsupported,
+    ])
   )
 }
 
 export async function watchMemories(
   call: CallTool,
-  opts: { maxMs: number; initialHash: string }
+  opts: { initialHash: string; until: () => number }
 ) {
-  const started = Date.now()
-  let previous = opts.initialHash
-  while (Date.now() - started < opts.maxMs) {
+  let previous: string | undefined
+  let candidate: string | undefined = opts.initialHash
+  while (Date.now() < opts.until()) {
     await sleep(5000)
-    if (memoryJobRunning()) continue
+    if (Date.now() >= opts.until()) break
     const hash = memoryFilesHash()
-    if (hash !== previous) {
+    if (hash === previous) {
+      candidate = undefined
+    } else if (hash === candidate) {
       await withLock(() => syncMemories(call))
       previous = hash
+      candidate = undefined
+    } else {
+      candidate = hash
     }
-  }
-}
-
-function memoryJobRunning(): boolean {
-  const file = path.join(
-    loadConfig().sourceHome || CODEX_HOME,
-    "memories_v2_1.sqlite"
-  )
-  if (!fs.existsSync(file)) return false
-  const db = new DatabaseSync(file, { readOnly: true })
-  try {
-    return (
-      db.prepare("SELECT 1 FROM jobs WHERE status = 'running' LIMIT 1").all()
-        .length > 0
-    )
-  } finally {
-    db.close()
   }
 }
 
