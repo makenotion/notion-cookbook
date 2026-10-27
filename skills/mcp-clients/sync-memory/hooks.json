@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$PLUGIN_ROOT/hook.cjs\" session-start",
+            "command": "node \"$PLUGIN_ROOT/mcp-clients/sync-memory/hook.cjs\" session-start",
             "timeout": 10
           }
         ]
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$PLUGIN_ROOT/hook.cjs\" stop",
+            "command": "node \"$PLUGIN_ROOT/mcp-clients/sync-memory/hook.cjs\" stop",
             "timeout": 10
           }
         ]

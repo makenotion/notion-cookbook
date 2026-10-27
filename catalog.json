@@ -2,24 +2,6 @@
   "version": 1,
   "recipes": [
     {
-      "id": "codex-notion-memory",
-      "title": "Codex Notion memory",
-      "summary": "Codex plugin that recursively copies all current v2 memory Markdown into Notion Memories, one relative path per page, with source metadata before unchanged original Markdown.",
-      "path": "examples/codex-notion-memory",
-      "kind": "api-example",
-      "status": "ready",
-      "language": "typescript",
-      "runtime": "node",
-      "integrations": ["notion-mcp", "codex"],
-      "entrypoints": ["plugin/src/main.ts"],
-      "commands": {
-        "install": "npm install",
-        "run": "npm run preview",
-        "check": "npm run check",
-        "test": "npm test"
-      }
-    },
-    {
       "id": "database-email-update",
       "title": "Database email update",
       "summary": "Send an email through SendGrid when the status of a page in a Notion database changes.",

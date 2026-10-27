@@ -19,6 +19,7 @@ if (!/^[1-9][0-9]*$/.test(jobsText) || !Number.isSafeInteger(jobs)) {
 
 const projectParents = [
   "examples",
+  "skills/mcp-clients",
   "apps/templates",
   "workers/templates",
   "workers/templates/custom-blocks",

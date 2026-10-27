@@ -1,12 +1,11 @@
 ---
-name: notion-memory
+name: sync-memory
 description: Copy current Codex memory Markdown files into Notion Memories, preview the files, or verify managed pages. Use when the user asks to sync or check Codex memories in Notion.
 ---
 
-# Notion Memory
+# Sync Memory
 
-Use Node.js 22.18+ and the bundled `src/main.ts`, relative to this plugin root
-(two directories above this skill):
+Use Node.js 22.18+ and the bundled `scripts/main.ts`, relative to this skill directory:
 
 - `sync`: recursively copy every regular `*.md` file under `memories_v2/`, one file per page.
 - `preview`: show the source files without connecting to Notion.

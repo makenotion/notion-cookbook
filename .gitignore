@@ -3,6 +3,7 @@
 /build
 
 /examples/**/package-lock.json
+/skills/mcp-clients/sync-memory/package-lock.json
 /workers/**/package-lock.json
 /examples/**/.env
 /workers.json

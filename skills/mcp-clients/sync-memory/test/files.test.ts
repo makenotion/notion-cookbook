@@ -3,7 +3,7 @@ import fs from "node:fs"
 import crypto from "node:crypto"
 import path from "node:path"
 import { test } from "node:test"
-import { sourceCreatedAt } from "../plugin/src/memories.ts"
+import { sourceCreatedAt } from "../scripts/memories.ts"
 import { fixture, object } from "./support/harness.ts"
 
 function copiedPage(content: unknown) {

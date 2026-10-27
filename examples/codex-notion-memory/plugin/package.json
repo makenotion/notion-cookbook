@@ -1,8 +1,0 @@
-{
-  "private": true,
-  "type": "module",
-  "engines": {
-    "node": ">=22.18"
-  },
-  "version": "0.4.2"
-}

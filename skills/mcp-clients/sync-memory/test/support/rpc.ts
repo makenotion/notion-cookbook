@@ -8,6 +8,7 @@ const allowed = new Set([
   "initialize",
   "hooks/list",
   "plugin/list",
+  "skills/list",
   "thread/start",
   "mcpServerStatus/list",
   "config/read",

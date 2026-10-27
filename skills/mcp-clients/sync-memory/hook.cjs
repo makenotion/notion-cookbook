@@ -13,10 +13,10 @@ try {
     : {}
   const result = spawnSync(
     config.nodePath || process.execPath,
-    [path.join(__dirname, "src/main.ts"), "hook", process.argv[2]],
+    [path.join(__dirname, "scripts/main.ts"), "hook", process.argv[2]],
     { stdio: "inherit" }
   )
-  if (result.error) console.error(`Notion memory hook: ${result.error.message}`)
+  if (result.error) console.error(`Sync Memory hook: ${result.error.message}`)
 } catch (error) {
-  console.error(`Notion memory hook: ${error.message}`)
+  console.error(`Sync Memory hook: ${error.message}`)
 }

@@ -60,8 +60,27 @@ export function fixture(t: TestContext) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "notion-plugin-test-"))
   const home = path.join(root, "home")
   const installed = path.join(root, "installed plugin")
+  const installedSkill = path.join(installed, "mcp-clients/sync-memory")
   fs.mkdirSync(home)
-  fs.cpSync(path.join(recipe, "plugin"), installed, { recursive: true })
+  fs.mkdirSync(installedSkill, { recursive: true })
+  fs.cpSync(
+    path.resolve(recipe, "../../.codex-plugin"),
+    path.join(installed, ".codex-plugin"),
+    { recursive: true }
+  )
+  for (const entry of [
+    ".mcp.json",
+    "hooks.json",
+    "hook.cjs",
+    "package.json",
+    "SKILL.md",
+    "evaluations",
+    "scripts",
+  ]) {
+    fs.cpSync(path.join(recipe, entry), path.join(installedSkill, entry), {
+      recursive: true,
+    })
+  }
   fs.chmodSync(path.join(support, "fake-codex.mjs"), 0o755)
   const env: NodeJS.ProcessEnv = {
     PATH: path.dirname(process.execPath),
@@ -129,7 +148,7 @@ export function fixture(t: TestContext) {
     exec(args: string[], extra: NodeJS.ProcessEnv = {}, timeout = 15_000) {
       return run(
         process.execPath,
-        [path.join(installed, "src/main.ts"), ...args],
+        [path.join(installedSkill, "scripts/main.ts"), ...args],
         { ...env, ...extra },
         root,
         timeout,

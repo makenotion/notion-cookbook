@@ -1,9 +1,15 @@
-# Codex Notion Memory
+# Sync Memory
 
 Copy Codex's current memory Markdown files into Notion Memories, one file per
 page. Relative file paths become page titles. Each page begins with source metadata,
 then a separator and the original Markdown without plugin transformations.
 The plugin calls Notion through Codex's existing MCP connection; it runs no model.
+
+The canonical source lives beside the other Notion skills at
+`skills/mcp-clients/sync-memory/`. `SKILL.md` is the agent entrypoint, and
+`scripts/` holds its deterministic copy commands. Codex plugin metadata at `skills/.codex-plugin/plugin.json` points to this
+canonical directory and its hooks for installation and automatic triggers.
+The current runtime supports Codex memory only.
 
 ## Behavior
 
@@ -84,12 +90,19 @@ the preamble, subject to the existing protection for human edits.
   their state separate; v2 does not guarantee importing old manually written notes.
 - A Notion workspace with Memories enabled and a connected Notion MCP server.
 
-Install from this directory's bundled marketplace:
+Install from the repository's bundled marketplace:
 
 ```sh
-codex plugin marketplace add /absolute/path/to/notion-cookbook/examples/codex-notion-memory
-codex plugin add notion-memory@notion-cookbook
+codex plugin marketplace add /absolute/path/to/notion-cookbook
+codex plugin add sync-memory@notion-cookbook
 ```
+
+In Codex, select `$sync-memory:sync-memory` or ask the agent to use Sync Memory to sync,
+preview, verify, or inspect the mapping. Copy the whole directory when installing
+the skill directly so its `scripts/` commands remain available. Automatic hooks
+and the bundled Notion connection require the plugin installation.
+
+The runtime test checks discovery of the skill through `skills/list`.
 
 The bundled server uses Notion MCP. Complete Codex's normal OAuth login. If using
 an already configured connection, set `mcpServer` in `~/.codex/notion-memory.json`.
@@ -110,6 +123,14 @@ mapping directory when testing. The old topic/archive mapping is unsupported;
 start with a fresh mapping directory when replacing a development installation.
 Old Notion pages and old memory files are not migrated or removed.
 
+The product and skill are named Sync Memory. The existing `notion-memory`
+configuration, mapping and log paths, `NOTION_MEMORY_*` environment variables, and
+`Synced by: notion-memory` metadata remain stable. Renaming does not create a new
+mapping namespace or require rewriting existing pages. Disable or uninstall an
+older `notion-memory` development plugin before enabling Sync Memory's hooks.
+Keep its configuration and state directory intact. There is no automatic removal
+or migration of the old plugin installation.
+
 Review and trust the two hooks in Codex (`/hooks` in the CLI). Until trusted,
 hooks are skipped. New hook definitions require review again.
 
@@ -129,13 +150,13 @@ writes, and a readback hash protects external changes before an update.
 
 ## Commands
 
-From an installed plugin root, using Node.js 22.18+:
+From the skill directory, using Node.js 22.18+:
 
 ```sh
-node src/main.ts preview
-node src/main.ts sync
-node src/main.ts verify
-node src/main.ts status
+node scripts/main.ts preview
+node scripts/main.ts sync
+node scripts/main.ts verify
+node scripts/main.ts status
 ```
 
 `preview` reads local files and their filesystem timestamps only. `verify` compares
@@ -153,18 +174,18 @@ it does not prove that Notion retained every original source character.
 
 ## Processing points and files
 
-| Processing point                                               | Implementation                                              |
-| -------------------------------------------------------------- | ----------------------------------------------------------- |
-| Plugin registration and MCP endpoint                           | `plugin/.codex-plugin/plugin.json`, `plugin/.mcp.json`      |
-| SessionStart / Stop registration                               | `plugin/hooks.json`                                         |
-| Select Node runtime                                            | `plugin/hook.cjs`                                           |
-| Manual command, detached worker, feature guard, watch window   | `plugin/src/main.ts`                                        |
-| Recursively read current memory Markdown files unchanged       | `plugin/src/memories.ts` — `memoryFiles`                    |
-| One file / one page, attribution, update protection, readback  | `plugin/src/memories.ts` — `syncMemories`, `verifyMemories` |
-| File polling and v2 job check                                  | `plugin/src/memories.ts` — `watchMemories`                  |
-| Connection, OAuth-owned transport, workspace check, RPC errors | `plugin/src/mcp.ts`                                         |
-| Settings, file mapping, atomic save, shared lock, logs         | `plugin/src/config.ts`                                      |
-| On-demand agent instruction                                    | `plugin/skills/notion-memory/SKILL.md`                      |
+| Processing point                                               | Implementation                                           |
+| -------------------------------------------------------------- | -------------------------------------------------------- |
+| Plugin registration and MCP endpoint                           | `../../.codex-plugin/plugin.json`, `.mcp.json`           |
+| SessionStart / Stop registration                               | `hooks.json`                                             |
+| Select Node runtime                                            | `hook.cjs`                                               |
+| Manual command, detached worker, feature guard, watch window   | `scripts/main.ts`                                        |
+| Recursively read current memory Markdown files unchanged       | `scripts/memories.ts` — `memoryFiles`                    |
+| One file / one page, attribution, update protection, readback  | `scripts/memories.ts` — `syncMemories`, `verifyMemories` |
+| File polling and v2 job check                                  | `scripts/memories.ts` — `watchMemories`                  |
+| Connection, OAuth-owned transport, workspace check, RPC errors | `scripts/mcp.ts`                                         |
+| Settings, file mapping, atomic save, shared lock, logs         | `scripts/config.ts`                                      |
+| On-demand agent instruction                                    | `SKILL.md`                                               |
 
 ## Validation
 

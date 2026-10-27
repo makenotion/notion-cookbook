@@ -8,7 +8,7 @@ import { appServer } from "./support/rpc.ts"
 const binary = process.env.CODEX_TEST_BINARY
 
 test(
-  "real Codex installs the package, discovers untrusted hooks and syncs through a local MCP server",
+  "real Codex installs Sync Memory, discovers its skill and untrusted hooks, and syncs through a local MCP server",
   {
     skip: !binary && "set CODEX_TEST_BINARY to an installed Codex executable",
     timeout: 60_000,
@@ -21,14 +21,14 @@ test(
     fs.writeFileSync(path.join(f.home, "config.toml"), config)
     const add = await run(
       binary,
-      ["plugin", "marketplace", "add", recipe],
+      ["plugin", "marketplace", "add", path.resolve(recipe, "../../..")],
       env,
       f.root
     )
     assert.equal(add.code, 0, add.stderr)
     const install = await run(
       binary,
-      ["plugin", "add", "notion-memory@notion-cookbook", "--json"],
+      ["plugin", "add", "sync-memory@notion-cookbook", "--json"],
       env,
       f.root
     )
@@ -37,15 +37,16 @@ test(
     assert.equal(installed.authPolicy, "ON_INSTALL")
     assert.equal(typeof installed.installedPath, "string")
     const cache = String(installed.installedPath)
-    assert.notEqual(cache, path.join(recipe, "plugin"))
+    assert.notEqual(cache, path.resolve(recipe, "../.."))
+    const installedSkill = path.join(cache, "mcp-clients/sync-memory")
     assert.equal(
-      fs.readFileSync(path.join(cache, "src/main.ts"), "utf8"),
-      fs.readFileSync(path.join(recipe, "plugin/src/main.ts"), "utf8")
+      fs.readFileSync(path.join(installedSkill, "scripts/main.ts"), "utf8"),
+      fs.readFileSync(path.join(recipe, "scripts/main.ts"), "utf8")
     )
     const server = appServer(binary, env, f.root)
     f.cleanupBeforeFiles(() => server.close())
     await server.call("initialize", {
-      clientInfo: { name: "notion-memory-runtime-test", version: "0.1.0" },
+      clientInfo: { name: "sync-memory-runtime-test", version: "0.1.0" },
       capabilities: { experimentalApi: true },
     })
     const hooks = object(await server.call("hooks/list", { cwds: [f.root] }))
@@ -68,13 +69,25 @@ test(
     const notion = inventory.data.map(object).find((s) => s.name === "notion")
     assert.ok(notion)
     assert.ok("notion-create-pages" in object(notion.tools))
+    const skills = object(
+      await server.call("skills/list", { cwds: [f.root], forceReload: true })
+    )
+    assert.ok(Array.isArray(skills.data))
+    const skillEntry = object(skills.data[0])
+    assert.ok(Array.isArray(skillEntry.skills))
+    const skill = skillEntry.skills
+      .map(object)
+      .find((s) => s.name === "sync-memory:sync-memory")
+    assert.ok(skill, "installed Sync Memory skill must be discoverable")
+    assert.equal(skill.path, path.join(installedSkill, "SKILL.md"))
+    assert.equal(skill.enabled, true)
     assert.deepEqual(f.pages(), [], "untrusted startup hook must not write")
 
     f.seed()
     const execute = () =>
       run(
         process.execPath,
-        [path.join(cache, "src/main.ts"), "sync"],
+        [path.join(installedSkill, "scripts/main.ts"), "sync"],
         env,
         f.root,
         20_000
@@ -110,7 +123,7 @@ test(
     const disabled = await run(
       process.execPath,
       [
-        path.join(cache, "src/main.ts"),
+        path.join(installedSkill, "scripts/main.ts"),
         "worker",
         "session-start",
         "--cwd",

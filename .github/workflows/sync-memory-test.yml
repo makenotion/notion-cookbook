@@ -1,15 +1,19 @@
-name: Notion memory plugin
+name: Sync Memory plugin
 
 on:
   pull_request:
     paths:
-      - "examples/codex-notion-memory/**"
-      - ".github/workflows/notion-memory-test.yml"
+      - ".agents/plugins/marketplace.json"
+      - "skills/.codex-plugin/plugin.json"
+      - "skills/mcp-clients/sync-memory/**"
+      - ".github/workflows/sync-memory-test.yml"
   push:
     branches: [main]
     paths:
-      - "examples/codex-notion-memory/**"
-      - ".github/workflows/notion-memory-test.yml"
+      - ".agents/plugins/marketplace.json"
+      - "skills/.codex-plugin/plugin.json"
+      - "skills/mcp-clients/sync-memory/**"
+      - ".github/workflows/sync-memory-test.yml"
   workflow_dispatch:
 
 permissions:
@@ -29,12 +33,12 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - name: Install test dependencies and pinned Codex CLI
-        working-directory: examples/codex-notion-memory
+        working-directory: skills/mcp-clients/sync-memory
         run: |
           npm install
           npm install --prefix "$RUNNER_TEMP/codex-runtime" @openai/codex@0.149.1
       - name: Typecheck and test the installed plugin through real Codex
-        working-directory: examples/codex-notion-memory
+        working-directory: skills/mcp-clients/sync-memory
         env:
           CODEX_TEST_BINARY: ${{ runner.temp }}/codex-runtime/node_modules/.bin/codex
         run: |

@@ -1,8 +1,3 @@
-// Mirrors Codex memories into Notion Memories. Entry point for the hooks and manual commands.
-//
-//   node src/main.ts hook <session-start|stop>   called by Codex hooks
-//   node src/main.ts sync                        write Codex memories now
-//   node src/main.ts status                      memories it manages
 import { spawn } from "node:child_process"
 import fs from "node:fs"
 import { fileURLToPath } from "node:url"
@@ -82,7 +77,9 @@ async function main(): Promise<void> {
       console.log(JSON.stringify(loadState(), null, 2))
       return
     default:
-      console.log("usage: node src/main.ts sync | preview | verify | status")
+      console.log(
+        "usage: node scripts/main.ts sync | preview | verify | status"
+      )
   }
 }
 

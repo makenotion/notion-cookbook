@@ -1,0 +1,14 @@
+{
+  "name": "sync-memory",
+  "version": "0.4.3",
+  "description": "Copy local memory Markdown into Notion Memories. Currently supports Codex memories.",
+  "skills": "./mcp-clients/sync-memory/",
+  "hooks": "./mcp-clients/sync-memory/hooks.json",
+  "mcpServers": "./mcp-clients/sync-memory/.mcp.json",
+  "interface": {
+    "displayName": "Sync Memory",
+    "shortDescription": "Copy local memory into Notion Memories",
+    "developerName": "Notion",
+    "category": "Productivity"
+  }
+}

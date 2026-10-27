@@ -147,7 +147,10 @@ test("missing Node is visible at the actual hook command boundary", async (t) =>
   const f = fixture(t)
   const result = await run(
     "/bin/sh",
-    ["-c", 'node "$PLUGIN_ROOT/src/main.ts" hook session-start'],
+    [
+      "-c",
+      'node "$PLUGIN_ROOT/mcp-clients/sync-memory/scripts/main.ts" hook session-start',
+    ],
     {
       ...f.env,
       PATH: path.join(f.root, "empty-bin"),
