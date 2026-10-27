@@ -84,11 +84,16 @@ test("missing optional file leaves its existing page alone; absent summary fails
 test("overlapping processes create one page per file and keep notices separate", async (t) => {
   const f = fixture(t)
   f.seed()
+  // Whichever process takes the lock first writes both pages, and the other then has
+  // nothing to send, so both get notices.
   const results = await Promise.all([
     f.exec(["sync"], { FIXTURE_NOTICE: "true" }),
-    f.exec(["sync"]),
+    f.exec(["sync"], { FIXTURE_NOTICE: "true" }),
   ])
-  for (const r of results) assert.equal(r.code, 0, r.stderr)
+  for (const r of results) {
+    assert.equal(r.code, 0, r.stderr)
+    assert.equal(typeof JSON.parse(r.stdout).total, "number")
+  }
   assert.equal(f.pages().length, 2)
   assert.ok(
     results.some((r) => /Synthetic workspace quota notice/.test(r.stderr))
