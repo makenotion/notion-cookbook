@@ -17,7 +17,7 @@
     "typescript": "^5.8.0"
   },
   "dependencies": {
-    "@notionhq/workers": "0.9.5",
+    "@notionhq/workers": ">=0.0.0",
     "fast-xml-parser": "^5.2.5"
   }
 }

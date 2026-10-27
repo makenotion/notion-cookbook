@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "@notionhq/custom-blocks": "^0.3.1",
-    "@notionhq/workers": "0.9.5",
+    "@notionhq/workers": ">=0.0.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
