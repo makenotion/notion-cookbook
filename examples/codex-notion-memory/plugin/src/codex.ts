@@ -4,19 +4,20 @@ import { DatabaseSync } from "node:sqlite"
 import { AGENT_HOME, loadConfig, sleep, withLock } from "./config.ts"
 import type { CallTool } from "./mcp.ts"
 import {
-  digest,
   type MemoryFile,
   memoryFilesHash,
   type MemorySource,
+  readSourceFile,
   syncMemories,
 } from "./memories.ts"
 
 // Codex memories (`[features] memories = true`) are written by Codex itself, in the
-// background, into $CODEX_HOME/memories_v2/memory_summary.md and MEMORY.md. Each file
-// becomes one Notes page.
+// background, into $CODEX_HOME/memories_v2/: memory_summary.md plus nested Markdown such as
+// rollout_summaries/ and extensions/. Each file becomes one Notes page titled by its path.
 
 export const codexSource: MemorySource = {
   name: "Codex",
+  root: "memories_v2",
   files: codexMemoryFiles,
 }
 
@@ -28,18 +29,23 @@ export function codexMemoryFiles(): MemoryFile[] {
   const dir = memoriesDir()
   if (!fs.existsSync(path.join(dir, "memory_summary.md")))
     throw new Error("Codex v2 memory_summary.md is not ready")
-  return ["memory_summary.md", "MEMORY.md"]
-    .filter((name) => fs.existsSync(path.join(dir, name)))
-    .map((name) => {
-      const content = fs.readFileSync(path.join(dir, name), "utf8")
-      return {
-        key: name,
-        title: name,
-        type: "Notes",
-        content,
-        hash: digest(content),
-      }
-    })
+  const names: string[] = []
+  function visit(relative: string) {
+    for (const entry of fs.readdirSync(path.join(dir, relative), {
+      withFileTypes: true,
+    })) {
+      if (entry.name === ".git") continue
+      const name = path.posix.join(relative, entry.name)
+      if (entry.isDirectory()) visit(name)
+      else if (entry.isFile() && entry.name.endsWith(".md")) names.push(name)
+    }
+  }
+  visit("")
+  return names.sort().map((name) => ({
+    ...readSourceFile(dir, name),
+    title: name,
+    type: "Notes",
+  }))
 }
 
 export async function watchMemories(

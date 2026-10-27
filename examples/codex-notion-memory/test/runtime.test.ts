@@ -102,9 +102,9 @@ test(
     const empty = await execute()
     assert.equal(empty.code, 0, empty.stderr)
     assert.equal(JSON.parse(empty.stdout).updated, 1)
-    assert.equal(
-      f.pages().find((p) => p.title === "memory_summary.md")?.content,
-      ""
+    assert.match(
+      String(f.pages().find((p) => p.title === "memory_summary.md")?.content),
+      /^# Codex memory source\n[\s\S]*\n---\n\n$/
     )
     // Directly exercise the installed worker's disabled-config guard. No hooks are trusted.
     const disabled = await run(

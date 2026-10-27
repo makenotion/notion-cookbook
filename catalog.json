@@ -4,7 +4,7 @@
     {
       "id": "codex-notion-memory",
       "title": "Codex Notion memory",
-      "summary": "Codex and Claude Code plugin that copies current memory Markdown into Notion Memories, one file per page, without content transformation.",
+      "summary": "Codex and Claude Code plugin that copies all current memory Markdown into Notion Memories, one relative path per page, with source metadata before unchanged original Markdown.",
       "path": "examples/codex-notion-memory",
       "kind": "api-example",
       "status": "ready",

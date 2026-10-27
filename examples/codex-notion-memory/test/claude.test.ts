@@ -37,7 +37,7 @@ test("lists auto memory files with unchanged Markdown, one page per file", () =>
     ]
   )
   const [feedback] = files
-  assert.equal(feedback.key, `${PROJECT}/feedback_tests.md`)
+  assert.equal(feedback.name, `${PROJECT}/memory/feedback_tests.md`)
   assert.equal(
     feedback.content,
     fs.readFileSync(path.join(FIXTURES, "feedback_tests.md"), "utf8")
@@ -77,7 +77,12 @@ test("copies Claude Code memory files, updates the same page, and leaves deleted
   assert.equal(profile?.Type, "Profile")
   assert.equal(profile?.Source, "Claude Code")
   assert.equal(profile?.lastUpdatedBy, "Claude Code")
-  assert.equal(profile?.content, fs.readFileSync(role, "utf8"))
+  const content = String(profile?.content)
+  assert.ok(content.startsWith("# Claude Code memory source\n"))
+  assert.match(content, /"Source root": "projects"/)
+  assert.ok(content.includes(`"Source path": "${PROJECT}/memory/user_role.md"`))
+  assert.ok(!content.includes(home))
+  assert.ok(content.endsWith(`\n---\n\n${fs.readFileSync(role, "utf8")}`))
 
   // Claude rewrites one memory and deletes another (for example with `rm`).
   fs.writeFileSync(
@@ -88,7 +93,11 @@ test("copies Claude Code memory files, updates the same page, and leaves deleted
   const second = await syncMemories(notion.callTool, claudeSource)
   assert.equal(second.updated, 1)
   assert.equal(second.unchanged, 3)
-  assert.equal(profile?.content, fs.readFileSync(role, "utf8"))
+  assert.ok(
+    String(profile?.content).endsWith(
+      `\n---\n\n${fs.readFileSync(role, "utf8")}`
+    )
+  )
   // The deleted file's page stays as it was; the plugin never deletes.
   assert.equal(notion.pages.size, 5)
   assert.ok(![...notion.pages.values()].some((p) => p.deleted))

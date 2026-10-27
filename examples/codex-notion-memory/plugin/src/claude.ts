@@ -3,10 +3,10 @@ import os from "node:os"
 import path from "node:path"
 import { AGENT_HOME } from "./config.ts"
 import {
-  digest,
   type MemoryFile,
   type MemorySource,
   type MemoryType,
+  readSourceFile,
 } from "./memories.ts"
 
 // Claude Code's auto memory keeps one Markdown file per memory in
@@ -36,6 +36,7 @@ const CUSTOM_DIR = customMemoryDir()
 
 export const claudeSource: MemorySource = {
   name: "Claude Code",
+  root: CUSTOM_DIR ? "autoMemoryDirectory" : "projects",
   files: () => claudeMemoryFiles(CUSTOM_DIR ?? PROJECTS_DIR),
 }
 
@@ -53,20 +54,20 @@ export function claudeMemoryFiles(dir: string): MemoryFile[] {
   for (const { project, memoryDir } of dirs) {
     for (const file of listDir(memoryDir)) {
       if (!file.endsWith(".md") || file === "MEMORY.md") continue
-      let content: string
+      let source
       try {
-        content = fs.readFileSync(path.join(memoryDir, file), "utf8")
+        source = readSourceFile(
+          dir,
+          project ? path.posix.join(project, "memory", file) : file
+        )
       } catch {
         continue
       }
       // The same file name can exist in several projects, so the title names the project.
-      const name = project ? `${projectLabel(project)}/${file}` : file
       out.push({
-        key: project ? `${project}/${file}` : file,
-        title: name,
-        type: memoryType(content),
-        content,
-        hash: digest(content),
+        ...source,
+        title: project ? `${projectLabel(project)}/${file}` : file,
+        type: memoryType(source.content),
       })
     }
   }

@@ -19,6 +19,7 @@ export interface State {
     string,
     {
       hash: string
+      metadataHash?: string
       pageId: string
       pageHash: string
       released?: boolean
