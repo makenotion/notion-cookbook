@@ -12,6 +12,9 @@ import { Worker } from "@notionhq/workers"
 import * as Builder from "@notionhq/workers/builder"
 import * as Schema from "@notionhq/workers/schema"
 
+type PageState = { page: number }
+type CursorState = { cursor: string }
+
 const worker = new Worker()
 export default worker
 
@@ -50,7 +53,7 @@ const tasks = worker.database("tasks", {
         { name: "In Progress", color: "yellow" },
         { name: "Done", color: "green" },
       ]),
-      Project: Schema.relation("projectsSync", {
+      Project: Schema.relation("projects", {
         twoWay: true,
         relatedPropertyName: "Tasks",
       }),
@@ -64,7 +67,7 @@ worker.sync("projectsSync", {
   database: projects,
   mode: "replace",
   schedule: "1h",
-  execute: async (state) => {
+  execute: async (state: PageState | undefined) => {
     const page = state?.page ?? 1
     await exampleApi.wait()
     const { items, hasMore } = await fetchProjects(page)
@@ -95,7 +98,7 @@ worker.sync("tasksBackfill", {
   database: tasks,
   mode: "replace",
   schedule: "manual",
-  execute: async (state) => {
+  execute: async (state: PageState | undefined) => {
     const page = state?.page ?? 1
     await exampleApi.wait()
     const { items, hasMore } = await fetchAllTasks(page)
@@ -124,7 +127,7 @@ worker.sync("tasksDelta", {
   database: tasks,
   mode: "incremental",
   schedule: "5m",
-  execute: async (state) => {
+  execute: async (state: CursorState | undefined) => {
     const cursor = state?.cursor
     await exampleApi.wait()
     const { items, nextCursor } = await fetchTaskChanges(cursor)
@@ -179,6 +182,6 @@ async function fetchTaskChanges(_cursor: string | undefined) {
         projectId: "proj-1",
       },
     ],
-    nextCursor: null as string | null,
+    nextCursor: null,
   }
 }

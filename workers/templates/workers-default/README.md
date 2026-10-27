@@ -767,7 +767,7 @@ ntn --help
 ## Local development
 
 ```shell
-npm run check # type-check
+npm run check # type-check src/ and .examples/ without emitting files
 npm run build # emit dist/
 ```
 
