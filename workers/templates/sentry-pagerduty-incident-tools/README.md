@@ -25,7 +25,7 @@ configured PagerDuty destination, asks for confirmation, then declares it.
 
 ## Quickstart
 
-You need Node.js 22+, npm 10.9.2+, access to deploy Notion Workers, a Sentry
+You need Node.js 22.23.4+, npm 10.9.2+, access to deploy Notion Workers, a Sentry
 token with `event:read`, and a PagerDuty API identity that can read services,
 priorities, on-call coverage, and incidents and can create incidents.
 The optional ID lookup commands below also use `curl` and `jq`.

@@ -4,6 +4,9 @@
   "private": true,
   "description": "Generate random data in a Notion Database.",
   "main": "index.js",
+  "engines": {
+    "node": ">=22.23.4"
+  },
   "scripts": {
     "ts-run": "node --loader ts-node/esm index.ts"
   },

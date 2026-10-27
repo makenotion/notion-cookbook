@@ -10,7 +10,7 @@ deletes a Notion page, and does not require a Notion API token.
 
 ## Quickstart
 
-You need Node.js 22+, npm 10.9.2+, a Readwise account with API access, and a
+You need Node.js 22.23.4+, npm 10.9.2+, a Readwise account with API access, and a
 personal [Readwise access token](https://readwise.io/access_token).
 
 From the repository root, deploy the Worker, pause its schedules, and add the

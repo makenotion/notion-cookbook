@@ -10,7 +10,7 @@ to create the database or provide a Notion API token.
 
 ## Quickstart
 
-You need Node.js 22+, npm 10.9.2+, a GitHub.com account, and a fine-grained
+You need Node.js 22.23.4+, npm 10.9.2+, a GitHub.com account, and a fine-grained
 personal access token (PAT) with read-only **Starring** account permission. This
 recipe does not support GitHub Enterprise Server. You also need the account's
 immutable numeric user ID. Open

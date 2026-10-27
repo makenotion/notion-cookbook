@@ -7,7 +7,7 @@ links back to Linear for day-to-day work.
 
 ## Quickstart
 
-You need Node.js 22+, a
+You need Node.js 22.23.4+, a
 [Linear personal API key](#getting-a-linear-personal-api-key), and a Linear
 user who can read the work you want to sync. Create a key in **Linear >
 Settings > Security & access > API keys**, then run these commands from the

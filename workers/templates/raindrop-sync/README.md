@@ -13,7 +13,7 @@ while Notion is where saved material connects to active work.
 
 ## Quickstart
 
-You need Node.js 22+, npm 10.9.2+, a Raindrop.io account, and a personal test
+You need Node.js 22.23.4+, npm 10.9.2+, a Raindrop.io account, and a personal test
 token. Create an app in [Raindrop.io App Management][raindrop-apps], open its
 settings, and copy the **Test token**. Use it to retrieve the account ID:
 

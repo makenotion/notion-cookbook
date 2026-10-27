@@ -5,7 +5,7 @@
   "description": "Send an email with SendGrid when an update is made in Notion.",
   "main": "index.js",
   "engines": {
-    "node": ">=14"
+    "node": ">=22.23.4"
   },
   "scripts": {
     "ts-run": "node --loader ts-node/esm index.ts"

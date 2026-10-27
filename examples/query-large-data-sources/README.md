@@ -12,7 +12,7 @@ into `created_time` windows that each stay under the limit.
 
 ## What you need
 
-- Node.js 18 or newer
+- Node.js 22.23.4 or newer
 - A Notion integration token, with the target database shared to it
 - A data source ID for a database you want to read
 

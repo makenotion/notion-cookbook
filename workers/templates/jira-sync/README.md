@@ -7,7 +7,7 @@ scorecard with velocity, scope change, and delivery forecasts.
 
 ## Quickstart
 
-You need Node.js 22+, a Jira Cloud account, and an
+You need Node.js 22.23.4+, a Jira Cloud account, and an
 [Atlassian API token](https://id.atlassian.com/manage/api-tokens). Note the
 email address associated with the token and your Jira subdomain (for example,
 `acme` for `acme.atlassian.net`).

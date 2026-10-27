@@ -11,7 +11,7 @@ no longer returned by the query.
 
 ## Quickstart
 
-You need Node 22+, a Snowflake read-only service role, and an RSA key pair for
+You need Node 22.23.4+, a Snowflake read-only service role, and an RSA key pair for
 JWT authentication. The
 [Snowflake query README](../snowflake-query/README.md) explains the key-pair
 setup.

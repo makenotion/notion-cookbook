@@ -4,6 +4,9 @@
   "private": true,
   "description": "Query a Notion data source that has more rows than the per-query limit",
   "type": "module",
+  "engines": {
+    "node": ">=22.23.4"
+  },
   "scripts": {
     "ts-run": "node --loader ts-node/esm index.ts"
   },

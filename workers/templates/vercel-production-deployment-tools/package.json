@@ -10,7 +10,7 @@
     "format:check": "prettier --check README.md src/**/*.ts test/**/*.ts package.json tsconfig.json"
   },
   "engines": {
-    "node": ">=22.0.0",
+    "node": ">=22.23.4",
     "npm": ">=10.9.2"
   },
   "devDependencies": {

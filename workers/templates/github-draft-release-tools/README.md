@@ -19,7 +19,7 @@ confirmation, and then publishes that same version.
 
 ## Quickstart
 
-You need Node.js 22+, npm 10.9.2+, the [GitHub CLI](https://cli.github.com/),
+You need Node.js 22.23.4+, npm 10.9.2+, the [GitHub CLI](https://cli.github.com/),
 access to deploy Notion Workers, and permission to create and install a GitHub
 App. Install the Workers CLI and sign in to GitHub:
 
