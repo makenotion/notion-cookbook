@@ -19,9 +19,29 @@ test(
     const env = { ...f.env, CODEX_PATH: binary }
     const config = `model = "synthetic-no-generation"\nmodel_provider = "fixture"\n[model_providers.fixture]\nname = "Offline fixture"\nbase_url = "http://127.0.0.1:9/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n[features]\nmemories = false\napps = false\nremote_plugin = false\n[analytics]\nenabled = false\n[mcp_servers.notion]\ncommand = ${JSON.stringify(process.execPath)}\nargs = [${JSON.stringify(path.join(support, "mcp-standin.mjs"))}]\n[mcp_servers.notion.env]\nFIXTURE_STATE = ${JSON.stringify(f.env.FIXTURE_STATE)}\nFIXTURE_CALLS = ${JSON.stringify(f.env.FIXTURE_CALLS)}\n`
     fs.writeFileSync(path.join(f.home, "config.toml"), config)
+    const marketplace = f.root
+    fs.mkdirSync(path.join(marketplace, ".agents/plugins"), { recursive: true })
+    const registry = object(
+      JSON.parse(
+        fs.readFileSync(
+          path.resolve(recipe, "../../../.agents/plugins/marketplace.json"),
+          "utf8"
+        )
+      )
+    )
+    assert.ok(Array.isArray(registry.plugins))
+    const plugin = registry.plugins
+      .map(object)
+      .find((p) => p.name === "sync-memory")
+    assert.ok(plugin)
+    object(plugin.source).path = "./installed plugin"
+    fs.writeFileSync(
+      path.join(marketplace, ".agents/plugins/marketplace.json"),
+      JSON.stringify({ ...registry, plugins: [plugin] })
+    )
     const add = await run(
       binary,
-      ["plugin", "marketplace", "add", path.resolve(recipe, "../../..")],
+      ["plugin", "marketplace", "add", marketplace],
       env,
       f.root
     )
@@ -38,7 +58,7 @@ test(
     assert.equal(typeof installed.installedPath, "string")
     const cache = String(installed.installedPath)
     assert.notEqual(cache, path.resolve(recipe, "../.."))
-    const installedSkill = path.join(cache, "mcp-clients/sync-memory")
+    const installedSkill = path.join(cache, "skills/sync-memory")
     assert.equal(
       fs.readFileSync(path.join(installedSkill, "scripts/main.ts"), "utf8"),
       fs.readFileSync(path.join(recipe, "scripts/main.ts"), "utf8")

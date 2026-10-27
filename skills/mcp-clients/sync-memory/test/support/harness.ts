@@ -5,6 +5,7 @@ import os from "node:os"
 import path from "node:path"
 import type { TestContext } from "node:test"
 import { fileURLToPath } from "node:url"
+import { buildPlugin } from "../../scripts/build-plugin.mjs"
 
 export const recipe = fileURLToPath(new URL("../../", import.meta.url))
 export const support = fileURLToPath(new URL("./", import.meta.url))
@@ -60,27 +61,9 @@ export function fixture(t: TestContext) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "notion-plugin-test-"))
   const home = path.join(root, "home")
   const installed = path.join(root, "installed plugin")
-  const installedSkill = path.join(installed, "mcp-clients/sync-memory")
+  const installedSkill = path.join(installed, "skills/sync-memory")
   fs.mkdirSync(home)
-  fs.mkdirSync(installedSkill, { recursive: true })
-  fs.cpSync(
-    path.resolve(recipe, "../../.codex-plugin"),
-    path.join(installed, ".codex-plugin"),
-    { recursive: true }
-  )
-  for (const entry of [
-    ".mcp.json",
-    "hooks.json",
-    "hook.cjs",
-    "package.json",
-    "SKILL.md",
-    "evaluations",
-    "scripts",
-  ]) {
-    fs.cpSync(path.join(recipe, entry), path.join(installedSkill, entry), {
-      recursive: true,
-    })
-  }
+  buildPlugin(installed)
   fs.chmodSync(path.join(support, "fake-codex.mjs"), 0o755)
   const env: NodeJS.ProcessEnv = {
     PATH: path.dirname(process.execPath),

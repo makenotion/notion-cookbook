@@ -18,14 +18,13 @@ const PROJECT = `${os.homedir().replace(/[^a-zA-Z0-9]/g, "-")}-code-app`
 const MEMORY_DIR = path.join(home, "projects", PROJECT, "memory")
 fs.cpSync(FIXTURES, MEMORY_DIR, { recursive: true })
 
-const { claudeMemoryFiles, claudeSource, isClaudeMemoryFile } = await import(
-  "../scripts/claude.ts"
-)
+const { claudeMemoryInventory, claudeSource, isClaudeMemoryFile } =
+  await import("../scripts/claude.ts")
 const { syncMemories } = await import("../scripts/memories.ts")
 const { loadState } = await import("../scripts/config.ts")
 
 test("lists auto memory files with unchanged Markdown, one page per file", () => {
-  const files = claudeMemoryFiles(path.join(home, "projects"))
+  const files = claudeMemoryInventory(path.join(home, "projects")).files
   assert.deepEqual(
     files.map((f) => [f.type, f.title]),
     [
@@ -44,7 +43,7 @@ test("lists auto memory files with unchanged Markdown, one page per file", () =>
   )
   // A flat custom directory has no project folders.
   assert.deepEqual(
-    claudeMemoryFiles(FIXTURES).map((f) => f.title),
+    claudeMemoryInventory(FIXTURES).files.map((f) => f.title),
     [
       "feedback_tests.md",
       "project_launch.md",

@@ -1,6 +1,7 @@
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
+import { withOwnership } from "./ownership.ts"
 
 export interface Config {
   // Codex executable used to start `codex app-server`.
@@ -14,7 +15,25 @@ export interface Config {
   mcpUrl: string
 }
 
+export type PendingWrite =
+  | {
+      phase: "unknown"
+      operation: "create" | "update"
+      hash: string
+      metadataHash: string
+      pageId?: string
+    }
+  | {
+      phase: "readback"
+      operation: "create" | "update"
+      hash: string
+      metadataHash: string
+      pageId: string
+      expectedPageHash?: string
+    }
+
 export interface State {
+  pending?: Record<string, PendingWrite>
   files: Record<
     string,
     {
@@ -45,8 +64,6 @@ export const DATA_DIR =
   process.env.NOTION_MEMORY_DATA || path.join(AGENT_HOME, "notion-memory")
 export const LOG_FILE = path.join(DATA_DIR, "notion-memory.log")
 const STATE_FILE = path.join(DATA_DIR, "state.json")
-const LOCK_DIR = path.join(DATA_DIR, "lock")
-const STALE_LOCK_MS = 120_000
 
 export function loadConfig(): Config {
   let file: Partial<Config> = {}
@@ -72,6 +89,36 @@ export function loadState(): State {
     Array.isArray(state.files)
   )
     throw new Error("Invalid file mapping state; use a fresh state.json")
+  if (state.pending !== undefined) {
+    if (
+      !state.pending ||
+      typeof state.pending !== "object" ||
+      Array.isArray(state.pending)
+    )
+      throw new Error(
+        "Invalid pending write journal; preserve state.json for reconciliation"
+      )
+    for (const value of Object.values(state.pending)) {
+      const entry = value as Partial<PendingWrite> | null
+      if (
+        !entry ||
+        (entry.phase !== "unknown" && entry.phase !== "readback") ||
+        (entry.operation !== "create" && entry.operation !== "update") ||
+        typeof entry.hash !== "string" ||
+        typeof entry.metadataHash !== "string" ||
+        (entry.pageId !== undefined &&
+          (typeof entry.pageId !== "string" || !entry.pageId)) ||
+        (entry.operation === "update" && typeof entry.pageId !== "string") ||
+        (entry.phase === "readback" &&
+          (typeof entry.pageId !== "string" ||
+            (entry.expectedPageHash !== undefined &&
+              typeof entry.expectedPageHash !== "string")))
+      )
+        throw new Error(
+          "Invalid pending write journal; preserve state.json for reconciliation"
+        )
+    }
+  }
   return state
 }
 
@@ -91,40 +138,10 @@ export function log(...parts: unknown[]): void {
   if (process.env.NOTION_SYNC_VERBOSE) process.stderr.write(line)
 }
 
-// Cross-process lock. Workers from back-to-back hooks can overlap, and two imports
-// running at once would create the same memory twice.
 export async function withLock<T>(fn: () => Promise<T>): Promise<T> {
-  fs.mkdirSync(DATA_DIR, { recursive: true })
-  for (let attempt = 0; ; attempt++) {
-    try {
-      fs.mkdirSync(LOCK_DIR)
-      break
-    } catch {
-      if (lockIsStale()) fs.rmSync(LOCK_DIR, { recursive: true, force: true })
-      if (attempt > 600) throw new Error(`could not acquire ${LOCK_DIR}`)
-      await sleep(200)
-    }
-  }
-  const heartbeat = setInterval(() => {
-    const now = new Date()
-    fs.utimesSync(LOCK_DIR, now, now)
-  }, 30_000)
-  try {
-    return await fn()
-  } finally {
-    clearInterval(heartbeat)
-    fs.rmSync(LOCK_DIR, { recursive: true, force: true })
-  }
+  return withOwnership(DATA_DIR, fn)
 }
 
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-function lockIsStale(): boolean {
-  try {
-    return Date.now() - fs.statSync(LOCK_DIR).mtimeMs > STALE_LOCK_MS
-  } catch {
-    return false
-  }
 }

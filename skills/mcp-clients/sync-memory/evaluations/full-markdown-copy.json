@@ -19,6 +19,6 @@
     "Keeps the default database schema and Codex attribution, placing source metadata in a page preamble instead of adding properties.",
     "Describes unchanged original Markdown after the metadata separator, including empty files, without claiming the entire body equals the source.",
     "Distinguishes source birth time and mtime from Notion timestamps, leaves unavailable birth time empty, and never uses ctime or absolute source paths.",
-    "Does not claim unsupported-file or missing-file reporting is implemented."
+    "Reports unsupported files and missing previously mapped paths from the command results."
   ]
 }

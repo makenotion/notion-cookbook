@@ -19,6 +19,13 @@ interface RpcResponse {
   error?: { message?: string }
 }
 
+interface ConnectionOptions {
+  codexPath: string
+  cwd: string
+  server?: string
+  expectedWorkspaceId?: string
+}
+
 interface McpServerStatus {
   name: string
   runtimeStatus?: string
@@ -39,11 +46,14 @@ export class CodexNotionMcp {
   private nextId = 0
   private threadId = ""
   private tools = new Map<string, string>()
+  private opts: ConnectionOptions
+  private notionReady?: Promise<void>
   private failure?: Error
   server = ""
 
-  private constructor(codexPath: string) {
-    this.child = spawn(codexPath, ["app-server"], {
+  private constructor(opts: ConnectionOptions) {
+    this.opts = opts
+    this.child = spawn(opts.codexPath, ["app-server"], {
       stdio: ["pipe", "pipe", "ignore"],
       env: { ...process.env, NOTION_MEMORY_WORKER: "1" },
     })
@@ -55,14 +65,42 @@ export class CodexNotionMcp {
     readline
       .createInterface({ input: this.child.stdout! })
       .on("line", (line) => {
-        let message: RpcResponse
+        let message: unknown
         try {
           message = JSON.parse(line)
         } catch {
           return
         }
-        if (message.id === undefined) return
-        this.pending.get(message.id)?.(message)
+        if (!isObject(message)) return
+        if ("method" in message) {
+          if (
+            typeof message.method === "string" &&
+            (typeof message.id === "number" || typeof message.id === "string")
+          )
+            this.child.stdin!.write(
+              `${JSON.stringify({
+                jsonrpc: "2.0",
+                id: message.id,
+                error: { code: -32601, message: "Unsupported server request" },
+              })}\n`
+            )
+          return
+        }
+        if (
+          typeof message.id !== "number" ||
+          "result" in message === "error" in message
+        )
+          return
+        const response: RpcResponse = { id: message.id, result: message.result }
+        if ("error" in message) {
+          if (
+            !isObject(message.error) ||
+            typeof message.error.message !== "string"
+          )
+            return
+          response.error = { message: message.error.message }
+        }
+        this.pending.get(message.id)?.(response)
         this.pending.delete(message.id)
       })
   }
@@ -76,79 +114,67 @@ export class CodexNotionMcp {
 
   private async initialize(): Promise<void> {
     await this.rpc("initialize", {
-      clientInfo: { name: "sync-memory", version: "0.1.0" },
+      clientInfo: { name: "sync-memory", version: "0.4.4" },
     })
     this.notify("initialized")
   }
 
-  // Read effective config without creating a thread or connecting to Notion.
-  static async memoriesEnabled(
-    codexPath: string,
-    cwd: string
-  ): Promise<boolean> {
-    const mcp = new CodexNotionMcp(codexPath)
+  static async open(opts: ConnectionOptions): Promise<CodexNotionMcp> {
+    const mcp = new CodexNotionMcp(opts)
     try {
       await mcp.initialize()
-      const result: unknown = await mcp.rpc("config/read", {
-        cwd,
-        includeLayers: false,
-      })
-      if (!result || typeof result !== "object" || !("config" in result))
-        return false
-      const config = result.config
-      if (!config || typeof config !== "object" || !("features" in config))
-        return false
-      const features = config.features
-      return (
-        !!features &&
-        typeof features === "object" &&
-        "memories" in features &&
-        features.memories === true
-      )
-    } finally {
+      return mcp
+    } catch (error) {
       mcp.close()
+      throw error
     }
   }
 
-  static async connect(opts: {
-    codexPath: string
-    cwd: string
-    server?: string
-    expectedWorkspaceId?: string
-  }): Promise<CodexNotionMcp> {
-    const mcp = new CodexNotionMcp(opts.codexPath)
-    try {
-      await mcp.initialize()
-      const thread = (await mcp.rpc("thread/start", {
-        ephemeral: true,
-        cwd: opts.cwd,
-      })) as { thread?: { id?: string } }
-      mcp.threadId = thread.thread?.id ?? ""
-      if (!mcp.threadId) throw new Error("codex app-server returned no thread")
-      await mcp.findNotionServer(opts.server)
-      if (opts.expectedWorkspaceId) {
-        const self = await mcp.callTool("get-self", {})
-        if (
-          !self ||
-          typeof self !== "object" ||
-          !("workspace" in self) ||
-          !self.workspace ||
-          typeof self.workspace !== "object" ||
-          !("id" in self.workspace) ||
-          self.workspace.id !== opts.expectedWorkspaceId
+  async memoriesEnabled(): Promise<boolean> {
+    const result = await this.rpc("config/read", {
+      cwd: this.opts.cwd,
+      includeLayers: false,
+    })
+    if (!isObject(result) || !isObject(result.config)) return false
+    return (
+      isObject(result.config.features) &&
+      result.config.features.memories === true
+    )
+  }
+
+  private async connectNotion(): Promise<void> {
+    const thread = await this.rpc("thread/start", {
+      ephemeral: true,
+      cwd: this.opts.cwd,
+    })
+    if (
+      !isObject(thread) ||
+      !isObject(thread.thread) ||
+      typeof thread.thread.id !== "string"
+    )
+      throw new Error("codex app-server returned no thread")
+    this.threadId = thread.thread.id
+    await this.findNotionServer(this.opts.server)
+    if (this.opts.expectedWorkspaceId) {
+      const self = await this.invokeTool("get-self", {})
+      if (
+        !isObject(self) ||
+        !isObject(self.workspace) ||
+        self.workspace.id !== this.opts.expectedWorkspaceId
+      )
+        throw new Error(
+          "Notion workspace does not match expectedWorkspaceId; refusing sync"
         )
-          throw new Error(
-            "Notion workspace does not match expectedWorkspaceId; refusing sync"
-          )
-      }
-      return mcp
-    } catch (e) {
-      mcp.close()
-      throw e
     }
   }
 
   readonly callTool: CallTool = async (tool, args) => {
+    this.notionReady ??= this.connectNotion()
+    await this.notionReady
+    return this.invokeTool(tool, args)
+  }
+
+  private readonly invokeTool: CallTool = async (tool, args) => {
     const name = this.tools.get(squash(tool))
     if (!name) throw new Error(`${this.server} has no Notion ${tool} tool`)
     const result = (await this.rpc("mcpServer/tool/call", {
@@ -254,4 +280,8 @@ export function toolResultValue(tool: string, result: ToolResult): unknown {
 // Key for matching tool names across prefixes and separators.
 export function squash(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]/g, "")
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
 }

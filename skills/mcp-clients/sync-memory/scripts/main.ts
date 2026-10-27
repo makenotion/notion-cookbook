@@ -29,6 +29,7 @@ import {
 import { type CallTool, CodexNotionMcp } from "./mcp.ts"
 import { memoryFilesHash, syncMemories, verifyMemories } from "./memories.ts"
 import { login, NotionMcpHttp, openBrowser, TOKEN_FILE } from "./notionMcp.ts"
+import { withWatcher } from "./ownership.ts"
 
 interface HookInput {
   session_id?: string
@@ -38,12 +39,6 @@ interface HookInput {
 
 const MAIN = fileURLToPath(import.meta.url)
 const SOURCE = AGENT === "claude" ? claudeSource : codexSource
-// Codex starts its memory pipeline when a session starts and again after turns, so the
-// plugin watches for the full bounded window after both hooks.
-const WATCH = {
-  "session-start": { maxMs: 600_000 },
-  stop: { maxMs: 300_000 },
-}
 
 async function main(): Promise<void> {
   const [command, ...args] = process.argv.slice(2)
@@ -57,7 +52,7 @@ async function main(): Promise<void> {
     case "hook":
       return handleHook(args[0])
     case "worker": {
-      const event = args[0] === "stop" ? "stop" : "session-start"
+      const event = args[0]
       // Claude Code writes memories with its own tools, so the PostToolUse hook already
       // fires on every change and there is nothing to watch. Its worker holds the lock
       // while connected, because refreshing the OAuth token must not race.
@@ -74,17 +69,34 @@ async function main(): Promise<void> {
           })
         )
       }
+      if (event !== "stop" && event !== "session-start")
+        throw new Error("Invalid Sync Memory hook event")
       const cwd = option("--cwd") || process.cwd()
-      if (!(await CodexNotionMcp.memoriesEnabled(config.codexPath, cwd))) {
-        log(
-          "memories: automatic sync skipped because Codex memories are disabled"
-        )
-        return
-      }
-      return withNotion(config, option("--cwd"), async (callTool) => {
-        const initialHash = memoryFilesHash(codexSource)
-        await withLock(() => syncMemories(callTool, codexSource))
-        await watchMemories(callTool, { ...WATCH[event], initialHash })
+      return withWatcher(DATA_DIR, event, async (lease) => {
+        const mcp = await CodexNotionMcp.open({
+          codexPath: config.codexPath,
+          cwd,
+          server: config.mcpServer,
+          expectedWorkspaceId: config.expectedWorkspaceId,
+        })
+        try {
+          if (!(await mcp.memoriesEnabled())) {
+            log(
+              "memories: automatic sync skipped because Codex memories are disabled"
+            )
+            return
+          }
+          let initialHash = memoryFilesHash(codexSource)
+          do {
+            await watchMemories(mcp.callTool, {
+              initialHash,
+              until: lease.until,
+            })
+            initialHash = memoryFilesHash(codexSource)
+          } while (!lease.finish())
+        } finally {
+          mcp.close()
+        }
       })
     }
     case "sync":
@@ -106,7 +118,7 @@ async function main(): Promise<void> {
       }
       return login(config.mcpUrl, openBrowser)
     case "preview":
-      console.log(JSON.stringify(SOURCE.files(), null, 2))
+      console.log(JSON.stringify(SOURCE.inventory(), null, 2))
       return
     case "status":
       console.log(JSON.stringify(loadState(), null, 2))
@@ -143,7 +155,6 @@ function handleHook(event: string | undefined): void {
   if (AGENT === "claude" && !claudeReady(event, input.cwd)) return
   fs.mkdirSync(DATA_DIR, { recursive: true })
   const out = fs.openSync(LOG_FILE, "a")
-  // The watcher reads Codex's job table with node:sqlite, which warns on Node 22.
   const args = [
     "--disable-warning=ExperimentalWarning",
     MAIN,
@@ -162,7 +173,7 @@ function handleHook(event: string | undefined): void {
 }
 
 function hasMemoryFiles(): boolean {
-  if (AGENT === "claude") return claudeSource.files().length > 0
+  if (AGENT === "claude") return claudeSource.inventory().files.length > 0
   return fs.existsSync(memoriesDir())
 }
 
@@ -202,7 +213,7 @@ async function withNotion(
   }
   let connection: Promise<CodexNotionMcp> | undefined
   const callTool: CallTool = async (tool, args) => {
-    connection ??= CodexNotionMcp.connect({
+    connection ??= CodexNotionMcp.open({
       codexPath: config.codexPath,
       cwd: cwd || process.cwd(),
       server: config.mcpServer,

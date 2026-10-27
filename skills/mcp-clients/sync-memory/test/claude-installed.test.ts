@@ -25,7 +25,7 @@ test("Claude Code artifact resolves its manifest and hooks and loads no MCP serv
     object(
       JSON.parse(
         fs.readFileSync(
-          path.join(f.installed, "mcp-clients/sync-memory/claude-hooks.json"),
+          path.join(f.installed, "skills/sync-memory/claude-hooks.json"),
           "utf8"
         )
       )
@@ -37,13 +37,13 @@ test("Claude Code artifact resolves its manifest and hooks and loads no MCP serv
     assert.match(text, /NOTION_MEMORY_AGENT=claude/)
     assert.match(
       text,
-      /\\"\$\{CLAUDE_PLUGIN_ROOT\}\/mcp-clients\/sync-memory\/hook\.cjs\\"/
+      /\\"\$\{CLAUDE_PLUGIN_ROOT\}\/skills\/sync-memory\/hook\.cjs\\"/
     )
   }
   f.seed()
   const result = await f.exec(["preview"])
   assert.equal(result.code, 0, result.stderr)
-  assert.equal(JSON.parse(result.stdout).length, FIXTURE_COUNT)
+  assert.equal(JSON.parse(result.stdout).files.length, FIXTURE_COUNT)
   assert.deepEqual(f.calls(), [])
 })
 
@@ -272,7 +272,7 @@ test("a custom autoMemoryDirectory is read and recognized by the hook", async (t
   f.seed(custom)
   const preview = await f.exec(["preview"])
   assert.equal(preview.code, 0, preview.stderr)
-  assert.equal(JSON.parse(preview.stdout).length, FIXTURE_COUNT)
+  assert.equal(JSON.parse(preview.stdout).files.length, FIXTURE_COUNT)
   const hook = await f.hook("PostToolUse", {
     tool_name: "Edit",
     tool_input: { file_path: path.join(custom, "user_role.md") },
@@ -287,7 +287,7 @@ test("missing Node is visible at the Claude Code hook command boundary", async (
     "/bin/sh",
     [
       "-c",
-      'NOTION_MEMORY_AGENT=claude node "${CLAUDE_PLUGIN_ROOT}/mcp-clients/sync-memory/hook.cjs" session-start',
+      'NOTION_MEMORY_AGENT=claude node "${CLAUDE_PLUGIN_ROOT}/skills/sync-memory/hook.cjs" session-start',
     ],
     {
       ...f.env,

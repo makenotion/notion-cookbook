@@ -4,6 +4,7 @@ import path from "node:path"
 import { AGENT_HOME } from "./config.ts"
 import {
   type MemoryFile,
+  type MemoryInventory,
   type MemorySource,
   type MemoryType,
   readSourceFile,
@@ -37,12 +38,12 @@ const CUSTOM_DIR = customMemoryDir()
 export const claudeSource: MemorySource = {
   name: "Claude Code",
   root: CUSTOM_DIR ? "autoMemoryDirectory" : "projects",
-  files: () => claudeMemoryFiles(CUSTOM_DIR ?? PROJECTS_DIR),
+  inventory: () => claudeMemoryInventory(CUSTOM_DIR ?? PROJECTS_DIR),
 }
 
 // Reads ~/.claude/projects/*/memory/, or a flat memory directory such as a custom
 // `autoMemoryDirectory`.
-export function claudeMemoryFiles(dir: string): MemoryFile[] {
+export function claudeMemoryInventory(dir: string): MemoryInventory {
   const flat = listDir(dir).some((f) => f.endsWith(".md"))
   const dirs = flat
     ? [{ project: undefined, memoryDir: dir }]
@@ -50,10 +51,17 @@ export function claudeMemoryFiles(dir: string): MemoryFile[] {
         project,
         memoryDir: path.join(dir, project, "memory"),
       }))
-  const out: MemoryFile[] = []
+  const files: MemoryFile[] = []
+  const unsupported: string[] = []
   for (const { project, memoryDir } of dirs) {
     for (const file of listDir(memoryDir)) {
-      if (!file.endsWith(".md") || file === "MEMORY.md") continue
+      if (file === "MEMORY.md") continue
+      if (!file.endsWith(".md")) {
+        unsupported.push(
+          project ? path.posix.join(project, "memory", file) : file
+        )
+        continue
+      }
       let source
       try {
         source = readSourceFile(
@@ -64,14 +72,14 @@ export function claudeMemoryFiles(dir: string): MemoryFile[] {
         continue
       }
       // The same file name can exist in several projects, so the title names the project.
-      out.push({
+      files.push({
         ...source,
         title: project ? `${projectLabel(project)}/${file}` : file,
         type: memoryType(source.content),
       })
     }
   }
-  return out
+  return { files, unsupported: unsupported.sort() }
 }
 
 // True when a Write or Edit from a PostToolUse hook touched an auto memory file.

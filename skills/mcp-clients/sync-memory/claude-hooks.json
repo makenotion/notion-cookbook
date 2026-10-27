@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "NOTION_MEMORY_AGENT=claude node \"${CLAUDE_PLUGIN_ROOT}/mcp-clients/sync-memory/hook.cjs\" session-start",
+            "command": "NOTION_MEMORY_AGENT=claude node \"${CLAUDE_PLUGIN_ROOT}/skills/sync-memory/hook.cjs\" session-start",
             "timeout": 10
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "NOTION_MEMORY_AGENT=claude node \"${CLAUDE_PLUGIN_ROOT}/mcp-clients/sync-memory/hook.cjs\" post-tool-use",
+            "command": "NOTION_MEMORY_AGENT=claude node \"${CLAUDE_PLUGIN_ROOT}/skills/sync-memory/hook.cjs\" post-tool-use",
             "timeout": 10
           }
         ]
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "NOTION_MEMORY_AGENT=claude node \"${CLAUDE_PLUGIN_ROOT}/mcp-clients/sync-memory/hook.cjs\" stop",
+            "command": "NOTION_MEMORY_AGENT=claude node \"${CLAUDE_PLUGIN_ROOT}/skills/sync-memory/hook.cjs\" stop",
             "timeout": 10
           }
         ]

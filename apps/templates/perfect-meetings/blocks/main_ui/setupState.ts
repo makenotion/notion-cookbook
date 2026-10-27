@@ -1,9 +1,8 @@
-import type { NotionDataSourcePage } from "@notionhq/apps/custom-blocks"
-
 import { MORNING_PREP_TIME, TIME_ZONE } from "../../src/lib/schedule"
 import { researchActivity } from "./derive"
 import type { QueryState } from "./live"
 import { dateRange, splitEmails, text } from "./meeting"
+import type { PageRow } from "./meeting"
 import { PREP, researchStuck, type BlockState } from "./state"
 
 export type SetupStage = {
@@ -16,9 +15,9 @@ export type SetupStage = {
 }
 
 export type SetupQueries = {
-  people: QueryState<NotionDataSourcePage>
-  companies: QueryState<NotionDataSourcePage>
-  meetings: QueryState<NotionDataSourcePage>
+  people: QueryState<PageRow>
+  companies: QueryState<PageRow>
+  meetings: QueryState<PageRow>
 }
 
 /** Format the configured wall-clock time without converting it to the viewer's zone. */
@@ -111,31 +110,27 @@ export function setupStages(
     const rows = briefs
       ? query.items.filter((row) => {
           if (
-            text(row.propertiesByKey.Status) === "Cancelled" ||
-            !splitEmails(text(row.propertiesByKey["Attendee emails"])).length
+            text(row.getPropertyByKey("Status")) === "Cancelled" ||
+            !splitEmails(text(row.getPropertyByKey("Attendee emails"))).length
           )
             return false
-          const range = dateRange(row.propertiesByKey.When)
+          const range = dateRange(row.getPropertyByKey("When"))
           return (
-            text(row.propertiesByKey["Prep status"]) === PREP.researching ||
+            text(row.getPropertyByKey("Prep status")) === PREP.researching ||
             (range !== null && range.endMs > now)
           )
         })
       : query.items
+    const prepResearchStatus = (row: PageRow): string => {
+      const status = text(row.getPropertyByKey("Prep status"))
+      if (status === PREP.ready) return "Done"
+      if (status === PREP.queued) return "Ready"
+      return status
+    }
     const counts = researchActivity(
-      briefs
-        ? rows.map((row) => ({
-            ...row,
-            propertiesByKey: {
-              ...row.propertiesByKey,
-              "Research status":
-                ({ Ready: "Done", Queued: "Ready" } as Record<string, string>)[
-                  text(row.propertiesByKey["Prep status"])
-                ] ?? text(row.propertiesByKey["Prep status"]),
-            },
-          }))
-        : rows,
-      now
+      rows,
+      now,
+      briefs ? prepResearchStatus : undefined
     )
     const stalled = counts.stalled
     const noun = counts.total === 1 ? singular : plural
@@ -150,8 +145,8 @@ export function setupStages(
     const waitingForProfiles = briefs
       ? rows.filter(
           (row) =>
-            text(row.propertiesByKey["Prep status"]) === PREP.queued &&
-            !text(row.propertiesByKey["Research status"]) &&
+            text(row.getPropertyByKey("Prep status")) === PREP.queued &&
+            !text(row.getPropertyByKey("Research status")) &&
             !researchStuck(row, now)
         ).length
       : 0

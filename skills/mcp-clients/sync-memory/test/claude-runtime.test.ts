@@ -3,7 +3,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { test } from "node:test"
 import { claudeFixture } from "./support/claude-harness.ts"
-import { recipe, run, waitFor } from "./support/harness.ts"
+import { object, recipe, run, waitFor } from "./support/harness.ts"
 
 const claude = process.env.CLAUDE_TEST_BINARY
 
@@ -24,12 +24,29 @@ test(
     const cli = (...args: string[]) =>
       run(String(claude), args, env, f.project, 60_000)
 
-    let result = await cli(
-      "plugin",
-      "marketplace",
-      "add",
-      path.resolve(recipe, "../../..")
+    // The repository's marketplace points at the built plugin; point a copy of it at
+    // this fixture's build instead.
+    const marketplace = f.root
+    const registry = object(
+      JSON.parse(
+        fs.readFileSync(
+          path.resolve(recipe, "../../../.claude-plugin/marketplace.json"),
+          "utf8"
+        )
+      )
     )
+    assert.ok(Array.isArray(registry.plugins))
+    const plugin = registry.plugins
+      .map(object)
+      .find((p) => p.name === "sync-memory")
+    assert.ok(plugin)
+    plugin.source = `./${path.basename(f.installed)}`
+    fs.mkdirSync(path.join(marketplace, ".claude-plugin"), { recursive: true })
+    fs.writeFileSync(
+      path.join(marketplace, ".claude-plugin/marketplace.json"),
+      JSON.stringify({ ...registry, plugins: [plugin] })
+    )
+    let result = await cli("plugin", "marketplace", "add", marketplace)
     assert.equal(result.code, 0, result.stderr + result.stdout)
     result = await cli("plugin", "install", "sync-memory@notion-cookbook")
     assert.equal(result.code, 0, result.stderr + result.stdout)
@@ -41,7 +58,7 @@ test(
     const pluginRoot = path.join(cache, version)
     assert.ok(
       fs.existsSync(
-        path.join(pluginRoot, "mcp-clients/sync-memory/claude-hooks.json")
+        path.join(pluginRoot, "skills/sync-memory/claude-hooks.json")
       )
     )
     assert.equal(fs.existsSync(path.join(pluginRoot, ".mcp.json")), false)

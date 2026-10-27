@@ -5,7 +5,28 @@ import { record, toolNames, toolResult } from "./notion-fixture.mjs"
 if (process.env.FIXTURE_FAILURE === "exit") process.exit(7)
 for await (const line of readline.createInterface({ input: process.stdin })) {
   const request = JSON.parse(line)
+  if (!request.method) {
+    record(`server-response:${request.id}:${request.error?.code}`)
+    continue
+  }
   record(request.method)
+  if (process.env.FIXTURE_SERVER_REQUESTS === "1") {
+    process.stdout.write('null\n[]\n"malformed"\n')
+    process.stdout.write(
+      JSON.stringify({
+        id: request.id,
+        method: "approval/request",
+        params: {},
+      }) + "\n"
+    )
+    process.stdout.write(
+      JSON.stringify({
+        id: "server-request",
+        method: "approval/request",
+        params: {},
+      }) + "\n"
+    )
+  }
   if (request.id === undefined) continue
   if (process.env.FIXTURE_FAILURE === "hang") continue
   let result

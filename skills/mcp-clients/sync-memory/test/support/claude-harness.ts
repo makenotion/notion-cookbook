@@ -5,6 +5,7 @@ import os from "node:os"
 import path from "node:path"
 import readline from "node:readline"
 import type { TestContext } from "node:test"
+import { buildPlugin } from "../../scripts/build-plugin.mjs"
 import { object, recipe, run, support } from "./harness.ts"
 
 export type ClaudeHookEvent = "SessionStart" | "PostToolUse" | "Stop"
@@ -18,26 +19,9 @@ export async function claudeFixture(t: TestContext, failure = "") {
   const project = path.join(root, "work")
   fs.mkdirSync(home)
   fs.mkdirSync(project)
-  // Same layout as the Codex harness: the plugin root is skills/, with this skill nested.
-  const skill = path.join(installed, "mcp-clients/sync-memory")
-  fs.mkdirSync(skill, { recursive: true })
-  fs.cpSync(
-    path.resolve(recipe, "../../.claude-plugin"),
-    path.join(installed, ".claude-plugin"),
-    { recursive: true }
-  )
-  for (const entry of [
-    ".mcp.json",
-    "claude-hooks.json",
-    "hook.cjs",
-    "package.json",
-    "SKILL.md",
-    "scripts",
-  ]) {
-    fs.cpSync(path.join(recipe, entry), path.join(skill, entry), {
-      recursive: true,
-    })
-  }
+  // The same built plugin the Codex harness installs.
+  buildPlugin(installed)
+  const skill = path.join(installed, "skills/sync-memory")
   const memoryDir = path.join(
     home,
     "projects",

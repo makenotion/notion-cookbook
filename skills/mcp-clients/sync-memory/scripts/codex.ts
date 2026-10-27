@@ -1,10 +1,9 @@
 import fs from "node:fs"
 import path from "node:path"
-import { DatabaseSync } from "node:sqlite"
 import { AGENT_HOME, loadConfig, sleep, withLock } from "./config.ts"
 import type { CallTool } from "./mcp.ts"
 import {
-  type MemoryFile,
+  type MemoryInventory,
   memoryFilesHash,
   type MemorySource,
   readSourceFile,
@@ -18,18 +17,19 @@ import {
 export const codexSource: MemorySource = {
   name: "Codex",
   root: "memories_v2",
-  files: codexMemoryFiles,
+  inventory: codexMemoryInventory,
 }
 
 export function memoriesDir(): string {
   return path.join(loadConfig().sourceHome || AGENT_HOME, "memories_v2")
 }
 
-export function codexMemoryFiles(): MemoryFile[] {
+export function codexMemoryInventory(): MemoryInventory {
   const dir = memoriesDir()
-  if (!fs.existsSync(path.join(dir, "memory_summary.md")))
-    throw new Error("Codex v2 memory_summary.md is not ready")
+  if (!fs.existsSync(dir))
+    throw new Error(`Memory directory does not exist: ${dir}`)
   const names: string[] = []
+  const unsupported: string[] = []
   function visit(relative: string) {
     for (const entry of fs.readdirSync(path.join(dir, relative), {
       withFileTypes: true,
@@ -38,46 +38,38 @@ export function codexMemoryFiles(): MemoryFile[] {
       const name = path.posix.join(relative, entry.name)
       if (entry.isDirectory()) visit(name)
       else if (entry.isFile() && entry.name.endsWith(".md")) names.push(name)
+      else unsupported.push(name)
     }
   }
   visit("")
-  return names.sort().map((name) => ({
+  const files = names.sort().map((name) => ({
     ...readSourceFile(dir, name),
     title: name,
-    type: "Notes",
+    type: "Notes" as const,
   }))
+  return { files, unsupported: unsupported.sort() }
 }
 
+// Syncs once the files hold still for one poll, so a consolidation that is still
+// writing is not imported half-way.
 export async function watchMemories(
   call: CallTool,
-  opts: { maxMs: number; initialHash: string }
+  opts: { initialHash: string; until: () => number }
 ) {
-  const started = Date.now()
-  let previous = opts.initialHash
-  while (Date.now() - started < opts.maxMs) {
+  let previous: string | undefined
+  let candidate: string | undefined = opts.initialHash
+  while (Date.now() < opts.until()) {
     await sleep(5000)
-    if (memoryJobRunning()) continue
+    if (Date.now() >= opts.until()) break
     const hash = memoryFilesHash(codexSource)
-    if (hash !== previous) {
+    if (hash === previous) {
+      candidate = undefined
+    } else if (hash === candidate) {
       await withLock(() => syncMemories(call, codexSource))
       previous = hash
+      candidate = undefined
+    } else {
+      candidate = hash
     }
-  }
-}
-
-function memoryJobRunning(): boolean {
-  const file = path.join(
-    loadConfig().sourceHome || AGENT_HOME,
-    "memories_v2_1.sqlite"
-  )
-  if (!fs.existsSync(file)) return false
-  const db = new DatabaseSync(file, { readOnly: true })
-  try {
-    return (
-      db.prepare("SELECT 1 FROM jobs WHERE status = 'running' LIMIT 1").all()
-        .length > 0
-    )
-  } finally {
-    db.close()
   }
 }

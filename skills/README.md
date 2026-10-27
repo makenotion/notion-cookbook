@@ -19,6 +19,7 @@ The [mcp-clients](mcp-clients/) directory contains reusable workflows for any MC
 - **[research-documentation](mcp-clients/research-documentation/)**: Research topics and document findings in Notion
 - **[spec-to-implementation](mcp-clients/spec-to-implementation/)**: Parse specifications and create implementation plans with task tracking
 - **[sync-memory](mcp-clients/sync-memory/)**: Copy local memory Markdown into Notion Memories. Currently supports Codex and includes executable scripts and optional Codex hooks.
+- **[setup](mcp-clients/setup/)**: Onboarding skill that sets up Notion by following the official setup guide
 
 ## Using skills
 

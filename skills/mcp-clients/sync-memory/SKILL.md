@@ -1,6 +1,8 @@
 ---
 name: sync-memory
 description: Copy current Codex or Claude Code memory Markdown files into Notion Memories, preview the files, or verify managed pages. Use when the user asks to sync or check Codex or Claude Code memories in Notion.
+metadata:
+  requires-client: codex, claude-code
 ---
 
 # Sync Memory
@@ -29,18 +31,19 @@ time (null when unavailable), filesystem mtime, sync attempt time and notion-mem
 as the copier. Never substitute ctime or expose absolute source paths. No database
 properties are added. Source metadata changes update the same page; unchanged text
 and metadata keep Synced at unchanged. Source and Last updated by name the agent,
-and updates preserve Source. In Codex, trusted SessionStart and Stop hooks start
-bounded watchers; later changes wait for the next hook or explicit sync. In Claude
-Code, hooks copy a memory as soon as Claude saves it, and SessionStart and Stop
-catch other changes.
+and updates preserve Source. In Codex, trusted SessionStart and Stop hooks start or
+renew one bounded watcher per mapping directory. In Claude Code, hooks copy a memory
+as soon as Claude saves it, and SessionStart and Stop catch other changes.
 
-Codex supports only v2. If its summary is not ready, report that condition.
-Existing Notion edits and deletions are protected. Missing source files leave
-existing pages alone; an explicitly empty file has only the metadata preamble. This
-is one-way copying. Notion may normalize imported Markdown. Verification checks
-saved page readbacks, not byte-identical export. Unsupported formats and missing old
-paths are not yet reported by the command. Do not claim these inventory gaps are
-covered.
+Codex supports only v2. Import existing Markdown even without a summary.
+Report the command's unsupported and missing paths. Existing Notion edits and
+deletions are protected. Missing source files leave existing pages alone. An
+explicitly empty file has only the metadata preamble. This is one-way copying.
+Notion may normalize imported Markdown. Verification checks saved page readbacks,
+not byte-identical export. Confirmed writes with a pending readback resume by
+reading the same page. If its submitted fingerprint no longer matches, stop for
+reconciliation rather than adopting possible human edits. An unknown write outcome
+also needs reconciliation before retry.
 
 In Codex, use the configured Codex-owned MCP connection and pin the intended
 workspace for local-only imports. In Claude Code, the plugin signs in itself: if it

@@ -7,17 +7,21 @@ The plugin calls Notion through Codex's existing MCP connection; it runs no mode
 
 The canonical source lives beside the other Notion skills at
 `skills/mcp-clients/sync-memory/`. `SKILL.md` is the agent entrypoint, and
-`scripts/` holds its deterministic copy commands. Codex plugin metadata at `skills/.codex-plugin/plugin.json` and Claude Code plugin
-metadata at `skills/.claude-plugin/plugin.json` point to this canonical directory
-and its hooks for installation and automatic triggers. Claude Code copies each auto
-memory file the same way. This page describes Codex first, and
+`scripts/` holds its deterministic copy commands. `npm run build:plugin` packages
+this skill into `build/sync-memory/` at the repository root. The generated plugin
+contains this skill, its runtime scripts, hooks, and Notion connection. Other
+skills, tests, evaluations, and dependencies are excluded. Build output stays
+untracked. The plugin has both a Codex and a Claude Code manifest. Claude Code
+copies each auto memory file the same way. This page describes Codex first, and
 [Claude Code](#claude-code) covers what differs there.
 
 ## Behavior
 
 The plugin recursively reads every regular `*.md` file under `memories_v2/`,
 including `rollout_summaries/` and `extensions/`. It skips `.git/`, symbolic links,
-and files with other extensions. Paths use `/` separators and sort before import.
+and files with other extensions. Unsupported files and skipped symbolic links
+appear in the command result.
+Paths use `/` separators and sort before import.
 
 | Source                                              | Notion page                             |
 | --------------------------------------------------- | --------------------------------------- |
@@ -35,9 +39,9 @@ A source timestamp change updates the same page even if its text is unchanged.
 
 If a managed page was edited or deleted in Notion, the next attempted update
 releases it instead of overwriting or recreating it. Source files stay untouched.
-Missing files leave existing Notion pages alone. A missing required summary stops
-the import; an explicitly empty file retains the metadata preamble with an empty
-original-content section.
+Missing files leave existing Notion pages alone and appear in the command result.
+A missing summary does not block other Markdown files. An explicitly empty file
+retains the metadata preamble with an empty original-content section.
 
 This version only reads v2. It performs no chapter parsing, rewriting, deduplication,
 classification, raw extraction import, source archival, version selection, legacy
@@ -92,12 +96,19 @@ the preamble, subject to the existing protection for human edits.
   their state separate; v2 does not guarantee importing old manually written notes.
 - A Notion workspace with Memories enabled and a connected Notion MCP server.
 
-Install from the repository's bundled marketplace:
+Build the plugin with Node.js 22.18+ from the repository checkout, then install
+from its bundled marketplace:
 
 ```sh
+cd /absolute/path/to/notion-cookbook/skills/mcp-clients/sync-memory
+npm run build:plugin
 codex plugin marketplace add /absolute/path/to/notion-cookbook
 codex plugin add sync-memory@notion-cookbook
 ```
+
+The build command prints the generated plugin directory. Build again before
+installing an updated checkout. The marketplace points to `build/sync-memory/`,
+not to the whole skills collection.
 
 In Codex, select `$sync-memory:sync-memory` or ask the agent to use Sync Memory to sync,
 preview, verify, or inspect the mapping. Copy the whole directory when installing
@@ -138,17 +149,21 @@ hooks are skipped. New hook definitions require review again.
 
 ## Triggering
 
-SessionStart and Stop hooks launch a detached worker and return quickly. Stop is
-a Codex lifecycle event, not closing the application. The worker checks effective
-`features.memories` once, syncs existing files, then polls every five seconds for
-10 minutes after the initial SessionStart import or five minutes after Stop.
-Later changes wait for the next hook or manual import. Polling waits for running
-jobs in the v2 memory database to finish; database read errors stop the worker.
-There is no continuously running service or native memory-updated event.
+SessionStart and Stop hooks start a detached worker and return. Stop is a Codex
+lifecycle event, not closing the application. One worker owns each mapping
+directory. Later hooks extend its watch deadline instead of starting additional
+watchers. SessionStart requests ten minutes and Stop requests five minutes.
+The worker checks effective `features.memories` and polls every five seconds.
+The initial inventory must remain stable for one interval before import. Later
+changes must match across two polls before another import. This does not guarantee an atomic snapshot across files.
+The worker does not read Codex's private SQLite database.
 
+The worker starts one Codex app-server subprocess. That process reads the memories
+setting and supplies Notion MCP calls through the existing Codex authentication.
 Manual `sync` explicitly imports retained files even if automatic memories are
-currently disabled. Workers use a cross-process lock. Source content and metadata hashes skip unchanged
-writes, and a readback hash protects external changes before an update.
+currently disabled. Imports use a cross-process lock. Source content and metadata
+hashes skip unchanged writes, and a readback hash protects external changes before
+an update. There is no permanent service or native memory-updated event.
 
 ## Commands
 
@@ -161,36 +176,45 @@ node scripts/main.ts verify
 node scripts/main.ts status
 ```
 
-`preview` reads local files and their filesystem timestamps only. `verify` compares
+`preview` reads local files and their filesystem timestamps only. Its result has
+`files` and `unsupported` arrays. `verify` compares
 current source content and metadata hashes with the
 mapping and fetches every managed page to check its saved readback hash. Notion
 may normalize Markdown formatting; this is not a byte-preserving backup format.
-`sync` prints created/updated/unchanged and externally changed counts.
+`sync` prints created, updated, unchanged, and externally changed counts. Both
+`sync` and `verify` report unsupported files and previously mapped paths that no
+longer exist. They never delete source files or Notion pages.
 
-Known gaps against a full sync inventory are that unsupported formats and missing
-previously synced files are silently skipped. A successful remote write followed
-by failed readback can leave an unrecorded new page, or make a retry mistake the
-plugin's own update for a human edit. The lock prevents overlapping imports but
-does not resolve ambiguous write outcomes. `verify` checks saved readback hashes;
-it does not prove that Notion retained every original source character.
+After a confirmed write, the mapping records the page ID and a pending readback
+before fetching the page. If that fetch fails, the next run retries the readback
+without creating another page or treating the plugin's own update as an external
+edit. Recovery requires the page to match the submitted fingerprint; if it differs,
+including because Notion normalized Markdown, synchronization stops for reconciliation
+instead of adopting possible human edits. A successful immediate readback accepts
+Notion's normalized representation. If the write itself has an unknown outcome,
+synchronization stops with an actionable error. It does not blindly retry the write. `verify` rejects unresolved
+writes and checks saved readback hashes. It does not prove that Notion retained every original source
+character.
 
 ## Processing points and files
 
 | Processing point                                               | Implementation                                           |
 | -------------------------------------------------------------- | -------------------------------------------------------- |
-| Plugin registration and MCP endpoint                           | `../../.codex-plugin/plugin.json`, `.mcp.json`           |
+| Plugin registration and MCP endpoint                           | `.codex-plugin/plugin.json`, `.mcp.json`                 |
 | SessionStart / Stop registration                               | `hooks.json`                                             |
 | Select Node runtime                                            | `hook.cjs`                                               |
 | Manual command, detached worker, feature guard, watch window   | `scripts/main.ts`                                        |
-| Recursively read current memory Markdown files unchanged       | `scripts/codex.ts` — `codexMemoryFiles`                  |
+| Recursively read current memory Markdown files unchanged       | `scripts/codex.ts` — `codexMemoryInventory`              |
 | One file / one page, attribution, update protection, readback  | `scripts/memories.ts` — `syncMemories`, `verifyMemories` |
-| File polling and v2 job check                                  | `scripts/codex.ts` — `watchMemories`                     |
+| File polling and stability check                               | `scripts/codex.ts` — `watchMemories`                     |
 | Connection, OAuth-owned transport, workspace check, RPC errors | `scripts/mcp.ts`                                         |
-| Settings, file mapping, atomic save, shared lock, logs         | `scripts/config.ts`                                      |
+| Settings, file mapping, atomic save, logs                      | `scripts/config.ts`                                      |
+| Process ownership for imports and the shared watcher           | `scripts/ownership.ts`                                   |
 | On-demand agent instruction                                    | `SKILL.md`                                               |
+| Generate the isolated plugin artifact                          | `scripts/build-plugin.mjs`                               |
 
-Claude Code loads only a `.mcp.json` at its plugin root (`skills/`), so this
-directory's `.mcp.json` stays Codex-only and adds no unauthenticated Notion server
+Claude Code loads only a `.mcp.json` at its plugin root, so the bundled skill's
+`.mcp.json` stays Codex-only and adds no unauthenticated Notion server
 to Claude Code sessions.
 
 ## Claude Code
@@ -227,6 +251,7 @@ start no worker. A manual `sync` still copies the files that are there.
 ### Setup
 
 ```sh
+npm run build:plugin
 claude plugin marketplace add /absolute/path/to/notion-cookbook
 claude plugin install sync-memory@notion-cookbook
 ```
@@ -264,12 +289,12 @@ connected, so overlapping hooks never refresh the OAuth token at the same time.
 State, tokens, and logs live in `~/.claude/notion-memory/`, separate from
 Codex's.
 
-| Processing point                               | Implementation                                          |
-| ---------------------------------------------- | ------------------------------------------------------- |
-| Plugin registration and hooks                  | `../../.claude-plugin/plugin.json`, `claude-hooks.json` |
-| Local marketplace                              | `../../../.claude-plugin/marketplace.json`              |
-| Memory files, auto memory switch, hook filter  | `scripts/claude.ts`                                     |
-| Sign-in, token refresh, Streamable HTTP to MCP | `scripts/notionMcp.ts`                                  |
+| Processing point                               | Implementation                                    |
+| ---------------------------------------------- | ------------------------------------------------- |
+| Plugin registration and hooks                  | `.claude-plugin/plugin.json`, `claude-hooks.json` |
+| Local marketplace                              | `../../../.claude-plugin/marketplace.json`        |
+| Memory files, auto memory switch, hook filter  | `scripts/claude.ts`                               |
+| Sign-in, token refresh, Streamable HTTP to MCP | `scripts/notionMcp.ts`                            |
 
 ## Validation
 
@@ -286,7 +311,12 @@ Markdown, same-page updates, empty and missing files, excluded links and Git sta
 external edits/deletions, notices, locks, worker polling and failures. Source metadata
 tests cover birth time, metadata-only updates, unchanged-page stability and existing
 mapping backfill.
-The optional runtime test installs the real artifact in an isolated Codex home
+The dedicated `sync-memory-test.yml` workflow runs the checks on Node.js 22.18.0
+and 22.23.4 with Codex 0.149.1. Skills are excluded from the general cookbook
+recipe runner. Skill evaluation scenarios use the separate
+[evaluation instructions](evaluations/README.md), not `npm test`.
+
+The optional runtime test builds and installs the real artifact in an isolated Codex home
 and drives a stdio Notion fixture through the real app-server without a model.
 Desktop trust/OAuth clicks and natural-conversation hook dispatch require separate
 live verification; manually starting a worker does not prove that entire chain.

@@ -1,17 +1,15 @@
 import type {
-  NotionDataSourcePage,
-  NotionDataSourceValue,
+  NotionPage,
+  NotionPagePropertyValue,
 } from "@notionhq/apps/custom-blocks"
 
 // Pure helpers for picking and describing the current or next meeting.
 
-type DateValue = {
-  type: "date" | "daterange" | "datetime" | "datetimerange"
-  start_date: string
-  start_time?: string
-  end_date?: string
-  end_time?: string
-  time_zone?: string
+export type PageRow<Id extends string = string> = {
+  id: Id
+  getPropertyByKey: NotionPage["getPropertyByKey"]
+  created_time: string | null
+  last_edited_time: string | null
 }
 
 const HOUR_MS = 60 * 60 * 1000
@@ -46,49 +44,70 @@ export function wallTimeToMs(
   time: string,
   timeZone?: string
 ): number {
-  const [year, month, day] = date.split("-").map(Number) as [
-    number,
-    number,
-    number,
-  ]
-  const [hour, minute] = time.split(":").map(Number) as [number, number]
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date)
+  const timeMatch = /^(\d{2}):(\d{2})$/.exec(time)
+  const year = Number(dateMatch?.[1])
+  const month = Number(dateMatch?.[2])
+  const day = Number(dateMatch?.[3])
+  const hour = Number(timeMatch?.[1])
+  const minute = Number(timeMatch?.[2])
   const guess = Date.UTC(year, month - 1, day, hour, minute)
   if (!timeZone) return guess
   return guess - zoneOffsetMs(guess - zoneOffsetMs(guess, timeZone), timeZone)
 }
 
 function localMidnightMs(date: string): number {
-  const [year, month, day] = date.split("-").map(Number) as [
-    number,
-    number,
-    number,
-  ]
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date)
+  const year = Number(dateMatch?.[1])
+  const month = Number(dateMatch?.[2])
+  const day = Number(dateMatch?.[3])
   return new Date(year, month - 1, day).getTime()
 }
 
 /** Start and end of a date value in epoch ms. Meetings without an end last an hour. */
 export function dateRange(
-  value: unknown
+  property: NotionPagePropertyValue | null
 ): { startMs: number; endMs: number; allDay: boolean } | null {
-  if (typeof value !== "object" || value === null || !("start_date" in value))
-    return null
-  const date = value as DateValue
-  if (date.type === "date" || date.type === "daterange") {
-    const startMs = localMidnightMs(date.start_date)
-    const endMs =
-      localMidnightMs(date.end_date ?? date.start_date) + 24 * HOUR_MS
+  if (property?.type !== "date" || property.date === null) return null
+  const date = property.date
+  const allDay = !date.start.includes("T")
+  const startMs = parseNotionDate(date.start, date.time_zone, allDay)
+  if (startMs === null) return null
+  if (allDay) {
+    const endMidnight = date.end
+      ? parseNotionDate(date.end, date.time_zone, true)
+      : localMidnightMs(date.start)
+    const endMs = endMidnight === null ? null : nextLocalMidnight(endMidnight)
+    if (endMs === null) return null
     return { startMs, endMs, allDay: true }
   }
-  const startMs = wallTimeToMs(
-    date.start_date,
-    date.start_time ?? "00:00",
-    date.time_zone
-  )
-  const endMs =
-    date.end_date && date.end_time
-      ? wallTimeToMs(date.end_date, date.end_time, date.time_zone)
-      : startMs + HOUR_MS
+  const endMs = date.end
+    ? parseNotionDate(date.end, date.time_zone, false)
+    : startMs + HOUR_MS
+  if (endMs === null) return null
   return { startMs, endMs, allDay: false }
+}
+
+function parseNotionDate(
+  value: string,
+  timeZone: string | null | undefined,
+  allDay: boolean
+): number | null {
+  if (allDay) return localMidnightMs(value)
+  if (!value.includes("T")) return null
+  if (/(?:Z|[+-]\d{2}:?\d{2})$/i.test(value)) {
+    const instant = Date.parse(value)
+    return Number.isFinite(instant) ? instant : null
+  }
+  const time = value.slice(11, 16)
+  if (time.length !== 5) return null
+  return wallTimeToMs(value.slice(0, 10), time, timeZone ?? undefined)
+}
+
+function nextLocalMidnight(midnight: number): number {
+  const next = new Date(midnight)
+  next.setDate(next.getDate() + 1)
+  return next.getTime()
 }
 
 export function splitEmails(value: string): string[] {
@@ -98,17 +117,45 @@ export function splitEmails(value: string): string[] {
     .filter(Boolean)
 }
 
-export function text(value: NotionDataSourceValue | undefined): string {
-  return typeof value === "string" ? value : ""
+export function text(
+  value: NotionPagePropertyValue | null | undefined
+): string {
+  if (!value) return ""
+  if (value.type === "title") {
+    return value.title
+      .map((segment) => segment["plain_text"])
+      .filter((part): part is string => typeof part === "string")
+      .join("")
+  }
+  if (value.type === "rich_text") {
+    return value.rich_text
+      .map((segment) => segment["plain_text"])
+      .filter((part): part is string => typeof part === "string")
+      .join("")
+  }
+  if (value.type === "select") {
+    return value.select?.name ?? ""
+  }
+  if (value.type === "status") {
+    return value.status?.name ?? ""
+  }
+  if (value.type === "url") {
+    return value.url ?? ""
+  }
+  if (value.type === "email") {
+    return value.email ?? ""
+  }
+  if (value.type === "phone_number") {
+    return value.phone_number ?? ""
+  }
+  return ""
 }
 
 /** Rows ordered by start time, dropping duplicates by ID. */
-export function sortByStart(
-  rows: readonly NotionDataSourcePage[]
-): NotionDataSourcePage[] {
+export function sortByStart<Row extends PageRow>(rows: readonly Row[]): Row[] {
   const unique = [...new Map(rows.map((row) => [row.id, row])).values()]
-  const start = (row: NotionDataSourcePage) =>
-    dateRange(row.propertiesByKey.When)?.startMs ?? Infinity
+  const start = (row: Row) =>
+    dateRange(row.getPropertyByKey("When"))?.startMs ?? Infinity
   return unique.sort((a, b) => start(a) - start(b))
 }
 
@@ -117,19 +164,29 @@ export function sortByStart(
  * progress wins over an all-day or multi-day event in progress (such as an
  * offsite), which wins over anything upcoming. Rows arrive sorted by start.
  */
-export function pickMeeting(
-  rows: readonly NotionDataSourcePage[],
+export function pickMeeting<Row extends PageRow>(
+  rows: readonly Row[],
   now: number
 ): {
-  row: NotionDataSourcePage
+  row: Row
   startMs: number
   endMs: number
   allDay: boolean
 } | null {
-  let allDayNow: ReturnType<typeof pickMeeting> = null
-  let upcoming: ReturnType<typeof pickMeeting> = null
+  let allDayNow: {
+    row: Row
+    startMs: number
+    endMs: number
+    allDay: boolean
+  } | null = null
+  let upcoming: {
+    row: Row
+    startMs: number
+    endMs: number
+    allDay: boolean
+  } | null = null
   for (const row of rows) {
-    const range = dateRange(row.propertiesByKey.When)
+    const range = dateRange(row.getPropertyByKey("When"))
     if (!range || range.endMs <= now) continue
     const candidate = { row, ...range }
     if (range.startMs <= now) {
@@ -150,11 +207,9 @@ const PROFILE_LINKS = [
 ] as const
 
 /** A person's public profile links that are set, in a fixed order. */
-export function profileLinks(
-  properties: Record<string, NotionDataSourceValue | undefined>
-): { label: string; url: string }[] {
+export function profileLinks(page: PageRow): { label: string; url: string }[] {
   return PROFILE_LINKS.flatMap(([property, label]) => {
-    const url = text(properties[property])
+    const url = text(page.getPropertyByKey(property))
     return /^https?:\/\//.test(url) ? [{ label, url }] : []
   })
 }
@@ -170,8 +225,8 @@ export function firstSentence(value: string): string {
   return (match ? match[0] : value).trim()
 }
 
-type Ranged = {
-  row: NotionDataSourcePage
+type Ranged<Row extends PageRow> = {
+  row: Row
   startMs: number
   endMs: number
   allDay: boolean
@@ -194,7 +249,7 @@ export function dayBounds(now: number): { startMs: number; endMs: number } {
 }
 
 /** A timed meeting placed in a day column, sharing width with overlaps. */
-export type DayEvent = Ranged & {
+export type DayEvent<Row extends PageRow = PageRow> = Ranged<Row> & {
   /** Visible start and end, clipped to the day. */
   topMs: number
   bottomMs: number
@@ -209,14 +264,14 @@ const MIN_EVENT_MS = 15 * 60 * 1000
  * whole day, go on the all-day strip. Timed events are laid out like a
  * calendar day: overlapping events split the width into columns.
  */
-export function layoutDay(
-  rows: readonly NotionDataSourcePage[],
+export function layoutDay<Row extends PageRow>(
+  rows: readonly Row[],
   day: { startMs: number; endMs: number }
-): { allDay: Ranged[]; timed: DayEvent[] } {
-  const allDay: Ranged[] = []
-  const timed: Omit<DayEvent, "column" | "columns">[] = []
+): { allDay: Ranged<Row>[]; timed: DayEvent<Row>[] } {
+  const allDay: Ranged<Row>[] = []
+  const timed: Omit<DayEvent<Row>, "column" | "columns">[] = []
   for (const row of sortByStart(rows)) {
-    const range = dateRange(row.propertiesByKey.When)
+    const range = dateRange(row.getPropertyByKey("When"))
     if (!range || range.endMs <= day.startMs || range.startMs >= day.endMs)
       continue
     const candidate = { row, ...range }
@@ -237,8 +292,8 @@ export function layoutDay(
 
   // Group chains of overlapping events, then give each event the first free
   // column in its group. Every event in a group shares the group's width.
-  const placed: DayEvent[] = []
-  let group: DayEvent[] = []
+  const placed: DayEvent<Row>[] = []
+  let group: DayEvent<Row>[] = []
   let groupEnd = -Infinity
   const flush = () => {
     const columns = Math.max(1, ...group.map((event) => event.column + 1))

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "notion",
+  "displayName": "Notion",
+  "description": "Connect Antigravity to your Notion workspace with the Notion MCP server, plus skills for research, documentation, meeting prep, specs, trackers, and project updates.",
+  "version": "0.1.0",
+  "logo": "logo.svg",
+  "suggestedPrompts": [
+    "Set up Notion so you can use my workspace as context",
+    "Turn this spec in Notion into an implementation plan with tasks",
+    "Write a weekly update for my project from what changed in Notion"
+  ],
+  "author": {
+    "name": "Notion Labs",
+    "url": "https://www.notion.com"
+  },
+  "homepage": "https://developers.notion.com/docs/notion-mcp",
+  "repository": "https://github.com/makenotion/notion-cookbook/tree/main/plugins/antigravity",
+  "license": "MIT",
+  "keywords": ["notion", "mcp", "productivity", "documentation", "knowledge"]
+}

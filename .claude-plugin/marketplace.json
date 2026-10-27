@@ -7,7 +7,7 @@
   "plugins": [
     {
       "name": "sync-memory",
-      "source": "./skills",
+      "source": "./build/sync-memory",
       "description": "Copy the memories Claude Code saves about you into Notion Memories.",
       "category": "productivity"
     }
