@@ -14,7 +14,7 @@ schedule.
 ## Prerequisites
 
 - Existing access to the Workflows private alpha (there is no waitlist).
-- Node.js 22.23.4 or newer and npm 10.9.9 or newer.
+- Node.js 22 or newer and npm 10.9.2 or newer.
 - The Notion CLI.
 
 ## Quick start

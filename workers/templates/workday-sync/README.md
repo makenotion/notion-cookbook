@@ -14,7 +14,7 @@ The worker refreshes both databases daily, making it easier to answer everyday
 
 ## Quickstart
 
-You need Node.js 22.23.4+, npm 10.9.9+, Notion Workers deployment access, and a
+You need Node.js 22+, npm 10.9.2+, Notion Workers deployment access, and a
 dedicated Workday integration user and API client. Start with a non-production
 tenant and review [Workday access and sharing](#workday-access-and-sharing)
 before sharing the result.

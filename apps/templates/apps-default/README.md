@@ -13,7 +13,7 @@ replay-safe durable step. The hello block demonstrates an interactive browser UI
 ## Prerequisites
 
 - Access to the Notion Apps alpha.
-- Node.js 26.12.1 or newer and npm 11.20.0 or newer.
+- Node.js 26 or newer.
 - An Apps SDK release with the creation helpers shown below.
 - A version of the Notion CLI with the experimental `apps` command.
 

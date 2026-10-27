@@ -12,7 +12,7 @@ that are no longer visible.
 
 ## Quickstart
 
-You need Node.js 22.23.4+, an Intercom workspace, and a
+You need Node.js 22+, an Intercom workspace, and a
 [private-app access token](#intercom-access-and-credentials). Give the app these
 permissions:
 

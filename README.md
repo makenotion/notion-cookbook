@@ -48,10 +48,6 @@ data flow, adapt it to include issue labels, and run its offline checks."
 
 ### Run an API example
 
-Install Node.js 22.23.4 or newer and npm 10.9.9 or newer before running an
-example or Worker. Repository validation uses the Node.js version pinned in
-`.node-version`.
-
 The introductory example is the best first project. Create a
 [Notion integration](https://www.notion.com/my-integrations), share a test page
 with it, then:

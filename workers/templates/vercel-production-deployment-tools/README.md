@@ -7,7 +7,7 @@ it asks to change traffic. No supporting Notion database is required.
 
 ## Quickstart
 
-You need Node.js 22.23.4+, npm 10.9.9+, the Vercel CLI, access to deploy Notion
+You need Node.js 22+, npm 10.9.2+, the Vercel CLI, access to deploy Notion
 Workers, and a Vercel project that uses staged Production deployments. Create a
 team-scoped Vercel token whose principal can access the project and has **Full
 Production Deployment** permission.

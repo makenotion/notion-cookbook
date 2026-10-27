@@ -59,8 +59,8 @@ The worker registers three tools:
 
 ## How it works
 
-This Worker requires Node.js 22.23.4 or newer. It opens the SQLite database
-with Node's built-in `node:sqlite` module (`DatabaseSync`). No third-party
+The SQLite database is opened with Node's built-in `node:sqlite` module
+(`DatabaseSync`, available without a flag in Node 22.13+). No third-party
 database driver is needed.
 
 `query` parses the SQL with `node-sql-parser` (SQLite dialect) and only
@@ -103,7 +103,7 @@ ntn workers exec query --local \
 
 - Data is ephemeral. The in-memory database resets when the worker process
   restarts. It is not intended for production use.
-- This worker uses Node's built-in `node:sqlite` module (Node 22.23.4+), which
+- This worker uses Node's built-in `node:sqlite` module (Node 22.13+), which
   requires no additional npm dependencies beyond `node-sql-parser`.
 - For a worker that connects to a real external database, see
   `../postgres-query` or `../snowflake-query`.

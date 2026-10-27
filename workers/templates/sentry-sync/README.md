@@ -7,7 +7,7 @@ work without sending every collaborator into Sentry.
 
 ## Quickstart
 
-You need Node.js 22.23.4+, a Sentry organization, and an
+You need Node.js 22+, a Sentry organization, and an
 [internal integration token](#create-a-sentry-token) with `event:read`,
 `org:read`, and `project:releases`.
 

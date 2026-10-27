@@ -7,7 +7,7 @@ databases and refreshes them every five minutes.
 
 ## Quickstart
 
-You need Node.js 22.23.4+, a HubSpot account with super-admin access, your
+You need Node.js 22+, a HubSpot account with super-admin access, your
 [portal ID](#finding-your-portal-id), and a
 [private app token](#getting-a-hubspot-access-token) with these read scopes:
 `crm.objects.contacts.read`, `crm.objects.deals.read`,

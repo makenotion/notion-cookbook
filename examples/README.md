@@ -30,8 +30,7 @@ configuration, and README.
 
 Use the selected example's README as the source of truth. The common flow is:
 
-1. Install Node.js 22.23.4 or newer and npm 10.9.9 or newer, as required by each
-   example's `package.json`.
+1. Install the Node.js version required by its `package.json`.
 2. Create a [Notion integration](https://www.notion.com/my-integrations).
 3. Share the page or database used by the example with that integration.
 4. From the example directory, run `npm install`.

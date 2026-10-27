@@ -10,7 +10,7 @@ a read-only coordination view with direct links back to the live source.
 
 ## Quickstart
 
-You need Node.js 22.23.4+, npm 10.9.9+, a PagerDuty account, and a read-only REST API
+You need Node.js 22+, npm 10.9.2+, a PagerDuty account, and a read-only REST API
 key. From the repository root:
 
 ```sh

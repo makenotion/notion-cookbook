@@ -9,7 +9,7 @@ Notion creates and manages both databases from the schemas in this Worker.
 
 ## Quickstart
 
-You need Node.js 22.23.4+, a Salesforce production org or sandbox with API access,
+You need Node.js 22+, a Salesforce production org or sandbox with API access,
 and a local [External Client App](#create-the-salesforce-external-client-app)
 configured for the client-credentials flow. Copy its consumer key and secret,
 and note the org's My Domain URL.

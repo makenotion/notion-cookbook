@@ -12,7 +12,7 @@ sync, it refreshes them every five minutes.
 
 The shortest path uses a
 [fine-grained personal access token](#option-3-fine-grained-personal-access-token)
-(PAT). You need Node.js 22.23.4+, a GitHub PAT with read-only **Issues**, **Pull
+(PAT). You need Node.js 22+, a GitHub PAT with read-only **Issues**, **Pull
 requests**, **Checks**, and **Commit statuses** permissions, and access to the
 repositories you want to sync.
 
