@@ -405,9 +405,7 @@ was saved, not whether the mappings are valid: the API accepts unknown property
 IDs. Compare every mapped ID against the decoded schema IDs and confirm that its
 property type matches the declaration. Invalid mappings surface on the instance
 as "Custom block property mappings are invalid", not as a PATCH failure.
-Then verify that the configured block renders and its main interaction works.
-Report any permission, feature-gate, or verification failure instead of claiming
-setup is complete.
+Verify that the instance renders with the expected data.
 
 [Share the Worker](https://developers.notion.com/workers/guides/sharing-workers) with **Can connect** access when another workspace member must
 insert the block. **Full access** also permits Worker management and deployment.
