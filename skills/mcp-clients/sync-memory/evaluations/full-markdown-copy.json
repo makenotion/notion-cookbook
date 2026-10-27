@@ -1,0 +1,24 @@
+{
+  "name": "Copy all current memory Markdown without rewriting",
+  "skills": ["sync-memory"],
+  "query": "Sync all my current Codex memory Markdown to local Notion exactly as it is.",
+  "context": {
+    "files": [
+      "memories_v2/memory_summary.md",
+      "memories_v2/rollout_summaries/session.md",
+      "memories_v2/extensions/ad_hoc/instructions.md",
+      "memories_v2/extensions/ad_hoc/notes/correction.md"
+    ],
+    "configuration": "The configured Codex-owned MCP connection is authenticated and pinned to the user's local workspace."
+  },
+  "success_criteria": [
+    "Uses the bundled sync command rather than manually rewriting or summarizing content.",
+    "Treats rollout summaries and extension Markdown as part of the copy scope, even when MEMORY.md does not exist.",
+    "Preserves relative paths and reports command results without claiming byte-identical Notion rendering.",
+    "Does not import Git metadata, SQLite internals, or legacy v1 files.",
+    "Keeps the default database schema and Codex attribution, placing source metadata in a page preamble instead of adding properties.",
+    "Describes unchanged original Markdown after the metadata separator, including empty files, without claiming the entire body equals the source.",
+    "Distinguishes source birth time and mtime from Notion timestamps, leaves unavailable birth time empty, and never uses ctime or absolute source paths.",
+    "Does not claim unsupported-file or missing-file reporting is implemented."
+  ]
+}

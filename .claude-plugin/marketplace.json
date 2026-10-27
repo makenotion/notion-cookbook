@@ -1,0 +1,15 @@
+{
+  "name": "notion-cookbook",
+  "owner": {
+    "name": "Notion"
+  },
+  "description": "Notion Cookbook plugins for Claude Code.",
+  "plugins": [
+    {
+      "name": "sync-memory",
+      "source": "./skills",
+      "description": "Copy the memories Claude Code saves about you into Notion Memories.",
+      "category": "productivity"
+    }
+  ]
+}

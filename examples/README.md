@@ -20,7 +20,6 @@ configuration, and README.
 
 | Example                                                   | What it demonstrates                                                                   |
 | --------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| [Codex Notion memory](codex-notion-memory/)               | A Codex and Claude Code plugin that mirrors agent memories into Notion Memories.       |
 | [Database email update](database-email-update/)           | Poll a database for status changes and send notifications through SendGrid.            |
 | [Generate random data](generate-random-data/)             | Inspect a database schema and create correctly typed sample rows.                      |
 | [Notion–GitHub issue sync](notion-github-sync/)           | Copy issues from one GitHub repository into a Notion database.                         |

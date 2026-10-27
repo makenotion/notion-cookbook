@@ -14,8 +14,9 @@ directory.
 - **Build an API integration:** create a
   [web form](examples/web-form-with-express/), connect
   [GitHub issues](examples/notion-github-sync/), send
-  [email notifications](examples/database-email-update/), or bring
-  [Codex and Claude Code memories](examples/codex-notion-memory/) into Notion.
+  [email notifications](examples/database-email-update/).
+- **Sync local memory into Notion:** use the
+  [Sync Memory skill](skills/mcp-clients/sync-memory/), supporting Codex and Claude Code memory.
 - **Bring external data into Notion:** use a Worker sync for
   [GitHub issues and pull requests](workers/templates/github-sync/),
   [GitHub stars](workers/templates/github-stars-sync/), [HubSpot](workers/templates/hubspot-sync/),
@@ -90,17 +91,16 @@ configuration; follow their READMEs.
 These examples use the official JavaScript SDK and run locally with Node.js.
 See the [API examples guide](examples/) for shared setup information.
 
-| Task                                                         | Example                                                                    | Integrations                   |
-| ------------------------------------------------------------ | -------------------------------------------------------------------------- | ------------------------------ |
-| Learn blocks, pages, databases, queries, and file uploads    | [Introduction to the Notion API](examples/intro-to-notion-api/)            | Notion API                     |
-| Bring Codex or Claude Code memories into Notion Memories     | [Codex Notion memory](examples/codex-notion-memory/)                       | Notion MCP, Codex, Claude Code |
-| Send an email when a database status changes                 | [Database email update](examples/database-email-update/)                   | Notion API, SendGrid           |
-| Fill a database with correctly typed sample rows             | [Generate random data](examples/generate-random-data/)                     | Notion API                     |
-| Copy GitHub issues into a Notion database                    | [Notion–GitHub issue sync](examples/notion-github-sync/)                   | Notion API, GitHub             |
-| Update Notion tasks when linked pull requests close or merge | [Notion task–GitHub PR sync](examples/notion-task-github-pr-sync/)         | Notion API, GitHub             |
-| Extract plain text from Notion blocks                        | [Parse text from any block type](examples/parse-text-from-any-block-type/) | Notion API                     |
-| Read beyond the 10,000-row query limit                       | [Query large data sources](examples/query-large-data-sources/)             | Notion API                     |
-| Create databases, pages, blocks, and comments from a web UI  | [Web form with Express](examples/web-form-with-express/)                   | Notion API, Express            |
+| Task                                                         | Example                                                                    | Integrations         |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------- | -------------------- |
+| Learn blocks, pages, databases, queries, and file uploads    | [Introduction to the Notion API](examples/intro-to-notion-api/)            | Notion API           |
+| Send an email when a database status changes                 | [Database email update](examples/database-email-update/)                   | Notion API, SendGrid |
+| Fill a database with correctly typed sample rows             | [Generate random data](examples/generate-random-data/)                     | Notion API           |
+| Copy GitHub issues into a Notion database                    | [Notion–GitHub issue sync](examples/notion-github-sync/)                   | Notion API, GitHub   |
+| Update Notion tasks when linked pull requests close or merge | [Notion task–GitHub PR sync](examples/notion-task-github-pr-sync/)         | Notion API, GitHub   |
+| Extract plain text from Notion blocks                        | [Parse text from any block type](examples/parse-text-from-any-block-type/) | Notion API           |
+| Read beyond the 10,000-row query limit                       | [Query large data sources](examples/query-large-data-sources/)             | Notion API           |
+| Create databases, pages, blocks, and comments from a web UI  | [Web form with Express](examples/web-form-with-express/)                   | Notion API, Express  |
 
 ## Worker examples
 
