@@ -398,14 +398,16 @@ ntn api v1/blocks/<instance-id> -X PATCH -d @update.json
 
 For a custom page, use `v1/pages/<instance-id>` instead. Omit `definition_id` for a
 bindings-only edit. The API also accepts it when it matches the stored definition;
-it rejects a different definition. Read back the instance with
-`ntn api v1/blocks/<instance-id>` or `ntn api v1/pages/<instance-id>` and check the
-definition, data-source IDs, and saved property mappings. Readback confirms what
-was saved, not whether the mappings are valid: the API accepts unknown property
-IDs. Compare every mapped ID against the decoded schema IDs and confirm that its
-property type matches the declaration. Invalid mappings surface on the instance
-as "Custom block property mappings are invalid", not as a PATCH failure.
-Verify that the instance renders with the expected data.
+it rejects a different definition.
+
+After saving, fetch the instance with `ntn api v1/blocks/<instance-id>` or
+`ntn api v1/pages/<instance-id>`. Check the saved definition, data source IDs, and
+property mappings.
+
+The API returns the saved mappings even when they contain unknown property IDs.
+To validate the mappings, compare every mapped ID against the decoded schema IDs
+and confirm that its property type matches the declaration. Then verify that the
+instance renders with the expected data.
 
 [Share the Worker](https://developers.notion.com/workers/guides/sharing-workers) with **Can connect** access when another workspace member must
 insert the block. **Full access** also permits Worker management and deployment.
