@@ -1,102 +1,66 @@
-import { useEffect, useMemo, useRef, useState } from "react"
-import { pages } from "@notionhq/custom-blocks"
+import { useMemo } from "react"
 import { useDataSource } from "@notionhq/custom-blocks/react"
 import type { OrgDataState, Person, PersonIcon } from "./types"
 
 const DATA_SOURCE_KEY = "people"
-const ICON_FETCH_CONCURRENCY = 5
+const DATA_SOURCE_OPTIONS = { limit: 999 }
 
 /**
- * Real data layer: reads the `people` data source and lazily resolves each
- * row's page icon (rows from useDataSource don't carry icons).
+ * Real data layer: reads the `people` data source and its page icons.
  */
 export function useNotionPeople(): OrgDataState {
-  const { items, isLoading, error } = useDataSource(DATA_SOURCE_KEY, {
-    limit: 999,
-  })
-  const [icons, setIcons] = useState<ReadonlyMap<string, PersonIcon | null>>(
-    new Map()
+  const { items, isLoading, error, propertyIdsByKey } = useDataSource(
+    DATA_SOURCE_KEY,
+    DATA_SOURCE_OPTIONS
   )
-  const requestedRef = useRef<Set<string>>(new Set())
-
-  const ids = items.map((item) => item.id).join("\n")
-
-  useEffect(() => {
-    let cancelled = false
-    const pending = items
-      .map((item) => item.id)
-      .filter((id) => !requestedRef.current.has(id))
-    if (pending.length === 0) return
-    for (const id of pending) requestedRef.current.add(id)
-
-    const queue = [...pending]
-    const found = new Map<string, PersonIcon | null>()
-    async function drain(): Promise<void> {
-      for (;;) {
-        const id = queue.shift()
-        if (id === undefined || cancelled) return
-        try {
-          const result = await pages.get(id as Parameters<typeof pages.get>[0])
-          if (result.status === "success") {
-            found.set(id, toPersonIcon(result.page.icon))
-          } else {
-            found.set(id, null)
-          }
-        } catch {
-          found.set(id, null)
-        }
-      }
-    }
-    void Promise.all(
-      Array.from({ length: ICON_FETCH_CONCURRENCY }, () => drain())
-    ).then(() => {
-      if (cancelled || found.size === 0) return
-      setIcons((prev) => {
-        const next = new Map(prev)
-        for (const [id, icon] of found) next.set(id, icon)
-        return next
-      })
-    })
-    return () => {
-      cancelled = true
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ids])
-
   return useMemo<OrgDataState>(() => {
-    if (error) return { status: "unbound" }
     if (isLoading && items.length === 0) return { status: "loading" }
+    if (error) return { status: "unbound" }
+    if (
+      !propertyIdsByKey.name ||
+      !propertyIdsByKey.role ||
+      !propertyIdsByKey.reportsTo
+    ) {
+      return { status: "unbound" }
+    }
 
     const people: Person[] = []
     for (const item of items) {
-      const props = item.propertiesByKey
-      const name = typeof props.name === "string" ? props.name.trim() : ""
+      const nameProperty = item.getPropertyByKey("name")
+      const name =
+        nameProperty?.type === "title"
+          ? nameProperty.title
+              .map((segment) => segment["plain_text"])
+              .filter((part): part is string => typeof part === "string")
+              .join("")
+              .trim()
+          : ""
       if (name === "") continue
-      const role = typeof props.role === "string" ? props.role.trim() : ""
-      const relation = props.reportsTo
-      const managerIds = Array.isArray(relation)
-        ? relation
-            .map((pointer) =>
-              pointer !== null &&
-              typeof pointer === "object" &&
-              "id" in pointer &&
-              typeof pointer.id === "string"
-                ? pointer.id
-                : null
-            )
-            .filter((id): id is string => id !== null)
-        : []
+      const roleProperty = item.getPropertyByKey("role")
+      const role =
+        roleProperty?.type === "rich_text"
+          ? roleProperty.rich_text
+              .map((segment) => segment["plain_text"])
+              .filter((part): part is string => typeof part === "string")
+              .join("")
+              .trim()
+          : ""
+      const relationProperty = item.getPropertyByKey("reportsTo")
+      const managerIds =
+        relationProperty?.type === "relation"
+          ? relationProperty.relation.map((pointer) => pointer.id)
+          : []
       people.push({
         id: item.id,
         name,
         role,
         managerIds,
-        icon: icons.get(item.id) ?? undefined,
+        icon: toPersonIcon(item.icon) ?? undefined,
       })
     }
     if (people.length === 0) return { status: "empty" }
     return { status: "ready", people }
-  }, [items, isLoading, error, icons])
+  }, [items, isLoading, error, propertyIdsByKey])
 }
 
 type NotionPageIconLike =

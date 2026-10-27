@@ -1,8 +1,5 @@
-import type {
-  NotionPropertySchema,
-  NotionPropertyType,
-} from "@notionhq/custom-blocks"
 import type { WhiteboardSetupIssue } from "./model"
+import type { NotionPropertyType } from "@notionhq/custom-blocks"
 
 type PropertyRequirement = {
   key: string
@@ -57,40 +54,17 @@ function typeLabel(type: NotionPropertyType): string {
     : `${type.charAt(0).toUpperCase()}${type.slice(1)}`
 }
 
-export function validateWhiteboardSchema(
-  schemasByKey: Record<string, NotionPropertySchema | undefined>
+export function validateWhiteboardBindings(
+  propertyIdsByKey: Record<string, string | undefined>
 ): WhiteboardSetupIssue[] {
   const issues: WhiteboardSetupIssue[] = []
 
   for (const requirement of WHITEBOARD_SCHEMA_REQUIREMENTS) {
-    const schema = schemasByKey[requirement.key]
-    if (!schema) {
+    if (!propertyIdsByKey[requirement.key]) {
       issues.push({
         property: requirement.label,
         message: `Map this field to a ${typeLabel(requirement.type)} property.`,
       })
-      continue
-    }
-
-    if (schema.type !== requirement.type) {
-      issues.push({
-        property: requirement.label,
-        message: `Map this field to a ${typeLabel(requirement.type)} property instead of ${typeLabel(schema.type)}.`,
-      })
-      continue
-    }
-
-    if (requirement.options && schema.type === "select") {
-      const available = new Set(schema.options.map((option) => option.name))
-      const missing = requirement.options.filter(
-        (option) => !available.has(option)
-      )
-      if (missing.length > 0) {
-        issues.push({
-          property: requirement.label,
-          message: `Add the missing Select ${missing.length === 1 ? "option" : "options"}: ${missing.join(", ")}.`,
-        })
-      }
     }
   }
 

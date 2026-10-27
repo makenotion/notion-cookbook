@@ -4,7 +4,7 @@ import {
   customBlock,
   pages,
   type DataSourceQueryOptions,
-  type NotionDataSourcePage,
+  type NotionPage,
 } from "@notionhq/apps/custom-blocks"
 import { NotionCustomBlock, NotionTokenScope } from "@notionhq/apps/react"
 import "@notionhq/apps/nds.css"
@@ -72,7 +72,12 @@ const STATE_KEY = "perfect-meetings:view"
 type Mode = "next" | "day"
 /** Which view is showing; `selectedId` is a meeting opened from the day view. */
 type ViewState = { mode: Mode; selectedId: string | null }
-type Picked = NonNullable<ReturnType<typeof pickMeeting>>
+type Picked = {
+  row: NotionPage
+  startMs: number
+  endMs: number
+  allDay: boolean
+}
 
 /** Current time, refreshed every 30 seconds. */
 function useNow(): number {
@@ -114,12 +119,12 @@ function useViewState(): [ViewState, (next: ViewState) => void] {
 }
 
 function byKey(
-  rows: readonly NotionDataSourcePage[],
+  rows: readonly NotionPage[],
   key: string
-): Map<string, NotionDataSourcePage> {
+): Map<string, NotionPage> {
   return new Map(
     rows.map((row) => [
-      text(row.propertiesByKey[key]).trim().toLowerCase(),
+      text(row.getPropertyByKey(key)).trim().toLowerCase(),
       row,
     ])
   )
@@ -207,19 +212,19 @@ function MeetingCards({
 }: {
   meeting: Picked
   eyebrow: string
-  people: Map<string, NotionDataSourcePage>
-  companies: Map<string, NotionDataSourcePage>
+  people: Map<string, NotionPage>
+  companies: Map<string, NotionPage>
   peopleLoading: boolean
   now: number
 }) {
   const { row, startMs, endMs, allDay } = meeting
   const attendees = splitEmails(
-    text(row.propertiesByKey["Attendee emails"])
+    text(row.getPropertyByKey("Attendee emails"))
   ).flatMap((email) => people.get(email) ?? [])
   const groups = groupByCompany(attendees, (person) =>
-    text(person.propertiesByKey["Company domain"])
+    text(person.getPropertyByKey("Company domain"))
   )
-  const status = text(row.propertiesByKey["Prep status"])
+  const status = text(row.getPropertyByKey("Prep status"))
   const copy = attendeeCopy(row, attendees.length, peopleLoading, now)
   const phase = researchPhase(row, now)
 
@@ -229,7 +234,7 @@ function MeetingCards({
         <div>
           <div className="meta">{eyebrow}</div>
           <h2 className="title">
-            {text(row.propertiesByKey.Title) || "Untitled meeting"}
+            {text(row.getPropertyByKey("Title")) || "Untitled meeting"}
           </h2>
           <div className="muted">{formatWhen(startMs, endMs, allDay)}</div>
           {phase === "researching" && (
@@ -239,7 +244,7 @@ function MeetingCards({
                   <span className="spinner" aria-hidden="true" />
                   {RESEARCHING_LINE}
                 </>
-              ) : text(row.propertiesByKey["Research status"]) === "Ready" ? (
+              ) : text(row.getPropertyByKey("Research status")) === "Ready" ? (
                 "Meeting prep queued"
               ) : (
                 "Waiting for participant and company research"
@@ -322,7 +327,7 @@ function DayView({
   now,
   onSelect,
 }: {
-  meetings: readonly NotionDataSourcePage[]
+  meetings: readonly NotionPage[]
   highlightId: string | null
   now: number
   onSelect: (id: string) => void
@@ -342,7 +347,7 @@ function DayView({
     // Only on mount and when the day changes.
   }, [day.startMs])
 
-  const className = (event: { row: NotionDataSourcePage; endMs: number }) =>
+  const className = (event: { row: NotionPage; endMs: number }) =>
     [
       "event",
       event.row.id === highlightId && "event-highlight",
@@ -377,7 +382,8 @@ function DayView({
                 onClick={() => onSelect(event.row.id)}
               >
                 <span className="event-title">
-                  {text(event.row.propertiesByKey.Title) || "Untitled meeting"}
+                  {text(event.row.getPropertyByKey("Title")) ||
+                    "Untitled meeting"}
                 </span>
               </button>
             ))}
@@ -395,10 +401,10 @@ function DayView({
             </div>
           ))}
           <div className="events" data-theme="blue">
-            {timed.map((event: DayEvent) => {
+            {timed.map((event: DayEvent<NotionPage>) => {
               const height = px(event.bottomMs) - px(event.topMs)
               const title =
-                text(event.row.propertiesByKey.Title) || "Untitled meeting"
+                text(event.row.getPropertyByKey("Title")) || "Untitled meeting"
               const time = `${formatTime(event.startMs)} – ${formatTime(event.endMs)}`
               return (
                 <button
@@ -537,7 +543,7 @@ function useSyncRequest(latestRunId: string | null): {
   }
 }
 
-type Row = NotionDataSourcePage
+type Row = NotionPage
 
 /**
  * A live query that reports `loaded` only after its first real result and
@@ -565,6 +571,8 @@ function useLiveQuery(
         last = snapshot
         dispatch({ type: "snapshot", snapshot })
       },
+      onError: (error) =>
+        dispatch({ type: "snapshot", snapshot: { ...last, error } }),
     })
     const timer = window.setTimeout(
       () => dispatch({ type: "timeout", snapshot: last }),
@@ -723,7 +731,7 @@ function MeetingsBlock() {
     const selected = view.selectedId
       ? meetings.find((row) => row.id === view.selectedId)
       : undefined
-    const range = selected && dateRange(selected.propertiesByKey.When)
+    const range = selected && dateRange(selected.getPropertyByKey("When"))
     content =
       selected && range ? (
         cards(

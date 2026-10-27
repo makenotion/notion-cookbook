@@ -7,7 +7,7 @@ import {
   Loader2,
   UsersRound,
 } from "lucide-react"
-import { pages, type NotionDataSourcePage } from "@notionhq/apps/custom-blocks"
+import { pages, type NotionPage } from "@notionhq/apps/custom-blocks"
 
 import { Avatar, AvatarFallback, AvatarImage } from "./components/ui/avatar"
 import { Badge } from "./components/ui/badge"
@@ -25,13 +25,7 @@ function initials(name: string) {
     .join("")
 }
 
-function ProfileActivity({
-  row,
-  now,
-}: {
-  row: NotionDataSourcePage
-  now: number
-}) {
+function ProfileActivity({ row, now }: { row: NotionPage; now: number }) {
   const counts = researchActivity([row], now)
   if (counts.done || counts.unrequested) return null
   return (
@@ -57,15 +51,14 @@ export function PersonCard({
   person,
   now,
 }: {
-  person: NotionDataSourcePage
+  person: NotionPage
   now: number
 }) {
-  const props = person.propertiesByKey
-  const email = text(props.Email)
-  const name = text(props.Name) || email
-  const role = text(props.Role)
-  const source = text(props["Role source"])
-  const links = profileLinks(props)
+  const email = text(person.getPropertyByKey("Email"))
+  const name = text(person.getPropertyByKey("Name")) || email
+  const role = text(person.getPropertyByKey("Role"))
+  const source = text(person.getPropertyByKey("Role source"))
+  const links = profileLinks(person)
   const sourceLink =
     /^https?:\/\//.test(source) && !links.some((link) => link.url === source)
   return (
@@ -75,7 +68,7 @@ export function PersonCard({
           <div className="profile-heading">
             <Avatar className="profile-avatar">
               <AvatarImage
-                src={text(props.Photo) || undefined}
+                src={text(person.getPropertyByKey("Photo")) || undefined}
                 alt=""
                 referrerPolicy="no-referrer"
               />
@@ -93,7 +86,7 @@ export function PersonCard({
                 <span>{name}</span>
                 <ArrowUpRight aria-hidden="true" />
               </Button>
-              {email && text(props.Name) && (
+              {email && text(person.getPropertyByKey("Name")) && (
                 <span className="profile-email" title={email}>
                   {email}
                 </span>
@@ -102,7 +95,7 @@ export function PersonCard({
           </div>
           {role && <p className="profile-role">{role}</p>}
           <div className="profile-meta">
-            {text(props.Confidence) === "Low" && (
+            {text(person.getPropertyByKey("Confidence")) === "Low" && (
               <Badge
                 variant="outline"
                 className="confidence-badge"
@@ -171,13 +164,15 @@ export function CompanyCard({
   now,
 }: {
   domain: string
-  company: NotionDataSourcePage | undefined
-  attendees: NotionDataSourcePage[]
+  company: NotionPage | undefined
+  attendees: NotionPage[]
   now: number
 }) {
-  const name = company ? text(company.propertiesByKey.Name) || domain : domain
-  const summary = company ? text(company.propertiesByKey.Summary) : ""
-  const website = company ? text(company.propertiesByKey.Website) : ""
+  const name = company
+    ? text(company.getPropertyByKey("Name")) || domain
+    : domain
+  const summary = company ? text(company.getPropertyByKey("Summary")) : ""
+  const website = company ? text(company.getPropertyByKey("Website")) : ""
   return (
     <li>
       <Card className="profile-card company-profile">

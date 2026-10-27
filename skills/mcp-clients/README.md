@@ -18,6 +18,7 @@ memory files and use its authenticated Notion connection.
 | [Research and documentation](research-documentation/SKILL.md) | Find information across a workspace, synthesize it, and publish a cited report in Notion.                |
 | [Spec to implementation](spec-to-implementation/SKILL.md)     | Convert a product or technical spec into an implementation plan and trackable Notion tasks.              |
 | [Sync Memory](sync-memory/SKILL.md)                           | Copy local memory Markdown into Notion Memories, currently from Codex.                                   |
+| [Setup](setup/SKILL.md)                                       | Set up Notion as shared agent context by following the official setup guide after install.               |
 
 ## Install
 
@@ -50,6 +51,7 @@ mcp-clients/
 ├── knowledge-capture/
 ├── meeting-intelligence/
 ├── research-documentation/
+├── setup/
 ├── spec-to-implementation/
 └── sync-memory/
 
@@ -68,6 +70,8 @@ mcp-clients/
 - Treat `evaluations/` as validation material, not runtime instructions.
 - When changing a skill, update its evaluations and follow the repository
   [contributing guide](../../CONTRIBUTING.md).
+- After changing a skill, run `npm run plugins:build` from the repository
+  root. Platform plugins in [`plugins/`](../../plugins/) ship generated copies.
 
 ## Evaluation and maintenance
 
