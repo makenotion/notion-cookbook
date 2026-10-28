@@ -200,7 +200,15 @@ row but no Company row.
 
 ## Configure
 
-After deploying, open the link provided in ntn output to set up calendar access.
+After deploying, open `setup_url` from the CLI output. Connect your Calendar
+account and choose **Calendars for meeting sync and research**. This one target
+is used for event sync, past meetings, and contact lookup across all three
+workflows. You can select multiple calendars. Each workflow keeps its own saved
+connection module with the same approved accounts and calendar selections.
+
+Finish installation, open the app, and press **Begin Sync**. No Mail connection
+is needed. Calendar access and the Meeting researcher must be enabled on the
+server; a successful build alone does not verify either.
 
 ## Develop
 
@@ -228,7 +236,8 @@ in their browser, so new viewers start on Today.
 The App's name is the title of its home page. Set it on the first deploy:
 
 ```shell
-ntn apps deploy --name "Perfect Meetings"
+ntn experiments enable apps
+ntn apps deploy --json --name "Perfect Meetings"
 ```
 
 ## Run on demand and debug
@@ -283,3 +292,10 @@ Notes:
   past meeting. Confirm profiles and Researched at are written, Done edits
   cause no further research, and Notes survive a retry. Build and offline
   tests cannot verify native trigger delivery or agent behavior.
+
+## Shared Calendar setup
+
+`src/connections/calendar.ts` default-exports `connections.calendar(...)` once
+for all workflows. Its single read-only `meetings` target supplies the calendars
+for sync triggers, event reads, past-meeting research, and contact lookup.
+Configure it once in the app setup page, not separately for each workflow.

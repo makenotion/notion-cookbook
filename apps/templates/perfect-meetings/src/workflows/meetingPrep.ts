@@ -12,7 +12,6 @@ import {
   type BacklogMeeting,
 } from "./lib/backlog.js"
 import {
-  prepConnections,
   prepTargets,
   runPrep,
   splitEmails,
@@ -27,7 +26,6 @@ export default workflow({
   name: "Prepare research",
   description:
     "Prepares calendar context and waits for each meeting's participant and company research before queuing its brief. Run manually to queue unresearched people and companies too.",
-  connections: prepConnections,
   triggers: ({ events }) => [
     events.notionPageCreated({ dataSource: meetings.dataSource }),
     events.notionPageUpdated({

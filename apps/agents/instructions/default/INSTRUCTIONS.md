@@ -123,7 +123,7 @@ import { database, sync } from "@notionhq/apps"
 ```
 
 The root exports `page`, `database`, `teamspace`, `customAgent`, `view`,
-`sync`, `workflow`, and `customBlock`. Workflow helpers `access`, `input`,
+`sync`, `workflow`, `connections`, and `customBlock`. Workflow helpers `access`, `input`,
 and `events`, plus workflow types such as `WorkflowContext`, are also available
 from the root.
 `sync` takes a Notion as Code data source handle. There is no standalone
@@ -131,7 +131,7 @@ from the root.
 
 Keep other imports on their existing subpaths: `Builder` from
 `@notionhq/apps/builder`, value helpers and types from their own modules,
-`connections` from `@notionhq/apps/workflow`, and `events` from
+`connections` from the package root, and `events` from
 `@notionhq/apps/events` (or use the workflow's typed trigger callback).
 Provider input and result types come from `@notionhq/apps/connections/<provider>`.
 Browser runtime and React APIs also keep their subpaths.
@@ -147,8 +147,16 @@ example or placeholder capabilities in discovered capability directories: the
 build can include and deploy them. Preserve shared configuration and
 infrastructure required by the selected capabilities.
 
-Each direct TypeScript file in these directories default-exports a declaration.
-Its filename supplies the capability key. Put capability-specific helpers in
+Default-export each workflow and sync from a direct TypeScript file in its
+capability directory; the filename is its stable key. Named workflow/sync
+exports and workflow discovery from `src/app.ts` are not supported.
+Default-export one connection per direct file in `src/connections/` and import
+it into handlers. Use provider factories such as `connections.calendar(...)`
+and `connections.mail()`. To register a connection declared elsewhere,
+re-export its default from `src/app.ts` under a stable name. Register each
+connection only once. Import and call connections directly in handlers;
+do not declare workflow-local `connections` or use `context.connections`.
+Calendar targets are flat properties, such as `calendar.meetings`. Put capability-specific helpers in
 `src/workflows/lib/` (or the matching capability directory's `lib/`) and shared
 helpers in `src/lib/`. Discovery only reads direct children, so these helpers
 are not treated as capabilities.
@@ -163,7 +171,7 @@ release that includes it. Do not continue without the full SDK guidance.
 | Area           | Where used                                                   | Template pointer                         | Full SDK skill                                               |
 | -------------- | ------------------------------------------------------------ | ---------------------------------------- | ------------------------------------------------------------ |
 | Workflow       | `src/workflows/`                                             | `.agents/skills/workflow/SKILL.md`       | `node_modules/@notionhq/apps/skills/workflow/SKILL.md`       |
-| Connections    | Workflow provider clients and triggers                       | `.agents/skills/connections/SKILL.md`    | `node_modules/@notionhq/apps/skills/connections/SKILL.md`    |
+| Connections    | `src/connections/` shared provider declarations and targets  | `.agents/skills/connections/SKILL.md`    | `node_modules/@notionhq/apps/skills/connections/SKILL.md`    |
 | Database sync  | `src/syncs/`                                                 | `.agents/skills/sync/SKILL.md`           | `node_modules/@notionhq/apps/skills/sync/SKILL.md`           |
 | Custom blocks  | `src/customBlocks/`                                          | `.agents/skills/custom-blocks/SKILL.md`  | `node_modules/@notionhq/apps/skills/custom-blocks/SKILL.md`  |
 | Notion as Code | Resources declared in modules imported by workflows or syncs | `.agents/skills/notion-as-code/SKILL.md` | `node_modules/@notionhq/apps/skills/notion-as-code/SKILL.md` |

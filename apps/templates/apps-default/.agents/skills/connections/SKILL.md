@@ -1,10 +1,15 @@
 ---
 name: connections
-description: Configure and use typed provider connections and connection-bound triggers in Notion App workflows.
+description: Declare and use shared app-level Calendar, Mail, Slack, and OAuth connections in Notion Apps.
 user-invocable: false
 ---
 
 # App connections
+
+Default-export one declaration per file in `src/connections/`, separate from
+workflows. Use provider factories such as `connections.calendar(...)` from
+`@notionhq/apps`, flat Calendar targets, and direct provider calls. Do not use
+workflow-local connections or named workflow exports.
 
 Before creating, modifying, or troubleshooting connection code, read
 `node_modules/@notionhq/apps/skills/connections/SKILL.md`.
