@@ -5,7 +5,8 @@
   "description": "Sync GitHub issues with Notion.",
   "main": "index.ts",
   "engines": {
-    "node": ">=14"
+    "node": ">=22.23.4",
+    "npm": ">=10.9.9"
   },
   "scripts": {
     "start": "ts-node index.ts"
