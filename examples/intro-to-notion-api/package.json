@@ -5,6 +5,10 @@
   "description": "Introductory examples of using Notion's public API via the Notion SDK for JavaScript.",
   "main": "index.js",
   "type": "module",
+  "engines": {
+    "node": ">=22.23.4",
+    "npm": ">=10.9.9"
+  },
   "scripts": {
     "start": "node --loader ts-node/esm",
     "exec": "node --loader ts-node/esm",
