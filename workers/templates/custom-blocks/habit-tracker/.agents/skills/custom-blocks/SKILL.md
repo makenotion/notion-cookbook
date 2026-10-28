@@ -170,8 +170,8 @@ ReactDOM.createRoot(root).render(
 For Notion styling, import `nds.css` for CSS variables and `scrollbars.css` for matching scrollbar colors.
 The SDK follows the host's theme and contrast settings. Apply the tokens in your own CSS
 to set fonts, colors, and spacing.
-Use these defaults when no design is specified. Preserve any design the user provides, and don't
-restyle existing UI to match Notion unless asked.
+Use Notion styling for a new project when the user hasn't specified a design, or when the user
+explicitly asks for Notion styling. Otherwise, preserve the existing or supplied design.
 
 `NotionCustomBlock` renders its children after initialization succeeds. Every declared data source requires a binding before initialization can complete.
 Call React SDK hooks inside this wrapper.
