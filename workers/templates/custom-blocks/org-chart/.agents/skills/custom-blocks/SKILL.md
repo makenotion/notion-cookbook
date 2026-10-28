@@ -334,18 +334,80 @@ ntn workers deploy
 
 Do not use `ntn workers exec` for a custom block. It has no `execute` handler.
 
-After deployment, insert a block instance from Notion's slash menu or use the CLI
-from the Worker root:
+After deployment, use `ntn workers customblocks make --help` to check the installed
+CLI's inputs. Run `make` from the deployed Worker root. `--key` selects the
+capability. With no target, it creates a private custom page. An ordinary page or
+block target receives a new inline instance; an existing custom page or custom
+block target is configured in place. Custom database views are not supported by
+this CLI/Public API flow.
 
-```shell
-ntn workers customblocks make --key issueBoard --target <page-id-or-url>
+### Connect an instance to data
+
+Use instance bindings when connecting one placement to the user's existing data.
+Definition defaults are shared by instances that inherit them; changing a default
+is not the normal way to configure one placement.
+
+Resolve each database to its data-source ID with
+`ntn datasources resolve <database-id>`. Read its schema with
+`ntn api v1/data_sources/<data-source-id>`.
+Match the declared data-source keys and map declared property keys to actual
+property IDs. Do not use property names as IDs or invent a mapping.
+
+The schema returns percent-encoded property IDs. Decode each ID once before using
+it in `property_ids_by_key`: `yG%5DC` becomes `yG]C`, `%5C` becomes `\`, and
+`title` stays `title`. In a JSON file, escape a decoded backslash as `\\`.
+
+If `make --help` lists `--bindings`, write `bindings.json` as an array:
+
+```json
+[
+  {
+    "key": "issues",
+    "data_source_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    "property_ids_by_key": { "title": "title" }
+  }
+]
 ```
 
-`--key` identifies the deployed block. `--target` identifies the page or block
-that receives the instance.
+Replace the example ID and mappings with the resolved values. Create an inline
+instance under the selected page:
 
-In Notion, connect each declared data source and map its properties. Check that
-the configured block renders and its main interaction works.
+```shell
+ntn workers customblocks make --key issueBoard --target <page-id-or-url> --bindings @bindings.json --json
+```
+
+Omit `--target` to create a private custom page. Preserve the returned `block_id`
+and `block_url` when present. A supplied binding array replaces the instance's
+overrides. Omit `--bindings` to preserve them; `--bindings '[]'` clears overrides
+so definition defaults apply. Existing targets accept the same definition; a
+different definition is rejected before changing bindings.
+
+If the installed CLI does not list `--bindings`, create or select the instance
+without that flag, then configure its bindings through `ntn api` as below.
+Do not report manual UI connection as required when the API can complete it.
+
+For later binding edits, prepare `update.json` containing
+`{"custom_block":{"data_sources":[...]}}` for an inline block, or
+`{"custom_page":{"data_sources":[...]}}` for a custom page. Use the same binding
+array shape as above and supply the full desired override list. These are file
+shapes, not literal payloads containing `...`.
+
+```shell
+ntn api v1/blocks/<instance-id> -X PATCH -d @update.json
+```
+
+For a custom page, use `v1/pages/<instance-id>` instead. Omit `definition_id` for a
+bindings-only edit. The API also accepts it when it matches the stored definition;
+it rejects a different definition.
+
+After saving, fetch the instance with `ntn api v1/blocks/<instance-id>` or
+`ntn api v1/pages/<instance-id>`. Check the saved definition, data source IDs, and
+property mappings.
+
+The API returns the saved mappings even when they contain unknown property IDs.
+To validate the mappings, compare every mapped ID against the decoded schema IDs
+and confirm that its property type matches the declaration. Then verify that the
+instance renders with the expected data.
 
 [Share the Worker](https://developers.notion.com/workers/guides/sharing-workers) with **Can connect** access when another workspace member must
 insert the block. **Full access** also permits Worker management and deployment.
