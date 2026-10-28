@@ -139,7 +139,7 @@ const myApi = worker.pacer("myApi", { allowedRequests: 10, intervalMs: 1000 })
 worker.sync("tasksSync", {
   database: tasks,
   schedule: "30m",
-  execute: async (state) => {
+  execute: async (state: { page: number } | undefined) => {
     await myApi.wait()
     const { items, hasMore } = await fetchTasks(state?.page ?? 1)
     return {
@@ -210,7 +210,7 @@ worker.sync("recordsSync", {
   database: records,
   mode: "replace",
   schedule: "1h",
-  execute: async (state) => {
+  execute: async (state: { page: number } | undefined) => {
     const page = state?.page ?? 1
     await myApi.wait()
     const { items, hasMore } = await fetchPage(page, 100)
@@ -260,7 +260,7 @@ worker.sync("tasksBackfill", {
   database: tasks,
   mode: "replace",
   schedule: "manual",
-  execute: async (state) => {
+  execute: async (state: { page: number } | undefined) => {
     const page = state?.page ?? 1
     await taskApi.wait()
     const { items, hasMore } = await fetchAllTasks(page, 100)
@@ -285,7 +285,7 @@ worker.sync("tasksDelta", {
   database: tasks,
   mode: "incremental",
   schedule: "5m",
-  execute: async (state) => {
+  execute: async (state: { cursor: string } | undefined) => {
     const cursor = state?.cursor
     await taskApi.wait()
     const { items, nextCursor } = await fetchTaskChanges(cursor)
