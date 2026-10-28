@@ -21,3 +21,7 @@ nnnnnnnn    nnnnnnn     nnnnnn     nnn
 ```
 
 This feature is in private alpha. Coming soon.
+
+## Collection views
+
+[Collection views](collection-views/) provides five independently selectable custom blocks in one Worker: Table, Board, Gallery, List, and Feed. All five share a mapped project database and use the public SDK for subscriptions, edits, creation, and peek requests.

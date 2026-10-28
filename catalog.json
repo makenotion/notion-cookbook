@@ -197,6 +197,25 @@
       }
     },
     {
+      "id": "collection-views",
+      "title": "Collection views custom blocks",
+      "summary": "Five editable Table, Board, Gallery, List, and Feed custom blocks sharing a mapped project database, with virtualized rendering and Stage moves.",
+      "path": "workers/templates/custom-blocks/collection-views",
+      "kind": "worker-custom-block",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "notion-custom-blocks"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name collection-views"
+      }
+    },
+    {
       "id": "custom",
       "title": "Hello world custom block",
       "summary": "Render a minimal Hello world view inside a Notion page with no data-source setup.",
