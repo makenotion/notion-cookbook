@@ -1,6 +1,7 @@
 import { type Config, loadConfig, log, withLock } from "./config.ts"
 import { type CallTool, CodexNotionMcp } from "./mcp.ts"
 import {
+  discardUnknownCreate,
   memoryInventory,
   memoryStatus,
   reconcileMemory,
@@ -20,9 +21,15 @@ async function main(): Promise<void> {
         console.log(JSON.stringify(result))
       })
     case "reconcile":
+      if (name && action === "--not-created" && !pageId) {
+        console.log(
+          JSON.stringify(await withLock(async () => discardUnknownCreate(name)))
+        )
+        return
+      }
       if (!name || action !== "--keep-notion" || !pageId || extra.length)
         throw new Error(
-          "usage: node scripts/main.ts reconcile <source-path> --keep-notion <page-id>"
+          "usage: node scripts/main.ts reconcile <source-path> --keep-notion <page-id> | reconcile <source-path> --not-created"
         )
       requireWorkspace(config)
       return withNotion(config, async (callTool) => {
@@ -46,7 +53,7 @@ async function main(): Promise<void> {
       return
     case undefined:
       console.log(
-        "usage: node scripts/main.ts sync | preview | verify | status | reconcile <source-path> --keep-notion <page-id>"
+        "usage: node scripts/main.ts sync | preview | verify | status | reconcile <source-path> --keep-notion <page-id> | reconcile <source-path> --not-created"
       )
       return
     default:

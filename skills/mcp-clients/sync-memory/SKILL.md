@@ -24,6 +24,10 @@ Use Node.js 22.18+ and the bundled `scripts/main.ts`, relative to this skill dir
 - `reconcile <source-path> --keep-notion <page-id>`: after explicit user approval,
   fetch and preserve that page, release the source path from future management, and
   clear its pending entry. Other paths can then sync. This sends no remote writes.
+- `reconcile <source-path> --not-created`: only for an unknown create with no known
+  page ID, after the user confirms in Notion that no page with that title and Source
+  path exists (for example, the workspace rejected it over its block limit). It
+  clears the pending entry so the next sync creates the page.
 
 Include `rollout_summaries/` and `extensions/`. Skip `.git/` and symbolic links.
 Use each file's relative path with `/` separators as its page title and mapping key.
@@ -49,9 +53,10 @@ reconciliation rather than adopting possible human edits. An unknown write outco
 also needs reconciliation before retry. Run `status` for the affected path, known
 page ID and recovery command. Inspect the page in the pinned workspace and obtain
 explicit approval before releasing it with `reconcile`. A lost create response
-requires locating the page by title and Source path first. If it cannot be
-identified or fetched, leave the pending entry intact and report the unresolved
-outcome. Never assume the write failed or reset the mapping. An unresolved entry
+requires locating the page by title and Source path first. If the user confirms no
+such page exists, use `--not-created`. Otherwise, if it cannot be identified or
+fetched, leave the pending entry intact and report the unresolved outcome. Never
+assume on your own that the write failed, and never reset the mapping. An unresolved entry
 blocks the whole sync; report the failure through the native scheduled task when
 applicable. Releasing a file allows other files to sync but leaves that file
 unsynced, which `verify` continues to report.

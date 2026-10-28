@@ -56,6 +56,8 @@ export function invoke(name, args) {
           args.parent?.page_id ||
           args.creation_mode === "draft"
       )
+      // Rejected before any page exists, like a workspace over its block limit.
+      failOnce("create-rejected")
       const pages = args.pages.map((p) => {
         assert.equal(
           p.properties.Source,

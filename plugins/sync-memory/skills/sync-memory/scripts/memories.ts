@@ -245,7 +245,7 @@ export function memoryStatus() {
       operation: pending.operation,
       pageId: pending.pageId ?? null,
       instructions:
-        "Inspect the affected page in the pinned workspace. If a create response was lost, locate the page by its title and Source path; never assume it was not created. With explicit user approval, keep that Notion page and release this source path from future sync using these command arguments. If the page cannot be identified or fetched, keep the pending entry and report the unresolved outcome.",
+        "Inspect the affected page in the pinned workspace. If a create response was lost, locate the page by its title and Source path; never assume it was not created. With explicit user approval, keep that Notion page and release this source path from future sync using these command arguments. If the user confirms in Notion that no page with this title and Source path exists, `reconcile <source-path> --not-created` clears the entry so the next sync creates it. Otherwise keep the pending entry and report the unresolved outcome.",
       command: [
         "node",
         "scripts/main.ts",
@@ -256,6 +256,22 @@ export function memoryStatus() {
       ],
     })),
   }
+}
+
+// The user has confirmed in Notion that an unknown create left no page, for example
+// because the workspace rejected it. Clearing the entry lets the next sync create the
+// page; an update or a create with a known page ID must use --keep-notion instead.
+export function discardUnknownCreate(name: string) {
+  const state = loadState()
+  const pending = state.pending?.[name]
+  if (!pending) throw new Error(`No pending write for ${name}`)
+  if (pending.operation !== "create" || pending.pageId)
+    throw new Error(
+      `${name} has a known page; inspect it and use --keep-notion ${pending.pageId ?? "<page-id>"}`
+    )
+  delete state.pending![name]
+  saveState(state)
+  return { path: name, discarded: true }
 }
 
 // Recovery preserves the reviewed remote page and retires this mapping; it never

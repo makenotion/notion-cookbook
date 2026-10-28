@@ -618,3 +618,53 @@ for (const operation of ["create", "update"]) {
     )
   })
 }
+
+test("a rejected create is recovered with --not-created and then created once", async (t) => {
+  const f = fixture(t)
+  f.seed()
+  const rejected = await f.exec(["sync"], {
+    FIXTURE_FAIL_ONCE: "create-rejected",
+  })
+  assert.equal(rejected.code, 1)
+  assert.match(rejected.stderr, /Unknown create outcome/)
+  const [recovery] = JSON.parse((await f.exec(["status"])).stdout).recovery
+  assert.equal(recovery.pageId, null)
+  assert.match(recovery.instructions, /--not-created/)
+  const name = String(recovery.path)
+  assert.equal(
+    f.pages().filter((page) => page.title === name).length,
+    0,
+    "the rejected create left no page"
+  )
+  const cleared = await f.exec(["reconcile", name, "--not-created"])
+  assert.equal(cleared.code, 0, cleared.stderr)
+  assert.deepEqual(JSON.parse(cleared.stdout), { path: name, discarded: true })
+  const retried = await f.exec(["sync"])
+  assert.equal(retried.code, 0, retried.stderr)
+  assert.equal(f.pages().filter((page) => page.title === name).length, 1)
+  assert.equal((await f.exec(["verify"])).code, 0)
+})
+
+test("--not-created refuses an update, whose page is known", async (t) => {
+  const f = fixture(t)
+  f.seed()
+  assert.equal((await f.exec(["sync"])).code, 0)
+  fs.writeFileSync(
+    path.join(f.home, "memories_v2/memory_summary.md"),
+    "updated source"
+  )
+  assert.equal(
+    (await f.exec(["sync"], { FIXTURE_FAIL_ONCE: "update-response" })).code,
+    1
+  )
+  const [recovery] = JSON.parse((await f.exec(["status"])).stdout).recovery
+  const statePath = path.join(f.home, "notion-memory/state.json")
+  const before = fs.readFileSync(statePath, "utf8")
+  const refused = await f.exec([
+    "reconcile",
+    String(recovery.path),
+    "--not-created",
+  ])
+  assert.equal(refused.code, 1)
+  assert.equal(fs.readFileSync(statePath, "utf8"), before)
+})
