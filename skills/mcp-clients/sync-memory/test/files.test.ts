@@ -504,3 +504,100 @@ test("deleted or malformed pending readback is never confirmed", async (t) => {
     calls
   )
 })
+
+for (const operation of ["create", "update"]) {
+  test(`status guides safe recovery of an unknown ${operation} without retrying or overwriting`, async (t) => {
+    const f = fixture(t)
+    f.seed()
+    const name = operation === "create" ? "MEMORY.md" : "memory_summary.md"
+    const source = path.join(f.home, "memories_v2", name)
+    if (operation === "update") {
+      assert.equal((await f.exec(["sync"])).code, 0)
+      fs.writeFileSync(source, "changed source")
+    }
+    assert.equal(
+      (await f.exec(["sync"], { FIXTURE_FAIL_ONCE: `${operation}-response` }))
+        .code,
+      1
+    )
+    const callsBeforeStatus = f.calls().length
+    const status = await f.exec(["status"])
+    assert.equal(status.code, 0, status.stderr)
+    const [recovery] = JSON.parse(status.stdout).recovery
+    assert.equal(recovery.path, name)
+    assert.equal(recovery.phase, "unknown")
+    assert.deepEqual(recovery.command.slice(0, 5), [
+      "node",
+      "scripts/main.ts",
+      "reconcile",
+      name,
+      "--keep-notion",
+    ])
+    assert.equal(f.calls().length, callsBeforeStatus, "status is local only")
+    const pages = f.pages()
+    const page = pages.find((entry) => entry.title === name)
+    assert.ok(page)
+    assert.equal(typeof page.id, "string")
+    page.content = "Human content kept during recovery"
+    f.savePages(pages)
+    const statePath = path.join(f.home, "notion-memory/state.json")
+    const before = fs.readFileSync(statePath, "utf8")
+    const args = ["reconcile", name, "--keep-notion", String(page.id)]
+    const failed = await f.exec(args, { FIXTURE_READBACK: "malformed" })
+    assert.equal(failed.code, 1)
+    assert.equal(fs.readFileSync(statePath, "utf8"), before)
+    fs.writeFileSync(
+      path.join(f.home, "notion-memory.json"),
+      JSON.stringify({ expectedWorkspaceId: "wrong-workspace" })
+    )
+    assert.equal((await f.exec(args)).code, 1)
+    assert.equal(fs.readFileSync(statePath, "utf8"), before)
+    fs.writeFileSync(
+      path.join(f.home, "notion-memory.json"),
+      JSON.stringify({ expectedWorkspaceId: "synthetic-workspace" })
+    )
+    if (operation === "update") {
+      assert.equal(
+        (await f.exec(["reconcile", name, "--keep-notion", "wrong-id"])).code,
+        1
+      )
+      assert.equal(fs.readFileSync(statePath, "utf8"), before)
+    }
+    const writes = f
+      .calls()
+      .filter((c) => c === "create-pages" || c === "update-page").length
+    const recovered = await f.exec(args)
+    assert.equal(recovered.code, 0, recovered.stderr)
+    assert.equal(JSON.parse(recovered.stdout).released, true)
+    assert.equal(
+      f.calls().filter((c) => c === "create-pages" || c === "update-page")
+        .length,
+      writes
+    )
+    assert.deepEqual(f.pages(), pages)
+    assert.equal(
+      (await f.exec(args)).code,
+      1,
+      "an absent pending write cannot be released"
+    )
+    fs.writeFileSync(
+      source,
+      "later local change must not replace the kept page"
+    )
+    fs.writeFileSync(
+      path.join(f.home, "memories_v2/new.md"),
+      "new independent memory"
+    )
+    const resumed = await f.exec(["sync"])
+    assert.equal(resumed.code, 0, resumed.stderr)
+    assert.equal(JSON.parse(resumed.stdout).changedInNotion, 1)
+    assert.equal(f.pages().find((p) => p.id === page.id)?.content, page.content)
+    assert.ok(f.pages().some((p) => p.title === "new.md"))
+    assert.deepEqual(JSON.parse((await f.exec(["status"])).stdout).recovery, [])
+    assert.equal(
+      (await f.exec(["verify"])).code,
+      1,
+      "a released file is not verified as synced"
+    )
+  })
+}

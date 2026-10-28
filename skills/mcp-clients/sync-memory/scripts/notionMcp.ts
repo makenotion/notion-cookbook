@@ -10,6 +10,7 @@ import path from "node:path"
 import { DATA_DIR } from "./config.ts"
 import {
   type CallTool,
+  isObject,
   notionTools,
   squash,
   type ToolResult,
@@ -49,7 +50,10 @@ export class NotionMcpHttp {
     this.tokens = tokens
   }
 
-  static async connect(mcpUrl: string): Promise<NotionMcpHttp> {
+  static async connect(
+    mcpUrl: string,
+    expectedWorkspaceId: string | undefined
+  ): Promise<NotionMcpHttp> {
     const tokens = readTokens()
     if (!tokens || tokens.mcpUrl !== mcpUrl)
       throw new Error(
@@ -63,6 +67,17 @@ export class NotionMcpHttp {
     })
     await mcp.post({ jsonrpc: "2.0", method: "notifications/initialized" })
     mcp.tools = notionTools({ name: "notion", tools: await mcp.listTools() })
+    if (expectedWorkspaceId) {
+      const self = await mcp.callTool("get-self", {})
+      if (
+        !isObject(self) ||
+        !isObject(self.workspace) ||
+        self.workspace.id !== expectedWorkspaceId
+      )
+        throw new Error(
+          "Notion workspace does not match expectedWorkspaceId; refusing sync"
+        )
+    }
     return mcp
   }
 

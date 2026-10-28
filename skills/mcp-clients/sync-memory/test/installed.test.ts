@@ -83,7 +83,7 @@ test("missing Node is visible at the manual command boundary", async (t) => {
 
 test("an explicit destination never falls back and workspace mismatch writes nothing", async (t) => {
   for (const config of [
-    { mcpServer: "missing-local" },
+    { mcpServer: "missing-local", expectedWorkspaceId: "synthetic-workspace" },
     { mcpServer: "notion", expectedWorkspaceId: "expected-local" },
   ]) {
     const f = fixture(t)
@@ -95,7 +95,48 @@ test("an explicit destination never falls back and workspace mismatch writes not
     const result = await f.exec(["sync"])
     assert.equal(result.code, 1)
     assert.deepEqual(f.pages(), [])
+    assert.equal(
+      fs.existsSync(path.join(f.home, "notion-memory/state.json")),
+      false
+    )
   }
+})
+
+test("sync requires a pinned workspace before starting a connection", async (t) => {
+  const f = fixture(t)
+  f.seed()
+  for (const config of [{}, { expectedWorkspaceId: "   " }]) {
+    fs.writeFileSync(
+      path.join(f.home, "notion-memory.json"),
+      JSON.stringify(config)
+    )
+    const result = await f.exec(["sync"])
+    assert.equal(result.code, 1)
+    assert.match(result.stderr, /Set expectedWorkspaceId/)
+  }
+  assert.deepEqual(f.calls(), [])
+  assert.deepEqual(f.pages(), [])
+})
+
+test("multiple Notion connections require explicit selection even with a workspace pin", async (t) => {
+  const f = fixture(t)
+  f.seed()
+  const ambiguous = await f.exec(["sync"], { FIXTURE_MULTIPLE_SERVERS: "1" })
+  assert.equal(ambiguous.code, 1)
+  assert.match(ambiguous.stderr, /Multiple Notion connections/)
+  assert.deepEqual(f.pages(), [])
+  assert.ok(!f.calls().includes("get-self"))
+  fs.writeFileSync(
+    path.join(f.home, "notion-memory.json"),
+    JSON.stringify({
+      mcpServer: "notion",
+      expectedWorkspaceId: "synthetic-workspace",
+    })
+  )
+  const selected = await f.exec(["sync"], { FIXTURE_MULTIPLE_SERVERS: "1" })
+  assert.equal(selected.code, 0, selected.stderr)
+  assert.equal(f.pages().length, 2)
+  assert.ok(f.calls().indexOf("get-self") < f.calls().indexOf("create-pages"))
 })
 
 test("server requests cannot consume client responses with the same ID", async (t) => {

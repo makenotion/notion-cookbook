@@ -113,7 +113,7 @@ export class CodexNotionMcp {
 
   private async initialize(): Promise<void> {
     await this.rpc("initialize", {
-      clientInfo: { name: "sync-memory", version: "0.4.6" },
+      clientInfo: { name: "sync-memory", version: "0.4.7" },
     })
     this.notify("initialized")
   }
@@ -187,7 +187,13 @@ export class CodexNotionMcp {
     })
     const match = preferred
       ? candidates.find((c) => c.server.name === preferred)
-      : (candidates.find((c) => c.server.name === "notion") ?? candidates[0])
+      : candidates.length === 1
+        ? candidates[0]
+        : undefined
+    if (!preferred && candidates.length > 1)
+      throw new Error(
+        `Multiple Notion connections found (${candidates.map((c) => c.server.name).join(", ")}); set mcpServer in the approved config. No connection was selected.`
+      )
     if (!match) {
       const names = (status.data ?? [])
         .map((s) => `${s.name} (${s.runtimeStatus})`)
@@ -269,6 +275,6 @@ export function squash(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]/g, "")
 }
 
-function isObject(value: unknown): value is Record<string, unknown> {
+export function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value)
 }

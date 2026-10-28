@@ -120,7 +120,10 @@ The runtime test checks discovery of the skill through `skills/list`.
 
 The bundled server uses Notion MCP. Complete Codex's normal OAuth login. If using
 an already configured connection, set `mcpServer` in `~/.codex/notion-memory.json`.
-For local imports, pin `expectedWorkspaceId` as well:
+Before any import, confirm the approved workspace with Notion get-self and pin
+`expectedWorkspaceId`. Both `sync` and `reconcile` require the pin, including manual
+invocations, and validate it before accessing memory pages. When more than one Notion connection
+is available, `mcpServer` is also required; there is no first-server fallback:
 
 ```json
 {
@@ -184,6 +187,7 @@ node scripts/main.ts preview
 node scripts/main.ts sync
 node scripts/main.ts verify
 node scripts/main.ts status
+node scripts/main.ts reconcile "rollout_summaries/session.md" --keep-notion <page-id>
 ```
 
 `preview` reads local files and their filesystem timestamps only. Its result has
@@ -202,23 +206,47 @@ edit. Recovery requires the page to match the submitted fingerprint; if it diffe
 including because Notion normalized Markdown, synchronization stops for reconciliation
 instead of adopting possible human edits. A successful immediate readback accepts
 Notion's normalized representation. If the write itself has an unknown outcome,
-synchronization stops with an actionable error. It does not blindly retry the write. `verify` rejects unresolved
+synchronization stops and directs the user to `status`. It does not blindly retry the write. `verify` rejects unresolved
 writes and checks saved readback hashes. It does not prove that Notion retained every original source
 character.
 
+### Recover a pending write
+
+An unresolved write stops the whole import so a partial batch cannot look like a
+complete sync. The native scheduled task receives a failing command; its saved
+notification settings control how the user is notified. No hook or silent worker
+is involved.
+
+1. Run `status` with the same config and mapping. It shows each pending source path,
+   operation, phase, known page ID, and recovery command arguments without connecting.
+2. Inspect the affected page in the pinned workspace. If a create response was
+   lost, find the page by its title and Source path. A timeout does not prove the
+   write failed. If the page cannot be identified or fetched, preserve the pending
+   entry and report the unresolved outcome.
+3. With explicit user approval to keep the Notion page and stop managing that
+   source path, run `reconcile <source-path> --keep-notion <page-id>`.
+
+`reconcile` fetches the page, marks the path released, and clears only its pending
+entry under the same lock. A known pending page ID must match. A workspace mismatch
+or failed read leaves the state intact. It never creates, edits, or deletes a Notion
+page, retries an unknown write, or adopts human content as a writable baseline.
+Other files can sync afterward. The released file remains unsynced and `verify`
+continues to report it; recovery does not mean the file was successfully copied.
+There is no reset-and-retry command for an unlocated page.
+
 ## Processing points and files
 
-| Processing point                                               | Implementation                                           |
-| -------------------------------------------------------------- | -------------------------------------------------------- |
-| Plugin registration and MCP endpoint                           | `.codex-plugin/plugin.json`, `.mcp.json`                 |
-| Manual command and lazy connection lifetime                    | `scripts/main.ts`                                        |
-| Recursively read current memory Markdown files unchanged       | `scripts/codex.ts` — `codexMemoryInventory`              |
-| One file / one page, attribution, update protection, readback  | `scripts/memories.ts` — `syncMemories`, `verifyMemories` |
-| Connection, OAuth-owned transport, workspace check, RPC errors | `scripts/mcp.ts`                                         |
-| Settings, file mapping, atomic save, logs                      | `scripts/config.ts`                                      |
-| Cross-process ownership for imports                            | `scripts/ownership.ts`                                   |
-| On-demand agent instruction                                    | `SKILL.md`                                               |
-| Generate the isolated plugin artifact                          | `scripts/build-plugin.mjs`                               |
+| Processing point                                               | Implementation                                                              |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Plugin registration and MCP endpoint                           | `.codex-plugin/plugin.json`, `.mcp.json`                                    |
+| Manual command and lazy connection lifetime                    | `scripts/main.ts`                                                           |
+| Recursively read current memory Markdown files unchanged       | `scripts/codex.ts` — `codexMemoryInventory`                                 |
+| One file / one page, attribution, update protection, readback  | `scripts/memories.ts` — `syncMemories`, `verifyMemories`, `reconcileMemory` |
+| Connection, OAuth-owned transport, workspace check, RPC errors | `scripts/mcp.ts`                                                            |
+| Settings, file mapping, atomic save, logs                      | `scripts/config.ts`                                                         |
+| Cross-process ownership for imports                            | `scripts/ownership.ts`                                                      |
+| On-demand agent instruction                                    | `SKILL.md`                                                                  |
+| Generate the isolated plugin artifact                          | `scripts/build-plugin.mjs`                                                  |
 
 Claude Code loads only a `.mcp.json` at its plugin root, so the bundled skill's
 `.mcp.json` stays Codex-only and adds no unauthenticated Notion server
@@ -265,6 +293,10 @@ cd notion-cookbook/skills/mcp-clients/sync-memory
 NOTION_MEMORY_AGENT=claude node scripts/main.ts login
 NOTION_MEMORY_AGENT=claude node scripts/main.ts preview
 ```
+
+As in Codex, `sync` and `reconcile` refuse to run until the approved workspace ID
+is pinned as `expectedWorkspaceId`, here in `~/.claude/notion-memory.json`, and
+check it with get-self before touching memory pages.
 
 Then ask Claude Code to sync your memories, or run
 `NOTION_MEMORY_AGENT=claude node scripts/main.ts sync` yourself.

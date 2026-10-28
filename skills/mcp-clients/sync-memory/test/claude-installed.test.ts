@@ -132,6 +132,28 @@ test("missing memories or sign-in connect to nothing", async (t) => {
   assert.deepEqual(signedOut.calls(), [])
 })
 
+test("Claude Code sync requires a pinned workspace and refuses a mismatch", async (t) => {
+  const f = await claudeFixture(t)
+  f.signIn()
+  f.seed()
+  const config = path.join(f.home, "notion-memory.json")
+  fs.writeFileSync(config, JSON.stringify({}))
+  let result = await f.exec(["sync"])
+  assert.equal(result.code, 1)
+  assert.match(result.stderr, /Set expectedWorkspaceId/)
+  assert.deepEqual(f.calls(), [])
+
+  fs.writeFileSync(config, JSON.stringify({ expectedWorkspaceId: "other" }))
+  result = await f.exec(["sync"])
+  assert.equal(result.code, 1)
+  assert.match(result.stderr, /does not match expectedWorkspaceId/)
+  assert.deepEqual(f.pages(), [])
+  assert.equal(
+    fs.existsSync(path.join(f.home, "notion-memory/state.json")),
+    false
+  )
+})
+
 test("expired sign-in, tool errors, and an unreachable server fail without writing", async (t) => {
   const expired = await claudeFixture(t, "expired")
   expired.signIn()

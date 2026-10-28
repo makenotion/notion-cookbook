@@ -17,6 +17,10 @@ export async function claudeFixture(t: TestContext, failure = "") {
   const project = path.join(root, "work")
   fs.mkdirSync(home)
   fs.mkdirSync(project)
+  fs.writeFileSync(
+    path.join(home, "notion-memory.json"),
+    JSON.stringify({ expectedWorkspaceId: "synthetic-workspace" })
+  )
   // The same built plugin the Codex harness installs.
   buildPlugin(installed)
   const skill = path.join(installed, "skills/sync-memory")

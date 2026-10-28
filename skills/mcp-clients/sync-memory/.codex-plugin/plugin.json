@@ -1,6 +1,6 @@
 {
   "name": "sync-memory",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "description": "Copy local memory Markdown into Notion Memories. Supports Codex memories; the same skill installs into Claude Code.",
   "skills": "./skills/",
   "mcpServers": "./skills/sync-memory/.mcp.json",

@@ -131,13 +131,16 @@ test("signs in with PKCE, maps tool names, and refreshes an expired token", asyn
   const notion = await fakeNotionServer()
   try {
     const mcpUrl = `${notion.base}/mcp`
-    await assert.rejects(NotionMcpHttp.connect(mcpUrl), /not signed in/)
+    await assert.rejects(
+      NotionMcpHttp.connect(mcpUrl, undefined),
+      /not signed in/
+    )
 
     // The test follows the authorize redirect instead of opening a browser.
     await login(mcpUrl, (url) => void fetch(url))
     assert.equal(fs.statSync(TOKEN_FILE).mode & 0o777, 0o600)
 
-    const mcp = await NotionMcpHttp.connect(mcpUrl)
+    const mcp = await NotionMcpHttp.connect(mcpUrl, undefined)
     // Logical tool names map to the hosted server's `notion-` names.
     assert.deepEqual(await mcp.callTool("get-self", {}), {
       tool: "notion-get-self",

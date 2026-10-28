@@ -54,6 +54,8 @@ for await (const line of readline.createInterface({ input: process.stdin })) {
                 },
               ],
       }
+      if (process.env.FIXTURE_MULTIPLE_SERVERS && result.data.length)
+        result.data.push({ ...result.data[0], name: "notion-personal" })
       break
     case "mcpServer/tool/call":
       result = toolResult(request.params.tool, request.params.arguments)

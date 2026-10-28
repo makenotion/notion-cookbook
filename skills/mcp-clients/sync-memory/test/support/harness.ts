@@ -63,6 +63,10 @@ export function fixture(t: TestContext) {
   const installed = path.join(root, "installed plugin")
   const installedSkill = path.join(installed, "skills/sync-memory")
   fs.mkdirSync(home)
+  fs.writeFileSync(
+    path.join(home, "notion-memory.json"),
+    JSON.stringify({ expectedWorkspaceId: "synthetic-workspace" })
+  )
   buildPlugin(installed)
   fs.chmodSync(path.join(support, "fake-codex.mjs"), 0o755)
   const env: NodeJS.ProcessEnv = {

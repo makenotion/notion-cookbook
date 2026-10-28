@@ -1,6 +1,6 @@
 {
   "name": "sync-memory",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "description": "Copy the memories Claude Code saves about you into Notion Memories, through Notion MCP.",
   "author": {
     "name": "Notion"

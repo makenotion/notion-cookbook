@@ -33,7 +33,10 @@ export function invoke(name, args) {
   }
   switch (tool) {
     case "get-self":
-      return { user: { name: "Casey Synthetic" } }
+      return {
+        user: { name: "Casey Synthetic" },
+        workspace: { id: "synthetic-workspace" },
+      }
     case "fetch": {
       if (args.id === "memory")
         return { text: `<data-source url="${collection}">` }
