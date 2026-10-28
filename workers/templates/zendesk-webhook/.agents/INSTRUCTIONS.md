@@ -281,14 +281,19 @@ worker.sync("tasksBackfill", {
 })
 
 // Delta: fetches recent changes, runs every 5 minutes.
+type DeltaState = { checkpoint?: string; pageCursor?: string }
+
 worker.sync("tasksDelta", {
   database: tasks,
   mode: "incremental",
   schedule: "5m",
-  execute: async (state: { cursor: string } | undefined) => {
-    const cursor = state?.cursor
+  execute: async (state: DeltaState | undefined) => {
     await taskApi.wait()
-    const { items, nextCursor } = await fetchTaskChanges(cursor)
+    const { items, nextPageCursor, nextCheckpoint } = await fetchTaskChanges(
+      state?.checkpoint,
+      state?.pageCursor
+    )
+    const hasMore = nextPageCursor !== undefined
     return {
       changes: items.map((item) => ({
         type: "upsert" as const,
@@ -299,12 +304,21 @@ worker.sync("tasksDelta", {
           Status: Builder.select(item.status),
         },
       })),
-      hasMore: Boolean(nextCursor),
-      nextState: nextCursor ? { cursor: nextCursor } : undefined,
+      hasMore,
+      nextState: {
+        checkpoint: hasMore ? state?.checkpoint : nextCheckpoint,
+        pageCursor: nextPageCursor,
+      },
     }
   },
 })
 ```
+
+`fetchTaskChanges(checkpoint, pageCursor)` is an API adapter. It must return
+`nextPageCursor` for another page in the same change window, or `undefined` when
+the cycle is complete. Its `nextCheckpoint` must cover only the changes fetched
+in that cycle. Keep the old checkpoint while paginating, then save
+`nextCheckpoint` on the final page so the next scheduled cycle resumes from it.
 
 #### Pagination
 

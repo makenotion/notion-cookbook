@@ -175,11 +175,15 @@ const records = worker.database("records", {
   },
 })
 
+type DeltaState = { checkpoint?: string; pageCursor?: string }
+
 worker.sync("incrementalSync", {
   database: records,
   mode: "incremental",
-  execute: async (state: { cursor: string } | undefined) => {
-    const { upserts, deletes, nextCursor } = await fetchChanges(state?.cursor)
+  execute: async (state: DeltaState | undefined) => {
+    const { upserts, deletes, nextPageCursor, nextCheckpoint } =
+      await fetchChanges(state?.checkpoint, state?.pageCursor)
+    const hasMore = nextPageCursor !== undefined
     return {
       changes: [
         ...upserts.map((item) => ({
@@ -192,12 +196,21 @@ worker.sync("incrementalSync", {
         })),
         ...deletes.map((id) => ({ type: "delete" as const, key: id })),
       ],
-      hasMore: Boolean(nextCursor),
-      nextState: nextCursor ? { cursor: nextCursor } : undefined,
+      hasMore,
+      nextState: {
+        checkpoint: hasMore ? state?.checkpoint : nextCheckpoint,
+        pageCursor: nextPageCursor,
+      },
     }
   },
 })
 ```
+
+`fetchChanges(checkpoint, pageCursor)` is an API adapter. It must return
+`nextPageCursor` for another page in the same change window, or `undefined` when
+the cycle is complete. Its `nextCheckpoint` must cover only the changes fetched
+in that cycle. Keep the old checkpoint while paginating, then save
+`nextCheckpoint` on the final page so the next scheduled cycle resumes from it.
 
 #### Relations
 

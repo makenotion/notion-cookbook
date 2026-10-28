@@ -255,9 +255,13 @@ worker.sync("teamsSync", {
 worker.sync("eventsSync", {
   database: events,
   mode: "incremental",
-  execute: async (state) => {
+  execute: async (
+    state: { checkpoint?: string; pageCursor?: string } | undefined
+  ) => {
     await myApi.wait()
-    const { upserts, deletes, nextCursor } = await fetchChanges(state?.cursor)
+    const { upserts, deletes, nextPageCursor, nextCheckpoint } =
+      await fetchChanges(state?.checkpoint, state?.pageCursor)
+    const hasMore = nextPageCursor !== undefined
     return {
       changes: [
         ...upserts.map((item) => ({
@@ -270,12 +274,21 @@ worker.sync("eventsSync", {
         })),
         ...deletes.map((id) => ({ type: "delete" as const, key: id })),
       ],
-      hasMore: Boolean(nextCursor),
-      nextState: nextCursor ? { cursor: nextCursor } : undefined,
+      hasMore,
+      nextState: {
+        checkpoint: hasMore ? state?.checkpoint : nextCheckpoint,
+        pageCursor: nextPageCursor,
+      },
     }
   },
 })
 ```
+
+`fetchChanges(checkpoint, pageCursor)` is an API adapter. It must return
+`nextPageCursor` for another page in the same change window, or `undefined` when
+the cycle is complete. Its `nextCheckpoint` must cover only the changes fetched
+in that cycle. Keep the old checkpoint while paginating, then save
+`nextCheckpoint` on the final page so the next scheduled cycle resumes from it.
 
 Use `replace` for smaller datasets (<1k records). Use `incremental` for larger datasets or when the API supports change tracking.
 
