@@ -5,7 +5,9 @@
   "context": {
     "outcomes": [
       "Codex v2 memory_summary.md is absent but rollout Markdown exists",
-      "Notion tool request failed after earlier successful writes"
+      "Notion tool request failed after earlier successful writes",
+      "Write response lost with a pending create and no page ID",
+      "More than one Notion connection is configured or expectedWorkspaceId is absent"
     ]
   },
   "success_criteria": [
@@ -13,6 +15,9 @@
     "Reports a tool failure and any known partial progress instead of claiming complete synchronization.",
     "Does not blindly retry ambiguous writes or bypass the configured workspace and authentication boundary.",
     "Distinguishes one-time import approval from recurring-job approval and does not claim that installing the plugin starts automatic synchronization.",
-    "An approved recurring local memory import reuses Sync Memory through the native local scheduler and the same mapping, rather than rewriting memory or creating duplicate tasks."
+    "An approved recurring local memory import reuses Sync Memory through the native local scheduler and the same mapping, rather than rewriting memory or creating duplicate tasks.",
+    "Pins the approved workspace before any sync and selects mcpServer explicitly when connections are ambiguous.",
+    "Uses status to identify a pending write; only with explicit user approval releases a located page using reconcile --keep-notion, preserves its contents, and reports that the released file remains unsynced.",
+    "If the affected page cannot be located or fetched, preserves the journal and reports the unresolved failure rather than clearing state or retrying the mutation."
   ]
 }

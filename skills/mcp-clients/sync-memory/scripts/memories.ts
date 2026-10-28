@@ -100,6 +100,7 @@ export async function syncMemories(call: CallTool) {
     unchanged: 0,
     changedInNotion: 0,
   }
+  let destinationChecked = false
   for (const file of files) {
     const previous = state.files[file.name]
     if (previous?.released) {
@@ -112,6 +113,12 @@ export async function syncMemories(call: CallTool) {
     ) {
       result.unchanged++
       continue
+    }
+    // Finish connection selection and workspace validation before journaling a
+    // mutation; a setup failure is not an unknown remote write.
+    if (!destinationChecked) {
+      await call("get-self", {})
+      destinationChecked = true
     }
     let pageId: string
     if (previous) {
@@ -171,7 +178,7 @@ export async function syncMemories(call: CallTool) {
       }
     } catch (error) {
       throw new Error(
-        `Unknown ${previous ? "update" : "create"} outcome for ${file.name}${previous ? ` (page ${previous.pageId})` : ""}; reconcile the remote page and state.json before retrying. ${error instanceof Error ? error.message : String(error)}`,
+        `Unknown ${previous ? "update" : "create"} outcome for ${file.name}${previous ? ` (page ${previous.pageId})` : ""}; run status for the reconcile command and instructions. No write will be retried. ${error instanceof Error ? error.message : String(error)}`,
         { cause: error }
       )
     }
@@ -198,7 +205,7 @@ async function resolvePending(call: CallTool, state: State, recovering = true) {
   for (const [name, pending] of entries) {
     if (pending.phase === "unknown")
       throw new Error(
-        `Unknown ${pending.operation} outcome for ${name}${pending.pageId ? ` (page ${pending.pageId})` : ""}; reconcile the remote page and state.json before retrying. No write was retried.`
+        `Unknown ${pending.operation} outcome for ${name}${pending.pageId ? ` (page ${pending.pageId})` : ""}; run status for the reconcile command and instructions. No write was retried.`
       )
   }
   for (const [name, pending] of entries) {
@@ -206,11 +213,11 @@ async function resolvePending(call: CallTool, state: State, recovering = true) {
     const page = await snapshot(call, pending.pageId)
     if (page.deleted)
       throw new Error(
-        `Pending readback page deleted: ${name} (${pending.pageId})`
+        `Pending readback page deleted: ${name} (${pending.pageId}); run status for the reconcile command and instructions.`
       )
     if (recovering && page.hash !== pending.expectedPageHash)
       throw new Error(
-        `Pending readback differs from the submitted page: ${name} (${pending.pageId}); reconcile the remote page and state.json before retrying. No write was retried.`
+        `Pending readback differs from the submitted page: ${name} (${pending.pageId}); run status for the reconcile command and instructions. No write was retried.`
       )
     state.files[name] = {
       pageId: pending.pageId,
@@ -221,6 +228,54 @@ async function resolvePending(call: CallTool, state: State, recovering = true) {
     delete state.pending![name]
     saveState(state)
   }
+}
+
+export function memoryStatus() {
+  const state = loadState()
+  return {
+    ...state,
+    recovery: Object.entries(state.pending ?? {}).map(([name, pending]) => ({
+      path: name,
+      phase: pending.phase,
+      operation: pending.operation,
+      pageId: pending.pageId ?? null,
+      instructions:
+        "Inspect the affected page in the pinned workspace. If a create response was lost, locate the page by its title and Source path; never assume it was not created. With explicit user approval, keep that Notion page and release this source path from future sync using these command arguments. If the page cannot be identified or fetched, keep the pending entry and report the unresolved outcome.",
+      command: [
+        "node",
+        "scripts/main.ts",
+        "reconcile",
+        name,
+        "--keep-notion",
+        pending.pageId ?? "<confirmed-page-id>",
+      ],
+    })),
+  }
+}
+
+// Recovery preserves the reviewed remote page and retires this mapping; it never
+// adopts possibly edited content as a new baseline or retries an unknown write.
+export async function reconcileMemory(
+  call: CallTool,
+  name: string,
+  pageId: string
+) {
+  const state = loadState()
+  const pending = state.pending?.[name]
+  if (!pending) throw new Error(`No pending write for ${name}`)
+  if (pending.pageId && pending.pageId !== pageId)
+    throw new Error(`Pending page ID for ${name} is ${pending.pageId}`)
+  const page = await snapshot(call, pageId)
+  state.files[name] = {
+    pageId,
+    hash: pending.hash,
+    metadataHash: pending.metadataHash,
+    pageHash: page.hash,
+    released: true,
+  }
+  delete state.pending![name]
+  saveState(state)
+  return { path: name, pageId, released: true }
 }
 
 export async function verifyMemories(call: CallTool) {

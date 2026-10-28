@@ -20,7 +20,10 @@ Use Node.js 22.18+ and the bundled `scripts/main.ts`, relative to this skill dir
 - `sync`: recursively copy every regular `*.md` file under `memories_v2/`, one file per page.
 - `preview`: show the source files without connecting to Notion.
 - `verify`: check current source hashes and managed Notion page readbacks.
-- `status`: show the local file-to-page mapping.
+- `status`: show the local mapping and pending-write recovery instructions.
+- `reconcile <source-path> --keep-notion <page-id>`: after explicit user approval,
+  fetch and preserve that page, release the source path from future management, and
+  clear its pending entry. Other paths can then sync. This sends no remote writes.
 
 Include `rollout_summaries/` and `extensions/`. Skip `.git/` and symbolic links.
 Use each file's relative path with `/` separators as its page title and mapping key.
@@ -43,10 +46,21 @@ Notion may normalize imported Markdown. Verification checks saved page readbacks
 not byte-identical export. Confirmed writes with a pending readback resume by
 reading the same page. If its submitted fingerprint no longer matches, stop for
 reconciliation rather than adopting possible human edits. An unknown write outcome
-also needs reconciliation before retry.
+also needs reconciliation before retry. Run `status` for the affected path, known
+page ID and recovery command. Inspect the page in the pinned workspace and obtain
+explicit approval before releasing it with `reconcile`. A lost create response
+requires locating the page by title and Source path first. If it cannot be
+identified or fetched, leave the pending entry intact and report the unresolved
+outcome. Never assume the write failed or reset the mapping. An unresolved entry
+blocks the whole sync; report the failure through the native scheduled task when
+applicable. Releasing a file allows other files to sync but leaves that file
+unsynced, which `verify` continues to report.
 
-Use the configured Codex-owned MCP connection and pin the intended workspace for
-local-only imports. If authentication or a tool fails, stop that operation and
+Before any import, use Notion get-self to confirm the approved workspace and pin
+its ID as `expectedWorkspaceId` in the config. The `sync` and `reconcile` commands
+require this setting and validate it before accessing memory pages. When multiple Notion
+connections are available, set `mcpServer` explicitly; there is no first-server
+fallback. If authentication or a tool fails, stop that operation and
 report it. Use the normal login flow when authorized. Keep source files untouched.
 
 ## Recurring sync
