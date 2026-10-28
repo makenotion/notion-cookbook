@@ -1,8 +1,6 @@
 import "@notionhq/custom-blocks/nds.css"
-import {
-  NotionCustomBlock,
-  NotionTokenScope,
-} from "@notionhq/custom-blocks/react"
+import "@notionhq/custom-blocks/scrollbars.css"
+import { NotionCustomBlock } from "@notionhq/custom-blocks/react"
 import ReactDOM from "react-dom/client"
 import "./index.css"
 
@@ -42,8 +40,6 @@ if (!root) throw new Error("Missing #root element")
 
 ReactDOM.createRoot(root).render(
   <NotionCustomBlock>
-    <NotionTokenScope>
-      <App />
-    </NotionTokenScope>
+    <App />
   </NotionCustomBlock>
 )

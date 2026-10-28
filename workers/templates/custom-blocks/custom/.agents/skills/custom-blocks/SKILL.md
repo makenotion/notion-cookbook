@@ -148,10 +148,8 @@ In `blocks/<key>/src/index.tsx`, wrap the React app in `NotionCustomBlock`.
 
 ```tsx
 import "@notionhq/custom-blocks/nds.css"
-import {
-  NotionCustomBlock,
-  NotionTokenScope,
-} from "@notionhq/custom-blocks/react"
+import "@notionhq/custom-blocks/scrollbars.css"
+import { NotionCustomBlock } from "@notionhq/custom-blocks/react"
 import ReactDOM from "react-dom/client"
 import "./index.css"
 import { App } from "./App"
@@ -163,14 +161,16 @@ ReactDOM.createRoot(root).render(
   <NotionCustomBlock
     errorFallback={(error) => <div role="alert">{error.message}</div>}
   >
-    <NotionTokenScope>
-      <App />
-    </NotionTokenScope>
+    <App />
   </NotionCustomBlock>
 )
 ```
 
-Include `NotionTokenScope` and the NDS stylesheet when the UI uses Notion design tokens.
+Import `nds.css` for Notion CSS variables and `scrollbars.css` for matching scrollbar colors.
+SDK initialization supplies document token scope, theme, contrast, and native control appearance.
+Set the app's font, text color, and spacing with the tokens in your own stylesheet.
+Use these defaults when no design is specified. Preserve any design the user provides, and don't
+restyle existing UI to match Notion unless asked.
 
 `NotionCustomBlock` renders its children after initialization succeeds. Every declared data source requires a binding before initialization can complete.
 Call React SDK hooks inside this wrapper.

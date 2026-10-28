@@ -45,6 +45,17 @@ blocks/hello-world/
   src/index.css              Notion token-based styles
 ```
 
+## Appearance defaults
+
+The frontend imports Notion CSS variables and scrollbar colors. SDK initialization keeps the
+iframe document in sync with the host's theme and contrast settings. `src/index.css` applies the
+font, text color, background, and sizing defaults; edit it to use your own design.
+
+Use these defaults when no design is specified. Preserve any design the user provides, and don't
+restyle existing UI to match Notion unless asked.
+
+This template requires an SDK release containing document token scope and `scrollbars.css`.
+
 ## Verification
 
 ```zsh
