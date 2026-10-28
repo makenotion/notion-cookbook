@@ -14,8 +14,8 @@ When using Notion's visual defaults, import `@notionhq/custom-blocks/nds.css` an
 scope, theme, contrast, and native control appearance. Tokens define values; your CSS applies them.
 Keep imports and styles already used by a supplied design unless the requested change needs them.
 
-For React, mount inside `NotionCustomBlock`. `NotionTokenScope` is available for explicit nested
-scopes, but document tokens also cover portals. For other frameworks, await `initCustomBlock()`.
+For React, mount inside `NotionCustomBlock`. For other frameworks, await `initCustomBlock()`.
+Document tokens also cover portals.
 Use the SDK's sizing and data APIs with either Notion styling or a supplied design.
 
 ## Typography and color
