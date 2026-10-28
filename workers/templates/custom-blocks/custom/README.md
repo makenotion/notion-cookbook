@@ -36,6 +36,8 @@ rendered content; edits hot-reload. Add data-source definitions to
 `src/index.ts` when the block needs Notion data, then restart the dev shell
 to pick up the new manifest and bind sample data.
 
+Edit `blocks/hello-world/src/index.css` to customize the starter's appearance.
+
 ## Project structure
 
 ```text
