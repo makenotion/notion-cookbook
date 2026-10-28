@@ -229,7 +229,7 @@ properties: {
 worker.sync("teamsSync", {
   database: teams,
   mode: "replace",
-  execute: async (state) => {
+  execute: async (state: { page: number } | undefined) => {
     const page = state?.page ?? 1
     await myApi.wait()
     const { items, hasMore } = await fetchPage(page, 100)
@@ -575,7 +575,7 @@ const crm = worker.pacer("crm", { allowedRequests: 10, intervalMs: 1000 })
 
 worker.sync("customersSync", {
   database: customers,
-  execute: async (state) => {
+  execute: async (state: { page: number } | undefined) => {
     const page = state?.page ?? 1
     await crm.wait()
     const { customers: items, hasMore } = await fetchCustomers(page)
