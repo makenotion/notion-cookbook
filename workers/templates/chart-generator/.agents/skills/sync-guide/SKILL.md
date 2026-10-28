@@ -130,7 +130,7 @@ worker.sync("recordsBackfill", {
   database: db,
   mode: "replace",
   schedule: "manual", // trigger manually or on a slow schedule
-  execute: async (state) => {
+  execute: async (state: { page: number } | undefined) => {
     const page = state?.page ?? 1
     await apiPacer.wait()
     const { items, totalPages } = await fetchPage(page, 100)

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit && tsc -p tsconfig.examples.json"
   },
   "engines": {
     "node": ">=22.23.4",
