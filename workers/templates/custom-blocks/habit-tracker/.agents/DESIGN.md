@@ -4,19 +4,14 @@ Use these defaults when no design is specified. Preserve any design the user pro
 restyle existing UI to match Notion unless asked. For a behavior-only change, keep the existing
 layout, colors, and typography.
 
-Custom blocks are browser apps inside a Notion iframe. Choose the design for the block's task
-and available space. A chart, editor, or canvas may need a different composition from a list.
-
 ## Appearance setup
 
-When using Notion's visual defaults, import `@notionhq/custom-blocks/nds.css` and optionally
-`@notionhq/custom-blocks/scrollbars.css`. SDK initialization synchronizes the document's token
-scope, theme, contrast, and native control appearance. Tokens define values; your CSS applies them.
-Keep imports and styles already used by a supplied design unless the requested change needs them.
+For Notion styling, import `@notionhq/custom-blocks/nds.css` and optionally
+`@notionhq/custom-blocks/scrollbars.css`. The SDK follows the host's theme and contrast settings.
+Apply the tokens in your own CSS to set fonts, colors, and spacing.
 
-For React, mount inside `NotionCustomBlock`. For other frameworks, await `initCustomBlock()`.
-Document tokens also cover portals.
-Use the SDK's sizing and data APIs with either Notion styling or a supplied design.
+Keep a supplied design's styles and imports unless the requested change needs them.
+The SDK's data and sizing APIs work with either design.
 
 ## Typography and color
 
@@ -24,18 +19,17 @@ For Notion styling, use `--font-sans` for interface text and `--font-mono` for c
 `--text-body` with `--text-body--line-height` for body text and `--text-title` with its line-height
 and weight tokens for titles. Use `--font-weight-medium` or `--font-weight-semibold` for emphasis.
 
-Font tokens describe stacks; they don't bundle font files. The sans stack starts with system UI
-fonts. Serif and monospace stacks use available local fallbacks. Bundle additional licensed font
-assets when a supplied design requires them.
+Font tokens define stacks, not font files. The sans stack starts with system UI fonts.
+Bundle any additional licensed fonts the design needs.
 
 Use `--content-primary` for main text, secondary and tertiary roles for supporting text,
 `--bg-base` or `--bg-elevated` for surfaces, and `--border-primary` for boundaries.
-Prefer semantic tokens over copied palette values when following Notion's design. Pair status
-colors with labels or another visible cue. Don't replace a supplied brand palette with these roles.
+Prefer semantic tokens over copied palette values. Pair status colors with labels or another visible cue.
 
 ## Layout and scrolling
 
-Use a clear hierarchy and enough spacing to separate tasks. With Notion styling, choose spacing
+Custom blocks share a Notion page with other content. Keep the main task clear at the available width.
+With Notion styling, choose spacing
 and radius tokens such as `--spacing-8`, `--spacing-16`, and `--radius-8` consistently.
 Don't add decorative dashboards, navigation, or cards around content that doesn't need them.
 
