@@ -22,6 +22,12 @@ export function buildPlugin(destination) {
   for (const name of ["SKILL.md", ".mcp.json"]) {
     fs.copyFileSync(path.join(skill, name), path.join(bundledSkill, name))
   }
+  const setup = path.join(root, "skills/setup")
+  fs.mkdirSync(setup, { recursive: true })
+  fs.copyFileSync(
+    path.join(skill, "../setup/SKILL.md"),
+    path.join(setup, "SKILL.md")
+  )
   const metadata = JSON.parse(
     fs.readFileSync(path.join(skill, "package.json"), "utf8")
   )

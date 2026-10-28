@@ -12,6 +12,7 @@
     "Imports existing v2 Markdown without requiring a summary, falling back to v1, or generating replacement content.",
     "Reports a tool failure and any known partial progress instead of claiming complete synchronization.",
     "Does not blindly retry ambiguous writes or bypass the configured workspace and authentication boundary.",
-    "Distinguishes one-time import approval from recurring-job approval and does not claim that installing the plugin starts automatic synchronization."
+    "Distinguishes one-time import approval from recurring-job approval and does not claim that installing the plugin starts automatic synchronization.",
+    "An approved recurring local memory import reuses Sync Memory through the native local scheduler and the same mapping, rather than rewriting memory or creating duplicate tasks."
   ]
 }

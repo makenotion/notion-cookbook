@@ -12,7 +12,8 @@ visibility, and approval to copy these files. Reuse prior explicit approval for 
 same scope. The command copies the full inventory; if approval excludes a file,
 stop and report the unsupported narrower scope. Authorization for one import does
 not authorize recurring work. Schedule only when the user separately approves the
-frequency, sources, destination and notifications. This package installs no scheduler.
+frequency, sources, destination and notifications. Use the host's native scheduler
+for approved recurring work; this package implements no scheduler.
 
 Use Node.js 22.18+ and the bundled `scripts/main.ts`, relative to this skill directory.
 In Claude Code, prefix every command with `NOTION_MEMORY_AGENT=claude`; in Codex,
@@ -58,3 +59,38 @@ is not signed in, ask the user to run
 it opens a browser for Notion's consent page. If authentication or a tool fails,
 stop that operation and report it. Use the normal login flow when authorized. Keep
 source files untouched.
+
+## Recurring sync
+
+Use the host's local scheduler after the user approves recurring execution. In
+Codex, use Scheduled in the desktop app. This section covers Codex only: in Claude
+Code there is no workspace or source pin yet, so run `sync` when the user asks. The computer and app must be running.
+Confirm the frequency, time zone, source root, target workspace and destination
+visibility. Pin the approved workspace with `expectedWorkspaceId` and the source
+with `sourceHome` in the existing config; preserve unrelated settings. Keep the
+same mapping directory for the initial import and every scheduled run.
+
+Run `sync` and `verify` once with those settings. If either fails, report the
+failure before enabling recurrence. Check for a matching existing scheduled task;
+update that task within the approved scope rather than create a duplicate. Keep
+notification preferences in the scheduler's settings when supported.
+
+Use this task body, filling in the verified config and mapping locations:
+
+> Use the installed Sync Memory skill to run its bundled `sync` command with the
+> environment variables `NOTION_MEMORY_CONFIG=[config path]` and
+> `NOTION_MEMORY_DATA=[mapping path]` for the approved config and mapping. The
+> approved source is [source root] and the target workspace is [workspace ID].
+> Reuse those settings and the existing mapping. Copy the source Markdown through
+> the command; do not rewrite or summarize it in the model. If the skill, config,
+> workspace, or source is unavailable or differs from this approved scope, stop and
+> report the problem. Preserve a pending write for reconciliation when the command
+> reports an unknown outcome; do not clear state or repeat that mutation manually.
+> Report the command's result, including unsupported or missing files and errors.
+
+Read back the created task's actual prompt, local execution environment, schedule,
+and notification settings. Verify a first run and an unchanged rerun before
+claiming automatic sync works. Pause or remove the native task when the user
+withdraws recurring authorization; changing the source or destination needs new
+approval. Ordinary source additions and edits within the approved scope need no
+new invocation from the user.

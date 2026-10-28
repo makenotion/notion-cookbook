@@ -6,6 +6,7 @@ on:
       - ".agents/plugins/marketplace.json"
       - ".claude-plugin/marketplace.json"
       - "skills/mcp-clients/sync-memory/**"
+      - "skills/mcp-clients/setup/SKILL.md"
       - ".github/workflows/sync-memory-test.yml"
   push:
     branches: [main]
@@ -13,6 +14,7 @@ on:
       - ".agents/plugins/marketplace.json"
       - ".claude-plugin/marketplace.json"
       - "skills/mcp-clients/sync-memory/**"
+      - "skills/mcp-clients/setup/SKILL.md"
       - ".github/workflows/sync-memory-test.yml"
   workflow_dispatch:
 
@@ -36,7 +38,7 @@ jobs:
         working-directory: skills/mcp-clients/sync-memory
         run: |
           npm install
-          npm install --prefix "$RUNNER_TEMP/codex-runtime" @openai/codex@0.149.1
+          npm install --prefix "$RUNNER_TEMP/codex-runtime" @openai/codex@0.165.0
           npm install --prefix "$RUNNER_TEMP/claude-runtime" @anthropic-ai/claude-code@2.1.296
       - name: Typecheck and test the installed plugin through real Codex and Claude Code
         working-directory: skills/mcp-clients/sync-memory

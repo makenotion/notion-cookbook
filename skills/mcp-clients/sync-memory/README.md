@@ -9,7 +9,7 @@ The canonical source lives beside the other Notion skills at
 `skills/mcp-clients/sync-memory/`. `SKILL.md` is the agent entrypoint, and
 `scripts/` holds its deterministic copy commands. `npm run build:plugin` packages
 this skill into `build/sync-memory/` at the repository root. The generated plugin
-contains this skill, its runtime scripts, and Notion connection. Other
+contains this skill, the shared Notion setup skill, runtime scripts, and Notion connection. Other
 skills, tests, evaluations, and dependencies are excluded. Build output stays
 untracked. The plugin has both a Codex and a Claude Code manifest, declares
 desktop-only execution, and registers no lifecycle hooks or background service in
@@ -160,17 +160,19 @@ for the same scope. A one-time import approval does not authorize recurring jobs
 The command copies the whole inventory and does not enforce content exclusions;
 if approval excludes any source file, stop rather than claim a filtered import.
 
-The separate [Notion setup skill](../setup/SKILL.md) covers general onboarding,
-including import approval and separately authorized scheduling. It is not bundled
-or registered as this plugin's onboarding flow. This package reuses the Notion
+The shared [Notion setup skill](../setup/SKILL.md) is bundled unchanged and registered
+as this plugin's onboarding flow. It delegates supported local memory imports and
+approved recurring imports to Sync Memory, using the host's native scheduler. This package reuses the Notion
 plugin's [privacy](https://privacycenter.notion.so/policies) and
 [terms](https://notion.notion.site/Terms-and-Privacy-28ffdd083dc3473e9c2da6ec011b58ac)
 listing URLs. Those links do not establish legal coverage for bulk local-memory
-copying. Feature-specific consent enforcement, exclusions and forget behavior,
+copying. Persistent consent enforcement, exclusions and forget behavior,
 background execution, and public submission remain release review items.
 
-A separately authorized local scheduler could run the same one-shot command.
-This package does not create one. Public directory eligibility must still be
+During setup, the agent can create an explicitly approved local Scheduled task
+that invokes the same one-shot command with a fixed config and mapping. The
+computer and desktop app must remain running. The plugin implements no scheduler
+and creates no task merely from installation. Public directory eligibility must still be
 confirmed through OpenAI's [desktop-only submission process](https://developers.openai.com/plugins/deploy/desktop-only).
 
 ## Commands
@@ -308,7 +310,7 @@ external edits/deletions, notices, locks, removed automatic entrypoints and fail
 tests cover birth time, metadata-only updates, unchanged-page stability and existing
 mapping backfill.
 The dedicated `sync-memory-test.yml` workflow runs the checks on Node.js 22.18.0
-and 22.23.4 with Codex 0.149.1. Skills are excluded from the general cookbook
+and 22.23.4 with Codex 0.165.0. Skills are excluded from the general cookbook
 recipe runner. Skill evaluation scenarios use the separate
 [evaluation instructions](evaluations/README.md), not `npm test`.
 

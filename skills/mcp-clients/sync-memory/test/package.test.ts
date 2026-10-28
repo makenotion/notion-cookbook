@@ -12,6 +12,7 @@ test("built plugin contains only Sync Memory runtime and declares desktop-only e
     "skills",
   ])
   assert.deepEqual(fs.readdirSync(path.join(f.installed, "skills")), [
+    "setup",
     "sync-memory",
   ])
   const manifest = object(
@@ -23,7 +24,17 @@ test("built plugin contains only Sync Memory runtime and declares desktop-only e
     )
   )
   assert.equal(manifest.name, "sync-memory")
-  const skill = path.resolve(f.installed, String(manifest.skills))
+  const skill = path.resolve(
+    f.installed,
+    String(manifest.skills),
+    "sync-memory"
+  )
+  const extension = object(object(manifest.extensions)["com.openai"])
+  const setup = path.resolve(f.installed, String(extension.onboardingSkill))
+  assert.equal(
+    fs.readFileSync(setup, "utf8"),
+    fs.readFileSync(path.resolve(recipe, "../setup/SKILL.md"), "utf8")
+  )
   assert.deepEqual(fs.readdirSync(skill).sort(), [
     ".mcp.json",
     "SKILL.md",
