@@ -1,0 +1,42 @@
+{
+  "name": "sync-memory",
+  "version": "0.4.8",
+  "description": "Copy local memory Markdown into Notion Memories. Currently supports Codex memories.",
+  "author": {
+    "name": "Notion Labs",
+    "url": "https://www.notion.com"
+  },
+  "homepage": "https://github.com/makenotion/notion-cookbook/tree/main/skills/mcp-clients/sync-memory",
+  "repository": "https://github.com/makenotion/notion-cookbook",
+  "license": "MIT",
+  "keywords": ["notion", "memory", "codex", "sync"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Sync Memory",
+    "shortDescription": "Copy Codex memory to Notion",
+    "longDescription": "Copy the Markdown files Codex keeps in memories_v2 into Notion Memories, one page per file, with source metadata before the unchanged original Markdown. Runs only when you ask or from a Scheduled task you approve, and reuses Codex's Notion connection.",
+    "developerName": "Notion",
+    "category": "Productivity",
+    "capabilities": ["Interactive", "Read", "Write"],
+    "defaultPrompt": [
+      "Sync my Codex memories to Notion",
+      "Preview which memory files would sync",
+      "Verify my synced Notion memories"
+    ],
+    "brandColor": "#111111",
+    "brandColorDark": "#EEEEEE",
+    "composerIcon": "./assets/notion.svg",
+    "logo": "./assets/notion.svg",
+    "websiteURL": "https://www.notion.com",
+    "supportURL": "https://www.notion.com/help",
+    "privacyPolicyURL": "https://privacycenter.notion.so/policies",
+    "termsOfServiceURL": "https://notion.notion.site/Terms-and-Privacy-28ffdd083dc3473e9c2da6ec011b58ac"
+  },
+  "requires_local_executor": true,
+  "extensions": {
+    "com.openai": {
+      "onboardingSkill": "./skills/notion-setup/SKILL.md"
+    }
+  }
+}

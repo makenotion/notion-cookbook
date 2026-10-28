@@ -131,15 +131,37 @@ test("append, override and empty content update the same page", async (t) => {
   const id = f.pages().find((p) => p.title === "memory_summary.md")?.id
   for (const text of ["baseline\nappended\n", "replacement\n", ""]) {
     fs.writeFileSync(path.join(f.home, "memories_v2/memory_summary.md"), text)
+    const updatesBefore = f.calls().filter((c) => c === "update-page").length
     const r = await f.exec(["sync"])
     assert.equal(r.code, 0, r.stderr)
     assert.equal(JSON.parse(r.stdout).updated, 1)
+    assert.equal(
+      f.calls().filter((c) => c === "update-page").length - updatesBefore,
+      1,
+      "an attributed page needs only the content write"
+    )
     assert.equal(
       copiedPage(f.pages().find((p) => p.id === id)?.content).original,
       text
     )
     assert.equal(f.pages().length, 2)
   }
+})
+
+test("an update restores missing Codex attribution before replacing content", async (t) => {
+  const f = fixture(t)
+  f.seed()
+  assert.equal((await f.exec(["sync"])).code, 0)
+  const pages = f.pages()
+  const page = pages.find((p) => p.title === "memory_summary.md")
+  assert.ok(page)
+  page.lastUpdatedBy = undefined
+  f.savePages(pages)
+  fs.writeFileSync(path.join(f.home, "memories_v2/memory_summary.md"), "next\n")
+  const r = await f.exec(["sync"])
+  assert.equal(r.code, 0, r.stderr)
+  assert.equal(JSON.parse(r.stdout).updated, 1)
+  assert.equal(f.pages().find((p) => p.id === page.id)?.lastUpdatedBy, "Codex")
 })
 
 test("manual Notion changes are protected when the source changes", async (t) => {

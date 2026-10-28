@@ -112,3 +112,34 @@ test("portable plugins omit skills requiring a specific client", async (t) => {
   ])
   assert.equal(run("--dryRun").status, 0)
 })
+
+test("listed plugins get exactly their skills, including client-specific ones", async (t) => {
+  const { root, put, run } = await fixture(t, {
+    "designer/SKILL.md": skill("notion-designer"),
+    "setup/SKILL.md": skill("notion-setup"),
+    "memory/SKILL.md":
+      "---\nname: sync-memory\ndescription: Copy memory.\nmetadata:\n  requires-client: codex\n---\n\nBody\n",
+    "memory/scripts/main.ts": "export {}",
+    "memory/test/main.test.ts": "throw new Error('not runtime')",
+    "memory/package-lock.json": "{}",
+  })
+  await put(
+    "plugins/sync-memory/.codex-plugin/plugin.json",
+    '{"name":"sync-memory"}'
+  )
+  assert.equal(run().status, 0)
+  const plugin = join(root, "plugins/sync-memory/skills")
+  assert.deepEqual((await readdir(plugin)).sort(), [
+    "notion-setup",
+    "sync-memory",
+  ])
+  assert.deepEqual((await readdir(join(plugin, "sync-memory"))).sort(), [
+    "SKILL.md",
+    "scripts",
+  ])
+  assert.deepEqual(await readdir(join(root, "plugins/demo/skills")), [
+    "notion-designer",
+    "notion-setup",
+  ])
+  assert.equal(run("--dryRun").status, 0)
+})

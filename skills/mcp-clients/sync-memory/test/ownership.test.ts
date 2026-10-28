@@ -4,7 +4,9 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { once } from "node:events"
+import net from "node:net"
 import { test, type TestContext } from "node:test"
+import { ownershipPort, withOwnership } from "../scripts/ownership.ts"
 import { waitFor } from "./support/harness.ts"
 
 const module = new URL("../scripts/ownership.ts", import.meta.url).href
@@ -79,4 +81,25 @@ test("SIGKILL releases ownership without stale files or reaping", async (t) => {
   assert.deepEqual(fs.readdirSync(root), [])
   second.child.stdin!.write("release")
   await exited(second.child)
+})
+
+test("an unrelated listener on the derived port fails fast instead of waiting", async (t) => {
+  const root = directory(t)
+  const foreign = net.createServer((socket) =>
+    socket.end("HTTP/1.1 200 OK\r\n\r\n")
+  )
+  await new Promise<void>((resolve) =>
+    foreign.listen({ host: "127.0.0.1", port: ownershipPort(root) }, resolve)
+  )
+  t.after(() => foreign.close())
+  const started = Date.now()
+  await assert.rejects(
+    withOwnership(
+      root,
+      async () => assert.fail("acquired a foreign port"),
+      30_000
+    ),
+    /Another program is listening/
+  )
+  assert.ok(Date.now() - started < 5_000)
 })

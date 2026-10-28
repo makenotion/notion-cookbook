@@ -113,7 +113,7 @@ export class CodexNotionMcp {
 
   private async initialize(): Promise<void> {
     await this.rpc("initialize", {
-      clientInfo: { name: "sync-memory", version: "0.4.7" },
+      clientInfo: { name: "sync-memory", version: "0.4.8" },
     })
     this.notify("initialized")
   }

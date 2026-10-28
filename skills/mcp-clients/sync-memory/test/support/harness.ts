@@ -5,10 +5,11 @@ import os from "node:os"
 import path from "node:path"
 import type { TestContext } from "node:test"
 import { fileURLToPath } from "node:url"
-import { buildPlugin } from "../../scripts/build-plugin.mjs"
 
 export const recipe = fileURLToPath(new URL("../../", import.meta.url))
 export const support = fileURLToPath(new URL("./", import.meta.url))
+// The checked-in plugin; `npm run plugins:build` regenerates its `skills/`.
+export const plugin = path.resolve(recipe, "../../../plugins/sync-memory")
 
 export function object(value: unknown): Record<string, unknown> {
   assert.ok(isObject(value))
@@ -67,7 +68,7 @@ export function fixture(t: TestContext) {
     path.join(home, "notion-memory.json"),
     JSON.stringify({ expectedWorkspaceId: "synthetic-workspace" })
   )
-  buildPlugin(installed)
+  fs.cpSync(plugin, installed, { recursive: true })
   fs.chmodSync(path.join(support, "fake-codex.mjs"), 0o755)
   const env: NodeJS.ProcessEnv = {
     PATH: path.dirname(process.execPath),

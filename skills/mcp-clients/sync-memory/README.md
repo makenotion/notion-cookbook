@@ -7,11 +7,13 @@ The plugin calls Notion through Codex's existing MCP connection; it runs no mode
 
 The canonical source lives beside the other Notion skills at
 `skills/mcp-clients/sync-memory/`. `SKILL.md` is the agent entrypoint, and
-`scripts/` holds its deterministic copy commands. `npm run build:plugin` packages
-this skill into `build/sync-memory/` at the repository root. The generated plugin
-contains this skill, the shared Notion setup skill, runtime scripts, and Notion connection. Other
-skills, tests, evaluations, and dependencies are excluded. Build output stays
-untracked. The current runtime supports Codex memory only and declares desktop-only execution.
+`scripts/` holds its deterministic copy commands. The Codex plugin lives in
+[`plugins/sync-memory/`](../../../plugins/sync-memory/): its manifest, Notion
+connection and icon are written by hand, and the repository's `npm run plugins:build`
+copies this skill and the shared Notion setup skill into its `skills/`. Other
+skills, tests, evaluations, and dependencies are excluded. Commit the regenerated
+copy; `npm run plugins:check` fails when it is stale. The current runtime supports
+Codex memory only and declares desktop-only execution.
 Installation registers no lifecycle hooks or background service.
 
 ## Behavior
@@ -89,25 +91,19 @@ the preamble, subject to the existing protection for human edits.
 
 ## Requirements and setup
 
-- Node.js 22.18+ and Codex with plugin support (tested with 0.164.0-alpha.11.1).
+- Node.js 22.18+ and Codex with plugin support (tested with 0.165.0).
 - Codex memories enabled and v2 memory artifacts already generated. The plugin
   does not migrate or regenerate Codex memory. Codex can dual-write v1/v2 and keeps
   their state separate; v2 does not guarantee importing old manually written notes.
 - A Notion workspace with Memories enabled and a connected Notion MCP server.
 
-Build the plugin with Node.js 22.18+ from the repository checkout, then install
-from its bundled marketplace:
+Install from the repository marketplace, which points to `plugins/sync-memory/`
+rather than the whole skills collection:
 
 ```sh
-cd /absolute/path/to/notion-cookbook/skills/mcp-clients/sync-memory
-npm run build:plugin
 codex plugin marketplace add /absolute/path/to/notion-cookbook
 codex plugin add sync-memory@notion-cookbook
 ```
-
-The build command prints the generated plugin directory. Build again before
-installing an updated checkout. The marketplace points to `build/sync-memory/`,
-not to the whole skills collection.
 
 In Codex, select `$sync-memory:sync-memory` or ask the agent to use Sync Memory to sync,
 preview, verify, or inspect the mapping. Copy the whole directory when installing
@@ -236,7 +232,7 @@ There is no reset-and-retry command for an unlocated page.
 
 | Processing point                                               | Implementation                                                              |
 | -------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| Plugin registration and MCP endpoint                           | `.codex-plugin/plugin.json`, `.mcp.json`                                    |
+| Plugin registration and MCP endpoint                           | `plugins/sync-memory/.codex-plugin/plugin.json`, `.mcp.json`                |
 | Manual command and lazy connection lifetime                    | `scripts/main.ts`                                                           |
 | Recursively read current memory Markdown files unchanged       | `scripts/memories.ts` — `memoryInventory`                                   |
 | One file / one page, attribution, update protection, readback  | `scripts/memories.ts` — `syncMemories`, `verifyMemories`, `reconcileMemory` |
@@ -244,7 +240,7 @@ There is no reset-and-retry command for an unlocated page.
 | Settings, file mapping, atomic save, logs                      | `scripts/config.ts`                                                         |
 | Cross-process ownership for imports                            | `scripts/ownership.ts`                                                      |
 | On-demand agent instruction                                    | `SKILL.md`                                                                  |
-| Generate the isolated plugin artifact                          | `scripts/build-plugin.mjs`                                                  |
+| Copy skills into the checked-in plugin                         | `scripts/build-plugins.mjs` (repository root)                               |
 
 ## Validation
 
@@ -265,7 +261,7 @@ and 22.23.4 with Codex 0.165.0. Skills are excluded from the general cookbook
 recipe runner. Skill evaluation scenarios use the separate
 [evaluation instructions](evaluations/README.md), not `npm test`.
 
-The optional runtime test builds and installs the real artifact in an isolated Codex home
+The optional runtime test installs the checked-in plugin in an isolated Codex home
 and drives a stdio Notion fixture through the real app-server without a model.
 Desktop installation/OAuth clicks and real Notion import rendering require separate
 live verification. Installation and skill discovery alone must not write memory.

@@ -121,6 +121,7 @@ export async function syncMemories(call: CallTool) {
       destinationChecked = true
     }
     let pageId: string
+    let attributed = false
     if (previous) {
       const page = await snapshot(call, previous.pageId)
       if (page.deleted || page.hash !== previous.pageHash) {
@@ -129,6 +130,7 @@ export async function syncMemories(call: CallTool) {
         result.changedInNotion++
         continue
       }
+      attributed = page.lastUpdatedBy === "Codex"
     }
     const content = renderMemory(file, new Date().toISOString())
     state.pending ??= {}
@@ -142,11 +144,14 @@ export async function syncMemories(call: CallTool) {
     saveState(state)
     try {
       if (previous) {
-        await call("update-page", {
-          page_id: previous.pageId,
-          command: "update_properties",
-          properties: { "Last updated by": "Codex" },
-        })
+        // Each extra write widens the window in which a failure leaves an unknown
+        // outcome, so only restore attribution when the page lost it.
+        if (!attributed)
+          await call("update-page", {
+            page_id: previous.pageId,
+            command: "update_properties",
+            properties: { "Last updated by": "Codex" },
+          })
         await call("update-page", {
           page_id: previous.pageId,
           command: "replace_content",
@@ -331,6 +336,7 @@ async function snapshot(call: CallTool, id: string) {
   const content = text.slice(start + "<content>".length, end).trim()
   return {
     deleted: /<page\b[^>]*\sdeleted\b/.test(text),
+    lastUpdatedBy: properties["Last updated by"],
     hash: digest(
       JSON.stringify([
         properties.Title ?? properties.title,
