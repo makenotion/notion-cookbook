@@ -167,8 +167,8 @@ ReactDOM.createRoot(root).render(
 ```
 
 Import `nds.css` for Notion CSS variables and `scrollbars.css` for matching scrollbar colors.
-SDK initialization supplies document token scope, theme, contrast, and native control appearance.
-Set the app's font, text color, and spacing with the tokens in your own stylesheet.
+The SDK follows the host's theme and contrast settings. Apply the tokens in your own CSS
+to set fonts, colors, and spacing.
 Use these defaults when no design is specified. Preserve any design the user provides, and don't
 restyle existing UI to match Notion unless asked.
 
