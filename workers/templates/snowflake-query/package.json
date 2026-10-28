@@ -19,6 +19,6 @@
   "dependencies": {
     "@notionhq/workers": ">=0.0.0",
     "node-sql-parser": "^5.4.0",
-    "snowflake-sdk": "^2.4.3"
+    "snowflake-sdk": "^3.3.0"
   }
 }
