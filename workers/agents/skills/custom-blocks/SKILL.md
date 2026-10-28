@@ -36,13 +36,16 @@ Take into account these limits when building a custom block:
 - **Property support:** Custom blocks do not support every Notion property type or operation.
   Support varies between reading, writing, filtering, and sorting.
   Check the installed SDK documentation and types for each required operation.
-- **Query filters:** Filters do not support `or` groups or nested groups.
-  Use one property condition or one `and` group.
+- **Query filters:** Check the installed SDK types. Older SDKs allow one property condition or a flat `and` group. SDKs with native view controls support bounded nested `and`/`or` groups (three group levels, 25 children per group).
 - **External Links and navigation:** Do not implement external link navigation or authentication redirects with `window.open` or `window.location`.
 - **Page creation:** `pages.create` cannot set an icon or cover.
   Create the page first. Then use `pages.update` to set its icon or cover.
 - **Availability:** Custom blocks require private-alpha access.
   Page guests cannot view custom blocks. Notion Sites does not render them.
+
+## Native custom view controls
+
+When adding host-owned New, Filter, Sort, or Search controls to a custom database view, read [the view controls reference](./view-controls.md). Check the installed Worker and frontend SDK exports first; older package versions do not support this contract.
 
 ## Build the block
 

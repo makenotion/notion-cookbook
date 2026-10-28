@@ -22,6 +22,8 @@
 
 Use the `custom-blocks` skill in `.agents/skills/custom-blocks/` before writing any block code. It covers the two SDK surfaces, the package setup this project requires, block sources, `dataSources` schemas and property types, and the local dev shell.
 
+Native custom view controls are explicitly declared on at most one data source. Before using them, check the installed SDK contract and read `.agents/skills/custom-blocks/view-controls.md`. The host owns New; custom code explicitly forwards query state from `useViewControls()` to the chosen `useDataSource()` call.
+
 ## Code example
 
 ```ts
