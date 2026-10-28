@@ -20,7 +20,7 @@
 
 `worker.customBlock()` declares a front-end web app that Notion serves in an iframe. It is a build-time/deploy-time capability with no `execute` handler, so it cannot be run with `ntn workers exec`. Declare one when the user wants a custom block rendered inside a Notion page, optionally bound to data sources.
 
-Read `.agents/DESIGN.md` before creating or changing custom block UI. It provides defaults when no design is specified; preserve supplied designs and existing styling unless the user asks to change them.
+Read `.agents/DESIGN.md` before creating or changing custom block UI. Use Notion styling for new projects without a specified design, or when the user explicitly asks for it. Otherwise, preserve the existing or supplied design.
 
 Use the `custom-blocks` skill in `.agents/skills/custom-blocks/` before writing any block code. It covers the two SDK surfaces, the package setup this project requires, block sources, `dataSources` schemas and property types, and the local dev shell.
 

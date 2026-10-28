@@ -1,8 +1,8 @@
 # Custom block design
 
-Use these defaults when no design is specified. Preserve any design the user provides, and don't
-restyle existing UI to match Notion unless asked. For a behavior-only change, keep the existing
-layout, colors, and typography.
+Use Notion styling for a new project when the user hasn't specified a design, or when the user
+explicitly asks for Notion styling. Otherwise, preserve the existing or supplied design.
+For a behavior-only change, keep the existing layout, colors, and typography.
 
 ## Appearance setup
 
