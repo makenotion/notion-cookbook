@@ -5,6 +5,9 @@ export const toolNames = ["get-self", "fetch", "create-pages", "update-page"]
 const collection = "collection://00000000-0000-0000-0000-000000000001"
 const stateFile = process.env.FIXTURE_STATE
 const callsFile = process.env.FIXTURE_CALLS
+// The workspace the synthetic connection is authorized for; pages are visible
+// only inside the workspace that created them.
+const workspace = process.env.FIXTURE_WORKSPACE || "synthetic-workspace"
 assert.ok(stateFile && callsFile, "fixture paths must be explicitly supplied")
 
 export function record(method) {
@@ -35,14 +38,18 @@ export function invoke(name, args) {
     case "get-self":
       return {
         user: { name: "Casey Synthetic" },
-        workspace: { id: "synthetic-workspace" },
+        workspace: { id: workspace, name: `${workspace} name` },
       }
     case "fetch": {
       if (args.id === "memory")
         return { text: `<data-source url="${collection}">` }
       failOnce("fetch")
       if (state.failReadback) failOnce(state.failReadback)
-      const page = state.pages.find((p) => p.id === args.id)
+      const page = state.pages.find(
+        (p) =>
+          p.id === args.id &&
+          (p.workspace ?? "synthetic-workspace") === workspace
+      )
       assert.ok(page, "unknown fixture page")
       if (process.env.FIXTURE_READBACK === "malformed")
         return { text: "<page><content>broken</content></page>" }
@@ -65,6 +72,7 @@ export function invoke(name, args) {
         )
         const page = {
           id: `synthetic-${state.pages.length + 1}`,
+          workspace,
           title: p.properties.title,
           type: p.properties.Type,
           source: p.properties.Source,
@@ -83,7 +91,11 @@ export function invoke(name, args) {
       return { pages }
     }
     case "update-page": {
-      const page = state.pages.find((p) => p.id === args.page_id)
+      const page = state.pages.find(
+        (p) =>
+          p.id === args.page_id &&
+          (p.workspace ?? "synthetic-workspace") === workspace
+      )
       assert.ok(page, "unknown fixture page")
       if (args.command === "update_properties") {
         if (args.properties.Source !== undefined)

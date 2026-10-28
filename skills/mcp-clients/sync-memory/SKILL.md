@@ -21,6 +21,11 @@ Use Node.js 22.18+ and the bundled `scripts/main.ts`, relative to this skill dir
 - `preview`: show the source files without connecting to Notion.
 - `verify`: check current source hashes and managed Notion page readbacks.
 - `status`: show the local mapping and pending-write recovery instructions.
+- `use-workspace`: show the workspace the Notion connection reaches, the pinned
+  workspace, and whether a mapping exists for it. No remote writes.
+- `use-workspace --confirm <workspace-id>`: after the user approves that workspace,
+  pin it. Refuses an ID the connection does not reach, and refuses to leave unresolved
+  pending writes in the current workspace.
 - `reconcile <source-path> --keep-notion <page-id>`: after explicit user approval,
   fetch and preserve that page, release the source path from future management, and
   clear its pending entry. Other paths can then sync. This sends no remote writes.
@@ -61,17 +66,42 @@ blocks the whole sync; report the failure through the native scheduled task when
 applicable. Releasing a file allows other files to sync but leaves that file
 unsynced, which `verify` continues to report.
 
-Before any import, use Notion get-self to confirm the approved workspace and pin
-its ID as `expectedWorkspaceId` in the config. The `sync` and `reconcile` commands
-require this setting and validate it before accessing memory pages. When multiple Notion
+Before any import, run `use-workspace`, show the user the connected workspace name
+and ID, and after approval pin it with `use-workspace --confirm`. This writes
+`expectedWorkspaceId` and keeps the other settings. The `sync`, `verify`, `status`
+and `reconcile` commands require the pin; `sync`, `verify` and `reconcile` check it
+against the connection before accessing memory pages. When multiple Notion
 connections are available, set `mcpServer` explicitly; there is no first-server
 fallback. If authentication or a tool fails, stop that operation and
 report it. Use the normal login flow when authorized. Keep source files untouched.
 
+## Switching workspaces
+
+The Notion connection decides which workspace is reachable; the pin only approves
+it. Each pinned workspace keeps its own mapping, because page IDs belong to one
+workspace. To switch:
+
+1. Resolve any pending writes in the current workspace with `status`.
+2. Ask the user to reconnect Notion and choose the new workspace on the consent page.
+   In Codex this is the app's Notion connection, or `codex mcp logout` then
+   `codex mcp login` for that server.
+3. Run `use-workspace`, confirm the new workspace with the user, then
+   `use-workspace --confirm <id>`.
+4. Repeat first-import approval for the new destination with `preview`, then run
+   `sync` and `verify`. A workspace without a mapping gets a full first import;
+   switching back to a workspace reuses its mapping without duplicating pages.
+5. Update the scheduled task's workspace ID after the user approves the new
+   destination. Until then, a scheduled run stops at the workspace check.
+
+Never edit or delete mappings to switch; pages in the previous workspace are left
+alone.
+
 ## Recurring sync
 
 Use the host's local scheduler after the user approves recurring execution. In
-Codex, use Scheduled in the desktop app. The computer and app must be running.
+the Codex desktop app, create a local cron task with its Scheduled tool; the computer and app must be running. The Codex CLI has no
+scheduler: report that, give the task body below for the desktop app, and leave
+manual `sync` available.
 Confirm the frequency, time zone, source root, target workspace and destination
 visibility. Pin the approved workspace with `expectedWorkspaceId` and the source
 with `sourceHome` in the existing config; preserve unrelated settings. Keep the

@@ -113,6 +113,9 @@ export function fixture(t: TestContext) {
     root,
     home,
     installed,
+    stateFile(workspace = "synthetic-workspace") {
+      return path.join(home, "notion-memory", workspace, "state.json")
+    },
     env,
     calls,
     pages,

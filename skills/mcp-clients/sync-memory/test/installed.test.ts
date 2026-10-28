@@ -95,10 +95,7 @@ test("an explicit destination never falls back and workspace mismatch writes not
     const result = await f.exec(["sync"])
     assert.equal(result.code, 1)
     assert.deepEqual(f.pages(), [])
-    assert.equal(
-      fs.existsSync(path.join(f.home, "notion-memory/state.json")),
-      false
-    )
+    assert.equal(fs.existsSync(f.stateFile()), false)
   }
 })
 

@@ -30,6 +30,8 @@ export type PendingWrite =
     }
 
 export interface State {
+  // The workspace whose page IDs this mapping holds; absent in legacy state.
+  workspaceId?: string
   pending?: Record<string, PendingWrite>
   files: Record<
     string,
@@ -52,7 +54,9 @@ export const CONFIG_FILE =
 export const DATA_DIR =
   process.env.NOTION_MEMORY_DATA || path.join(CODEX_HOME, "notion-memory")
 export const LOG_FILE = path.join(DATA_DIR, "notion-memory.log")
-const STATE_FILE = path.join(DATA_DIR, "state.json")
+// Mappings from before per-workspace state, adopted by the pinned workspace.
+const LEGACY_STATE_FILE = path.join(DATA_DIR, "state.json")
+const WORKSPACE_ID = /^[A-Za-z0-9-]+$/
 
 export function loadConfig(): Config {
   let file: Partial<Config> = {}
@@ -66,9 +70,41 @@ export function loadConfig(): Config {
   }
 }
 
-export function loadState(): State {
-  if (!fs.existsSync(STATE_FILE)) return { files: {} }
-  const state = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"))
+// Page IDs belong to one workspace, so each pinned workspace keeps its own
+// mapping. Switching back to a workspace reuses its mapping instead of creating
+// duplicate pages.
+export function stateFile(workspaceId: string): string {
+  if (!WORKSPACE_ID.test(workspaceId))
+    throw new Error(`Invalid workspace ID: ${workspaceId}`)
+  return path.join(DATA_DIR, workspaceId, "state.json")
+}
+
+export function pinnedWorkspace(): string {
+  const workspaceId = loadConfig().expectedWorkspaceId?.trim()
+  if (!workspaceId)
+    throw new Error(
+      "Set expectedWorkspaceId in the approved config before using the mapping. Run use-workspace to confirm the destination workspace."
+    )
+  return workspaceId
+}
+
+export function hasState(workspaceId: string): boolean {
+  return fs.existsSync(stateFile(workspaceId))
+}
+
+export function loadState(workspaceId = pinnedWorkspace()): State {
+  const file = stateFile(workspaceId)
+  const source = fs.existsSync(file)
+    ? file
+    : fs.existsSync(LEGACY_STATE_FILE)
+      ? LEGACY_STATE_FILE
+      : undefined
+  if (!source) return { workspaceId, files: {} }
+  const state = JSON.parse(fs.readFileSync(source, "utf8"))
+  if (state.workspaceId !== undefined && state.workspaceId !== workspaceId)
+    throw new Error(
+      `Mapping ${source} belongs to workspace ${state.workspaceId}, not ${workspaceId}`
+    )
   if (
     !state.files ||
     typeof state.files !== "object" ||
@@ -105,13 +141,36 @@ export function loadState(): State {
         )
     }
   }
-  return state
+  return { ...state, workspaceId }
 }
 
+// Saving under the workspace also completes the move of a legacy mapping.
 export function saveState(state: State): void {
-  fs.mkdirSync(DATA_DIR, { recursive: true })
-  fs.writeFileSync(`${STATE_FILE}.tmp`, JSON.stringify(state, null, 2))
-  fs.renameSync(`${STATE_FILE}.tmp`, STATE_FILE)
+  const workspaceId = state.workspaceId ?? pinnedWorkspace()
+  const file = stateFile(workspaceId)
+  const adoptsLegacy = !fs.existsSync(file)
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  fs.writeFileSync(
+    `${file}.tmp`,
+    JSON.stringify({ ...state, workspaceId }, null, 2)
+  )
+  fs.renameSync(`${file}.tmp`, file)
+  if (adoptsLegacy) fs.rmSync(LEGACY_STATE_FILE, { force: true })
+}
+
+// Rewrites only the pin, keeping every other approved setting in the file.
+export function pinWorkspace(workspaceId: string): void {
+  stateFile(workspaceId)
+  const file: Record<string, unknown> = fs.existsSync(CONFIG_FILE)
+    ? JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8"))
+    : {}
+  fs.mkdirSync(path.dirname(CONFIG_FILE), { recursive: true })
+  fs.writeFileSync(
+    `${CONFIG_FILE}.tmp`,
+    JSON.stringify({ ...file, expectedWorkspaceId: workspaceId }, null, 2) +
+      "\n"
+  )
+  fs.renameSync(`${CONFIG_FILE}.tmp`, CONFIG_FILE)
 }
 
 export function log(...parts: unknown[]): void {
