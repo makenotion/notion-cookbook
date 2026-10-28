@@ -1,6 +1,6 @@
 {
   "name": "sync-memory",
-  "version": "0.4.9",
+  "version": "0.4.10",
   "description": "Copy local memory Markdown into Notion Memories. Currently supports Codex memories.",
   "author": {
     "name": "Notion Labs",

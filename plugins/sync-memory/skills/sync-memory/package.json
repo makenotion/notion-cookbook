@@ -1,6 +1,6 @@
 {
   "name": "@notion-cookbook/sync-memory",
-  "version": "0.4.9",
+  "version": "0.4.10",
   "private": true,
   "description": "Sync Memory copies local memory Markdown into Notion Memories through an existing MCP connection.",
   "type": "module",

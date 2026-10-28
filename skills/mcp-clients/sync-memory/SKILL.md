@@ -7,10 +7,10 @@ metadata:
 
 # Sync Memory
 
-Before the first import, confirm the source inventory, destination workspace and
-visibility, and approval to copy these files. Reuse prior explicit approval for the
-same scope. The command copies the full inventory; if approval excludes a file,
-stop and report the unsupported narrower scope. Authorization for one import does
+A request to copy or sync memory to Notion approves copying the full inventory to
+the connected workspace's Memories. Run `preview` to report the files, then `sync`;
+do not ask for a separate approval. If the user excludes a file, stop and report that
+a narrower scope is unsupported. Authorization for one import does
 not authorize recurring work. Schedule only when the user separately approves the
 frequency, sources, destination and notifications. Use the host's native scheduler
 for approved recurring work; this package implements no scheduler.
@@ -66,35 +66,28 @@ blocks the whole sync; report the failure through the native scheduled task when
 applicable. Releasing a file allows other files to sync but leaves that file
 unsynced, which `verify` continues to report.
 
-Before any import, run `use-workspace`, show the user the connected workspace name
-and ID, and after approval pin it with `use-workspace --confirm`. This writes
+Before the first import, run `use-workspace` and pin the connected workspace with
+`use-workspace --confirm <id>`, reporting its name and ID. This writes
 `expectedWorkspaceId` and keeps the other settings. The `sync`, `verify`, `status`
 and `reconcile` commands require the pin; `sync`, `verify` and `reconcile` check it
 against the connection before accessing memory pages. When multiple Notion
 connections are available, set `mcpServer` explicitly; there is no first-server
-fallback. If authentication or a tool fails, stop that operation and
-report it. Use the normal login flow when authorized. Keep source files untouched.
+fallback. If the Notion server is not signed in, start the host's own MCP sign-in for
+that server (in the Codex app, connect Notion; in the Codex CLI, ask the user to run
+`codex mcp login <server>`), wait for the user to finish consent, then continue.
+Never open the authorization page yourself with computer use, browser tools, or
+another browser profile. If a tool fails, stop that operation and report it. Keep
+source files untouched.
 
-## Switching workspaces
+## Workspace changes
 
-The Notion connection decides which workspace is reachable; the pin only approves
-it. Each pinned workspace keeps its own mapping, because page IDs belong to one
-workspace. To switch:
-
-1. Resolve any pending writes in the current workspace with `status`.
-2. Ask the user to reconnect Notion and choose the new workspace on the consent page.
-   In Codex this is the app's Notion connection, or `codex mcp logout` then
-   `codex mcp login` for that server.
-3. Run `use-workspace`, confirm the new workspace with the user, then
-   `use-workspace --confirm <id>`.
-4. Repeat first-import approval for the new destination with `preview`, then run
-   `sync` and `verify`. A workspace without a mapping gets a full first import;
-   switching back to a workspace reuses its mapping without duplicating pages.
-5. Update the scheduled task's workspace ID after the user approves the new
-   destination. Until then, a scheduled run stops at the workspace check.
-
-Never edit or delete mappings to switch; pages in the previous workspace are left
-alone.
+The user changes workspaces by reconnecting Notion; that is outside this skill. Each
+pinned workspace keeps its own mapping, because page IDs belong to one workspace.
+When `use-workspace` reports a connected workspace other than the pin and the user
+asks to sync there, pin it with `use-workspace --confirm <id>` and run `sync`. Its
+mapping is reused if it has one; otherwise it gets a full first import. The command
+refuses while the pinned workspace has pending writes; report `status` instead.
+Never edit or delete mappings; pages in other workspaces are left alone.
 
 ## Recurring sync
 
@@ -102,8 +95,7 @@ Use the host's local scheduler after the user approves recurring execution. In
 the Codex desktop app, create a local cron task with its Scheduled tool; the computer and app must be running. The Codex CLI has no
 scheduler: report that, give the task body below for the desktop app, and leave
 manual `sync` available.
-Confirm the frequency, time zone, source root, target workspace and destination
-visibility. Pin the approved workspace with `expectedWorkspaceId` and the source
+Confirm the frequency, time zone, source root and target workspace. Pin the approved workspace with `expectedWorkspaceId` and the source
 with `sourceHome` in the existing config; preserve unrelated settings. Keep the
 same mapping directory for the initial import and every scheduled run.
 
@@ -112,7 +104,8 @@ failure before enabling recurrence. Check for a matching existing scheduled task
 update that task within the approved scope rather than create a duplicate. Keep
 notification preferences in the scheduler's settings when supported.
 
-Use this task body, filling in the verified config and mapping locations:
+Use this task body verbatim. Replace only the bracketed values; do not add steps,
+checks, versioned paths, or other setup work to it:
 
 > Use the installed Sync Memory skill to run its bundled `sync` command with the
 > environment variables `NOTION_MEMORY_CONFIG=[config path]` and
