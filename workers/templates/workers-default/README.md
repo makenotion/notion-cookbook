@@ -326,7 +326,7 @@ const tasks = worker.database("tasks", {
     properties: {
       Name: Schema.title(),
       "Task ID": Schema.richText(),
-      Project: Schema.relation("projectsSync", {
+      Project: Schema.relation("projects", {
         twoWay: true,
         relatedPropertyName: "Tasks",
       }),
