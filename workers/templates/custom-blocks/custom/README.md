@@ -36,6 +36,8 @@ rendered content; edits hot-reload. Add data-source definitions to
 `src/index.ts` when the block needs Notion data, then restart the dev shell
 to pick up the new manifest and bind sample data.
 
+Edit `blocks/hello-world/src/index.css` to customize the starter's appearance.
+
 ## Project structure
 
 ```text
@@ -44,17 +46,6 @@ blocks/hello-world/
   src/index.tsx              React entry point
   src/index.css              Notion token-based styles
 ```
-
-## Appearance defaults
-
-The frontend imports Notion CSS variables and scrollbar colors. SDK initialization keeps the
-iframe document in sync with the host's theme and contrast settings. `src/index.css` applies the
-font, text color, background, and sizing defaults; edit it to use your own design.
-
-Use these defaults when no design is specified. Preserve any design the user provides, and don't
-restyle existing UI to match Notion unless asked.
-
-This template requires an SDK release containing document token scope and `scrollbars.css`.
 
 ## Verification
 
