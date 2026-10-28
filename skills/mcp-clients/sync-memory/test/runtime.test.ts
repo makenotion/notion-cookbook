@@ -69,6 +69,24 @@ test(
       clientInfo: { name: "sync-memory-runtime-test", version: "0.1.0" },
       capabilities: { experimentalApi: true },
     })
+    const details = object(
+      object(
+        await server.call("plugin/read", {
+          marketplacePath: path.join(
+            marketplace,
+            ".agents/plugins/marketplace.json"
+          ),
+          pluginName: "sync-memory",
+        })
+      ).plugin
+    )
+    const onboarding = object(details.onboardingSkill)
+    assert.equal(onboarding.name, "sync-memory:notion-setup")
+    assert.equal(onboarding.enabled, true)
+    assert.equal(
+      fs.readFileSync(String(onboarding.path), "utf8"),
+      fs.readFileSync(path.resolve(recipe, "../setup/SKILL.md"), "utf8")
+    )
     const hooks = object(await server.call("hooks/list", { cwds: [f.root] }))
     assert.ok(Array.isArray(hooks.data))
     const definitions = hooks.data.flatMap((entry) => {
@@ -105,6 +123,15 @@ test(
     assert.ok(skill, "installed Sync Memory skill must be discoverable")
     assert.equal(skill.path, path.join(installedSkill, "SKILL.md"))
     assert.equal(skill.enabled, true)
+    const setup = skillEntry.skills
+      .map(object)
+      .find((s) => s.name === "sync-memory:notion-setup")
+    assert.ok(setup, "packaged onboarding skill must be discoverable")
+    assert.equal(setup.path, path.join(cache, "skills/setup/SKILL.md"))
+    assert.equal(
+      fs.readFileSync(String(setup.path), "utf8"),
+      fs.readFileSync(path.resolve(recipe, "../setup/SKILL.md"), "utf8")
+    )
     assert.deepEqual(f.pages(), [], "installation and discovery must not write")
 
     f.seed()

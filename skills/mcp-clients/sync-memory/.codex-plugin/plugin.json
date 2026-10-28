@@ -1,8 +1,8 @@
 {
   "name": "sync-memory",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "description": "Copy local memory Markdown into Notion Memories. Currently supports Codex memories.",
-  "skills": "./skills/sync-memory/",
+  "skills": "./skills/",
   "mcpServers": "./skills/sync-memory/.mcp.json",
   "interface": {
     "displayName": "Sync Memory",
@@ -14,5 +14,10 @@
     "supportURL": "https://www.notion.com/help",
     "websiteURL": "https://mcp.notion.com/mcp"
   },
-  "requires_local_executor": true
+  "requires_local_executor": true,
+  "extensions": {
+    "com.openai": {
+      "onboardingSkill": "./skills/setup/SKILL.md"
+    }
+  }
 }

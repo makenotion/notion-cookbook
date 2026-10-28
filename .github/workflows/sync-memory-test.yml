@@ -5,12 +5,14 @@ on:
     paths:
       - ".agents/plugins/marketplace.json"
       - "skills/mcp-clients/sync-memory/**"
+      - "skills/mcp-clients/setup/SKILL.md"
       - ".github/workflows/sync-memory-test.yml"
   push:
     branches: [main]
     paths:
       - ".agents/plugins/marketplace.json"
       - "skills/mcp-clients/sync-memory/**"
+      - "skills/mcp-clients/setup/SKILL.md"
       - ".github/workflows/sync-memory-test.yml"
   workflow_dispatch:
 
@@ -34,7 +36,7 @@ jobs:
         working-directory: skills/mcp-clients/sync-memory
         run: |
           npm install
-          npm install --prefix "$RUNNER_TEMP/codex-runtime" @openai/codex@0.149.1
+          npm install --prefix "$RUNNER_TEMP/codex-runtime" @openai/codex@0.165.0
       - name: Typecheck and test the installed plugin through real Codex
         working-directory: skills/mcp-clients/sync-memory
         env:
