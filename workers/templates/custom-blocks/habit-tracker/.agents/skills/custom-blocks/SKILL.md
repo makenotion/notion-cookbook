@@ -145,6 +145,7 @@ worker.customBlock("issueBoard", {
 ### 3. Connect the frontend to Notion
 
 In `blocks/<key>/src/index.tsx`, wrap the React app in `NotionCustomBlock`.
+The example uses Notion styling. For a supplied design, keep its styles and imports.
 
 ```tsx
 import "@notionhq/custom-blocks/nds.css"
@@ -166,7 +167,7 @@ ReactDOM.createRoot(root).render(
 )
 ```
 
-Import `nds.css` for Notion CSS variables and `scrollbars.css` for matching scrollbar colors.
+For Notion styling, import `nds.css` for CSS variables and `scrollbars.css` for matching scrollbar colors.
 The SDK follows the host's theme and contrast settings. Apply the tokens in your own CSS
 to set fonts, colors, and spacing.
 Use these defaults when no design is specified. Preserve any design the user provides, and don't
