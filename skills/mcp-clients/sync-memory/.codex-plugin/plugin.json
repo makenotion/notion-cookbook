@@ -1,14 +1,18 @@
 {
   "name": "sync-memory",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "description": "Copy local memory Markdown into Notion Memories. Supports Codex memories; the same skill installs into Claude Code.",
   "skills": "./skills/sync-memory/",
-  "hooks": "./skills/sync-memory/hooks.json",
   "mcpServers": "./skills/sync-memory/.mcp.json",
   "interface": {
     "displayName": "Sync Memory",
     "shortDescription": "Copy local memory into Notion Memories",
     "developerName": "Notion",
-    "category": "Productivity"
-  }
+    "category": "Productivity",
+    "privacyPolicyURL": "https://privacycenter.notion.so/policies",
+    "termsOfServiceURL": "https://notion.notion.site/Terms-and-Privacy-28ffdd083dc3473e9c2da6ec011b58ac",
+    "supportURL": "https://www.notion.com/help",
+    "websiteURL": "https://mcp.notion.com/mcp"
+  },
+  "requires_local_executor": true
 }

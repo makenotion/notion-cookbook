@@ -18,8 +18,9 @@ const PROJECT = `${os.homedir().replace(/[^a-zA-Z0-9]/g, "-")}-code-app`
 const MEMORY_DIR = path.join(home, "projects", PROJECT, "memory")
 fs.cpSync(FIXTURES, MEMORY_DIR, { recursive: true })
 
-const { claudeMemoryInventory, claudeSource, isClaudeMemoryFile } =
-  await import("../scripts/claude.ts")
+const { claudeMemoryInventory, claudeSource } = await import(
+  "../scripts/claude.ts"
+)
 const { syncMemories } = await import("../scripts/memories.ts")
 const { loadState } = await import("../scripts/config.ts")
 
@@ -52,17 +53,6 @@ test("lists auto memory files with unchanged Markdown, one page per file", () =>
       "user_role.md",
     ]
   )
-})
-
-test("recognizes only auto memory files from hook input", () => {
-  assert.equal(isClaudeMemoryFile(path.join(MEMORY_DIR, "user_role.md")), true)
-  assert.equal(isClaudeMemoryFile(path.join(MEMORY_DIR, "MEMORY.md")), false)
-  assert.equal(
-    isClaudeMemoryFile(path.join(home, "projects", PROJECT, "notes.md")),
-    false
-  )
-  assert.equal(isClaudeMemoryFile("/tmp/memory/user_role.md"), false)
-  assert.equal(isClaudeMemoryFile(""), false)
 })
 
 test("copies Claude Code memory files, updates the same page, and leaves deleted files' pages", async () => {

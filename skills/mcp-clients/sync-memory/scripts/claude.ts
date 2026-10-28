@@ -82,45 +82,6 @@ export function claudeMemoryInventory(dir: string): MemoryInventory {
   return { files, unsupported: unsupported.sort() }
 }
 
-// True when a Write or Edit from a PostToolUse hook touched an auto memory file.
-export function isClaudeMemoryFile(file: string): boolean {
-  const parts = path
-    .relative(CUSTOM_DIR ?? PROJECTS_DIR, path.resolve(file))
-    .split(path.sep)
-  const name = parts.at(-1) ?? ""
-  if (parts[0] === ".." || !name.endsWith(".md") || name === "MEMORY.md")
-    return false
-  return CUSTOM_DIR
-    ? parts.length === 1
-    : parts.length === 3 && parts[1] === "memory"
-}
-
-// Whether Claude Code's auto memory is on, the way Claude Code decides it:
-// CLAUDE_CODE_DISABLE_AUTO_MEMORY wins, then bare mode, then `autoMemoryEnabled` from the
-// most specific settings file that sets it. Hooks inherit the settings' `env` block, so
-// an env var set there counts too. `cwd` adds that project's settings.
-export function claudeMemoriesEnabled(cwd: string | undefined): boolean {
-  const env = process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY?.trim().toLowerCase()
-  if (env && ["1", "true", "yes", "on"].includes(env)) return false
-  if (env && ["0", "false", "no", "off"].includes(env)) return true
-  if (process.env.CLAUDE_CODE_SIMPLE) return false
-  const files = [
-    MANAGED_SETTINGS,
-    ...(cwd
-      ? [
-          path.join(cwd, ".claude", "settings.local.json"),
-          path.join(cwd, ".claude", "settings.json"),
-        ]
-      : []),
-    USER_SETTINGS,
-  ]
-  for (const file of files) {
-    const value = readSettings(file).autoMemoryEnabled
-    if (typeof value === "boolean") return value
-  }
-  return true
-}
-
 function customMemoryDir(): string | undefined {
   for (const file of [MANAGED_SETTINGS, USER_SETTINGS]) {
     const value = readSettings(file).autoMemoryDirectory

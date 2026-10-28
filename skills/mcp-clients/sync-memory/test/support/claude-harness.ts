@@ -8,8 +8,6 @@ import type { TestContext } from "node:test"
 import { buildPlugin } from "../../scripts/build-plugin.mjs"
 import { object, recipe, run, support } from "./harness.ts"
 
-export type ClaudeHookEvent = "SessionStart" | "PostToolUse" | "Stop"
-
 // An installed copy of the plugin in a path with spaces, an empty Claude Code home, a
 // project directory, and the offline Notion server from fake-notion-http.mjs.
 export async function claudeFixture(t: TestContext, failure = "") {
@@ -57,19 +55,9 @@ export async function claudeFixture(t: TestContext, failure = "") {
   const logFile = path.join(dataDir, "notion-memory.log")
   const log = () =>
     fs.existsSync(logFile) ? fs.readFileSync(logFile, "utf8") : ""
-  const hooks = object(
-    object(
-      JSON.parse(fs.readFileSync(path.join(skill, "claude-hooks.json"), "utf8"))
-    ).hooks
-  )
 
   t.after(() => {
     server.kill()
-    for (const match of log().matchAll(/worker pid (\d+)/g)) {
-      try {
-        process.kill(Number(match[1]), "SIGTERM")
-      } catch {}
-    }
     fs.rmSync(root, { recursive: true, force: true })
   })
 
@@ -134,30 +122,7 @@ export async function claudeFixture(t: TestContext, failure = "") {
         timeout
       )
     },
-    // Runs the command exactly as written in claude-hooks.json, the way Claude Code does.
-    hook(
-      event: ClaudeHookEvent,
-      input: Record<string, unknown> = {},
-      extra: NodeJS.ProcessEnv = {}
-    ) {
-      const entries = hooks[event]
-      assert.ok(Array.isArray(entries))
-      return run(
-        "/bin/sh",
-        ["-c", hookCommand(entries)],
-        { ...env, CLAUDE_PLUGIN_ROOT: installed, ...extra },
-        project,
-        15_000,
-        JSON.stringify({ session_id: "synthetic", cwd: project, ...input })
-      )
-    },
   }
-}
-
-function hookCommand(entries: unknown[]): string {
-  const hooks = object(entries[0]).hooks
-  assert.ok(Array.isArray(hooks))
-  return String(object(hooks[0]).command)
 }
 
 async function serverPort(server: ChildProcess): Promise<number> {

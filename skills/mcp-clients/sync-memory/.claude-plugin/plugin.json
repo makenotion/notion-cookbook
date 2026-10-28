@@ -1,11 +1,10 @@
 {
   "name": "sync-memory",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "description": "Copy the memories Claude Code saves about you into Notion Memories, through Notion MCP.",
   "author": {
     "name": "Notion"
   },
   "license": "MIT",
-  "skills": "./skills/sync-memory/",
-  "hooks": "./skills/sync-memory/claude-hooks.json"
+  "skills": "./skills/sync-memory/"
 }

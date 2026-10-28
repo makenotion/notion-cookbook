@@ -1,5 +1,5 @@
 // Calls Notion MCP tools through Codex's own MCP client, so these scripts never handle a
-// Notion token: Codex owns the connection. The worker starts `codex app-server`, opens an
+// Notion token: Codex owns the connection. The command starts `codex app-server`, opens an
 // ephemeral thread (no model call, and ephemeral threads never feed Codex's memory
 // pipeline), and uses `mcpServer/tool/call`.
 //
@@ -55,7 +55,6 @@ export class CodexNotionMcp {
     this.opts = opts
     this.child = spawn(opts.codexPath, ["app-server"], {
       stdio: ["pipe", "pipe", "ignore"],
-      env: { ...process.env, NOTION_MEMORY_WORKER: "1" },
     })
     this.child.on("error", (error) => this.fail(error))
     this.child.on("exit", (code, signal) =>
@@ -114,7 +113,7 @@ export class CodexNotionMcp {
 
   private async initialize(): Promise<void> {
     await this.rpc("initialize", {
-      clientInfo: { name: "sync-memory", version: "0.4.4" },
+      clientInfo: { name: "sync-memory", version: "0.4.5" },
     })
     this.notify("initialized")
   }
@@ -128,18 +127,6 @@ export class CodexNotionMcp {
       mcp.close()
       throw error
     }
-  }
-
-  async memoriesEnabled(): Promise<boolean> {
-    const result = await this.rpc("config/read", {
-      cwd: this.opts.cwd,
-      includeLayers: false,
-    })
-    if (!isObject(result) || !isObject(result.config)) return false
-    return (
-      isObject(result.config.features) &&
-      result.config.features.memories === true
-    )
   }
 
   private async connectNotion(): Promise<void> {

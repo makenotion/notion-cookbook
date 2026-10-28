@@ -34,15 +34,6 @@ for await (const line of readline.createInterface({ input: process.stdin })) {
     case "initialize":
       result = { userAgent: "offline-fixture" }
       break
-    case "config/read":
-      result = {
-        config: {
-          features: {
-            memories: process.env.FIXTURE_MEMORIES_ENABLED !== "false",
-          },
-        },
-      }
-      break
     case "thread/start":
       if (!request.params.ephemeral)
         throw new Error("only ephemeral threads permitted")

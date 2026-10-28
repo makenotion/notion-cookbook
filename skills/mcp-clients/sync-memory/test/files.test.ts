@@ -219,12 +219,6 @@ test("preview is offline and verify detects changed pages", async (t) => {
   assert.match(r.stderr, /Page changed/)
 })
 
-test("hook with no latest memory directory starts no worker", async (t) => {
-  const f = fixture(t)
-  assert.equal((await f.exec(["hook", "session-start"])).code, 0)
-  assert.deepEqual(f.calls(), [])
-})
-
 test("source metadata stays in the body and metadata-only updates preserve identity", async (t) => {
   const f = fixture(t)
   f.seed()

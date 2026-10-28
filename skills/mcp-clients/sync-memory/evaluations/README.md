@@ -15,5 +15,5 @@ Markdown, page identity, attribution, and reported result. Keep personal memory
 and production workspaces outside these evaluations.
 
 The automated tests in `test/` separately cover package contents, real Codex
-installation and discovery, file copying, write recovery, and worker behavior.
+installation and discovery, file copying, write recovery, and the absence of lifecycle hooks.
 Real Notion authentication and import rendering require separate live checks.

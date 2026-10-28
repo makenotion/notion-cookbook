@@ -34,7 +34,7 @@ memory files and use its authenticated Notion connection.
    in clients that support it; otherwise, ask the assistant to follow the
    supplied workflow explicitly.
 
-Sync Memory bundles executable scripts and optional Codex lifecycle hooks.
+Sync Memory bundles executable scripts for desktop-only use and registers no lifecycle hooks.
 Follow its [installation instructions](sync-memory/README.md) for the plugin
 package, or copy the complete skill directory for manual use in Codex.
 

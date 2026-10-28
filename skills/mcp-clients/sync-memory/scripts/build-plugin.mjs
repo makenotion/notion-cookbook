@@ -19,13 +19,7 @@ export function buildPlugin(destination) {
       path.join(root, manifest, "plugin.json")
     )
   }
-  for (const name of [
-    "SKILL.md",
-    ".mcp.json",
-    "hooks.json",
-    "claude-hooks.json",
-    "hook.cjs",
-  ]) {
+  for (const name of ["SKILL.md", ".mcp.json"]) {
     fs.copyFileSync(path.join(skill, name), path.join(bundledSkill, name))
   }
   const metadata = JSON.parse(

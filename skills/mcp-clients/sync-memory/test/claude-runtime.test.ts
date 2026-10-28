@@ -3,12 +3,12 @@ import fs from "node:fs"
 import path from "node:path"
 import { test } from "node:test"
 import { claudeFixture } from "./support/claude-harness.ts"
-import { object, recipe, run, waitFor } from "./support/harness.ts"
+import { object, recipe, run } from "./support/harness.ts"
 
 const claude = process.env.CLAUDE_TEST_BINARY
 
 test(
-  "real Claude Code installs the plugin, loads no MCP server, and its cached hook syncs",
+  "real Claude Code installs the plugin with no hooks or MCP server, and its cached script syncs",
   {
     skip:
       !claude &&
@@ -56,26 +56,31 @@ test(
     const cache = path.join(f.home, "plugins/cache/notion-cookbook/sync-memory")
     const [version] = fs.readdirSync(cache)
     const pluginRoot = path.join(cache, version)
-    assert.ok(
-      fs.existsSync(
-        path.join(pluginRoot, "skills/sync-memory/claude-hooks.json")
+    const manifest = object(
+      JSON.parse(
+        fs.readFileSync(
+          path.join(pluginRoot, ".claude-plugin/plugin.json"),
+          "utf8"
+        )
       )
     )
+    assert.equal(manifest.hooks, undefined)
     assert.equal(fs.existsSync(path.join(pluginRoot, ".mcp.json")), false)
 
     result = await cli("mcp", "list")
     assert.doesNotMatch(result.stdout + result.stderr, /sync-memory/)
 
-    // The SessionStart command from the installed cache writes through the offline server.
+    // An explicit sync from the installed cache writes through the offline server.
     f.signIn()
     f.seed()
-    const hook = await f.hook(
-      "SessionStart",
-      {},
-      { CLAUDE_PLUGIN_ROOT: pluginRoot }
+    result = await run(
+      process.execPath,
+      [path.join(pluginRoot, "skills/sync-memory/scripts/main.ts"), "sync"],
+      f.env,
+      f.project
     )
-    assert.equal(hook.code, 0, hook.stderr)
-    await waitFor(() => /"created":5/.test(f.log()), 15_000)
+    assert.equal(result.code, 0, result.stderr)
+    assert.equal(JSON.parse(result.stdout).created, 5)
     assert.equal(f.pages().length, 5)
   }
 )

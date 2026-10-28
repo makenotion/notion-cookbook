@@ -8,7 +8,7 @@ import { appServer } from "./support/rpc.ts"
 const binary = process.env.CODEX_TEST_BINARY
 
 test(
-  "real Codex installs Sync Memory, discovers its skill and untrusted hooks, and syncs through a local MCP server",
+  "real Codex installs Sync Memory, discovers its desktop-only skill without hooks, and syncs through a local MCP server",
   {
     skip: !binary && "set CODEX_TEST_BINARY to an installed Codex executable",
     timeout: 60_000,
@@ -71,12 +71,16 @@ test(
     })
     const hooks = object(await server.call("hooks/list", { cwds: [f.root] }))
     assert.ok(Array.isArray(hooks.data))
-    const entry = object(hooks.data[0])
-    assert.ok(Array.isArray(entry.hooks))
-    const definitions = entry.hooks.map(object)
-    assert.equal(definitions.length, 2)
-    assert.ok(definitions.every((h) => h.trustStatus === "untrusted"))
-    assert.ok(definitions.every((h) => String(h.sourcePath).startsWith(cache)))
+    const definitions = hooks.data.flatMap((entry) => {
+      const items = object(entry).hooks
+      assert.ok(Array.isArray(items))
+      return items
+    })
+    assert.deepEqual(
+      definitions,
+      [],
+      "installation must register no lifecycle hooks"
+    )
     const thread = object(
       await server.call("thread/start", { ephemeral: true, cwd: f.root })
     )
@@ -101,7 +105,7 @@ test(
     assert.ok(skill, "installed Sync Memory skill must be discoverable")
     assert.equal(skill.path, path.join(installedSkill, "SKILL.md"))
     assert.equal(skill.enabled, true)
-    assert.deepEqual(f.pages(), [], "untrusted startup hook must not write")
+    assert.deepEqual(f.pages(), [], "installation and discovery must not write")
 
     f.seed()
     const execute = () =>
@@ -139,22 +143,6 @@ test(
       String(f.pages().find((p) => p.title === "memory_summary.md")?.content),
       /^# Codex memory source\n[\s\S]*\n---\n\n$/
     )
-    // Directly exercise the installed worker's disabled-config guard. No hooks are trusted.
-    const disabled = await run(
-      process.execPath,
-      [
-        path.join(installedSkill, "scripts/main.ts"),
-        "worker",
-        "session-start",
-        "--cwd",
-        f.root,
-      ],
-      env,
-      f.root,
-      15_000
-    )
-    assert.equal(disabled.code, 0, disabled.stderr)
-    assert.match(fs.readFileSync(f.logFile, "utf8"), /memories are disabled/)
     assert.ok(!f.calls().includes("turn/start"))
   }
 )

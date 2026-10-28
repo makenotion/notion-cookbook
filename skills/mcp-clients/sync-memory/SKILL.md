@@ -7,6 +7,13 @@ metadata:
 
 # Sync Memory
 
+Before the first import, confirm the source inventory, destination workspace and
+visibility, and approval to copy these files. Reuse prior explicit approval for the
+same scope. The command copies the full inventory; if approval excludes a file,
+stop and report the unsupported narrower scope. Authorization for one import does
+not authorize recurring work. Schedule only when the user separately approves the
+frequency, sources, destination and notifications. This package installs no scheduler.
+
 Use Node.js 22.18+ and the bundled `scripts/main.ts`, relative to this skill directory.
 In Claude Code, prefix every command with `NOTION_MEMORY_AGENT=claude`; in Codex,
 run them as shown.
@@ -31,9 +38,8 @@ time (null when unavailable), filesystem mtime, sync attempt time and notion-mem
 as the copier. Never substitute ctime or expose absolute source paths. No database
 properties are added. Source metadata changes update the same page; unchanged text
 and metadata keep Synced at unchanged. Source and Last updated by name the agent,
-and updates preserve Source. In Codex, trusted SessionStart and Stop hooks start or
-renew one bounded watcher per mapping directory. In Claude Code, hooks copy a memory
-as soon as Claude saves it, and SessionStart and Stop catch other changes.
+and updates preserve Source. This desktop-only package runs on explicit invocation;
+it installs no session hooks, watcher, or background service in either agent.
 
 Codex supports only v2. Import existing Markdown even without a summary.
 Report the command's unsupported and missing paths. Existing Notion edits and

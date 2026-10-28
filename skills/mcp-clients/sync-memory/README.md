@@ -9,11 +9,12 @@ The canonical source lives beside the other Notion skills at
 `skills/mcp-clients/sync-memory/`. `SKILL.md` is the agent entrypoint, and
 `scripts/` holds its deterministic copy commands. `npm run build:plugin` packages
 this skill into `build/sync-memory/` at the repository root. The generated plugin
-contains this skill, its runtime scripts, hooks, and Notion connection. Other
+contains this skill, its runtime scripts, and Notion connection. Other
 skills, tests, evaluations, and dependencies are excluded. Build output stays
-untracked. The plugin has both a Codex and a Claude Code manifest. Claude Code
-copies each auto memory file the same way. This page describes Codex first, and
-[Claude Code](#claude-code) covers what differs there.
+untracked. The plugin has both a Codex and a Claude Code manifest, declares
+desktop-only execution, and registers no lifecycle hooks or background service in
+either agent. Claude Code copies each auto memory file the same way. This page
+describes Codex first, and [Claude Code](#claude-code) covers what differs there.
 
 ## Behavior
 
@@ -112,8 +113,8 @@ not to the whole skills collection.
 
 In Codex, select `$sync-memory:sync-memory` or ask the agent to use Sync Memory to sync,
 preview, verify, or inspect the mapping. Copy the whole directory when installing
-the skill directly so its `scripts/` commands remain available. Automatic hooks
-and the bundled Notion connection require the plugin installation.
+the skill directly so its `scripts/` commands remain available.
+The bundled Notion connection requires the plugin installation.
 
 The runtime test checks discovery of the skill through `skills/list`.
 
@@ -124,7 +125,6 @@ For local imports, pin `expectedWorkspaceId` as well:
 ```json
 {
   "codexPath": "codex",
-  "nodePath": "/absolute/path/to/node",
   "mcpServer": "notion-local",
   "expectedWorkspaceId": "your-local-workspace-id"
 }
@@ -140,30 +140,38 @@ The product and skill are named Sync Memory. The existing `notion-memory`
 configuration, mapping and log paths, `NOTION_MEMORY_*` environment variables, and
 `Synced by: notion-memory` metadata remain stable. Renaming does not create a new
 mapping namespace or require rewriting existing pages. Disable or uninstall an
-older `notion-memory` development plugin before enabling Sync Memory's hooks.
+older development plugin with automatic hooks before using this release.
 Keep its configuration and state directory intact. There is no automatic removal
-or migration of the old plugin installation.
+or migration of an old plugin installation.
 
-Review and trust the two hooks in Codex (`/hooks` in the CLI). Until trusted,
-hooks are skipped. New hook definitions require review again.
+## Execution and authorization
 
-## Triggering
+Each explicit `sync` invocation imports the current source inventory, then exits.
+There is no watcher, session hook, login item, or automatic restart in this package.
+A changed import starts one Codex app-server subprocess through the existing Codex
+authentication. An unchanged import starts none. Imports use a cross-process lock.
+Source content and metadata hashes skip unchanged writes, and a readback hash
+protects external changes before an update. The command does not read Codex's
+private SQLite database or regenerate memory when automatic memories are disabled.
 
-SessionStart and Stop hooks start a detached worker and return. Stop is a Codex
-lifecycle event, not closing the application. One worker owns each mapping
-directory. Later hooks extend its watch deadline instead of starting additional
-watchers. SessionStart requests ten minutes and Stop requests five minutes.
-The worker checks effective `features.memories` and polls every five seconds.
-The initial inventory must remain stable for one interval before import. Later
-changes must match across two polls before another import. This does not guarantee an atomic snapshot across files.
-The worker does not read Codex's private SQLite database.
+Before the first import, confirm the source inventory, target workspace, destination
+visibility, and authorization to copy the existing files. Reuse explicit approval
+for the same scope. A one-time import approval does not authorize recurring jobs.
+The command copies the whole inventory and does not enforce content exclusions;
+if approval excludes any source file, stop rather than claim a filtered import.
 
-The worker starts one Codex app-server subprocess. That process reads the memories
-setting and supplies Notion MCP calls through the existing Codex authentication.
-Manual `sync` explicitly imports retained files even if automatic memories are
-currently disabled. Imports use a cross-process lock. Source content and metadata
-hashes skip unchanged writes, and a readback hash protects external changes before
-an update. There is no permanent service or native memory-updated event.
+The separate [Notion setup skill](../setup/SKILL.md) covers general onboarding,
+including import approval and separately authorized scheduling. It is not bundled
+or registered as this plugin's onboarding flow. This package reuses the Notion
+plugin's [privacy](https://privacycenter.notion.so/policies) and
+[terms](https://notion.notion.site/Terms-and-Privacy-28ffdd083dc3473e9c2da6ec011b58ac)
+listing URLs. Those links do not establish legal coverage for bulk local-memory
+copying. Feature-specific consent enforcement, exclusions and forget behavior,
+background execution, and public submission remain release review items.
+
+A separately authorized local scheduler could run the same one-shot command.
+This package does not create one. Public directory eligibility must still be
+confirmed through OpenAI's [desktop-only submission process](https://developers.openai.com/plugins/deploy/desktop-only).
 
 ## Commands
 
@@ -201,15 +209,12 @@ character.
 | Processing point                                               | Implementation                                           |
 | -------------------------------------------------------------- | -------------------------------------------------------- |
 | Plugin registration and MCP endpoint                           | `.codex-plugin/plugin.json`, `.mcp.json`                 |
-| SessionStart / Stop registration                               | `hooks.json`                                             |
-| Select Node runtime                                            | `hook.cjs`                                               |
-| Manual command, detached worker, feature guard, watch window   | `scripts/main.ts`                                        |
+| Manual command and lazy connection lifetime                    | `scripts/main.ts`                                        |
 | Recursively read current memory Markdown files unchanged       | `scripts/codex.ts` — `codexMemoryInventory`              |
 | One file / one page, attribution, update protection, readback  | `scripts/memories.ts` — `syncMemories`, `verifyMemories` |
-| File polling and stability check                               | `scripts/codex.ts` — `watchMemories`                     |
 | Connection, OAuth-owned transport, workspace check, RPC errors | `scripts/mcp.ts`                                         |
 | Settings, file mapping, atomic save, logs                      | `scripts/config.ts`                                      |
-| Process ownership for imports and the shared watcher           | `scripts/ownership.ts`                                   |
+| Cross-process ownership for imports                            | `scripts/ownership.ts`                                   |
 | On-demand agent instruction                                    | `SKILL.md`                                               |
 | Generate the isolated plugin artifact                          | `scripts/build-plugin.mjs`                               |
 
@@ -242,12 +247,6 @@ and missing files work as for Codex: a deleted memory file leaves its page alone
 The plugin reads memories from every project, so run the preview first if some
 projects hold memories you don't want in Notion.
 
-Automatic syncs follow Claude Code's own auto memory switch, decided the way
-Claude Code decides it: `CLAUDE_CODE_DISABLE_AUTO_MEMORY` (including from a
-settings `env` block), then bare mode, then `autoMemoryEnabled` from managed,
-the session project's local and shared, or user settings. When it is off, hooks
-start no worker. A manual `sync` still copies the files that are there.
-
 ### Setup
 
 ```sh
@@ -265,7 +264,8 @@ NOTION_MEMORY_AGENT=claude node scripts/main.ts login
 NOTION_MEMORY_AGENT=claude node scripts/main.ts preview
 ```
 
-Restart Claude Code to load the hooks.
+Then ask Claude Code to sync your memories, or run
+`NOTION_MEMORY_AGENT=claude node scripts/main.ts sync` yourself.
 
 ### Signing in
 
@@ -276,25 +276,21 @@ redirect on `127.0.0.1`. The tokens are stored in
 `~/.claude/notion-memory/oauth.json`, readable only by you, and refreshed
 automatically. Delete that file to sign out.
 
-### Triggering in Claude Code
+### Running in Claude Code
 
-Claude Code writes memories with its own Write and Edit tools, so the plugin
-doesn't need to watch for changes. A `PostToolUse` hook (`Write|Edit|MultiEdit`
-on a memory file) copies a memory as soon as Claude saves it, and `SessionStart`
-and `Stop` catch changes made any other way. Each starts a detached worker that
-syncs once and exits. A hook starts no worker when there are no memories, auto
-memory is off, or you have not signed in yet; the last two are logged. Every
-request to Notion has a 60-second timeout. A worker holds the lock while it is
-connected, so overlapping hooks never refresh the OAuth token at the same time.
+As in Codex, the plugin runs only when you or Claude invoke it. It installs no
+hooks, so Claude Code saving a memory does not copy it until the next `sync`.
+Every request to Notion has a 60-second timeout. `sync` and `verify` hold the lock
+while connected, so two runs never refresh the OAuth token at the same time.
 State, tokens, and logs live in `~/.claude/notion-memory/`, separate from
 Codex's.
 
-| Processing point                               | Implementation                                    |
-| ---------------------------------------------- | ------------------------------------------------- |
-| Plugin registration and hooks                  | `.claude-plugin/plugin.json`, `claude-hooks.json` |
-| Local marketplace                              | `../../../.claude-plugin/marketplace.json`        |
-| Memory files, auto memory switch, hook filter  | `scripts/claude.ts`                               |
-| Sign-in, token refresh, Streamable HTTP to MCP | `scripts/notionMcp.ts`                            |
+| Processing point                               | Implementation                             |
+| ---------------------------------------------- | ------------------------------------------ |
+| Plugin registration                            | `.claude-plugin/plugin.json`               |
+| Local marketplace                              | `../../../.claude-plugin/marketplace.json` |
+| Memory files and `autoMemoryDirectory`         | `scripts/claude.ts`                        |
+| Sign-in, token refresh, Streamable HTTP to MCP | `scripts/notionMcp.ts`                     |
 
 ## Validation
 
@@ -308,7 +304,7 @@ CLAUDE_TEST_BINARY="$(command -v claude)" npm test
 
 Tests exercise nested files, distinct paths with the same basename, unchanged
 Markdown, same-page updates, empty and missing files, excluded links and Git state,
-external edits/deletions, notices, locks, worker polling and failures. Source metadata
+external edits/deletions, notices, locks, removed automatic entrypoints and failures. Source metadata
 tests cover birth time, metadata-only updates, unchanged-page stability and existing
 mapping backfill.
 The dedicated `sync-memory-test.yml` workflow runs the checks on Node.js 22.18.0
@@ -318,13 +314,13 @@ recipe runner. Skill evaluation scenarios use the separate
 
 The optional runtime test builds and installs the real artifact in an isolated Codex home
 and drives a stdio Notion fixture through the real app-server without a model.
-Desktop trust/OAuth clicks and natural-conversation hook dispatch require separate
-live verification; manually starting a worker does not prove that entire chain.
+Desktop installation/OAuth clicks and real Notion import rendering require separate
+live verification. Installation and skill discovery alone must not write memory.
 
 Claude Code gets the same treatment against `test/support/fake-notion-http.mjs`,
 a local stand-in for mcp.notion.com (OAuth refresh and Streamable HTTP MCP) over
-the same Notion fixture. Those tests run the hook commands exactly as written in
-`claude-hooks.json` from a copy of the plugin in a path with spaces. The optional
-runtime test installs through the real `claude plugin` commands into an empty
-`CLAUDE_CONFIG_DIR` and runs the cached SessionStart hook. A real `login` against
-Notion needs browser consent and is not automated.
+the same Notion fixture. Those tests run the bundled commands from a copy of the
+plugin in a path with spaces. The optional runtime test installs through the real
+`claude plugin` commands into an empty `CLAUDE_CONFIG_DIR` and checks that no hook
+or MCP server is registered. A real `login` against Notion needs browser consent
+and is not automated.

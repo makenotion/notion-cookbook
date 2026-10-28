@@ -1,13 +1,10 @@
 import fs from "node:fs"
 import path from "node:path"
-import { AGENT_HOME, loadConfig, sleep, withLock } from "./config.ts"
-import type { CallTool } from "./mcp.ts"
+import { AGENT_HOME, loadConfig } from "./config.ts"
 import {
   type MemoryInventory,
-  memoryFilesHash,
   type MemorySource,
   readSourceFile,
-  syncMemories,
 } from "./memories.ts"
 
 // Codex memories (`[features] memories = true`) are written by Codex itself, in the
@@ -48,28 +45,4 @@ export function codexMemoryInventory(): MemoryInventory {
     type: "Notes" as const,
   }))
   return { files, unsupported: unsupported.sort() }
-}
-
-// Syncs once the files hold still for one poll, so a consolidation that is still
-// writing is not imported half-way.
-export async function watchMemories(
-  call: CallTool,
-  opts: { initialHash: string; until: () => number }
-) {
-  let previous: string | undefined
-  let candidate: string | undefined = opts.initialHash
-  while (Date.now() < opts.until()) {
-    await sleep(5000)
-    if (Date.now() >= opts.until()) break
-    const hash = memoryFilesHash(codexSource)
-    if (hash === previous) {
-      candidate = undefined
-    } else if (hash === candidate) {
-      await withLock(() => syncMemories(call, codexSource))
-      previous = hash
-      candidate = undefined
-    } else {
-      candidate = hash
-    }
-  }
 }

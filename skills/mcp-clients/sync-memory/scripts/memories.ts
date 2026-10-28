@@ -211,16 +211,6 @@ export async function verifyMemories(call: CallTool, source: MemorySource) {
   }
 }
 
-export function memoryFilesHash(source: MemorySource): string {
-  const { files, unsupported } = source.inventory()
-  return digest(
-    JSON.stringify([
-      files.map(({ name, hash, metadataHash }) => [name, hash, metadataHash]),
-      unsupported,
-    ])
-  )
-}
-
 // Reads one source file with the timestamps its preamble reports.
 export function readSourceFile(root: string, name: string): SourceFile {
   const file = path.join(root, name)
