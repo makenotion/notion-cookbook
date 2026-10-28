@@ -21,3 +21,5 @@ nnnnnnnn    nnnnnnn     nnnnnn     nnn
 ```
 
 This feature is in private alpha. Coming soon.
+
+For native custom view controls, see the [authoring reference](../../agents/skills/custom-blocks/view-controls.md). It covers package prerequisites, one-source ownership, explicit query forwarding, and host-owned page creation.
