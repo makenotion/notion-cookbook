@@ -44,6 +44,10 @@ lists. Spread `DEFAULT_SKILLS` to add to them instead of repeating them.
 App recipes use their own group and [canonical App guidance](../../apps/agents/).
 `skillsRoot` keeps each group's skill names scoped to its SDK family.
 
+Custom block instructions also include `DESIGN.md`. It ships at `.agents/DESIGN.md`, and the
+instructions direct agents to read it for UI work. This is the canonical agent design guide;
+the developer site's design guide and token reference provide the full human-facing documentation.
+
 Each template also gets an `AGENTS.md` and a `CLAUDE.md` symlink pointing at
 `.agents/INSTRUCTIONS.md`, so both discovery conventions resolve to one file.
 
