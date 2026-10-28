@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
-import type { NotionDataSourcePage } from "@notionhq/apps/custom-blocks"
+import type { PageRow } from "../blocks/main_ui/meeting.js"
+import { pageRow, propertyValue, type PageProperties } from "./pageFixtures.js"
 import { initialQuery, type QueryState } from "../blocks/main_ui/live.js"
 import {
   setupStages,
@@ -14,15 +15,9 @@ const researching = {
   total: 2,
   stalled: 0,
 }
-const row = (status: string, properties: Record<string, unknown> = {}) =>
-  ({
-    id: status,
-    propertiesById: {},
-    propertiesByKey: { "Research status": status, ...properties },
-  }) as unknown as NotionDataSourcePage
-const loaded = (
-  items: NotionDataSourcePage[] = []
-): QueryState<NotionDataSourcePage> => ({
+const row = (status: string, properties: PageProperties = {}) =>
+  pageRow(status, { "Research status": status, ...properties })
+const loaded = (items: PageRow[] = []): QueryState<PageRow> => ({
   phase: "settled",
   loaded: true,
   hasData: true,
@@ -39,7 +34,7 @@ const meeting = (status: string, day = "2026-10-03") =>
     "Prep status": status,
     Status: "Scheduled",
     "Attendee emails": "a@acme.example",
-    When: { type: "date", start_date: day },
+    When: { start: day },
   })
 
 describe("first-run stages", () => {
@@ -98,7 +93,7 @@ describe("first-run stages", () => {
 
   it("keeps briefs pending until their profile research completes", () => {
     const waiting = meeting("Queued")
-    waiting.propertiesByKey["Research status"] = ""
+    waiting.properties["Research status"] = propertyValue("research", "")
     const stages = setupStages(
       researching,
       queries({
@@ -115,7 +110,7 @@ describe("first-run stages", () => {
       status: "pending",
       detail: "1 waiting for research",
     })
-    waiting.propertiesByKey["Research status"] = "Ready"
+    waiting.properties["Research status"] = propertyValue("research", "Ready")
     expect(
       setupStages(
         researching,
@@ -175,11 +170,7 @@ describe("first-run stages", () => {
 
   it("stops the activity indicator for stale research and failed syncs", () => {
     const stale = row("Researching")
-    stale.propertiesById.last_edited_time = {
-      type: "datetime",
-      start_date: "2026-10-01",
-      start_time: "12:00",
-    }
+    stale.last_edited_time = "2026-10-01T12:00:00Z"
     const stages = setupStages(
       { kind: "failed", error: "Calendar disconnected" },
       queries({ people: loaded([stale]) }),

@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "A collection of guides, examples, and resources for building with Notion's developer platform",
   "private": true,
+  "engines": {
+    "node": ">=22.23.4",
+    "npm": ">=10.9.9"
+  },
   "scripts": {
     "projects:install": "node scripts/run-projects.mjs install",
     "projects:typecheck": "node scripts/run-projects.mjs typecheck",
@@ -11,10 +15,12 @@
     "agents:sync": "node scripts/sync-agent-files.mjs",
     "agents:check": "node scripts/sync-agent-files.mjs --dryRun",
     "agents:test": "node --test scripts/*.test.mjs",
+    "plugins:build": "node scripts/build-plugins.mjs",
+    "plugins:check": "node scripts/build-plugins.mjs --dryRun",
     "lint:markdown": "markdownlint \"**/*.md\" --ignore node_modules --ignore \"**/node_modules/**\" --config .markdownlint.jsonc",
     "format": "prettier --write \"**/*.{md,json,yml,yaml}\"",
     "format:check": "prettier --check \"**/*.{md,json,yml,yaml}\"",
-    "verify": "npm run catalog:validate && npm run agents:check && npm run agents:test && npm run projects:typecheck && npm run projects:test && npm run lint:markdown && npm run format:check",
+    "verify": "npm run catalog:validate && npm run agents:check && npm run agents:test && npm run plugins:check && npm run projects:typecheck && npm run projects:test && npm run lint:markdown && npm run format:check",
     "verify:all": "npm run projects:install && npm run verify",
     "prepare": "husky"
   },

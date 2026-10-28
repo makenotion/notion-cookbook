@@ -3,7 +3,7 @@
 ## Project Structure & Module Organization
 
 - `src/index.ts` defines the worker and capabilities.
-- `.examples/` has focused samples (sync, tool, automation, OAuth, webhook).
+- `.examples/` has focused samples (sync, tool, OAuth, webhook).
 - Shared agent skills live in `.agents/skills/`.
 - Generated: `dist/` build output, `workers.json` CLI config.
 
@@ -28,16 +28,22 @@ Use the `custom-blocks` skill in `.agents/skills/custom-blocks/` before writing 
 import { Worker } from "@notionhq/workers"
 import * as Builder from "@notionhq/workers/builder"
 import * as Schema from "@notionhq/workers/schema"
+import { j } from "@notionhq/workers/schema-builder"
 
 const worker = new Worker()
 export default worker
 
-worker.sync("tasksSync", {
+const tasks = worker.database("tasks", {
+  type: "managed",
+  initialTitle: "Tasks",
   primaryKeyProperty: "ID",
   schema: {
-    defaultName: "Tasks",
     properties: { Name: Schema.title(), ID: Schema.richText() },
   },
+})
+
+worker.sync("tasksSync", {
+  database: tasks,
   execute: async (_state, { notion }) => ({
     changes: [
       {
@@ -56,22 +62,18 @@ worker.sync("tasksSync", {
 worker.tool("sayHello", {
   title: "Say Hello",
   description: "Return a greeting",
-  schema: {
-    type: "object",
-    properties: { name: { type: "string" } },
-    required: ["name"],
-    additionalProperties: false,
-  },
+  schema: j.object({ name: j.string() }),
   execute: ({ name }, { notion }) => `Hello, ${name}`,
 })
 
-worker.automation("sendWelcomeEmail", {
-  title: "Send Welcome Email",
-  description: "Runs from a database automation",
-  execute: async (event, { notion }) => {},
+worker.oauth("googleAuth", {
+  name: "my-google-auth",
+  authorizationEndpoint: "https://accounts.google.com/o/oauth2/v2/auth",
+  tokenEndpoint: "https://oauth2.googleapis.com/token",
+  scope: "openid email",
+  clientId: process.env.GOOGLE_CLIENT_ID ?? "",
+  clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
 })
-
-worker.oauth("googleAuth", { name: "my-google-auth", provider: "google" })
 
 worker.webhook("onGithubPush", {
   title: "GitHub Push Webhook",
@@ -90,7 +92,7 @@ All `execute` handlers receive a `context.notion` object (a `@notionhq/client` S
 
 However, `context.notion` is only **pre-authenticated** when it's a tool capability invoked by a Custom Agent. In that case, the platform sets `NOTION_API_TOKEN` automatically, using the permissions of the Custom Agent — no setup required.
 
-For all other capabilities (syncs, automations, webhooks), `context.notion` is **not** pre-authenticated. The user must set the `NOTION_API_TOKEN` environment variable themselves by:
+For all other capabilities (syncs, webhooks), `context.notion` is **not** pre-authenticated. The user must set the `NOTION_API_TOKEN` environment variable themselves by:
 
 1. Creating a connection at https://app.notion.com/developers/connections
 2. Giving that connection access to the relevant pages and databases in Notion
@@ -127,20 +129,25 @@ Syncs run in a "sync cycle": a back-to-back chain of `execute` calls that starts
 **Example replace sync:**
 
 ```ts
-worker.sync("paginatedSync", {
-  mode: "replace",
+const records = worker.database("records", {
+  type: "managed",
+  initialTitle: "Records",
   primaryKeyProperty: "ID",
   schema: {
-    defaultName: "Records",
     properties: { Name: Schema.title(), ID: Schema.richText() },
   },
-  execute: async (state, { notion }) => {
+})
+
+worker.sync("paginatedSync", {
+  database: records,
+  mode: "replace",
+  execute: async (state: { page: number } | undefined) => {
     const page = state?.page ?? 1
     const pageSize = 100
     const { items, hasMore } = await fetchPage(page, pageSize)
     return {
       changes: items.map((item) => ({
-        type: "upsert",
+        type: "upsert" as const,
         key: item.id,
         properties: {
           Name: Builder.title(item.name),
@@ -159,79 +166,121 @@ worker.sync("paginatedSync", {
 **Incremental example (changes only, with deletes):**
 
 ```ts
-worker.sync("incrementalSync", {
+const records = worker.database("records", {
+  type: "managed",
+  initialTitle: "Records",
   primaryKeyProperty: "ID",
-  mode: "incremental",
   schema: {
-    defaultName: "Records",
     properties: { Name: Schema.title(), ID: Schema.richText() },
   },
-  execute: async (state, { notion }) => {
-    const { upserts, deletes, nextCursor } = await fetchChanges(state?.cursor)
+})
+
+type DeltaState = { checkpoint?: string; pageCursor?: string }
+
+worker.sync("incrementalSync", {
+  database: records,
+  mode: "incremental",
+  execute: async (state: DeltaState | undefined) => {
+    const { upserts, deletes, nextPageCursor, nextCheckpoint } =
+      await fetchChanges(state?.checkpoint, state?.pageCursor)
+    const hasMore = nextPageCursor !== undefined
     return {
       changes: [
         ...upserts.map((item) => ({
-          type: "upsert",
+          type: "upsert" as const,
           key: item.id,
           properties: {
             Name: Builder.title(item.name),
             ID: Builder.richText(item.id),
           },
         })),
-        ...deletes.map((id) => ({ type: "delete", key: id })),
+        ...deletes.map((id) => ({ type: "delete" as const, key: id })),
       ],
-      hasMore: Boolean(nextCursor),
-      nextState: nextCursor ? { cursor: nextCursor } : undefined,
+      hasMore,
+      nextState: {
+        checkpoint: hasMore ? state?.checkpoint : nextCheckpoint,
+        pageCursor: nextPageCursor,
+      },
     }
   },
 })
 ```
 
+`fetchChanges(checkpoint, pageCursor)` is an API adapter. It must return
+`nextPageCursor` for another page in the same change window, or `undefined` when
+the cycle is complete. Its `nextCheckpoint` must cover only the changes fetched
+in that cycle. Keep the old checkpoint while paginating, then save
+`nextCheckpoint` on the final page so the next scheduled cycle resumes from it.
+
 #### Relations
 
-Two syncs can relate to one another using `Schema.relation(relatedSyncKey)` and `Builder.relation(primaryKey)` entries inside an array.
+Declare the related databases with `worker.database()`. Pass the target
+**database declaration key** to `Schema.relation()`, and use
+`Builder.relation(primaryKey)` entries inside an array for row values.
 
 ```ts
-worker.sync("projectsSync", {
+const projects = worker.database("projects", {
+  type: "managed",
+  initialTitle: "Projects",
   primaryKeyProperty: "Project ID",
-  ...
-});
-
-// Example sync worker that syncs sample tasks to a database
-worker.sync("tasksSync", {
-  primaryKeyProperty: "Task ID",
-  ...
   schema: {
-    ...
     properties: {
-      ...
-      Project: Schema.relation("projectsSync", {
-        // Optionally configure a two-way relation. This will automatically create the
-        // "Tasks" property on the project synced database: there is no need
-        // to configure "Tasks" on the projectSync capability.
-        twoWay: true, relatedPropertyName: "Tasks"
+      Name: Schema.title(),
+      "Project ID": Schema.richText(),
+    },
+  },
+})
+
+const tasks = worker.database("tasks", {
+  type: "managed",
+  initialTitle: "Tasks",
+  primaryKeyProperty: "Task ID",
+  schema: {
+    properties: {
+      Name: Schema.title(),
+      "Task ID": Schema.richText(),
+      Project: Schema.relation("projects", {
+        twoWay: true,
+        relatedPropertyName: "Tasks",
       }),
     },
   },
+})
 
-  execute: async () => {
-    // Return sample tasks as database entries
-    const tasks = fetchTasks()
-    const changes = tasks.map((task) => ({
-      type: "upsert" as const,
-      key: task.id,
-      properties: {
-        ...
-        Project: [Builder.relation(task.projectId)],
+worker.sync("projectsSync", {
+  database: projects,
+  execute: async () => ({
+    changes: [
+      {
+        type: "upsert",
+        key: "project-1",
+        properties: {
+          Name: Builder.title("Example project"),
+          "Project ID": Builder.richText("project-1"),
+        },
       },
-    }));
+    ],
+    hasMore: false,
+  }),
+})
 
-    return {
-      changes,
-      hasMore: false,
-    };
-  },
-});
+worker.sync("tasksSync", {
+  database: tasks,
+  execute: async () => ({
+    changes: [
+      {
+        type: "upsert",
+        key: "task-1",
+        properties: {
+          Name: Builder.title("Write docs"),
+          "Task ID": Builder.richText("task-1"),
+          Project: [Builder.relation("project-1")],
+        },
+      },
+    ],
+    hasMore: false,
+  }),
+})
 ```
 
 ### Webhooks
@@ -260,7 +309,7 @@ worker.webhook("onExternalEvent", {
 https://www.notion.so/webhooks/worker/{spaceId}/{workerId}/{uniqueWebhookId}/{webhookName}
 ```
 
-This full URL can be retrieved using the `notion workers webhooks ls` command.
+This full URL can be retrieved using the `ntn workers webhooks list` command.
 
 It is also the responsibility of the worker to verify the webhook. Throw WebhookVerificationError if the payload is not valid. 5 invalid payloads in a row will cause webhooks to short circuit until redeployed.
 
@@ -334,7 +383,7 @@ When `ntn datasources query <id>` returns 404 or "Could not find data source", t
 
 ## Build, Test, and Development Commands
 
-- Node >= 22 and npm >= 10.9.2 (see `package.json` engines).
+- Node >= 22.23.4 and npm >= 10.9.9 (see `package.json` engines).
 - `npm run build`: compile TypeScript to `dist/`.
 - `npm run check`: type-check only (no emit).
 - `ntn login`: connect to a Notion workspace.

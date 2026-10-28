@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest"
 
-import type { NotionDataSourcePage } from "@notionhq/apps/custom-blocks"
+import type { NotionDateInput } from "@notionhq/apps/custom-blocks"
+import type { PageRow } from "../blocks/main_ui/meeting.js"
+import { pageRow, propertyValue } from "./pageFixtures.js"
 import {
   dateRange,
   dayBounds,
@@ -11,23 +13,17 @@ import {
   layoutDay,
   pickMeeting,
   sortByStart,
+  text,
   wallTimeToMs,
 } from "../blocks/main_ui/meeting.js"
 
-function row(id: string, when: unknown): NotionDataSourcePage {
-  return {
-    id,
-    propertiesById: {},
-    propertiesByKey: { When: when },
-  } as unknown as NotionDataSourcePage
+function row(id: string, when: NotionDateInput): PageRow {
+  return pageRow(id, { When: when })
 }
 
-const timed = (date: string, start: string, end: string) => ({
-  type: "datetimerange",
-  start_date: date,
-  start_time: start,
-  end_date: date,
-  end_time: end,
+const timed = (date: string, start: string, end: string): NotionDateInput => ({
+  start: `${date}T${start}:00`,
+  end: `${date}T${end}:00`,
   time_zone: "America/Los_Angeles",
 })
 
@@ -44,18 +40,115 @@ describe("dateRange", () => {
   })
 
   it("gives a meeting without an end one hour", () => {
-    const range = dateRange({
-      type: "datetime",
-      start_date: "2026-09-29",
-      start_time: "10:00",
-    })
+    const range = dateRange(
+      propertyValue("when", {
+        start: "2026-09-29T10:00:00Z",
+      })
+    )
     expect(range && range.endMs - range.startMs).toBe(60 * 60 * 1000)
+  })
+
+  it("reads SDK date ranges with explicit offsets", () => {
+    expect(
+      dateRange(
+        propertyValue("when", {
+          start: "2026-09-29T10:00:00-07:00",
+          end: "2026-09-29T11:30:00-07:00",
+        })
+      )
+    ).toEqual({
+      startMs: Date.parse("2026-09-29T17:00:00Z"),
+      endMs: Date.parse("2026-09-29T18:30:00Z"),
+      allDay: false,
+    })
+  })
+
+  it("uses the date's named zone after daylight saving time changes", () => {
+    expect(
+      dateRange(
+        propertyValue("when", {
+          start: "2026-03-08T10:00:00",
+          end: "2026-03-08T11:00:00",
+          time_zone: "America/Los_Angeles",
+        })
+      )
+    ).toEqual({
+      startMs: Date.parse("2026-03-08T17:00:00Z"),
+      endMs: Date.parse("2026-03-08T18:00:00Z"),
+      allDay: false,
+    })
+  })
+
+  it("keeps an explicit UTC instant when a named zone is also present", () => {
+    expect(
+      dateRange(
+        propertyValue("when", {
+          start: "2026-09-29T17:00:00Z",
+          end: "2026-09-29T18:00:00Z",
+          time_zone: "America/Los_Angeles",
+        })
+      )
+    ).toEqual({
+      startMs: Date.parse("2026-09-29T17:00:00Z"),
+      endMs: Date.parse("2026-09-29T18:00:00Z"),
+      allDay: false,
+    })
+  })
+
+  it("includes the last calendar day of an all-day date range", () => {
+    expect(
+      dateRange(
+        propertyValue("when", {
+          start: "2026-09-28",
+          end: "2026-09-29",
+        })
+      )
+    ).toEqual({
+      startMs: new Date(2026, 8, 28).getTime(),
+      endMs: new Date(2026, 8, 30).getTime(),
+      allDay: true,
+    })
+  })
+})
+
+describe("SDK property text", () => {
+  it("joins the rich text segments of a title", () => {
+    expect(
+      text({
+        id: "title-id",
+        type: "title",
+        title: [{ plain_text: "Meeting " }, { plain_text: "prep" }],
+      })
+    ).toBe("Meeting prep")
+  })
+
+  it("reads profile text and links from typed property values", () => {
+    expect(text(propertyValue("summary", "A useful summary."))).toBe(
+      "A useful summary."
+    )
+    expect(text({ id: "site", type: "url", url: "https://acme.example" })).toBe(
+      "https://acme.example"
+    )
+    expect(text({ id: "email", type: "email", email: "a@acme.example" })).toBe(
+      "a@acme.example"
+    )
+  })
+
+  it("reads research and prep states from select and status properties", () => {
+    expect(
+      text({ id: "research", type: "select", select: { name: "Researching" } })
+    ).toBe("Researching")
+    expect(
+      text({ id: "prep", type: "status", status: { name: "Ready" } })
+    ).toBe("Ready")
+    expect(text({ id: "empty", type: "select", select: null })).toBe("")
+    expect(text(null)).toBe("")
   })
 })
 
 describe("pickMeeting", () => {
   const rows = [
-    row("all-day", { type: "date", start_date: "2026-09-29" }),
+    row("all-day", { start: "2026-09-29" }),
     row("past", timed("2026-09-29", "08:00", "09:00")),
     row("now", timed("2026-09-29", "10:00", "11:00")),
     row("later", timed("2026-09-29", "13:00", "14:00")),
@@ -86,12 +179,22 @@ describe("pickMeeting", () => {
 describe("profileLinks", () => {
   it("lists set profile links in a fixed order", () => {
     expect(
-      profileLinks({
-        "Personal site": "https://d.example",
-        LinkedIn: "https://linkedin.com/in/d",
-        X: "",
-        Instagram: "not a url",
-      })
+      profileLinks(
+        pageRow("person", {
+          "Personal site": {
+            id: "site-id",
+            type: "url",
+            url: "https://d.example",
+          },
+          LinkedIn: {
+            id: "linkedin-id",
+            type: "url",
+            url: "https://linkedin.com/in/d",
+          },
+          X: { id: "x-id", type: "url", url: null },
+          Instagram: { id: "instagram-id", type: "url", url: "not a url" },
+        })
+      )
     ).toEqual([
       { label: "LinkedIn", url: "https://linkedin.com/in/d" },
       { label: "Website", url: "https://d.example" },
@@ -120,9 +223,8 @@ describe("firstSentence", () => {
 describe("multi-day events", () => {
   it("finds an offsite that started before the query cutoff", () => {
     const offsite = row("offsite", {
-      type: "daterange",
-      start_date: "2026-09-28",
-      end_date: "2026-10-02",
+      start: "2026-09-28",
+      end: "2026-10-02",
     })
     const merged = sortByStart([
       row("later", timed("2026-10-05", "10:00", "11:00")),
@@ -140,11 +242,8 @@ describe("layoutDay", () => {
   const hhmm = (hours: number) =>
     `${String(Math.floor(hours)).padStart(2, "0")}:${String((hours % 1) * 60).padStart(2, "0")}`
   const at = (start: number, end: number) => ({
-    type: "datetimerange",
-    start_date: "2026-09-29",
-    start_time: hhmm(start),
-    end_date: "2026-09-29",
-    end_time: hhmm(end),
+    start: `2026-09-29T${hhmm(start)}:00`,
+    end: `2026-09-29T${hhmm(end)}:00`,
     time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   })
   const day = dayBounds(new Date(2026, 8, 29, 12).getTime())
@@ -168,13 +267,12 @@ describe("layoutDay", () => {
   it("puts all-day and whole-day events on the all-day strip and skips other days", () => {
     const { allDay, timed } = layoutDay(
       [
-        row("all-day", { type: "date", start_date: "2026-09-29" }),
+        row("all-day", { start: "2026-09-29" }),
         row("offsite", {
-          type: "daterange",
-          start_date: "2026-09-28",
-          end_date: "2026-10-01",
+          start: "2026-09-28",
+          end: "2026-10-01",
         }),
-        row("tomorrow", { type: "date", start_date: "2026-09-30" }),
+        row("tomorrow", { start: "2026-09-30" }),
         row("meeting", at(9, 10)),
       ],
       day

@@ -11,6 +11,7 @@ should point here instead of restating these rules.
 | `examples/<task>/`                              | Self-contained TypeScript programs that call the Notion API and run locally with Node.js.                            |
 | `workers/templates/<integration>-<capability>/` | Self-contained Notion Worker syncs, agent tools, and webhooks.                                                       |
 | `skills/`                                       | Reusable instructions and evaluations for AI-assisted Notion workflows.                                              |
+| `plugins/<platform>/`                           | Agent platform plugins. Hand-written manifests; `skills/` is generated.                                              |
 | `docs/`                                         | Longer developer guides that are not standalone runnable projects.                                                   |
 | `scripts/`                                      | Repository-wide installation, validation, and maintenance commands.                                                  |
 
@@ -55,7 +56,7 @@ the same environment variables.
 5. State clearly when a live check was not run because credentials or external
    access were unavailable.
 
-For Workers, Node.js 22 and npm 10.9.2 or newer are required. Authenticate and
+For Workers, Node.js 22.23.4 and npm 10.9.9 or newer are required. Authenticate and
 deploy only when the user asks for a live deployment. Treat generated
 `workers.json` files as local state unless a tracked fixture explicitly says
 otherwise.
@@ -159,3 +160,6 @@ format checks. For skill changes, read [`skills/README.md`](skills/README.md)
 and the relevant skill collection guide first; update evaluations when behavior
 changes. Do not treat a skill as a runnable cookbook recipe or add it to
 `catalog.json`.
+
+After changing `skills/mcp-clients/`, run `npm run plugins:build` and commit the
+regenerated `plugins/*/skills/`. Never edit those copies directly.

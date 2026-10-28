@@ -1,6 +1,7 @@
-import type { NotionDataSourcePage } from "@notionhq/apps/custom-blocks"
+import type { NotionPagePropertyValue } from "@notionhq/apps/custom-blocks"
 
 import { dateRange, splitEmails, text } from "./meeting"
+import type { PageRow } from "./meeting"
 
 // Pure helpers that derive what the block shows from Workflow runs and
 // Meetings rows. Nothing here is stored: every state comes from existing data.
@@ -165,52 +166,52 @@ export function statusText(state: BlockState): string {
 }
 
 /** Epoch ms of a date-shaped value, or null. */
-export function dateMs(value: unknown): number | null {
+export function dateMs(value: NotionPagePropertyValue | null): number | null {
   return dateRange(value)?.startMs ?? null
 }
 
 /** A run row's start: Started, or its created time when Started is empty. */
-export function runStartedMs(row: NotionDataSourcePage): number | null {
-  return (
-    dateMs(row.propertiesByKey.Started) ??
-    dateMs(row.propertiesById.created_time)
-  )
+export function runStartedMs(row: PageRow): number | null {
+  return dateMs(row.getPropertyByKey("Started")) ?? dateTimeMs(row.created_time)
 }
 
 /** When a meeting last changed: Prep updated or its last edit, if later. */
-export function lastActivityMs(row: NotionDataSourcePage): number | null {
+export function lastActivityMs(row: PageRow): number | null {
   const times = [
-    dateMs(row.propertiesByKey["Prep updated"]),
-    dateMs(row.propertiesById.last_edited_time),
+    dateMs(row.getPropertyByKey("Prep updated")),
+    dateTimeMs(row.last_edited_time),
   ].filter((ms): ms is number => ms !== null)
   return times.length > 0 ? Math.max(...times) : null
 }
 
-function hasEnded(row: NotionDataSourcePage, now: number): boolean {
-  const range = dateRange(row.propertiesByKey.When)
+function dateTimeMs(value: string | null): number | null {
+  if (value === null) return null
+  const ms = Date.parse(value)
+  return Number.isFinite(ms) ? ms : null
+}
+
+function hasEnded(row: PageRow, now: number): boolean {
+  const range = dateRange(row.getPropertyByKey("When"))
   return range !== null && range.endMs <= now
 }
 
 /** Whether a meeting is Queued or Researching and that research is still due. */
-function waitingOnResearch(row: NotionDataSourcePage, now: number): boolean {
-  const status = text(row.propertiesByKey["Prep status"])
+function waitingOnResearch(row: PageRow, now: number): boolean {
+  const status = text(row.getPropertyByKey("Prep status"))
   if (status === PREP.researching) return true
   // Prep skips meetings that have already ended, so those stay Queued.
   return status === PREP.queued && !hasEnded(row, now)
 }
 
 /** Whether a waiting meeting has not changed for STALE_RUN_MS. */
-export function researchStuck(row: NotionDataSourcePage, now: number): boolean {
+export function researchStuck(row: PageRow, now: number): boolean {
   if (!waitingOnResearch(row, now)) return false
   const last = lastActivityMs(row)
   return last !== null && now - last > STALE_RUN_MS
 }
 
 /** Whether research is running, or about to run, for a meeting. */
-export function researchPending(
-  row: NotionDataSourcePage,
-  now: number
-): boolean {
+export function researchPending(row: PageRow, now: number): boolean {
   return waitingOnResearch(row, now) && !researchStuck(row, now)
 }
 
@@ -225,7 +226,7 @@ export function researchPending(
  * are deduplicated by ID.
  */
 export function researchProgress(
-  rows: readonly NotionDataSourcePage[],
+  rows: readonly PageRow[],
   now: number
 ): Progress {
   let done = 0
@@ -233,10 +234,10 @@ export function researchProgress(
   let stalled = 0
   const unique = new Map(rows.map((row) => [row.id, row]))
   for (const row of unique.values()) {
-    if (text(row.propertiesByKey.Status) === "Cancelled") continue
-    if (splitEmails(text(row.propertiesByKey["Attendee emails"])).length === 0)
+    if (text(row.getPropertyByKey("Status")) === "Cancelled") continue
+    if (splitEmails(text(row.getPropertyByKey("Attendee emails"))).length === 0)
       continue
-    const status = text(row.propertiesByKey["Prep status"])
+    const status = text(row.getPropertyByKey("Prep status"))
     if (researchStuck(row, now)) {
       stalled++
     } else if (researchPending(row, now)) {
@@ -268,15 +269,15 @@ const FAILED_COPY =
  * research is running, or about to run, for that meeting.
  */
 export function attendeeCopy(
-  row: NotionDataSourcePage,
+  row: PageRow,
   foundAttendees: number,
   peopleLoading: boolean,
   now: number
 ): AttendeeCopy {
-  const emails = splitEmails(text(row.propertiesByKey["Attendee emails"]))
+  const emails = splitEmails(text(row.getPropertyByKey("Attendee emails")))
   if (emails.length === 0)
     return { kind: "message", text: "No outside attendees on this meeting." }
-  const failed = text(row.propertiesByKey["Prep status"]) === PREP.failed
+  const failed = text(row.getPropertyByKey("Prep status")) === PREP.failed
   if (foundAttendees > 0)
     return {
       kind: "cards",
@@ -349,10 +350,7 @@ export function quietSync(
 /** Where a meeting's research stands, for its cards. */
 export type ResearchPhase = "researching" | "stuck" | "done"
 
-export function researchPhase(
-  row: NotionDataSourcePage,
-  now: number
-): ResearchPhase {
+export function researchPhase(row: PageRow, now: number): ResearchPhase {
   if (researchStuck(row, now)) return "stuck"
   if (researchPending(row, now)) return "researching"
   return "done"

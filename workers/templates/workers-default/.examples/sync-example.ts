@@ -12,6 +12,14 @@ import { Worker } from "@notionhq/workers"
 import * as Builder from "@notionhq/workers/builder"
 import * as Schema from "@notionhq/workers/schema"
 
+type PageState = { page: number }
+type DeltaState = { checkpoint?: string; pageCursor?: string }
+type TaskChangesPage = {
+  items: { id: string; name: string; status: string; projectId: string }[]
+  nextPageCursor?: string
+  nextCheckpoint: string
+}
+
 const worker = new Worker()
 export default worker
 
@@ -50,7 +58,7 @@ const tasks = worker.database("tasks", {
         { name: "In Progress", color: "yellow" },
         { name: "Done", color: "green" },
       ]),
-      Project: Schema.relation("projectsSync", {
+      Project: Schema.relation("projects", {
         twoWay: true,
         relatedPropertyName: "Tasks",
       }),
@@ -64,7 +72,7 @@ worker.sync("projectsSync", {
   database: projects,
   mode: "replace",
   schedule: "1h",
-  execute: async (state) => {
+  execute: async (state: PageState | undefined) => {
     const page = state?.page ?? 1
     await exampleApi.wait()
     const { items, hasMore } = await fetchProjects(page)
@@ -95,7 +103,7 @@ worker.sync("tasksBackfill", {
   database: tasks,
   mode: "replace",
   schedule: "manual",
-  execute: async (state) => {
+  execute: async (state: PageState | undefined) => {
     const page = state?.page ?? 1
     await exampleApi.wait()
     const { items, hasMore } = await fetchAllTasks(page)
@@ -119,15 +127,18 @@ worker.sync("tasksBackfill", {
 
 // Delta: fetches only recent changes.
 // Schedule: runs every 5 minutes to keep Notion up to date.
-// Incremental mode: only returns changes since the last cursor.
+// Keep the checkpoint unchanged while paginating. Advance it after the last page.
 worker.sync("tasksDelta", {
   database: tasks,
   mode: "incremental",
   schedule: "5m",
-  execute: async (state) => {
-    const cursor = state?.cursor
+  execute: async (state: DeltaState | undefined) => {
     await exampleApi.wait()
-    const { items, nextCursor } = await fetchTaskChanges(cursor)
+    const { items, nextPageCursor, nextCheckpoint } = await fetchTaskChanges(
+      state?.checkpoint,
+      state?.pageCursor
+    )
+    const hasMore = nextPageCursor !== undefined
 
     return {
       changes: items.map((item) => ({
@@ -140,8 +151,11 @@ worker.sync("tasksDelta", {
           Project: [Builder.relation(item.projectId)],
         },
       })),
-      hasMore: Boolean(nextCursor),
-      nextState: nextCursor ? { cursor: nextCursor } : undefined,
+      hasMore,
+      nextState: {
+        checkpoint: hasMore ? state?.checkpoint : nextCheckpoint,
+        pageCursor: nextPageCursor,
+      },
     }
   },
 })
@@ -169,7 +183,16 @@ async function fetchAllTasks(_page: number) {
   }
 }
 
-async function fetchTaskChanges(_cursor: string | undefined) {
+// The real API adapter must return a checkpoint covering this cycle's changes.
+// Page cursors must traverse the same change window until the cycle completes.
+async function fetchTaskChanges(
+  checkpoint: string | undefined,
+  _pageCursor: string | undefined
+): Promise<TaskChangesPage> {
+  if (checkpoint === "change-1") {
+    return { items: [], nextCheckpoint: "change-1" }
+  }
+
   return {
     items: [
       {
@@ -179,6 +202,6 @@ async function fetchTaskChanges(_cursor: string | undefined) {
         projectId: "proj-1",
       },
     ],
-    nextCursor: null as string | null,
+    nextCheckpoint: "change-1",
   }
 }

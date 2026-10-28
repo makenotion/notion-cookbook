@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest"
 
-import type { NotionDataSourcePage } from "@notionhq/apps/custom-blocks"
+import type { NotionDateInput } from "@notionhq/apps/custom-blocks"
+import type { PageRow } from "../blocks/main_ui/meeting.js"
+import { pageRow } from "./pageFixtures.js"
 import {
   STALE_RUN_MS,
   attendeeCopy,
@@ -38,11 +40,6 @@ const run = (status: string | null, error = "", startedMs = NOW - 60_000) => ({
   error,
 })
 
-const at = (iso: string) => {
-  const [date, time] = iso.split("T") as [string, string]
-  return { date, time: time.slice(0, 5) }
-}
-
 function meeting(
   id: string,
   props: {
@@ -53,32 +50,24 @@ function meeting(
     status?: string
     lastEditedMs?: number
   } = {}
-): NotionDataSourcePage {
-  const edited = at(new Date(props.lastEditedMs ?? NOW - 60_000).toISOString())
-  const start = at(props.start ?? "2026-09-29T18:00:00Z")
-  const end = at(props.end ?? "2026-09-29T19:00:00Z")
-  return {
+): PageRow {
+  return pageRow(
     id,
-    propertiesById: {
-      last_edited_time: {
-        type: "datetime",
-        start_date: edited.date,
-        start_time: edited.time,
-      },
-    },
-    propertiesByKey: {
+    {
       "Prep status": props.prep ?? "",
       "Attendee emails": props.attendees ?? "a@acme.com",
       Status: props.status ?? "Scheduled",
       When: {
-        type: "datetimerange",
-        start_date: start.date,
-        start_time: start.time,
-        end_date: end.date,
-        end_time: end.time,
+        start: props.start ?? "2026-09-29T18:00:00Z",
+        end: props.end ?? "2026-09-29T19:00:00Z",
       },
     },
-  } as unknown as NotionDataSourcePage
+    {
+      last_edited_time: new Date(
+        props.lastEditedMs ?? NOW - 60_000
+      ).toISOString(),
+    }
+  )
 }
 
 describe("blockState", () => {
@@ -403,33 +392,23 @@ describe("stuck research", () => {
 
 describe("runStartedMs", () => {
   it("falls back to the row's created time when Started is empty", () => {
-    const row = (started: unknown) =>
-      ({
-        id: "r",
-        propertiesByKey: { Started: started },
-        propertiesById: {
-          created_time: {
-            type: "datetime",
-            start_date: "2026-09-29",
-            start_time: "16:00",
-          },
-        },
-      }) as unknown as NotionDataSourcePage
-    expect(runStartedMs(row(undefined))).toBe(
-      Date.parse("2026-09-29T16:00:00Z")
-    )
-    expect(
-      runStartedMs(
-        row({ type: "datetime", start_date: "2026-09-29", start_time: "16:30" })
+    const row = (started: NotionDateInput | null) =>
+      pageRow(
+        "r",
+        { Started: started },
+        { created_time: "2026-09-29T16:00:00Z" }
       )
-    ).toBe(Date.parse("2026-09-29T16:30:00Z"))
+    expect(runStartedMs(row(null))).toBe(Date.parse("2026-09-29T16:00:00Z"))
+    expect(runStartedMs(row({ start: "2026-09-29T16:30:00Z" }))).toBe(
+      Date.parse("2026-09-29T16:30:00Z")
+    )
     // A stale run with no Started is still recognised as stale.
     const state = blockState(
       input({
         latestRun: {
           id: "r",
           status: null,
-          startedMs: runStartedMs(row(undefined)),
+          startedMs: runStartedMs(row(null)),
           error: "",
         },
       })
@@ -491,8 +470,7 @@ describe("quietSync", () => {
       quietSync(run("Success"), false, { done: 1, total: 2, stalled: 1 }, NOW)
     ).toEqual({
       inFlight: false,
-      status:
-        "Preparing meeting briefs (1 of 2 meetings ready), 1 stuck",
+      status: "Preparing meeting briefs (1 of 2 meetings ready), 1 stuck",
     })
     expect(
       quietSync(run("Success"), false, { done: 0, total: 0, stalled: 2 }, NOW)

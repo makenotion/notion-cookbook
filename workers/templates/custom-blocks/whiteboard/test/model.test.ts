@@ -11,8 +11,7 @@ import {
   encodePoints,
   parsePoints,
 } from "../blocks/whiteboard/src/model"
-import { validateWhiteboardSchema } from "../blocks/whiteboard/src/schema"
-import type { NotionPropertySchema } from "@notionhq/custom-blocks"
+import { validateWhiteboardBindings } from "../blocks/whiteboard/src/schema"
 
 test("point serialization rejects malformed values and rounds coordinates", () => {
   assert.deepEqual(parsePoints('[[1,2],[3,"bad"],[4,5]]'), [
@@ -56,60 +55,43 @@ test("geometry helpers sample, bound, hit-test, and snap strokes", () => {
   assert.equal(autoLabel("arrow"), "Arrow")
 })
 
-test("whiteboard schema validation reports wrong types and missing select options", () => {
-  const schemas: Record<string, NotionPropertySchema> = {
-    title: { name: "Title", type: "title" },
-    type: {
-      name: "Type",
-      type: "select",
-      options: [{ id: "sticky", name: "sticky" }],
-    },
-    color: { name: "Color", type: "rich_text" },
-    x: { name: "X", type: "number" },
-    y: { name: "Y", type: "number" },
-    width: { name: "Width", type: "number" },
-    height: { name: "Height", type: "number" },
-    points: { name: "Points", type: "rich_text" },
-    strokeWidth: { name: "Stroke width", type: "number" },
-    z: { name: "Z", type: "number" },
-  }
-
-  assert.deepEqual(validateWhiteboardSchema(schemas), [
-    {
-      property: "Type",
-      message: "Add the missing Select options: stroke, line, arrow.",
-    },
-    {
-      property: "Color",
-      message: "Map this field to a Select property instead of Rich text.",
-    },
-  ])
+test("whiteboard setup reports required fields without mappings", () => {
+  assert.deepEqual(
+    validateWhiteboardBindings({ title: "title-id", type: undefined }),
+    [
+      { property: "Type", message: "Map this field to a Select property." },
+      { property: "Color", message: "Map this field to a Select property." },
+      { property: "X", message: "Map this field to a Number property." },
+      { property: "Y", message: "Map this field to a Number property." },
+      { property: "Width", message: "Map this field to a Number property." },
+      { property: "Height", message: "Map this field to a Number property." },
+      {
+        property: "Points",
+        message: "Map this field to a Rich text property.",
+      },
+      {
+        property: "Stroke width",
+        message: "Map this field to a Number property.",
+      },
+      { property: "Z", message: "Map this field to a Number property." },
+    ]
+  )
 })
 
-test("whiteboard schema validation accepts the required property mapping", () => {
-  const option = (name: string) => ({ id: name, name })
-  const schemas: Record<string, NotionPropertySchema> = {
-    title: { name: "Title", type: "title" },
-    type: {
-      name: "Type",
-      type: "select",
-      options: ["sticky", "stroke", "line", "arrow"].map(option),
-    },
-    color: {
-      name: "Color",
-      type: "select",
-      options: ["yellow", "blue", "pink", "green", "purple", "red", "gray"].map(
-        option
-      ),
-    },
-    x: { name: "X", type: "number" },
-    y: { name: "Y", type: "number" },
-    width: { name: "Width", type: "number" },
-    height: { name: "Height", type: "number" },
-    points: { name: "Points", type: "rich_text" },
-    strokeWidth: { name: "Stroke width", type: "number" },
-    z: { name: "Z", type: "number" },
-  }
-
-  assert.deepEqual(validateWhiteboardSchema(schemas), [])
+test("whiteboard setup accepts all required property bindings", () => {
+  assert.deepEqual(
+    validateWhiteboardBindings({
+      title: "title-id",
+      type: "type-id",
+      color: "color-id",
+      x: "x-id",
+      y: "y-id",
+      width: "width-id",
+      height: "height-id",
+      points: "points-id",
+      strokeWidth: "stroke-width-id",
+      z: "z-id",
+    }),
+    []
+  )
 })

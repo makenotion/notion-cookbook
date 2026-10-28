@@ -29,7 +29,9 @@ ntn workers deploy --name whiteboard
 
 In Notion, insert the custom block into a page and map its `items` data source
 to a database with the schema below (or let block configuration create it).
-The block shows a setup hint until the data source is bound.
+The block shows setup hints until the data source and required property keys
+are bound. The SDK reports key mappings but does not expose the database
+schema, so the block cannot check mapped property types or select options.
 
 ## Database
 
@@ -47,7 +49,9 @@ is one row:
 | `z`               | number    | Stacking order                                                                         |
 | `points`          | rich_text | JSON point array relative to `x`/`y`, chunked under the 2000-character rich-text limit |
 
-Rows stay synchronized through `useDataSource` (limit 999). Writes are
+Rows stay synchronized through the SDK data-source subscription (limit 999).
+The block reports missing property mappings; verify that the mapped properties
+use the types and select options listed above. Writes are
 optimistic: creates and deletes go out eagerly, moves and edits are debounced
 ~500ms, and failed writes revert quietly from a persisted baseline.
 

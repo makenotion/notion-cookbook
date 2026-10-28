@@ -5,7 +5,7 @@ Overall workers documentation lives at https://developers.notion.com/workers/get
 ## Project Structure & Module Organization
 
 - `src/index.ts` defines the worker and capabilities.
-- `.examples/`, when present, has focused samples (sync, tool, automation, OAuth, webhook).
+- `.examples/`, when present, has focused samples (sync, tool, OAuth, webhook).
 - Shared agent skills live in `.agents/skills/`.
 - Generated: `dist/` build output, `workers.json` CLI config.
 
@@ -28,6 +28,7 @@ Overall workers documentation lives at https://developers.notion.com/workers/get
 import { Worker } from "@notionhq/workers"
 import * as Builder from "@notionhq/workers/builder"
 import * as Schema from "@notionhq/workers/schema"
+import { j } from "@notionhq/workers/schema-builder"
 
 const worker = new Worker()
 export default worker
@@ -46,7 +47,7 @@ const myApi = worker.pacer("myApi", { allowedRequests: 10, intervalMs: 1000 })
 // Declare a sync that writes to the database
 worker.sync("tasksSync", {
   database: tasks,
-  execute: async (state) => {
+  execute: async (state: { page: number } | undefined) => {
     await myApi.wait()
     const items = await fetchItems(state?.page ?? 1)
     return {
@@ -63,12 +64,7 @@ worker.sync("tasksSync", {
 worker.tool("sayHello", {
   title: "Say Hello",
   description: "Return a greeting",
-  schema: {
-    type: "object",
-    properties: { name: { type: "string" } },
-    required: ["name"],
-    additionalProperties: false,
-  },
+  schema: j.object({ name: j.string() }),
   execute: ({ name }, { notion }) => `Hello, ${name}`,
 })
 
@@ -98,7 +94,7 @@ All `execute` handlers receive a `context.notion` object (a `@notionhq/client` S
 
 However, `context.notion` is only **pre-authenticated** when it's a tool capability invoked by a Custom Agent. In that case, the platform sets `NOTION_API_TOKEN` automatically, using the permissions of the Custom Agent — no setup required.
 
-For all other capabilities (syncs, automations, webhooks), `context.notion` is **not** pre-authenticated. The user must set the `NOTION_API_TOKEN` environment variable themselves by:
+For all other capabilities (syncs, webhooks), `context.notion` is **not** pre-authenticated. The user must set the `NOTION_API_TOKEN` environment variable themselves by:
 
 1. Creating a connection at https://app.notion.com/developers/connections
 2. Giving that connection access to the relevant pages and databases in Notion
@@ -143,7 +139,7 @@ const myApi = worker.pacer("myApi", { allowedRequests: 10, intervalMs: 1000 })
 worker.sync("tasksSync", {
   database: tasks,
   schedule: "30m",
-  execute: async (state) => {
+  execute: async (state: { page: number } | undefined) => {
     await myApi.wait()
     const { items, hasMore } = await fetchTasks(state?.page ?? 1)
     return {
@@ -214,7 +210,7 @@ worker.sync("recordsSync", {
   database: records,
   mode: "replace",
   schedule: "1h",
-  execute: async (state) => {
+  execute: async (state: { page: number } | undefined) => {
     const page = state?.page ?? 1
     await myApi.wait()
     const { items, hasMore } = await fetchPage(page, 100)
@@ -264,7 +260,7 @@ worker.sync("tasksBackfill", {
   database: tasks,
   mode: "replace",
   schedule: "manual",
-  execute: async (state) => {
+  execute: async (state: { page: number } | undefined) => {
     const page = state?.page ?? 1
     await taskApi.wait()
     const { items, hasMore } = await fetchAllTasks(page, 100)
@@ -285,14 +281,19 @@ worker.sync("tasksBackfill", {
 })
 
 // Delta: fetches recent changes, runs every 5 minutes.
+type DeltaState = { checkpoint?: string; pageCursor?: string }
+
 worker.sync("tasksDelta", {
   database: tasks,
   mode: "incremental",
   schedule: "5m",
-  execute: async (state) => {
-    const cursor = state?.cursor
+  execute: async (state: DeltaState | undefined) => {
     await taskApi.wait()
-    const { items, nextCursor } = await fetchTaskChanges(cursor)
+    const { items, nextPageCursor, nextCheckpoint } = await fetchTaskChanges(
+      state?.checkpoint,
+      state?.pageCursor
+    )
+    const hasMore = nextPageCursor !== undefined
     return {
       changes: items.map((item) => ({
         type: "upsert" as const,
@@ -303,12 +304,21 @@ worker.sync("tasksDelta", {
           Status: Builder.select(item.status),
         },
       })),
-      hasMore: Boolean(nextCursor),
-      nextState: nextCursor ? { cursor: nextCursor } : undefined,
+      hasMore,
+      nextState: {
+        checkpoint: hasMore ? state?.checkpoint : nextCheckpoint,
+        pageCursor: nextPageCursor,
+      },
     }
   },
 })
 ```
+
+`fetchTaskChanges(checkpoint, pageCursor)` is an API adapter. It must return
+`nextPageCursor` for another page in the same change window, or `undefined` when
+the cycle is complete. Its `nextCheckpoint` must cover only the changes fetched
+in that cycle. Keep the old checkpoint while paginating, then save
+`nextCheckpoint` on the final page so the next scheduled cycle resumes from it.
 
 #### Pagination
 
@@ -329,7 +339,7 @@ Set `schedule` on a sync to control how often it runs:
 
 #### Relations
 
-Two databases can relate to one another using `Schema.relation(syncKey)` and `Builder.relation(primaryKey)`:
+Two databases can relate to one another using `Schema.relation(databaseKey)` and `Builder.relation(primaryKey)`:
 
 ```ts
 const projects = worker.database("projects", {
@@ -347,8 +357,8 @@ const tasks = worker.database("tasks", {
   properties: {
    "Task Name": Schema.title(),
    "Task ID": Schema.richText(),
-   // Reference the sync key that populates the related database
-   Project: Schema.relation("projectsSync", { twoWay: true, relatedPropertyName: "Tasks" }),
+   // Reference the related database declaration key
+   Project: Schema.relation("projects", { twoWay: true, relatedPropertyName: "Tasks" }),
   },
  },
 });
@@ -471,7 +481,7 @@ When `ntn datasources query <id>` returns 404 or "Could not find data source", t
 
 ## Build, Test, and Development Commands
 
-- Node >= 22 and npm >= 10.9.2 (see `package.json` engines).
+- Node >= 22.23.4 and npm >= 10.9.9 (see `package.json` engines).
 - `npm run build`: compile TypeScript to `dist/`.
 - `npm run check`: type-check only (no emit).
 - `ntn login`: connect to a Notion workspace.

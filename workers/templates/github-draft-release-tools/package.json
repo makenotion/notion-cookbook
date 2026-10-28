@@ -10,8 +10,8 @@
     "test": "node --import tsx --test test/*.test.ts"
   },
   "engines": {
-    "node": ">=22.0.0",
-    "npm": ">=10.9.2"
+    "node": ">=22.23.4",
+    "npm": ">=10.9.9"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
@@ -20,7 +20,7 @@
     "typescript": "^5.8.0"
   },
   "dependencies": {
-    "@notionhq/workers": "^0.4.0",
+    "@notionhq/workers": ">=0.0.0",
     "@octokit/auth-app": "^8.2.0",
     "@octokit/request": "^10.0.11"
   }
