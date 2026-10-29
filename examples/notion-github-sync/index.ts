@@ -11,7 +11,6 @@ import { Client, isFullDatabase } from "@notionhq/client"
 import dotenv from "dotenv"
 import { Octokit } from "octokit"
 import _ from "lodash"
-import type { PaginatingEndpoints } from "@octokit/plugin-paginate-rest"
 
 dotenv.config()
 const octokit = new Octokit({ auth: process.env.GITHUB_KEY })
@@ -124,15 +123,12 @@ async function getIssuesFromNotionDataSource() {
  */
 async function getGitHubIssuesForRepository() {
   const issues = []
-  const iterator = octokit.paginate.iterator(
-    octokit.rest.issues.listForRepo as unknown as keyof PaginatingEndpoints,
-    {
-      owner: process.env.GITHUB_REPO_OWNER,
-      repo: process.env.GITHUB_REPO_NAME,
-      state: "all",
-      per_page: 100,
-    }
-  )
+  const iterator = octokit.paginate.iterator(octokit.rest.issues.listForRepo, {
+    owner: process.env.GITHUB_REPO_OWNER,
+    repo: process.env.GITHUB_REPO_NAME,
+    state: "all",
+    per_page: 100,
+  })
   for await (const { data } of iterator) {
     for (const issue of data) {
       const castIssue: Record<string, unknown> =

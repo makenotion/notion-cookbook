@@ -11,7 +11,6 @@ import { Client } from "@notionhq/client"
 import dotenv from "dotenv"
 import { Octokit } from "octokit"
 import _ from "lodash"
-import type { PaginatingEndpoints } from "@octokit/plugin-paginate-rest"
 
 dotenv.config()
 const octokit = new Octokit({ auth: process.env.GITHUB_KEY })
@@ -92,15 +91,12 @@ async function hasIntegrationCommentedOnPage(page_id) {
  */
 async function getGitHubPRsForRepository() {
   const pullRequests = []
-  const iterator = octokit.paginate.iterator(
-    octokit.rest.pulls.list as unknown as keyof PaginatingEndpoints,
-    {
-      owner: process.env.GITHUB_REPO_OWNER,
-      repo: process.env.GITHUB_REPO_NAME,
-      state: "all",
-      per_page: 100,
-    }
-  )
+  const iterator = octokit.paginate.iterator(octokit.rest.pulls.list, {
+    owner: process.env.GITHUB_REPO_OWNER,
+    repo: process.env.GITHUB_REPO_NAME,
+    state: "all",
+    per_page: 100,
+  })
   let notionPRLinkMatch: RegExpMatchArray | undefined
   for await (const { data } of iterator) {
     for (const pr of data) {
