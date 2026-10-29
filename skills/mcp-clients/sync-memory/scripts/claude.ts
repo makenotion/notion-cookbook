@@ -2,6 +2,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { AGENT_HOME } from "./config.ts"
+import { isObject } from "./mcp.ts"
 import {
   type MemoryFile,
   type MemoryInventory,
@@ -33,44 +34,44 @@ const MANAGED_SETTINGS =
       ? "C:\\Program Files\\ClaudeCode\\managed-settings.json"
       : "/etc/claude-code/managed-settings.json"
 const USER_SETTINGS = path.join(AGENT_HOME, "settings.json")
-const CUSTOM_DIR = customMemoryDir()
 
-export const claudeSource: MemorySource = {
-  name: "Claude Code",
-  root: CUSTOM_DIR ? "autoMemoryDirectory" : "projects",
-  inventory: () => claudeMemoryInventory(CUSTOM_DIR ?? PROJECTS_DIR),
+// Reads Claude Code's settings, so only Claude Code runs call it.
+export function claudeSource(): MemorySource {
+  const customDir = customMemoryDir()
+  return {
+    name: "Claude Code",
+    root: customDir ? "autoMemoryDirectory" : "projects",
+    inventory: () =>
+      customDir
+        ? claudeMemoryInventory(customDir, "flat")
+        : claudeMemoryInventory(PROJECTS_DIR, "projects"),
+  }
 }
 
-// Reads ~/.claude/projects/*/memory/, or a flat memory directory such as a custom
+// Reads `<dir>/*/memory/` for the "projects" layout, or `<dir>` itself for a custom
 // `autoMemoryDirectory`.
-export function claudeMemoryInventory(dir: string): MemoryInventory {
-  const flat = listDir(dir).some((f) => f.endsWith(".md"))
-  const dirs = flat
-    ? [{ project: undefined, memoryDir: dir }]
-    : listDir(dir).map((project) => ({
-        project,
-        memoryDir: path.join(dir, project, "memory"),
-      }))
+export function claudeMemoryInventory(
+  dir: string,
+  layout: "projects" | "flat"
+): MemoryInventory {
+  const dirs =
+    layout === "flat"
+      ? [{ project: undefined, memoryDir: dir }]
+      : listDir(dir).map((project) => ({
+          project,
+          memoryDir: path.join(dir, project, "memory"),
+        }))
   const files: MemoryFile[] = []
   const unsupported: string[] = []
   for (const { project, memoryDir } of dirs) {
     for (const file of listDir(memoryDir)) {
       if (file === "MEMORY.md") continue
+      const name = project ? path.posix.join(project, "memory", file) : file
       if (!file.endsWith(".md")) {
-        unsupported.push(
-          project ? path.posix.join(project, "memory", file) : file
-        )
+        unsupported.push(name)
         continue
       }
-      let source
-      try {
-        source = readSourceFile(
-          dir,
-          project ? path.posix.join(project, "memory", file) : file
-        )
-      } catch {
-        continue
-      }
+      const source = readSourceFile(dir, name)
       // The same file name can exist in several projects, so the title names the project.
       files.push({
         ...source,
@@ -92,14 +93,9 @@ function customMemoryDir(): string | undefined {
 }
 
 function readSettings(file: string): Record<string, unknown> {
-  try {
-    const value: unknown = JSON.parse(fs.readFileSync(file, "utf8"))
-    return value && typeof value === "object" && !Array.isArray(value)
-      ? { ...value }
-      : {}
-  } catch {
-    return {}
-  }
+  if (!fs.existsSync(file)) return {}
+  const value: unknown = JSON.parse(fs.readFileSync(file, "utf8"))
+  return isObject(value) ? value : {}
 }
 
 // Older memories put `type` at the top level, newer ones under `metadata`.

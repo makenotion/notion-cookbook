@@ -10,8 +10,8 @@ import path from "node:path"
 import { DATA_DIR } from "./config.ts"
 import {
   type CallTool,
-  isObject,
   notionTools,
+  assertConnectedWorkspace,
   squash,
   type ToolResult,
   toolResultValue,
@@ -67,17 +67,11 @@ export class NotionMcpHttp {
     })
     await mcp.post({ jsonrpc: "2.0", method: "notifications/initialized" })
     mcp.tools = notionTools({ name: "notion", tools: await mcp.listTools() })
-    if (expectedWorkspaceId) {
-      const self = await mcp.callTool("get-self", {})
-      if (
-        !isObject(self) ||
-        !isObject(self.workspace) ||
-        self.workspace.id !== expectedWorkspaceId
+    if (expectedWorkspaceId)
+      assertConnectedWorkspace(
+        await mcp.callTool("get-self", {}),
+        expectedWorkspaceId
       )
-        throw new Error(
-          "Notion workspace does not match expectedWorkspaceId; refusing sync"
-        )
-    }
     return mcp
   }
 
@@ -347,10 +341,7 @@ function sseMessages(text: string): RpcMessage[] {
       .filter((line) => line.startsWith("data:"))
       .map((line) => line.slice(5).trimStart())
       .join("\n")
-    if (!data) continue
-    try {
-      out.push(JSON.parse(data))
-    } catch {}
+    if (data) out.push(JSON.parse(data))
   }
   return out
 }

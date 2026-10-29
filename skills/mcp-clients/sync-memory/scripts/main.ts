@@ -1,15 +1,3 @@
-// Entry point for explicit Sync Memory commands. Set NOTION_MEMORY_AGENT=claude to work
-// on Claude Code memories instead of Codex's.
-//
-//   node scripts/main.ts login             Claude Code only: sign in to Notion MCP
-//   node scripts/main.ts sync              write the agent's memories now
-//   node scripts/main.ts preview           offline: what it would write
-//   node scripts/main.ts verify            read every synced page back
-//   node scripts/main.ts status            memories it manages and pending-write recovery
-//   node scripts/main.ts use-workspace [--confirm <workspace-id>]
-//                                          report or pin the connected workspace
-//   node scripts/main.ts reconcile <source-path> --keep-notion <page-id> | --not-created
-//                                          release a pending write after review
 import { claudeSource } from "./claude.ts"
 import { codexSource } from "./codex.ts"
 import {
@@ -32,7 +20,7 @@ import {
 } from "./memories.ts"
 import { login, NotionMcpHttp, openBrowser } from "./notionMcp.ts"
 
-const SOURCE = AGENT === "claude" ? claudeSource : codexSource
+const SOURCE = AGENT === "claude" ? claudeSource() : codexSource
 
 async function main(): Promise<void> {
   const [command, name, action, pageId, ...extra] = process.argv.slice(2)

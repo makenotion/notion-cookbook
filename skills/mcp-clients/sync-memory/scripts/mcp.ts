@@ -163,17 +163,11 @@ export class CodexNotionMcp {
       throw new Error("codex app-server returned no thread")
     this.threadId = thread.thread.id
     await this.findNotionServer(this.opts.server)
-    if (this.opts.expectedWorkspaceId) {
-      const self = await this.invokeTool("get-self", {})
-      if (
-        !isObject(self) ||
-        !isObject(self.workspace) ||
-        self.workspace.id !== this.opts.expectedWorkspaceId
+    if (this.opts.expectedWorkspaceId)
+      assertConnectedWorkspace(
+        await this.invokeTool("get-self", {}),
+        this.opts.expectedWorkspaceId
       )
-        throw new Error(
-          "Notion workspace does not match expectedWorkspaceId; refusing sync"
-        )
-    }
   }
 
   readonly callTool: CallTool = async (tool, args) => {
@@ -270,6 +264,21 @@ export function notionTools(server: {
     if (key.startsWith(prefix)) out.set(key.slice(prefix.length), name)
   }
   return out
+}
+
+// Refuses a connection whose get-self result is not the pinned workspace.
+export function assertConnectedWorkspace(
+  self: unknown,
+  expectedWorkspaceId: string
+): void {
+  if (
+    !isObject(self) ||
+    !isObject(self.workspace) ||
+    self.workspace.id !== expectedWorkspaceId
+  )
+    throw new Error(
+      "Notion workspace does not match expectedWorkspaceId; refusing sync"
+    )
 }
 
 // A tool's text content, parsed as JSON when it is JSON.

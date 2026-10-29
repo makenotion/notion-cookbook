@@ -32,12 +32,26 @@ test("Claude Code sync persists across processes, skips unchanged, and updates o
     assert.equal(page.source, "Claude Code")
     assert.equal(page.lastUpdatedBy, "Claude Code")
   }
+  const role = path.join(f.memoryDir, "user_role.md")
+  const profile = f
+    .pages()
+    .find((p) => String(p.title).endsWith("/user_role.md"))
+  assert.equal(profile?.type, "Profile")
+  const content = String(profile?.content)
+  assert.ok(content.startsWith("# Claude Code memory source\n"))
+  assert.match(content, /"Source root": "projects"/)
+  const sourcePath = path.posix.join(
+    path.basename(path.dirname(f.memoryDir)),
+    "memory/user_role.md"
+  )
+  assert.ok(content.includes(`"Source path": "${sourcePath}"`))
+  assert.ok(!content.includes(f.home))
+  assert.ok(content.endsWith(`\n---\n\n${fs.readFileSync(role, "utf8")}`))
   const before = f.calls().length
   result = await f.exec(["sync"])
   assert.equal(result.code, 0, result.stderr)
   assert.equal(JSON.parse(result.stdout).unchanged, FIXTURE_COUNT)
   assert.equal(f.calls().length, before, "unchanged process must not connect")
-  const role = path.join(f.memoryDir, "user_role.md")
   fs.writeFileSync(
     role,
     fs.readFileSync(role, "utf8").replace("ten years", "twelve years")
