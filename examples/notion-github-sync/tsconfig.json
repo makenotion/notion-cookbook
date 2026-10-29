@@ -1,15 +1,16 @@
 {
   "compilerOptions": {
     "target": "ES2019",
-    "module": "commonjs",
-    "moduleResolution": "Node",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "allowSyntheticDefaultImports": true,
     "strict": false,
     "esModuleInterop": true,
     "allowJs": true,
     "checkJs": false,
     "resolveJsonModule": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "types": ["node"]
   },
   "include": ["**/*.ts", "**/*.js"]
 }

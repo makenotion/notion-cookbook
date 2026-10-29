@@ -14,10 +14,10 @@
     "npm": ">=10.9.9"
   },
   "devDependencies": {
-    "@types/node": "^22.9.0",
-    "prettier": "3.6.2",
-    "tsx": "^4.20.6",
-    "typescript": "^5.8.0"
+    "@types/node": "^22.20.5",
+    "prettier": "^3.9.10",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
   },
   "dependencies": {
     "@notionhq/workers": ">=0.0.0",

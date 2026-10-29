@@ -10,17 +10,17 @@
     "npm": ">=10.9.9"
   },
   "scripts": {
-    "start": "node --loader ts-node/esm",
-    "exec": "node --loader ts-node/esm",
-    "basic:1": "node --loader ts-node/esm basic/1-add-block.ts",
-    "basic:2": "node --loader ts-node/esm basic/2-add-linked-block.ts",
-    "basic:3": "node --loader ts-node/esm basic/3-add-styled-block.ts",
-    "intermediate:1": "node --loader ts-node/esm intermediate/1-create-a-database.ts",
-    "intermediate:2": "node --loader ts-node/esm intermediate/2-add-page-to-database.ts",
-    "intermediate:3": "node --loader ts-node/esm intermediate/3-query-database.ts",
-    "intermediate:4": "node --loader ts-node/esm intermediate/4-sort-database.ts",
-    "intermediate:5": "node --loader ts-node/esm intermediate/5-upload-file.ts",
-    "intermediate:6": "node --loader ts-node/esm intermediate/6-create-page-with-template.ts"
+    "start": "tsx",
+    "exec": "tsx",
+    "basic:1": "tsx basic/1-add-block.ts",
+    "basic:2": "tsx basic/2-add-linked-block.ts",
+    "basic:3": "tsx basic/3-add-styled-block.ts",
+    "intermediate:1": "tsx intermediate/1-create-a-database.ts",
+    "intermediate:2": "tsx intermediate/2-add-page-to-database.ts",
+    "intermediate:3": "tsx intermediate/3-query-database.ts",
+    "intermediate:4": "tsx intermediate/4-sort-database.ts",
+    "intermediate:5": "tsx intermediate/5-upload-file.ts",
+    "intermediate:6": "tsx intermediate/6-create-page-with-template.ts"
   },
   "repository": {
     "type": "git",
@@ -36,9 +36,9 @@
     "dotenv": "^16.3.1"
   },
   "devDependencies": {
-    "@types/node": "^18.0.0",
-    "prettier": "3.5.3",
-    "ts-node": "^10.8.2",
-    "typescript": "^4.7.4"
+    "@types/node": "^22.20.5",
+    "prettier": "^3.9.10",
+    "typescript": "^7.0.2",
+    "tsx": "^4.23.15"
   }
 }

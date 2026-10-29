@@ -1,23 +1,18 @@
 {
   "compilerOptions": {
     "sourceMap": false,
-
     "target": "ESNext",
-    "module": "commonjs",
-
-    "moduleResolution": "Node",
-
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "allowSyntheticDefaultImports": true,
-
     "useDefineForClassFields": false,
-
     "strict": false,
-
     "isolatedModules": true,
     "esModuleInterop": true,
     "noUncheckedIndexedAccess": true,
     "allowJs": true,
-    "checkJs": false
+    "checkJs": false,
+    "types": ["node"]
   },
   "include": ["**/*.ts", "**/*.js"]
 }
