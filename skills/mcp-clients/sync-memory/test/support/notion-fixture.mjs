@@ -87,7 +87,9 @@ export function invoke(name, args) {
       const pages = args.pages.map((p) => {
         assert.equal(
           p.properties.Source,
-          args.parent === "memory" ? "Codex" : undefined
+          args.parent === "memory"
+            ? (process.env.FIXTURE_SOURCE ?? "Codex")
+            : undefined
         )
         const page = {
           id: `synthetic-${state.pages.length + 1}`,

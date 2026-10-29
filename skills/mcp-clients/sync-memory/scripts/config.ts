@@ -10,6 +10,8 @@ export interface Config {
   mcpServer?: string
   sourceHome?: string
   expectedWorkspaceId?: string
+  // Notion MCP endpoint the plugin signs in to directly in Claude Code.
+  mcpUrl: string
 }
 
 export type PendingWrite =
@@ -45,14 +47,22 @@ export interface State {
   >
 }
 
-export const CODEX_HOME =
-  process.env.CODEX_HOME || path.join(os.homedir(), ".codex")
+export type Agent = "codex" | "claude"
+
+// The same skill directory installs into Codex and Claude Code. Claude Code commands set
+// NOTION_MEMORY_AGENT=claude, and config, state, and logs live in that agent's home directory.
+export const AGENT: Agent =
+  process.env.NOTION_MEMORY_AGENT === "claude" ? "claude" : "codex"
+export const AGENT_HOME =
+  AGENT === "claude"
+    ? process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude")
+    : process.env.CODEX_HOME || path.join(os.homedir(), ".codex")
 export const CONFIG_FILE =
   process.env.NOTION_MEMORY_CONFIG ||
-  path.join(CODEX_HOME, "notion-memory.json")
+  path.join(AGENT_HOME, "notion-memory.json")
 // Keep the mapping namespace stable across skill upgrades and explicit runs.
 export const DATA_DIR =
-  process.env.NOTION_MEMORY_DATA || path.join(CODEX_HOME, "notion-memory")
+  process.env.NOTION_MEMORY_DATA || path.join(AGENT_HOME, "notion-memory")
 export const LOG_FILE = path.join(DATA_DIR, "notion-memory.log")
 const WORKSPACE_ID = /^[A-Za-z0-9-]+$/
 
@@ -65,6 +75,8 @@ export function loadConfig(): Config {
     mcpServer: process.env.NOTION_MCP_SERVER || file.mcpServer,
     sourceHome: file.sourceHome,
     expectedWorkspaceId: file.expectedWorkspaceId,
+    mcpUrl:
+      process.env.NOTION_MCP_URL || file.mcpUrl || "https://mcp.notion.com/mcp",
   }
 }
 
@@ -139,10 +151,7 @@ export function loadState(workspaceId = pinnedWorkspace()): State {
 export function saveState(state: State): void {
   const file = stateFile(state.workspaceId)
   fs.mkdirSync(path.dirname(file), { recursive: true })
-  fs.writeFileSync(
-    `${file}.tmp`,
-    JSON.stringify(state, null, 2)
-  )
+  fs.writeFileSync(`${file}.tmp`, JSON.stringify(state, null, 2))
   fs.renameSync(`${file}.tmp`, file)
 }
 

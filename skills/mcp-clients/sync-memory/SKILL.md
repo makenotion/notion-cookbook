@@ -1,8 +1,8 @@
 ---
 name: notion-sync-memory
-description: Copy local memory Markdown into Notion Memories, preview the files, or verify managed pages. Use when the user asks to sync or check memory in Notion. The current source adapter requires Codex.
+description: Copy local Codex or Claude Code memory Markdown into Notion Memories, preview the files, or verify managed pages. Use when the user asks to sync or check memory in Notion. The source adapters require Codex or Claude Code.
 metadata:
-  requires-client: codex
+  requires-client: codex, claude-code
 ---
 
 # Sync Memory
@@ -15,9 +15,13 @@ not authorize recurring work. Schedule only when the user separately approves th
 frequency, sources, destination and notifications. Use the host's native scheduler
 for approved recurring work; this package implements no scheduler.
 
-Use Node.js 22.18+ and the bundled `scripts/main.ts`, relative to this skill directory:
+Use Node.js 22.18+ and the bundled `scripts/main.ts`, relative to this skill directory.
+In Claude Code, prefix every command with `NOTION_MEMORY_AGENT=claude`; in Codex,
+run them as shown.
 
-- `sync`: recursively copy every regular `*.md` file under `memories_v2/`, one file per page.
+- `sync`: copy the agent's memory files, one file per page. In Codex that is
+  every regular `*.md` file under `memories_v2/`, recursively; in Claude Code, each
+  auto memory file under `~/.claude/projects/*/memory/` except the `MEMORY.md` index.
 - `preview`: show the source files without connecting to Notion.
 - `verify`: check current source hashes and managed Notion page readbacks.
 - `status`: show the local mapping and pending-write recovery instructions.
@@ -34,20 +38,23 @@ Use Node.js 22.18+ and the bundled `scripts/main.ts`, relative to this skill dir
   path exists (for example, the workspace rejected it over its block limit). It
   clears the pending entry so the next sync creates the page.
 
-Include `rollout_summaries/` and `extensions/`. Skip `.git/` and symbolic links.
-Use each file's relative path with `/` separators as its page title and mapping key.
-Codex v2 normally does not generate `MEMORY.md`; copy it if present.
-Put source metadata at the start of each page, followed by a separator and the
-original Markdown unchanged. The metadata includes Codex, memories_v2, relative
-path, filesystem birth time (null when unavailable), filesystem mtime, sync attempt
-time and notion-memory as the copier. Never substitute ctime or expose absolute
-source paths. No database properties are added. Source metadata changes update the
-same page; unchanged text and metadata keep Synced at unchanged.
-Pages use Type Notes, Source Codex and Last updated by
-Codex. Updates preserve Source. This desktop-only package runs on explicit
-invocation; it installs no session hooks, watcher, or background service.
+In Codex, include `rollout_summaries/` and `extensions/`. Skip `.git/` and symbolic
+links. Use each file's relative path with `/` separators as its page title and
+mapping key. Codex v2 normally does not generate `MEMORY.md`; copy it if present.
+Claude Code pages are titled `<project>/<file>` and take Type from the memory's
+frontmatter `type`; Codex pages use Type Notes.
 
-Only Codex v2 is supported. Import existing Markdown even without a summary.
+Put source metadata at the start of each page, followed by a separator and the
+original Markdown unchanged. The metadata includes the agent, the source root
+(`memories_v2`, `projects` or `autoMemoryDirectory`), relative path, filesystem birth
+time (null when unavailable), filesystem mtime, sync attempt time and notion-memory
+as the copier. Never substitute ctime or expose absolute source paths. No database
+properties are added. Source metadata changes update the same page; unchanged text
+and metadata keep Synced at unchanged. Source and Last updated by name the agent,
+and updates preserve Source. This desktop-only package runs on explicit invocation;
+it installs no session hooks, watcher, or background service in either agent.
+
+Codex supports only v2. Import existing Markdown even without a summary.
 Report the command's unsupported, missing and rejected paths. A rejected path is
 content Notion refused as invalid input; nothing was written, other files still
 sync, and `verify` reports it until the source file changes. Existing Notion edits and
@@ -77,6 +84,9 @@ connections are available, set `mcpServer` explicitly; there is no first-server
 fallback. If the Notion server is not signed in, start the host's own MCP sign-in for
 that server (in the Codex app, connect Notion; in the Codex CLI, ask the user to run
 `codex mcp login <server>`), wait for the user to finish consent, then continue.
+In Claude Code, the skill signs in itself: ask the user to run
+`NOTION_MEMORY_AGENT=claude node <skill-directory>/scripts/main.ts login` themselves,
+since it opens Notion's consent page in their browser.
 Never open the authorization page yourself with computer use, browser tools, or
 another browser profile. If a tool fails, stop that operation and report it. Keep
 source files untouched.
@@ -96,7 +106,8 @@ Never edit or delete mappings; pages in other workspaces are left alone.
 Use the host's local scheduler after the user approves recurring execution. In
 the Codex desktop app, create a local cron task with its Scheduled tool; the computer and app must be running. The Codex CLI has no
 scheduler: report that, give the task body below for the desktop app, and leave
-manual `sync` available.
+manual `sync` available. This section covers Codex only: Claude Code has no
+`sourceHome` pin yet, so run `sync` there when the user asks.
 Confirm the frequency, time zone, source root and target workspace. Pin the approved workspace with `expectedWorkspaceId` and the source
 with `sourceHome` in the existing config; preserve unrelated settings. Keep the
 same mapping directory for the initial import and every scheduled run.

@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url"
 export const recipe = fileURLToPath(new URL("../../", import.meta.url))
 export const support = fileURLToPath(new URL("./", import.meta.url))
 // Tests run a copy of the skill as it ships, without maintainer-only files.
-const MAINTAINER_ONLY = new Set(["test", "evaluations", "node_modules"])
+export const MAINTAINER_ONLY = new Set(["test", "evaluations", "node_modules"])
 
 export function object(value: unknown): Record<string, unknown> {
   assert.ok(isObject(value))

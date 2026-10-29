@@ -32,7 +32,7 @@ interface McpServerStatus {
   tools?: Record<string, unknown>
 }
 
-interface ToolResult {
+export interface ToolResult {
   content?: { type: string; text?: string }[]
   isError?: boolean
 }
@@ -163,17 +163,11 @@ export class CodexNotionMcp {
       throw new Error("codex app-server returned no thread")
     this.threadId = thread.thread.id
     await this.findNotionServer(this.opts.server)
-    if (this.opts.expectedWorkspaceId) {
-      const self = await this.invokeTool("get-self", {})
-      if (
-        !isObject(self) ||
-        !isObject(self.workspace) ||
-        self.workspace.id !== this.opts.expectedWorkspaceId
+    if (this.opts.expectedWorkspaceId)
+      assertConnectedWorkspace(
+        await this.invokeTool("get-self", {}),
+        this.opts.expectedWorkspaceId
       )
-        throw new Error(
-          "Notion workspace does not match expectedWorkspaceId; refusing sync"
-        )
-    }
   }
 
   readonly callTool: CallTool = async (tool, args) => {
@@ -191,20 +185,7 @@ export class CodexNotionMcp {
       tool: name,
       arguments: args,
     })) as ToolResult
-    const texts = (result.content ?? []).flatMap((part) =>
-      part.type === "text" && part.text ? [part.text] : []
-    )
-    if (result.isError) throw new NotionToolError(tool, texts.join("\n"))
-    // Notion sends the JSON result first, then optional human-readable notices.
-    // Keep those notices visible without corrupting the machine-readable result.
-    for (const notice of texts.slice(1))
-      console.error(JSON.stringify({ tool, notice }))
-    const text = texts[0] ?? ""
-    try {
-      return JSON.parse(text)
-    } catch {
-      return text
-    }
+    return toolResultValue(tool, result)
   }
 
   close(): void {
@@ -285,7 +266,41 @@ export function notionTools(server: {
   return out
 }
 
-function squash(name: string): string {
+// Refuses a connection whose get-self result is not the pinned workspace.
+export function assertConnectedWorkspace(
+  self: unknown,
+  expectedWorkspaceId: string
+): void {
+  if (
+    !isObject(self) ||
+    !isObject(self.workspace) ||
+    self.workspace.id !== expectedWorkspaceId
+  )
+    throw new Error(
+      "Notion workspace does not match expectedWorkspaceId; refusing sync"
+    )
+}
+
+// A tool's text content, parsed as JSON when it is JSON.
+export function toolResultValue(tool: string, result: ToolResult): unknown {
+  const texts = (result.content ?? []).flatMap((part) =>
+    part.type === "text" && part.text ? [part.text] : []
+  )
+  if (result.isError) throw new NotionToolError(tool, texts.join("\n"))
+  // Notion sends the JSON result first, then optional human-readable notices.
+  // Keep those notices visible without corrupting the machine-readable result.
+  for (const notice of texts.slice(1))
+    console.error(JSON.stringify({ tool, notice }))
+  const text = texts[0] ?? ""
+  try {
+    return JSON.parse(text)
+  } catch {
+    return text
+  }
+}
+
+// Key for matching tool names across prefixes and separators.
+export function squash(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]/g, "")
 }
 
@@ -298,6 +313,6 @@ function parseJson(text: unknown): unknown {
   }
 }
 
-function isObject(value: unknown): value is Record<string, unknown> {
+export function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value)
 }

@@ -1,4 +1,7 @@
+import { claudeSource } from "./claude.ts"
+import { codexSource } from "./codex.ts"
 import {
+  AGENT,
   type Config,
   hasState,
   loadConfig,
@@ -10,24 +13,29 @@ import {
 import { type CallTool, CodexNotionMcp } from "./mcp.ts"
 import {
   discardUnknownCreate,
-  memoryInventory,
   memoryStatus,
   reconcileMemory,
-  verifyMemories,
   syncMemories,
+  verifyMemories,
 } from "./memories.ts"
+import { login, NotionMcpHttp, openBrowser } from "./notionMcp.ts"
+
+const SOURCE = AGENT === "claude" ? claudeSource() : codexSource
 
 async function main(): Promise<void> {
   const [command, name, action, pageId, ...extra] = process.argv.slice(2)
   const config = loadConfig()
 
   switch (command) {
+    // Claude Code holds the lock while connected, because refreshing the OAuth token must
+    // not race.
     case "sync":
       requireWorkspace(config)
-      return withNotion(config, async (callTool) => {
-        const result = await withLock(() => syncMemories(callTool))
-        console.log(JSON.stringify(result))
-      })
+      return withLock(() =>
+        withNotion(config, async (callTool) => {
+          console.log(JSON.stringify(await syncMemories(callTool, SOURCE)))
+        })
+      )
     case "reconcile":
       if (name && action === "--not-created" && !pageId) {
         console.log(
@@ -40,30 +48,36 @@ async function main(): Promise<void> {
           "usage: node scripts/main.ts reconcile <source-path> --keep-notion <page-id> | reconcile <source-path> --not-created"
         )
       requireWorkspace(config)
-      return withNotion(config, async (callTool) => {
-        console.log(
-          JSON.stringify(
-            await withLock(() => reconcileMemory(callTool, name, pageId))
+      return withLock(() =>
+        withNotion(config, async (callTool) => {
+          console.log(
+            JSON.stringify(await reconcileMemory(callTool, name, pageId))
           )
-        )
-      })
+        })
+      )
     case "use-workspace":
       return useWorkspace(config, name, action, pageId)
     case "verify":
-      return withNotion(config, async (callTool) => {
-        console.log(
-          JSON.stringify(await withLock(() => verifyMemories(callTool)))
-        )
-      })
+      return withLock(() =>
+        withNotion(config, async (callTool) => {
+          console.log(JSON.stringify(await verifyMemories(callTool, SOURCE)))
+        })
+      )
+    case "login":
+      if (AGENT !== "claude") {
+        console.log("Codex signs in itself: run `codex mcp login notion`.")
+        return
+      }
+      return login(config.mcpUrl, openBrowser)
     case "preview":
-      console.log(JSON.stringify(memoryInventory(), null, 2))
+      console.log(JSON.stringify(SOURCE.inventory(), null, 2))
       return
     case "status":
       console.log(JSON.stringify(memoryStatus(), null, 2))
       return
     case undefined:
       console.log(
-        "usage: node scripts/main.ts sync | preview | verify | status | use-workspace [--confirm <workspace-id>] | reconcile <source-path> --keep-notion <page-id> | reconcile <source-path> --not-created"
+        "usage: node scripts/main.ts login | sync | preview | verify | status | use-workspace [--confirm <workspace-id>] | reconcile <source-path> --keep-notion <page-id> | reconcile <source-path> --not-created"
       )
       return
     default:
@@ -150,12 +164,23 @@ function requireWorkspace(config: Config): void {
     )
 }
 
-// Connects to the Notion server that Codex is already signed in to. The connection starts
-// on the first tool call, so an unchanged sync starts no app-server.
+// Connects to Notion MCP: through the server Codex is already signed in to, or, in Claude
+// Code, directly with the plugin's own sign-in. The connection starts on the first tool
+// call, so an unchanged sync never connects.
 async function withNotion(
   config: Config,
   fn: (callTool: CallTool) => Promise<void>
 ): Promise<void> {
+  if (AGENT === "claude") {
+    let connection: Promise<NotionMcpHttp> | undefined
+    return fn(async (tool, args) => {
+      connection ??= NotionMcpHttp.connect(
+        config.mcpUrl,
+        config.expectedWorkspaceId
+      )
+      return (await connection).callTool(tool, args)
+    })
+  }
   let connection: Promise<CodexNotionMcp> | undefined
   const callTool: CallTool = async (tool, args) => {
     connection ??= CodexNotionMcp.open({

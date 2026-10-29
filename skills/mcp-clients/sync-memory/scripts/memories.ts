@@ -1,22 +1,18 @@
 import crypto from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
-import {
-  CODEX_HOME,
-  loadConfig,
-  loadState,
-  log,
-  saveState,
-  withLock,
-} from "./config.ts"
-import type { State } from "./config.ts"
+import { loadState, log, saveState, type State } from "./config.ts"
 import { type CallTool, NotionToolError } from "./mcp.ts"
 
-export function memoriesDir(): string {
-  return path.join(loadConfig().sourceHome || CODEX_HOME, "memories_v2")
-}
+// Mirrors an agent's memory files into the user's Notion Memories with the same Notion MCP
+// tools any agent uses. One source file becomes one page, and its Markdown passes through
+// unchanged after a source metadata preamble. Each agent has a MemorySource that lists
+// its own files (codex.ts, claude.ts).
 
-export interface MemoryFile {
+export type MemoryType = "Profile" | "Preference" | "Work" | "Notes"
+
+export interface SourceFile {
+  // Path relative to the source root with `/` separators: the state key and Source path.
   name: string
   content: string
   hash: string
@@ -25,24 +21,18 @@ export interface MemoryFile {
   metadataHash: string
 }
 
-export function sourceCreatedAt(birthtimeMs: number): string | null {
-  const date = new Date(birthtimeMs)
-  return birthtimeMs > 0 && Number.isFinite(date.getTime())
-    ? date.toISOString()
-    : null
+export interface MemoryFile extends SourceFile {
+  title: string
+  type: MemoryType
 }
 
-export function renderMemory(file: MemoryFile, syncedAt: string): string {
-  const metadata = {
-    Source: "Codex",
-    "Source root": "memories_v2",
-    "Source path": file.name,
-    "Source created at": file.createdAt,
-    "Source updated at": file.updatedAt,
-    "Synced at": syncedAt,
-    "Synced by": "notion-memory",
-  }
-  return `# Codex memory source\n\n\`\`\`json\n${JSON.stringify(metadata, null, 2)}\n\`\`\`\n\n---\n\n${escapeNotionTags(file.content)}`
+export interface MemorySource {
+  // Agent name: the Source and Last updated by option on the pages it writes.
+  name: "Codex" | "Claude Code"
+  // Source root named in the preamble. Never an absolute path.
+  root: string
+  // Read on every sync, because the agent's memory files can change between syncs.
+  inventory(): MemoryInventory
 }
 
 // Notion Markdown reads `<name ...>` outside code as a Notion tag such as <page> and
@@ -73,49 +63,16 @@ export function escapeNotionTags(markdown: string): string {
     .join("\n")
 }
 
-export function memoryInventory(): {
+export interface MemoryInventory {
   files: MemoryFile[]
+  // Other entries in the memory directory, which are reported but not copied.
   unsupported: string[]
-} {
-  const dir = memoriesDir()
-  if (!fs.existsSync(dir))
-    throw new Error(`Memory directory does not exist: ${dir}`)
-  const names: string[] = []
-  const unsupported: string[] = []
-  function visit(relative: string) {
-    for (const entry of fs.readdirSync(path.join(dir, relative), {
-      withFileTypes: true,
-    })) {
-      if (entry.name === ".git") continue
-      const name = path.posix.join(relative, entry.name)
-      if (entry.isDirectory()) visit(name)
-      else if (entry.isFile() && entry.name.endsWith(".md")) names.push(name)
-      else unsupported.push(name)
-    }
-  }
-  visit("")
-  const files = names.sort().map((name) => {
-    const file = path.join(dir, name)
-    const content = fs.readFileSync(file, "utf8")
-    const stat = fs.statSync(file)
-    const createdAt = sourceCreatedAt(stat.birthtimeMs)
-    const updatedAt = stat.mtime.toISOString()
-    return {
-      name,
-      content,
-      hash: digest(content),
-      createdAt,
-      updatedAt,
-      metadataHash: digest(JSON.stringify([createdAt, updatedAt])),
-    }
-  })
-  return { files, unsupported: unsupported.sort() }
 }
 
-export async function syncMemories(call: CallTool) {
+export async function syncMemories(call: CallTool, source: MemorySource) {
   const state = loadState()
   await resolvePending(call, state)
-  const { files, unsupported } = memoryInventory()
+  const { files, unsupported } = source.inventory()
   const present = new Set(files.map((file) => file.name))
   const result = {
     unsupported,
@@ -159,9 +116,9 @@ export async function syncMemories(call: CallTool) {
         result.changedInNotion++
         continue
       }
-      attributed = page.lastUpdatedBy === "Codex"
+      attributed = page.lastUpdatedBy === source.name
     }
-    const content = renderMemory(file, new Date().toISOString())
+    const content = renderMemory(source, file, new Date().toISOString())
     state.pending ??= {}
     state.pending[file.name] = {
       phase: "unknown",
@@ -179,7 +136,7 @@ export async function syncMemories(call: CallTool) {
           await call("update-page", {
             page_id: previous.pageId,
             command: "update_properties",
-            properties: { "Last updated by": "Codex" },
+            properties: { "Last updated by": source.name },
           })
         await call("update-page", {
           page_id: previous.pageId,
@@ -194,10 +151,10 @@ export async function syncMemories(call: CallTool) {
           pages: [
             {
               properties: {
-                title: file.name,
-                Type: "Notes",
-                Source: "Codex",
-                "Last updated by": "Codex",
+                title: file.title,
+                Type: file.type,
+                Source: source.name,
+                "Last updated by": source.name,
               },
               content,
             },
@@ -232,7 +189,7 @@ export async function syncMemories(call: CallTool) {
       hash: file.hash,
       metadataHash: file.metadataHash,
       expectedPageHash: digest(
-        JSON.stringify([file.name, "Notes", content.trim()])
+        JSON.stringify([file.title, file.type, content.trim()])
       ),
     }
     saveState(state)
@@ -336,14 +293,14 @@ export async function reconcileMemory(
   return { path: name, pageId, released: true }
 }
 
-export async function verifyMemories(call: CallTool) {
+export async function verifyMemories(call: CallTool, source: MemorySource) {
   const state = loadState()
   const pending = Object.entries(state.pending ?? {})
   if (pending.length)
     throw new Error(
       `Pending writes require sync/reconciliation: ${pending.map(([name, entry]) => `${name} (${entry.phase})`).join(", ")}`
     )
-  const { files, unsupported } = memoryInventory()
+  const { files, unsupported } = source.inventory()
   for (const file of files) {
     const entry = state.files[file.name]
     if (
@@ -352,10 +309,10 @@ export async function verifyMemories(call: CallTool) {
       entry.hash !== file.hash ||
       entry.metadataHash !== file.metadataHash
     )
-      throw new Error(`Unsynced file: ${file.name}`)
+      throw new Error(`Unsynced file: ${file.title}`)
     const page = await snapshot(call, entry.pageId)
     if (page.deleted || page.hash !== entry.pageHash)
-      throw new Error(`Page changed: ${file.name}`)
+      throw new Error(`Page changed: ${file.title}`)
   }
   const present = new Set(files.map((file) => file.name))
   return {
@@ -365,6 +322,52 @@ export async function verifyMemories(call: CallTool) {
       .filter((name) => !present.has(name))
       .sort(),
   }
+}
+
+// Reads one source file with the timestamps its preamble reports.
+export function readSourceFile(root: string, name: string): SourceFile {
+  const file = path.join(root, name)
+  const content = fs.readFileSync(file, "utf8")
+  const stat = fs.statSync(file)
+  const createdAt = sourceCreatedAt(stat.birthtimeMs)
+  const updatedAt = stat.mtime.toISOString()
+  return {
+    name,
+    content,
+    hash: digest(content),
+    createdAt,
+    updatedAt,
+    metadataHash: digest(JSON.stringify([createdAt, updatedAt])),
+  }
+}
+
+// Birth time when the filesystem reports one. Never falls back to ctime.
+export function sourceCreatedAt(birthtimeMs: number): string | null {
+  const date = new Date(birthtimeMs)
+  return birthtimeMs > 0 && Number.isFinite(date.getTime())
+    ? date.toISOString()
+    : null
+}
+
+export function renderMemory(
+  source: MemorySource,
+  file: SourceFile,
+  syncedAt: string
+): string {
+  const metadata = {
+    Source: source.name,
+    "Source root": source.root,
+    "Source path": file.name,
+    "Source created at": file.createdAt,
+    "Source updated at": file.updatedAt,
+    "Synced at": syncedAt,
+    "Synced by": "notion-memory",
+  }
+  return `# ${source.name} memory source\n\n\`\`\`json\n${JSON.stringify(metadata, null, 2)}\n\`\`\`\n\n---\n\n${escapeNotionTags(file.content)}`
+}
+
+export function digest(text: string): string {
+  return crypto.createHash("sha256").update(text).digest("hex")
 }
 
 async function snapshot(call: CallTool, id: string) {
@@ -398,10 +401,6 @@ async function snapshot(call: CallTool, id: string) {
       ])
     ),
   }
-}
-
-function digest(text: string): string {
-  return crypto.createHash("sha256").update(text).digest("hex")
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

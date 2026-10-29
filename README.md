@@ -16,7 +16,7 @@ directory.
   [GitHub issues](examples/notion-github-sync/), send
   [email notifications](examples/database-email-update/).
 - **Sync local memory into Notion:** use the
-  [Sync Memory skill](skills/mcp-clients/sync-memory/), currently supporting Codex memory.
+  [Sync Memory skill](skills/mcp-clients/sync-memory/), supporting Codex and Claude Code memory.
 - **Bring external data into Notion:** use a Worker sync for
   [GitHub issues and pull requests](workers/templates/github-sync/),
   [GitHub stars](workers/templates/github-stars-sync/), [HubSpot](workers/templates/hubspot-sync/),
