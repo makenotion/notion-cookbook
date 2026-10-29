@@ -58,9 +58,19 @@ reading. Keep extracurricular and personal tracking out unless requested.
 Read [template reference](reference/template.md) for the original structural
 reference and [design guidance](reference/design.md) before composing the page.
 Draw visual inspiration from both Notion-created and community templates, respecting
-any explicit source restrictions from the user. Attribute the actual creator;
-borrow design patterns rather than copying artwork or claiming an exact clone.
+any explicit source restrictions from the user. Borrow design patterns without
+copying artwork or claiming an exact clone. Keep design-research attribution and
+process commentary out of the created workspace unless requested. Preserve
+citations for the learner's actual source material.
 Do not infer popularity rankings from a gallery listing.
+
+## Apply the workspace pattern
+
+Read [workspace composition and acceptance walk](reference/workspace-pattern.md)
+before creating the home. Use its domain-specific pattern when the brief fits;
+adapt the amount of structure to the supplied work. The first screen, connected
+record bodies, visual settings and rendered acceptance walk are part of the
+deliverable, not optional polish after setup.
 
 ## Produce the designed result
 
@@ -102,3 +112,7 @@ for unsupported or unverified features.
 
 Return the home link, a brief explanation of what is ready, one concrete first
 action, and any remaining gaps. Avoid a long technical inventory.
+
+Build and revise the workspace through Notion MCP. UI inspection must not change
+content or layout settings. Report unsupported presentation settings as capability
+gaps; an output polished through the UI is not an MCP-only skill pass.

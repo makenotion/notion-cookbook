@@ -1,8 +1,8 @@
 # Evaluation cases
 
 Use the [collection protocol](../../evaluations.md) with stateful mock tools.
-These are scenario specifications, not executed tests. Compare no-skill and
-new-skill runs; the previous-skill condition is not applicable.
+The JSON files specify scenarios. Compare no-skill, previous-skill and revised-skill
+runs when measuring improvement; a live smoke test does not establish reliability.
 
 - `context-to-workspace.json`: context extraction, domain decisions, populated
   structure, evidence fidelity, and usable navigation.
@@ -35,3 +35,19 @@ do not count mock structural checks as proof of rendered beauty.
 `default-private-destination.json` checks that an omitted destination uses the
 connection's private default. Grade visual composition against the relevant
 gallery patterns, not merely the presence of an icon, cover, or callout.
+
+## Reference workspace replay
+
+`reference-workspace.json` supplies a fictional brief for an authorized private
+workspace. Give the runner only its query/context and the runtime skill; withhold
+success criteria and existing sample page IDs. Record the first result, inspect
+the saved views and relations, and walk the rendered workspace in Notion. Compare
+workflow, hierarchy, visible metadata and detail-page usefulness with the reviewed
+reference composition, not exact prose or pixels. A reviewer-polished output is
+not a passing forward test. Report retries and unavailable visual checks.
+
+For MCP-only runs, all page, record, view and presentation changes must use the
+Notion MCP connection. UI inspection may navigate and capture the result but
+must not repair it. Keep UI-assisted examples separate from passing MCP-only
+evidence. Record unsupported settings and their visible effects, and preserve
+the initial result when instructions change during a retry.
