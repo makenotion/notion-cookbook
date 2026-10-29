@@ -1,6 +1,6 @@
 ---
-name: sync-memory
-description: Copy current Codex or Claude Code memory Markdown files into Notion Memories, preview the files, or verify managed pages. Use when the user asks to sync or check Codex or Claude Code memories in Notion.
+name: notion-sync-memory
+description: Copy local Codex or Claude Code memory Markdown into Notion Memories, preview the files, or verify managed pages. Use when the user asks to sync or check memory in Notion. The source adapters require Codex or Claude Code.
 metadata:
   requires-client: codex, claude-code
 ---
@@ -84,7 +84,7 @@ connections are available, set `mcpServer` explicitly; there is no first-server
 fallback. If the Notion server is not signed in, start the host's own MCP sign-in for
 that server (in the Codex app, connect Notion; in the Codex CLI, ask the user to run
 `codex mcp login <server>`), wait for the user to finish consent, then continue.
-In Claude Code, the plugin signs in itself: ask the user to run
+In Claude Code, the skill signs in itself: ask the user to run
 `NOTION_MEMORY_AGENT=claude node <skill-directory>/scripts/main.ts login` themselves,
 since it opens Notion's consent page in their browser.
 Never open the authorization page yourself with computer use, browser tools, or

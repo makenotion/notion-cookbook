@@ -49,7 +49,7 @@ export interface State {
 
 export type Agent = "codex" | "claude"
 
-// The same plugin directory installs into Codex and Claude Code. Claude Code commands set
+// The same skill directory installs into Codex and Claude Code. Claude Code commands set
 // NOTION_MEMORY_AGENT=claude, and config, state, and logs live in that agent's home directory.
 export const AGENT: Agent =
   process.env.NOTION_MEMORY_AGENT === "claude" ? "claude" : "codex"
@@ -60,7 +60,7 @@ export const AGENT_HOME =
 export const CONFIG_FILE =
   process.env.NOTION_MEMORY_CONFIG ||
   path.join(AGENT_HOME, "notion-memory.json")
-// Keep the mapping namespace stable across plugin upgrades and explicit runs.
+// Keep the mapping namespace stable across skill upgrades and explicit runs.
 export const DATA_DIR =
   process.env.NOTION_MEMORY_DATA || path.join(AGENT_HOME, "notion-memory")
 export const LOG_FILE = path.join(DATA_DIR, "notion-memory.log")

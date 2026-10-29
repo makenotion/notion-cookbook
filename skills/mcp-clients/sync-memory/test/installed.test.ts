@@ -69,11 +69,11 @@ test("missing Node is visible at the manual command boundary", async (t) => {
   const f = fixture(t)
   const result = await run(
     "/bin/sh",
-    ["-c", 'node "$PLUGIN_ROOT/skills/sync-memory/scripts/main.ts" sync'],
+    ["-c", 'node "$SKILL_ROOT/scripts/main.ts" sync'],
     {
       ...f.env,
       PATH: path.join(f.root, "empty-bin"),
-      PLUGIN_ROOT: f.installed,
+      SKILL_ROOT: f.installed,
     },
     f.root
   )

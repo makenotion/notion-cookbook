@@ -1,20 +1,19 @@
 # Sync Memory
 
 Copy Codex's or Claude Code's memory Markdown files into Notion Memories, one file
-per page. In Codex the plugin calls Notion through Codex's existing MCP connection;
+per page. In Codex the skill calls Notion through Codex's existing MCP connection;
 in Claude Code it signs in to Notion MCP itself. It runs no model.
 `SKILL.md` is the agent entrypoint; `scripts/` holds the copy commands.
 
-This directory is the source. `npm run plugins:build` copies it and the shared
-[Notion setup skill](../setup/SKILL.md) into
-[`plugins/sync-memory/`](../../../plugins/sync-memory/), leaving out tests,
-evaluations and dependencies. The plugin's manifest, Notion connection and icon are
-written by hand. Commit the regenerated copy; `npm run plugins:check` fails when it
-is stale. The same build writes the Claude Code copy to
-[`plugins/sync-memory-claude/`](../../../plugins/sync-memory-claude/), which has only
-this skill and no `.mcp.json`, because Claude Code loads any plugin's root
-`.mcp.json` as a session MCP server. Neither plugin installs hooks or a background
-service.
+The skill supports Codex and Claude Code memory only and installs no hooks or
+background service. It declares `metadata.requires-client: codex, claude-code`, so
+`npm run plugins:build` leaves it out of the portable plugins under
+[`plugins/`](../../../plugins/). A Codex plugin that bundles it ships `SKILL.md`,
+`agents/`, `scripts/`, `package.json` and `tsconfig.json` as
+`skills/notion-sync-memory/`, leaves out `test/`, `evaluations/` and
+`node_modules/`, and must declare `requires_local_executor: true` because the
+scripts run on the user's computer. In Claude Code, copy the same files to
+`~/.claude/skills/notion-sync-memory/` as a user skill.
 
 ## Behavior
 
@@ -57,13 +56,11 @@ written for it and other files continue.
 
 ## Setup
 
-Requires Node.js 22.18+, Codex with plugin support (tested with 0.165.0), Codex v2
+Requires Node.js 22.18+, Codex (tested with 0.165.0), Codex v2
 memories, and a Notion workspace with Memories.
 
-```sh
-codex plugin marketplace add /absolute/path/to/notion-cookbook
-codex plugin add sync-memory@notion-cookbook
-```
+To install it by hand, copy this directory without `test/`, `evaluations/` and
+`node_modules/` to `~/.codex/skills/notion-sync-memory/`, and connect Notion in Codex.
 
 Settings live in `~/.codex/notion-memory.json`. `use-workspace --confirm <id>` writes
 `expectedWorkspaceId`, which `sync`, `verify`, `status` and `reconcile` require.
@@ -79,7 +76,7 @@ workspace keeps its own mapping under `~/.codex/notion-memory/<workspace-id>/`.
 ```
 
 Bulk copying of local memory and its consent, exclusion and forget behavior remain
-release review items. Public listing goes through OpenAI's
+release review items. Listing a Codex plugin that bundles it goes through OpenAI's
 [desktop-only submission process](https://developers.openai.com/plugins/deploy/desktop-only).
 
 ## Commands
@@ -136,9 +133,9 @@ frontmatter: `user` → Profile, `feedback` → Preference, `project` → Work, 
 else → Notes. Memories from every project are read, so preview first.
 
 ```sh
-claude plugin marketplace add /absolute/path/to/notion-cookbook
-claude plugin install sync-memory@notion-cookbook
+mkdir -p ~/.claude/skills/notion-sync-memory
 cd notion-cookbook/skills/mcp-clients/sync-memory
+cp -R SKILL.md agents scripts package.json tsconfig.json ~/.claude/skills/notion-sync-memory/
 NOTION_MEMORY_AGENT=claude node scripts/main.ts login
 NOTION_MEMORY_AGENT=claude node scripts/main.ts preview
 NOTION_MEMORY_AGENT=claude node scripts/main.ts use-workspace --confirm <workspace-id>
@@ -163,11 +160,12 @@ CODEX_TEST_BINARY="$(command -v codex)" NOTION_TEST_SLOW=1 npm test
 CLAUDE_TEST_BINARY="$(command -v claude)" npm test
 ```
 
-The slow tests install the checked-in plugin in an isolated Codex home and drive a
-Notion fixture through the real app-server without a model. The
+The `CODEX_TEST_BINARY` tests install the skill in an isolated Codex home, check
+that Codex discovers it, and drive a Notion fixture through the real app-server
+without a model. The
 `sync-memory-test.yml` workflow runs them on Node.js 22.18.0 and 22.23.4 with Codex
 0.165.0 and Claude Code 2.1.296. Claude Code tests run against
 `test/support/fake-notion-http.mjs`, a local stand-in for mcp.notion.com, and the
-optional runtime test installs through the real `claude plugin` commands and checks
-that no hook or MCP server is registered. OAuth consent and rendering in real
+optional runtime test installs the skill as a Claude Code user skill and checks that
+Claude Code discovers it. OAuth consent and rendering in real
 Notion need separate live checks.

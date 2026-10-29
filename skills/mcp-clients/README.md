@@ -34,9 +34,8 @@ memory files and use its authenticated Notion connection.
    in clients that support it; otherwise, ask the assistant to follow the
    supplied workflow explicitly.
 
-Sync Memory bundles executable scripts for desktop-only use and registers no lifecycle hooks.
-Follow its [installation instructions](sync-memory/README.md) for the plugin
-package, or copy the complete skill directory for manual use in Codex.
+Sync Memory bundles executable scripts for desktop-only use and registers no
+lifecycle hooks. Follow its [setup instructions](sync-memory/README.md).
 
 The instructions use tool names such as `Notion:notion-search`. Your client may
 expose a different server prefix or tool namespace. Use the corresponding tool
@@ -72,8 +71,8 @@ mcp-clients/
   [contributing guide](../../CONTRIBUTING.md).
 - After changing a skill, run `npm run plugins:build` from the repository
   root. Platform plugins in [`plugins/`](../../plugins/) ship generated copies.
-- Skills with `metadata.requires-client` use their client-specific package and
-  are excluded from portable platform plugins.
+- Skills with `metadata.requires-client` are left out of the platform plugins
+  in `plugins/`; they ship only in that client's package.
 
 ## Evaluation and maintenance
 

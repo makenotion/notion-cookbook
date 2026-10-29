@@ -1,14 +1,16 @@
 import assert from "node:assert/strict"
+import { spawn } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
+import readline from "node:readline"
 import { test } from "node:test"
 import { claudeFixture } from "./support/claude-harness.ts"
-import { object, recipe, run } from "./support/harness.ts"
+import { object, run } from "./support/harness.ts"
 
 const claude = process.env.CLAUDE_TEST_BINARY
 
 test(
-  "real Claude Code installs the plugin with no hooks or MCP server, and its cached script syncs",
+  "real Claude Code discovers the installed Sync Memory user skill with no MCP server, and its script syncs",
   {
     skip:
       !claude &&
@@ -17,65 +19,32 @@ test(
   },
   async (t) => {
     const f = await claudeFixture(t)
-    const env = {
-      ...f.env,
-      PATH: `${path.dirname(process.execPath)}:/usr/bin:/bin`,
-    }
-    const cli = (...args: string[]) =>
-      run(String(claude), args, env, f.project, 60_000)
+    const userSkill = path.join(f.home, "skills/notion-sync-memory")
+    fs.cpSync(f.installed, userSkill, { recursive: true })
 
-    // The repository's marketplace points at the built plugin; point a copy of it at
-    // this fixture's build instead.
-    const marketplace = f.root
-    const registry = object(
-      JSON.parse(
-        fs.readFileSync(
-          path.resolve(recipe, "../../../.claude-plugin/marketplace.json"),
-          "utf8"
-        )
-      )
+    // Claude Code reports its skills in the init event before any model call, so an
+    // unauthenticated print run is enough to check discovery.
+    const init = await initEvent(
+      String(claude),
+      {
+        ...f.env,
+        PATH: `${path.dirname(process.execPath)}:/usr/bin:/bin`,
+      },
+      f.project
     )
-    assert.ok(Array.isArray(registry.plugins))
-    const plugin = registry.plugins
-      .map(object)
-      .find((p) => p.name === "sync-memory")
-    assert.ok(plugin)
-    plugin.source = `./${path.basename(f.installed)}`
-    fs.mkdirSync(path.join(marketplace, ".claude-plugin"), { recursive: true })
-    fs.writeFileSync(
-      path.join(marketplace, ".claude-plugin/marketplace.json"),
-      JSON.stringify({ ...registry, plugins: [plugin] })
+    assert.ok(Array.isArray(init.skills))
+    assert.ok(
+      init.skills.includes("notion-sync-memory"),
+      "installed Sync Memory skill must be discoverable"
     )
-    let result = await cli("plugin", "marketplace", "add", marketplace)
-    assert.equal(result.code, 0, result.stderr + result.stdout)
-    result = await cli("plugin", "install", "sync-memory@notion-cookbook")
-    assert.equal(result.code, 0, result.stderr + result.stdout)
-    result = await cli("plugin", "list")
-    assert.match(result.stdout, /sync-memory@notion-cookbook/)
+    assert.deepEqual(init.mcp_servers, [])
 
-    const cache = path.join(f.home, "plugins/cache/notion-cookbook/sync-memory")
-    const [version] = fs.readdirSync(cache)
-    const pluginRoot = path.join(cache, version)
-    const manifest = object(
-      JSON.parse(
-        fs.readFileSync(
-          path.join(pluginRoot, ".claude-plugin/plugin.json"),
-          "utf8"
-        )
-      )
-    )
-    assert.equal(manifest.hooks, undefined)
-    assert.equal(fs.existsSync(path.join(pluginRoot, ".mcp.json")), false)
-
-    result = await cli("mcp", "list")
-    assert.doesNotMatch(result.stdout + result.stderr, /sync-memory/)
-
-    // An explicit sync from the installed cache writes through the offline server.
+    // An explicit sync from the user skill writes through the offline server.
     f.signIn()
     f.seed()
-    result = await run(
+    const result = await run(
       process.execPath,
-      [path.join(pluginRoot, "skills/sync-memory/scripts/main.ts"), "sync"],
+      [path.join(userSkill, "scripts/main.ts"), "sync"],
       f.env,
       f.project
     )
@@ -84,3 +53,26 @@ test(
     assert.equal(f.pages().length, 5)
   }
 )
+
+async function initEvent(
+  binary: string,
+  env: NodeJS.ProcessEnv,
+  cwd: string
+): Promise<Record<string, unknown>> {
+  const child = spawn(
+    binary,
+    ["-p", "hi", "--output-format", "stream-json", "--verbose"],
+    { env, cwd, stdio: ["ignore", "pipe", "inherit"] }
+  )
+  try {
+    for await (const line of readline.createInterface({
+      input: child.stdout,
+    })) {
+      const event = object(JSON.parse(line))
+      if (event.type === "system" && event.subtype === "init") return event
+    }
+    throw new Error("Claude Code exited before its init event")
+  } finally {
+    child.kill()
+  }
+}

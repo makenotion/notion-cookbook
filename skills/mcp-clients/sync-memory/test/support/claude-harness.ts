@@ -5,20 +5,14 @@ import os from "node:os"
 import path from "node:path"
 import readline from "node:readline"
 import type { TestContext } from "node:test"
-import { object, recipe, run, support } from "./harness.ts"
+import { MAINTAINER_ONLY, object, recipe, run, support } from "./harness.ts"
 
-// The checked-in Claude Code plugin; `npm run plugins:build` regenerates its `skills/`.
-export const claudePlugin = path.resolve(
-  recipe,
-  "../../../plugins/sync-memory-claude"
-)
-
-// An installed copy of the plugin in a path with spaces, an empty Claude Code home, a
+// An installed copy of the skill in a path with spaces, an empty Claude Code home, a
 // project directory, and the offline Notion server from fake-notion-http.mjs.
 export async function claudeFixture(t: TestContext, failure = "") {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "notion claude test-"))
   const home = path.join(root, "claude home")
-  const installed = path.join(root, "installed plugin")
+  const installed = path.join(root, "installed skill")
   const project = path.join(root, "work")
   fs.mkdirSync(home)
   fs.mkdirSync(project)
@@ -26,8 +20,10 @@ export async function claudeFixture(t: TestContext, failure = "") {
     path.join(home, "notion-memory.json"),
     JSON.stringify({ expectedWorkspaceId: "synthetic-workspace" })
   )
-  fs.cpSync(claudePlugin, installed, { recursive: true })
-  const skill = path.join(installed, "skills/sync-memory")
+  fs.cpSync(recipe, installed, {
+    recursive: true,
+    filter: (source) => !MAINTAINER_ONLY.has(path.basename(source)),
+  })
   const memoryDir = path.join(
     home,
     "projects",
@@ -124,7 +120,7 @@ export async function claudeFixture(t: TestContext, failure = "") {
     exec(args: string[], extra: NodeJS.ProcessEnv = {}, timeout = 15_000) {
       return run(
         process.execPath,
-        [path.join(skill, "scripts/main.ts"), ...args],
+        [path.join(installed, "scripts/main.ts"), ...args],
         { ...env, ...extra },
         project,
         timeout

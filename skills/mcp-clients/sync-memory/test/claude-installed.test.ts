@@ -3,24 +3,12 @@ import fs from "node:fs"
 import path from "node:path"
 import { test } from "node:test"
 import { claudeFixture } from "./support/claude-harness.ts"
-import { object } from "./support/harness.ts"
 
 // Every fixture file except the MEMORY.md index.
 const FIXTURE_COUNT = 5
 
-test("Claude Code artifact resolves its manifest, registers no hooks, and loads no MCP server", async (t) => {
+test("Claude Code skill has no hook commands and previews without Notion", async (t) => {
   const f = await claudeFixture(t)
-  const manifest = object(
-    JSON.parse(
-      fs.readFileSync(
-        path.join(f.installed, ".claude-plugin/plugin.json"),
-        "utf8"
-      )
-    )
-  )
-  assert.equal(manifest.hooks, undefined)
-  // Claude Code loads any .mcp.json at the plugin root; this plugin has none.
-  assert.equal(fs.existsSync(path.join(f.installed, ".mcp.json")), false)
   for (const command of ["hook", "worker"]) {
     const result = await f.exec([command, "session-start"])
     assert.equal(result.code, 1)

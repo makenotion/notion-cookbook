@@ -1,6 +1,6 @@
 {
   "name": "Copy all current memory Markdown without rewriting",
-  "skills": ["sync-memory"],
+  "skills": ["notion-sync-memory"],
   "query": "Sync all my current Codex memory Markdown to local Notion exactly as it is.",
   "context": {
     "files": [
