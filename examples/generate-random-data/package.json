@@ -14,7 +14,7 @@
   "author": "David Blackman",
   "license": "MIT",
   "dependencies": {
-    "@notionhq/client": "^5.4.0",
+    "@notionhq/client": "^5.28.0",
     "@types/faker": "^5.5.5",
     "@types/lodash": "^4.17.27",
     "dotenv": "^8.2.0",

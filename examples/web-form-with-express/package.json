@@ -8,7 +8,7 @@
     "start": "tsx server.ts"
   },
   "dependencies": {
-    "@notionhq/client": "^5.4.0",
+    "@notionhq/client": "^5.28.0",
     "dotenv": "^16.3.1",
     "express": "^4.21.2"
   },
