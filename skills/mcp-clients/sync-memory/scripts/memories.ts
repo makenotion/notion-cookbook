@@ -10,7 +10,7 @@ import {
   withLock,
 } from "./config.ts"
 import type { State } from "./config.ts"
-import type { CallTool } from "./mcp.ts"
+import { type CallTool, NotionToolError } from "./mcp.ts"
 
 export function memoriesDir(): string {
   return path.join(loadConfig().sourceHome || CODEX_HOME, "memories_v2")
@@ -42,7 +42,35 @@ export function renderMemory(file: MemoryFile, syncedAt: string): string {
     "Synced at": syncedAt,
     "Synced by": "notion-memory",
   }
-  return `# Codex memory source\n\n\`\`\`json\n${JSON.stringify(metadata, null, 2)}\n\`\`\`\n\n---\n\n${file.content}`
+  return `# Codex memory source\n\n\`\`\`json\n${JSON.stringify(metadata, null, 2)}\n\`\`\`\n\n---\n\n${escapeNotionTags(file.content)}`
+}
+
+// Notion Markdown reads `<name ...>` outside code as a Notion tag such as <page> and
+// rejects the whole page when one is misplaced. Memory files are plain Markdown, so
+// escape tag-like text outside code to keep it as literal text.
+export function escapeNotionTags(markdown: string): string {
+  let fence: string | undefined
+  return markdown
+    .split("\n")
+    .map((line) => {
+      const marker = line.match(/^ {0,3}(`{3,}|~{3,})/)?.[1]
+      if (fence) {
+        if (marker?.[0] === fence[0] && marker.length >= fence.length)
+          fence = undefined
+        return line
+      }
+      if (marker) {
+        fence = marker
+        return line
+      }
+      // A code span opens and closes with the same number of backticks. Autolinks
+      // such as <https://…> and <me@example.com> are valid Notion Markdown.
+      return line.replace(
+        /(`+)[\s\S]*?(?<!`)\1(?!`)|(?<!\\)<(?=[A-Za-z/!])(?![A-Za-z][\w+.-]*:[^\s<>]*>|[^\s<>@]+@[^\s<>]+>)/g,
+        (match, ticks) => (ticks ? match : "\\<")
+      )
+    })
+    .join("\n")
 }
 
 export function memoryInventory(): {
@@ -99,6 +127,7 @@ export async function syncMemories(call: CallTool) {
     updated: 0,
     unchanged: 0,
     changedInNotion: 0,
+    rejected: [] as { path: string; reason: string }[],
   }
   let destinationChecked = false
   for (const file of files) {
@@ -182,6 +211,14 @@ export async function syncMemories(call: CallTool) {
         pageId = page.id
       }
     } catch (error) {
+      // Notion validates input before writing, so a validation rejection is a known
+      // non-write: report this file and keep syncing the others.
+      if (error instanceof NotionToolError && error.invalidInput) {
+        delete state.pending[file.name]
+        saveState(state)
+        result.rejected.push({ path: file.name, reason: error.reason })
+        continue
+      }
       throw new Error(
         `Unknown ${previous ? "update" : "create"} outcome for ${file.name}${previous ? ` (page ${previous.pageId})` : ""}; run status for the reconcile command and instructions. No write will be retried. ${error instanceof Error ? error.message : String(error)}`,
         { cause: error }

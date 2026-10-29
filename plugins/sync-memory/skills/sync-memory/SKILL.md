@@ -48,7 +48,9 @@ Codex. Updates preserve Source. This desktop-only package runs on explicit
 invocation; it installs no session hooks, watcher, or background service.
 
 Only Codex v2 is supported. Import existing Markdown even without a summary.
-Report the command's unsupported and missing paths. Existing Notion edits and
+Report the command's unsupported, missing and rejected paths. A rejected path is
+content Notion refused as invalid input; nothing was written, other files still
+sync, and `verify` reports it until the source file changes. Existing Notion edits and
 deletions are protected. Missing source files leave existing pages alone. An
 explicitly empty file has only the metadata preamble. This is one-way copying.
 Notion may normalize imported Markdown. Verification checks saved page readbacks,

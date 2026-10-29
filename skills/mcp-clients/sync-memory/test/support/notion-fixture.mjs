@@ -34,6 +34,24 @@ export function invoke(name, args) {
     save()
     throw new Error(`Synthetic ${phase} failure`)
   }
+  // Notion answers both bad input and missing access with a 400 validation_error;
+  // only additional_data.tool_error_class tells them apart.
+  const reject = (content) => {
+    for (const [text, errorClass] of [
+      [process.env.FIXTURE_INVALID_TEXT, "validation"],
+      [process.env.FIXTURE_DENIED_TEXT, "permission_denied"],
+    ])
+      if (text && content.includes(text))
+        throw new Error(
+          JSON.stringify({
+            name: "APIResponseError",
+            code: "validation_error",
+            status: 400,
+            body: JSON.stringify({ message: `Synthetic ${errorClass} error` }),
+            additional_data: { tool_error_class: errorClass },
+          })
+        )
+  }
   switch (tool) {
     case "get-self":
       return {
@@ -65,6 +83,7 @@ export function invoke(name, args) {
       )
       // Rejected before any page exists, like a workspace over its block limit.
       failOnce("create-rejected")
+      for (const p of args.pages) reject(p.content)
       const pages = args.pages.map((p) => {
         assert.equal(
           p.properties.Source,
@@ -106,6 +125,7 @@ export function invoke(name, args) {
         return {}
       }
       assert.equal(args.command, "replace_content")
+      reject(args.new_str)
       page.content = importedContent(args.new_str)
       if (process.env.FIXTURE_FAIL_ONCE?.startsWith("update-readback"))
         state.failReadback = process.env.FIXTURE_FAIL_ONCE

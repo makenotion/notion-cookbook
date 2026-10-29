@@ -37,6 +37,27 @@ interface ToolResult {
   isError?: boolean
 }
 
+// A Notion tool call that returned an error result. `invalidInput` is true only when
+// Notion classified the error as input validation, which it checks before writing.
+// Other 400s, such as permission_denied, share the validation_error code.
+export class NotionToolError extends Error {
+  readonly invalidInput: boolean
+  readonly reason: string
+
+  constructor(tool: string, text: string) {
+    super(`${tool}: ${text.slice(0, 500)}`)
+    const error = parseJson(text)
+    const details = isObject(error) ? error.additional_data : undefined
+    const body = isObject(error) ? parseJson(error.body) : undefined
+    this.invalidInput =
+      isObject(details) && details.tool_error_class === "validation"
+    this.reason =
+      isObject(body) && typeof body.message === "string"
+        ? body.message
+        : text.slice(0, 500)
+  }
+}
+
 const REQUEST_TIMEOUT_MS = 60_000
 const PROBE_TOOL = "create-pages"
 
@@ -113,7 +134,7 @@ export class CodexNotionMcp {
 
   private async initialize(): Promise<void> {
     await this.rpc("initialize", {
-      clientInfo: { name: "sync-memory", version: "0.4.10" },
+      clientInfo: { name: "sync-memory", version: "0.4.11" },
     })
     this.notify("initialized")
   }
@@ -173,8 +194,7 @@ export class CodexNotionMcp {
     const texts = (result.content ?? []).flatMap((part) =>
       part.type === "text" && part.text ? [part.text] : []
     )
-    if (result.isError)
-      throw new Error(`${tool}: ${texts.join("\n").slice(0, 500)}`)
+    if (result.isError) throw new NotionToolError(tool, texts.join("\n"))
     // Notion sends the JSON result first, then optional human-readable notices.
     // Keep those notices visible without corrupting the machine-readable result.
     for (const notice of texts.slice(1))
@@ -267,6 +287,15 @@ export function notionTools(server: {
 
 function squash(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]/g, "")
+}
+
+function parseJson(text: unknown): unknown {
+  if (typeof text !== "string") return undefined
+  try {
+    return JSON.parse(text)
+  } catch {
+    return undefined
+  }
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
