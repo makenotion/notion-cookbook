@@ -20,6 +20,8 @@ The [mcp-clients](mcp-clients/) directory contains reusable workflows for any MC
 - **[spec-to-implementation](mcp-clients/spec-to-implementation/)**: Parse specifications and create implementation plans with task tracking
 - **[setup](mcp-clients/setup/)**: Onboarding skill that sets up Notion by following the official setup guide
 
+- **[Build my content calendar](mcp-clients/marketing-workspace/)**: Plan publication and production with actionable content briefs.
+
 ## Using skills
 
 1. Connect your MCP client to the [Notion MCP server](https://developers.notion.com/docs/notion-mcp).
