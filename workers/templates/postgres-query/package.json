@@ -12,10 +12,10 @@
     "npm": ">=10.9.9"
   },
   "devDependencies": {
-    "@types/node": "^22.9.0",
+    "@types/node": "^22.20.5",
     "@types/pg": "^8.11.0",
-    "tsx": "^4.20.6",
-    "typescript": "^5.8.0"
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
   },
   "dependencies": {
     "@notionhq/workers": ">=0.0.0",
