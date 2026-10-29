@@ -1,6 +1,6 @@
 # MCP client skills for Notion
 
-Seven self-contained skills for working with Notion through any MCP client
+Twelve self-contained skills for working with Notion through any MCP client
 connected to the [Notion MCP server](https://developers.notion.com/docs/notion-mcp),
 including Claude and ChatGPT.
 The workflows are independent of the AI provider; installation and invocation
@@ -17,6 +17,11 @@ depend on your client.
 | [Research and documentation](research-documentation/SKILL.md) | Find information across a workspace, synthesize it, and publish a cited report in Notion.                |
 | [Spec to implementation](spec-to-implementation/SKILL.md)     | Convert a product or technical spec into an implementation plan and trackable Notion tasks.              |
 | [Setup](setup/SKILL.md)                                       | Set up Notion as shared agent context by following the official setup guide after install.               |
+| [School workspace](school-workspace/SKILL.md)                 | Get started with a personalized school home from chat and source material.                               |
+| [Marketing workspace](marketing-workspace/SKILL.md)           | Get started with a personalized marketing home from chat and source material.                            |
+| [Operations workspace](operations-workspace/SKILL.md)         | Get started with a personalized operations home from chat and source material.                           |
+| [Engineering workspace](engineering-workspace/SKILL.md)       | Get started with a personalized engineering home from chat and source material.                          |
+| [Set up my project](set-up-my-project/SKILL.md)               | Turn your brief and chat context into a project home with tasks, milestones, and next actions.           |
 
 ## Install
 
@@ -40,6 +45,11 @@ from your connected Notion MCP server and follow its available input schema.
 
 ```text
 mcp-clients/
+├── set-up-my-project/
+├── school-workspace/
+├── marketing-workspace/
+├── operations-workspace/
+├── engineering-workspace/
 ├── database-designer/
 ├── weekly-project-digest/
 ├── knowledge-capture/

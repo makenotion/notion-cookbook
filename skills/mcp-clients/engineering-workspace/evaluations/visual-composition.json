@@ -1,0 +1,30 @@
+{
+  "name": "visual-composition",
+  "skills": ["notion-engineering-workspace"],
+  "query": "Make this Notion starting point beautiful and easy to use under https://notion.so/home. Use community or Notion templates for inspiration. I like a warm, uncluttered style; no cover image is needed.",
+  "context": {
+    "conversation": "We have setup instructions and a draft architecture proposal. Active issues live in GitHub; link them.",
+    "sources": {
+      "https://notion.so/home": "Empty authorized destination."
+    },
+    "tools": [
+      "fetch",
+      "search",
+      "get-tool-access",
+      "create-pages",
+      "create-database",
+      "create-view",
+      "query-data-sources"
+    ],
+    "web_responses": {
+      "https://www.notion.com/templates/brand-guide-bio": "Creator: Matt Bio. Preview shows a coordinated palette and compact index. Artwork is the creator's sample brand."
+    }
+  },
+  "success_criteria": [
+    "Uses community inspiration when useful without falsely attributing it to Notion or rejecting it as categorically forbidden.",
+    "Produces a warm coherent layout without a cover, copied sample artwork, fabricated records, or unnecessary decorative widgets.",
+    "Makes purpose, next action, and real work easy to find; uses the appropriate domain layout rather than adding every possible view.",
+    "Provides working navigation and preserves undated work, blockers, unknown owners, and draft states from context.",
+    "Applies supported visual features and inspects rendered output when available, correcting layout problems; otherwise distinguishes structural validation from visual validation."
+  ]
+}

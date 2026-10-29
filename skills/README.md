@@ -20,6 +20,19 @@ The [mcp-clients](mcp-clients/) directory contains reusable workflows for any MC
 - **[spec-to-implementation](mcp-clients/spec-to-implementation/)**: Parse specifications and create implementation plans with task tracking
 - **[setup](mcp-clients/setup/)**: Onboarding skill that sets up Notion by following the official setup guide
 
+### Getting started with a workspace
+
+These skills build populated, focused starting points from chat and connected
+sources, with structural references and visual inspiration from Notion-created
+and community gallery templates. Each includes composition guidance and a usability
+pass. These are curated starting points, not a measured popularity ranking.
+
+- **[School workspace](mcp-clients/school-workspace/)**: Organize learning material so it is easy to find and revisit.
+- **[Marketing workspace](mcp-clients/marketing-workspace/)**: Track content items with an author, content type, and production status on a calendar.
+- **[Operations workspace](mcp-clients/operations-workspace/)**: Give a team a clear entry point to shared information.
+- **[Engineering workspace](mcp-clients/engineering-workspace/)**: Provide a navigable home for engineering knowledge.
+- **[Set up my project](mcp-clients/set-up-my-project/)**: Turn project ideas, briefs, and chat context into a ready-to-use project home with tasks, milestones, and next steps.
+
 ## Using skills
 
 1. Connect your MCP client to the [Notion MCP server](https://developers.notion.com/docs/notion-mcp).

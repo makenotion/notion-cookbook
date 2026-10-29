@@ -98,7 +98,7 @@ quality regression before recommending an efficiency improvement.
 
 ## Test skill selection separately
 
-With all six skills available, check which skill is selected for representative
+With all collection skills available, check which skill is selected for representative
 requests. Explicitly invoking a skill tests execution, not automatic discovery.
 
 | Request                                                      | Expected selection     |
@@ -113,6 +113,11 @@ requests. Explicitly invoking a skill tests execution, not automatic discovery.
 | Reconcile the workspace sources about our auth approach      | Research documentation |
 | Create implementation tasks from this spec                   | Spec to implementation |
 | Rewrite this one sentence in a warmer tone                   | None of these skills   |
+| Set up my semester from my syllabi and class notes           | School workspace       |
+| Build a launch marketing home from our briefs and ideas      | Marketing workspace    |
+| Organize our processes into an operations home               | Operations workspace   |
+| Create an engineering home linking docs and existing issues  | Engineering workspace  |
+| Set up our workshop project from this brief and our chat     | Set up my project      |
 | What is 12 multiplied by 8?                                  | None of these skills   |
 
 Composite requests may legitimately use more than one skill. Check that each
