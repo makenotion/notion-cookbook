@@ -11,11 +11,12 @@ independent project that can be copied, built, and deployed on its own.
 
 ## Templates
 
-| App                                             | What it demonstrates                                                      |
-| ----------------------------------------------- | ------------------------------------------------------------------------- |
-| [Default app](templates/apps-default/)          | A recurring workflow with a durable step and an interactive custom block. |
-| [Perfect Meetings](templates/perfect-meetings/) | Calendar connection, deterministic triggers and agentic research          |
-| [Statsig Rollout](templates/statsig-rollout/)   | Database-triggered workflow that calls an external API with retries       |
+| App                                                     | What it demonstrates                                                      |
+| ------------------------------------------------------- | ------------------------------------------------------------------------- |
+| [Default app](templates/apps-default/)                  | A recurring workflow with a durable step and an interactive custom block. |
+| [Krillion Leaderboard](templates/krillion-leaderboard/) | Slack channel target, scheduled workflow, and offline-tested parsing      |
+| [Perfect Meetings](templates/perfect-meetings/)         | Calendar connection, deterministic triggers and agentic research          |
+| [Statsig Rollout](templates/statsig-rollout/)           | Database-triggered workflow that calls an external API with retries       |
 
 ## Quick start
 

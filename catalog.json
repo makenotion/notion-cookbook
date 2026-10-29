@@ -327,6 +327,28 @@
       }
     },
     {
+      "id": "krillion-leaderboard",
+      "title": "Krillion leaderboard App",
+      "summary": "Read Krillion scores posted in a Slack channel and post the day's top 3 there every evening.",
+      "path": "apps/templates/krillion-leaderboard",
+      "kind": "app-default",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-apps", "notion-workflow", "slack"],
+      "entrypoints": [
+        "src/workflows/postLeaderboard.ts",
+        "src/connections/slack.ts"
+      ],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn apps deploy --name \"Krillion Leaderboard\""
+      }
+    },
+    {
       "id": "perfect-meetings",
       "title": "Meeting prep App",
       "summary": "Turn Google Calendar meetings with outside attendees into Notion pages with an AI research brief.",
