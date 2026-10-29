@@ -102,14 +102,14 @@ when each `reconcile` form is allowed.
 
 ## Files
 
-| File                    | Role                                                       |
-| ----------------------- | ---------------------------------------------------------- |
-| `scripts/main.ts`       | Command entrypoint and workspace pinning                   |
-| `scripts/memories.ts`   | Inventory, sync, verify, reconcile and tag escaping        |
-| `scripts/mcp.ts`        | Codex app-server client and Notion tool errors             |
-| `scripts/config.ts`     | Settings, per-workspace mappings and logs                  |
-| `scripts/ownership.ts`  | Cross-process lock                                         |
-| `evaluations/`          | Agent scenarios per the [protocol](../../evaluations.md)   |
+| File                   | Role                                                     |
+| ---------------------- | -------------------------------------------------------- |
+| `scripts/main.ts`      | Command entrypoint and workspace pinning                 |
+| `scripts/memories.ts`  | Inventory, sync, verify, reconcile and tag escaping      |
+| `scripts/mcp.ts`       | Codex app-server client and Notion tool errors           |
+| `scripts/config.ts`    | Settings, per-workspace mappings and logs                |
+| `scripts/ownership.ts` | Cross-process lock                                       |
+| `evaluations/`         | Agent scenarios per the [protocol](../../evaluations.md) |
 
 ## Validation
 
