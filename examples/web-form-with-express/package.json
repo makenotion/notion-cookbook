@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@notionhq/client": "^5.4.0",
-    "dotenv": "^16.3.1",
+    "dotenv": "^18.0.9",
     "express": "^4.21.2"
   },
   "devDependencies": {

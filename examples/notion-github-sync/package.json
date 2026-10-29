@@ -15,7 +15,7 @@
   "license": "MIT",
   "dependencies": {
     "@notionhq/client": "^5.4.0",
-    "dotenv": "^16.0.1",
+    "dotenv": "^18.0.9",
     "lodash": "^4.18.1",
     "octokit": "^3.2.1"
   },
