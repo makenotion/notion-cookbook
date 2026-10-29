@@ -1,8 +1,9 @@
 # Evaluation cases
 
 Use the [collection protocol](../../evaluations.md) with stateful mock tools.
-These are scenario specifications, not executed tests. Compare no-skill and
-new-skill runs; the previous-skill condition is not applicable.
+These are scenario specifications, not executed tests. Compare no-skill, previous-skill, and revised-skill runs when measuring
+regression or improvement. A single live run is a behavioral smoke test, not
+evidence of cross-model reliability.
 
 - `context-to-workspace.json`: context extraction, domain decisions, populated
   structure, evidence fidelity, and usable navigation.
@@ -35,3 +36,12 @@ do not count mock structural checks as proof of rendered beauty.
 `default-private-destination.json` checks that an omitted destination uses the
 connection's private default. Grade visual composition against the relevant
 gallery patterns, not merely the presence of an icon, cover, or callout.
+
+## Connected workspace case
+
+- `connected-campaign-workspace.json`: sidebar architecture, native campaign
+  relations, visible record properties, distinct working bodies, and rendered
+  navigation across the system. Run with only the query and source brief, not
+  these grading criteria or design coaching. Keep sample data separate from
+  existing work and preserve the raw output. Parent-agent manual redesigns do
+  not count as skill passes.

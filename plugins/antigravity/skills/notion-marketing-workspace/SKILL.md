@@ -1,6 +1,6 @@
 ---
 name: notion-marketing-workspace
-description: Build a personalized Notion marketing workspace from campaign briefs, content ideas, and chat or connected-source context. Use to get started with a campaign home and an actionable editorial calendar.
+description: Build a personalized Notion marketing workspace from campaign briefs, content ideas, and chat or connected-source context. Use to connect campaign briefs, content production, and brand resources into a working marketing system.
 ---
 
 # Marketing workspace
@@ -34,27 +34,47 @@ permission to take unrelated actions.
 
 ## Shape the workspace
 
-Choose between a simple editorial calendar and a campaign home from the user's
-actual work. A solo content plan usually needs one database, not separate teams,
-assets, budgets, campaigns, and analytics databases.
+Design the connected workspace before composing its landing page. Decide what
+belongs in the sidebar, what is a database record, and what work belongs inside
+each destination. Match scope: a request for a solo content calendar can stay
+small; a campaign workspace needs a campaign lifecycle and connected deliverables,
+even when only one campaign exists today.
 
-- Content: title, channel or format, production status, owner when known, and
-  publish date when agreed. Keep audience, angle, brief, assets, and sources in
-  each item's body. Separate approval state from published state when necessary.
-- Start with a production board grouped by status and a calendar using publish
-  date. Keep an unscheduled ideas view so undated work remains visible.
-- For multiple campaigns with their own goals and lifecycle, add a campaigns
-  collection and relate content to it. Otherwise put the brief on the home page.
-- Surface the campaign objective, audience, message, and next deliverables.
-  Distinguish proposed copy and dates from approved material. Do not invent
-  performance numbers, budgets, approvals, or publishing commitments.
-- Link existing brand guidance and approved assets. Do not copy private planning
-  into a public content destination or treat a filtered view as audience isolation.
+- Use a durable marketing home with short, recognizable child destinations such
+  as Campaigns, Content, and Brand resources. Reuse an existing team home and
+  collections when appropriate. The sidebar should expose stable destinations,
+  not every deliverable or duplicate copies of the same calendar.
+- Put campaigns in a Campaigns database. Relate Content records to their campaign
+  using native relations. Surface the campaign's content through a filtered linked
+  view; keep the shared Content database useful across future campaigns. A relation
+  is not a substitute for a filter, and a hyperlink is not a native relation.
+- A campaign record has visible status, target launch date, lead when known, and
+  related content. Its body carries the brief or links to a substantial brief,
+  plus a focused view of deliverables. Long strategy and review material can have
+  their own pages. Do not make the landing page perform every job.
+- Content properties carry format/channel, production status, owner when known,
+  planned publish date, and campaign. Separate approval and publication state
+  where the workflow needs them. Keep unknown owners unassigned and tentative
+  dates distinguishable; never invent approvals, budgets, or performance.
+- Configure database-page layouts and property visibility when supported: keep
+  operational properties visible near the title, secondary fields in details,
+  and do not repeat the property panel as prose. Inspect the native UI when the
+  connector cannot configure these settings and UI tools are available. If a
+  setting cannot be changed, describe the actual limitation rather than claim it.
+- Give each content record a usable working body appropriate to its format:
+  article argument and draft, video beats and script, email subject and body,
+  social copy and hook. Develop proposed material from the supplied brief where
+  authorized; label new copy as a draft. Do not pretend missing assets are ready.
+- Reuse brand guidance and asset libraries. Create a separate resource destination
+  when there is material to organize; do not add empty asset databases for symmetry.
+  No real assets means no fake previews. Filtered views do not isolate audiences.
 
-Use compact cards with title, channel, status, and date. Show asset previews only
-when real assets are available and the connection supports them. Place brief and
-brand links near the calendar; keep long strategy documents one click deeper.
-Creating a content calendar does not authorize publishing posts or sending email.
+The home offers orientation, active campaigns, and a small actionable content
+view. Production boards, full calendars, and detailed review workflows belong in
+their working destinations or alternate database views. Keep undated work visible.
+Avoid duplicate database titles, repeated slogans, dense metadata chips, and a
+wide status board dominating a narrow landing page. Creating this system does
+not authorize publishing content or sending email.
 
 Read [template reference](reference/template.md) for the original structural
 reference and [design guidance](reference/design.md) before composing the page.
@@ -65,15 +85,16 @@ Do not infer popularity rankings from a gallery listing.
 
 ## Produce the designed result
 
-Make the editorial workflow visible: choose the primary schedule or production
-view from the content state, then compose the campaign identity and briefs around
-it. Use [design guidance](reference/design.md) for editorial rather than dashboard decisions.
+Make the editorial workflow navigable: marketing home → campaign → deliverable,
+with routes back to shared content and brand resources. Use
+[design guidance](reference/design.md) for composition at each destination.
 
 Create real destinations and useful record bodies. Select supported page settings
 for this output; do not merely rename a sibling skill's page or recolor its blocks.
-When testing multiple skills, make independent private homes unless the user asks
-for a shared container; an optional index can link to them. Review the result
-against the relevant template research and actual user workflow.
+Sample information is test input, not a reason to make a miniature showcase.
+Build the same connected workspace the skill would produce for real work. A
+comparison index may link to independent workspaces; it should not own them.
+Review the result against the relevant template research and actual user workflow.
 
 ## Build and verify in Notion
 
@@ -97,7 +118,9 @@ objects. On a repeat request, match existing pages and records before creating.
 Read back the home and populated objects where write results do not establish
 correctness. Check source fidelity, row coverage, navigation targets, relations,
 and actual filters and sorts, including undated and unassigned work. When a visual
-preview is available, inspect hierarchy, density, and narrow-screen readability;
+preview is available, open the sidebar, home, a campaign, and representative
+content records. Inspect hierarchy, density, property visibility, and navigation
+in the actual rendered workspace, including narrow-screen readability when possible;
 otherwise disclose that appearance was not visually verified. Do not claim success
 for unsupported or unverified features.
 
