@@ -83,6 +83,14 @@ any explicit source restrictions from the user. Attribute the actual creator;
 borrow design patterns rather than copying artwork or claiming an exact clone.
 Do not infer popularity rankings from a gallery listing.
 
+## Apply the workspace pattern
+
+Read [workspace composition and acceptance walk](reference/workspace-pattern.md)
+before creating the home. Use its domain-specific pattern when the brief fits;
+adapt the amount of structure to the supplied work. The first screen, connected
+record bodies, visual settings and rendered acceptance walk are part of the
+deliverable, not optional polish after setup.
+
 ## Produce the designed result
 
 Make the editorial workflow navigable: marketing home → campaign → deliverable,

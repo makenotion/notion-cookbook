@@ -45,3 +45,11 @@ gallery patterns, not merely the presence of an icon, cover, or callout.
   these grading criteria or design coaching. Keep sample data separate from
   existing work and preserve the raw output. Parent-agent manual redesigns do
   not count as skill passes.
+
+## Reference workspace replay
+
+- `reference-workspace.json`: isolated fictional campaign-system brief. Give the
+  runner only the query/context and runtime skill, withholding scoring criteria
+  and existing sample IDs. Check saved relations/views and rendered navigation.
+- [Recorded desktop smoke test](reference-workspace-results.md): observed outcomes,
+  instruction revisions, and the limits of this single live test.
