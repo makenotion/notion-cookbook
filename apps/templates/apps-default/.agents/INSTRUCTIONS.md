@@ -157,7 +157,7 @@ re-export its default from `src/app.ts` under a stable name. Register each
 connection only once. Import and call connections directly in handlers;
 do not declare workflow-local `connections` or use `context.connections`.
 Calendar, Mail, and Slack targets are flat properties, such as `calendar.meetings`
-or `inbox.support`. Pass them instead of raw calendar IDs, email addresses, or channel IDs. Put capability-specific helpers in
+or `inbox.support`. Pass them instead of id strings or other identifiers. Put capability-specific helpers in
 `src/workflows/lib/` (or the matching capability directory's `lib/`) and shared
 helpers in `src/lib/`. Discovery only reads direct children, so these helpers
 are not treated as capabilities.

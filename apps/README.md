@@ -40,7 +40,7 @@ Declare connections once in `src/connections/*.ts`, then import them in each
 workflow. Default-export `connections.calendar(...)`, `connections.mail(...)`, or
 `connections.slack(...)` from `@notionhq/apps` instead of workflow-local connection declarations.
 Calendar, Mail, and Slack targets are flat properties, such as `calendar.meetings`
-or `inbox.support`. Pass them instead of raw calendar IDs, email addresses, or channel IDs.
+or `inbox.support`. Pass them instead of id strings or other identifiers.
 
 An installation configures each connection and its targets once. Every workflow
 in that App uses that saved setup. Accounts are not shared between installations.
