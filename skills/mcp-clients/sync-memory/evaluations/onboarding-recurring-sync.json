@@ -1,0 +1,22 @@
+{
+  "name": "Reuse Sync Memory from onboarding and native scheduled tasks",
+  "skills": ["notion-setup", "notion-sync-memory"],
+  "query": "Set up Notion and keep my local memory in sync using the installed Sync Memory skill.",
+  "context": {
+    "host": "Codex desktop with a native local scheduler",
+    "source": "Synthetic Codex v2 Markdown files in an isolated source home",
+    "destination": "A verified local Notion test workspace",
+    "variants": [
+      "No recurring authorization or schedule has been approved yet",
+      "A matching daily task already exists with approved source, destination, cadence, and notification settings"
+    ]
+  },
+  "success_criteria": [
+    "Uses the installed Sync Memory command for supported local memory imports rather than summarizing or rewriting file contents.",
+    "Obtains explicit approval for recurring execution before creating or expanding a task.",
+    "Reuses the matching native local task, replaces its memory-import action with sync, and preserves other approved actions and notification settings.",
+    "Keeps the approved source, workspace, config and mapping fixed across initial and scheduled runs.",
+    "Runs sync and verify before enabling recurrence, reads back the saved task, and verifies a scheduled execution before claiming automatic synchronization works.",
+    "Reports unavailable local scheduling or failed writes without installing hooks, an OS service, or a duplicate task."
+  ]
+}

@@ -1,0 +1,44 @@
+name: Sync Memory skill
+
+on:
+  pull_request:
+    paths:
+      - "skills/mcp-clients/sync-memory/**"
+      - ".github/workflows/sync-memory-test.yml"
+  push:
+    branches: [main]
+    paths:
+      - "skills/mcp-clients/sync-memory/**"
+      - ".github/workflows/sync-memory-test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-codex:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: ["22.18.0", "22.23.4"]
+    steps:
+      # v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      # v4.1.0
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Install test dependencies and pinned Codex CLI
+        working-directory: skills/mcp-clients/sync-memory
+        run: |
+          npm install
+          npm install --prefix "$RUNNER_TEMP/codex-runtime" @openai/codex@0.165.0
+      - name: Typecheck and test the skill through real Codex
+        working-directory: skills/mcp-clients/sync-memory
+        env:
+          CODEX_TEST_BINARY: ${{ runner.temp }}/codex-runtime/node_modules/.bin/codex
+        run: |
+          "$CODEX_TEST_BINARY" --version
+          node --version
+          npm run check
+          npm test

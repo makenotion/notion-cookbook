@@ -1,10 +1,11 @@
 # MCP client skills for Notion
 
-Seven self-contained skills for working with Notion through any MCP client
+Reusable skills for working with Notion through an MCP client
 connected to the [Notion MCP server](https://developers.notion.com/docs/notion-mcp),
 including Claude and ChatGPT.
-The workflows are independent of the AI provider; installation and invocation
-depend on your client.
+Most workflows are independent of the AI provider; installation and invocation
+depend on your client. Sync Memory currently requires Codex to read its local
+memory files and use its authenticated Notion connection.
 
 ## Choose a skill
 
@@ -16,6 +17,7 @@ depend on your client.
 | [Meeting intelligence](meeting-intelligence/SKILL.md)         | Prepare agendas, internal pre-reads, and meeting follow-up from Notion context.                          |
 | [Research and documentation](research-documentation/SKILL.md) | Find information across a workspace, synthesize it, and publish a cited report in Notion.                |
 | [Spec to implementation](spec-to-implementation/SKILL.md)     | Convert a product or technical spec into an implementation plan and trackable Notion tasks.              |
+| [Sync Memory](sync-memory/SKILL.md)                           | Copy local memory Markdown into Notion Memories, currently from Codex.                                   |
 | [Setup](setup/SKILL.md)                                       | Set up Notion as shared agent context by following the official setup guide after install.               |
 
 ## Install
@@ -32,6 +34,9 @@ depend on your client.
    in clients that support it; otherwise, ask the assistant to follow the
    supplied workflow explicitly.
 
+Sync Memory bundles executable scripts for desktop-only use and registers no
+lifecycle hooks. Follow its [setup instructions](sync-memory/README.md).
+
 The instructions use tool names such as `Notion:notion-search`. Your client may
 expose a different server prefix or tool namespace. Use the corresponding tool
 from your connected Notion MCP server and follow its available input schema.
@@ -46,7 +51,8 @@ mcp-clients/
 ├── meeting-intelligence/
 ├── research-documentation/
 ├── setup/
-└── spec-to-implementation/
+├── spec-to-implementation/
+└── sync-memory/
 
 <each-skill>/
 ├── SKILL.md       # Entry point and workflow instructions
@@ -65,6 +71,8 @@ mcp-clients/
   [contributing guide](../../CONTRIBUTING.md).
 - After changing a skill, run `npm run plugins:build` from the repository
   root. Platform plugins in [`plugins/`](../../plugins/) ship generated copies.
+- Skills with `metadata.requires-client` are left out of the platform plugins
+  in `plugins/`; they ship only in that client's package.
 
 ## Evaluation and maintenance
 

@@ -1,4 +1,6 @@
-// Copies the MCP client skills into every platform plugin under `plugins/`.
+// Copies the MCP client skills into every platform plugin under `plugins/`,
+// except skills that declare `metadata.requires-client`: those run only in that
+// client, so they ship in its own package instead.
 // `skills/mcp-clients/` is the only source of truth for skill content; each
 // plugin directory hand-writes just its manifest, MCP config, and assets, and
 // this script owns its `skills/` subdirectory. Each skill folder is named after
@@ -46,13 +48,16 @@ async function collectFiles(dir, prefix = "") {
   return files.sort()
 }
 
-function readSkillName(skillMarkdown, path) {
+function readSkill(skillMarkdown, path) {
   const frontmatter = /^---\n([\s\S]*?)\n---\n/.exec(skillMarkdown)?.[1]
   const name = frontmatter && /^name:\s*(.+?)\s*$/m.exec(frontmatter)?.[1]
   if (!name || !SKILL_NAME.test(name)) {
     fail(`${path} needs a frontmatter name in lowercase-hyphen form`)
   }
-  return name
+  return {
+    name,
+    requiresClient: /^  requires-client:\s*\S/m.test(frontmatter),
+  }
 }
 
 // Maps each output path, relative to a plugin root, to its contents.
@@ -72,13 +77,14 @@ async function buildExpectedFiles() {
       if (error.code === "ENOENT") continue
       throw error
     }
-    const name = readSkillName(skillMarkdown, skillPath)
+    const { name, requiresClient } = readSkill(skillMarkdown, skillPath)
     if (sourceByName.has(name)) {
       fail(
         `${skillPath} and ${sourceByName.get(name)} both use the skill name ${JSON.stringify(name)}`
       )
     }
     sourceByName.set(name, skillPath)
+    if (requiresClient) continue
     for (const file of await collectFiles(skillRoot)) {
       expected.set(
         join("skills", name, file),

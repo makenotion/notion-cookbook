@@ -96,3 +96,19 @@ test("rejects two skills with the same name", async (t) => {
   assert.equal(result.status, 1)
   assert.match(result.stderr, /both use the skill name "notion-same"/)
 })
+
+test("plugins omit skills requiring a specific client", async (t) => {
+  const { root, run } = await fixture(t, {
+    "designer/SKILL.md": skill("notion-designer"),
+    "memory/SKILL.md":
+      "---\nname: notion-sync-memory\ndescription: Copy memory.\nmetadata:\n  requires-client: codex\n---\n\nBody\n",
+    "memory/scripts/main.ts": "throw new Error('Codex only')",
+    "memory/node_modules/development-only/index.js":
+      "throw new Error('not runtime')",
+  })
+  assert.equal(run().status, 0)
+  assert.deepEqual(await readdir(join(root, "plugins/demo/skills")), [
+    "notion-designer",
+  ])
+  assert.equal(run("--dryRun").status, 0)
+})

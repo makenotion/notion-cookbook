@@ -98,7 +98,7 @@ quality regression before recommending an efficiency improvement.
 
 ## Test skill selection separately
 
-With all six skills available, check which skill is selected for representative
+With the skills available, check which skill is selected for representative
 requests. Explicitly invoking a skill tests execution, not automatic discovery.
 
 | Request                                                      | Expected selection     |
@@ -114,6 +114,8 @@ requests. Explicitly invoking a skill tests execution, not automatic discovery.
 | Create implementation tasks from this spec                   | Spec to implementation |
 | Rewrite this one sentence in a warmer tone                   | None of these skills   |
 | What is 12 multiplied by 8?                                  | None of these skills   |
+| Sync my existing Codex memory files into Notion Memories     | Sync Memory            |
+| Preview the local memory files without writing to Notion     | Sync Memory            |
 
 Composite requests may legitimately use more than one skill. Check that each
 selected skill contributes to the requested outcome instead of repeating work.
