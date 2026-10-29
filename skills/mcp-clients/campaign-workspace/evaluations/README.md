@@ -30,7 +30,9 @@ not exact heading strings or a fixed count of decorative elements.
 Existing first-party-only cases intentionally retain that restriction in their
 user prompts: source selection must follow the particular user's request.
 For visual runs, render persisted mock output in Notion or use a disposable test
-workspace with authorization. Record desktop and narrow-screen observations;
+workspace with authorization. Use Notion MCP for every workspace mutation; UI tools are read-only. Record
+unsupported settings as gaps rather than repairing them through the UI.
+Record desktop and narrow-screen observations;
 do not count mock structural checks as proof of rendered beauty.
 
 `default-private-destination.json` checks that an omitted destination uses the
@@ -51,5 +53,6 @@ gallery patterns, not merely the presence of an icon, cover, or callout.
 - `reference-workspace.json`: isolated fictional campaign-system brief. Give the
   runner only the query/context and runtime skill, withholding scoring criteria
   and existing sample IDs. Check saved relations/views and rendered navigation.
-- [Recorded desktop smoke test](reference-workspace-results.md): observed outcomes,
-  instruction revisions, and the limits of this single live test.
+- [Recorded UI-assisted desktop smoke test](reference-workspace-results.md): observed outcomes,
+  instruction revisions, and the limits of this single live test; it is not an
+  MCP-only pass.

@@ -3,16 +3,15 @@
 Begin with the thing being published and the production rhythm. A publication
 calendar, campaign launch, and asset library are different editorial products.
 
-## Research to use
+## Optional visual references
 
-The inspected preview of [Brand Guide by Matt Bio](https://www.notion.com/templates/brand-guide-bio)
-uses a high-contrast typographic cover, compact index, and coordinated brand
-panels. Borrow its editorial confidence and coherent identity.
-[Brand Assets by Notion](https://www.notion.com/templates/brand-assets) shows large
-asset previews, short labels, and category tabs: useful when people recognize
-creative by sight. The [content calendar reference](template.md) supplies the
-production model. Previews were inspected on October 29, 2026; they do not prove
-underlying automation or interactions.
+[Brand Guide by Matt Bio](https://www.notion.com/templates/brand-guide-bio) offers
+inspiration for a compact index, strong typography, and coordinated brand panels.
+[Brand Assets by Notion](https://www.notion.com/templates/brand-assets) is a reference
+for recognizable asset previews, short labels, and category tabs. The
+[content calendar reference](template.md) supports the production model.
+Inspect current previews when adapting their visual details; previews alone do
+not establish underlying automation or interactions.
 
 ## Compose a connected editorial system
 
