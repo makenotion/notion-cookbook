@@ -1,19 +1,18 @@
 // Find the official Notion API client @ https://  github.com/makenotion/notion-sdk-js/
 // npm install @notionhq/client
 import { Client, isFullDataSource } from "@notionhq/client"
-import {
+import type {
   CreatePageParameters,
   DataSourceObjectResponse,
   GetDataSourceResponse,
   GetPagePropertyResponse,
-} from "@notionhq/client/build/src/api-endpoints"
+} from "@notionhq/client"
 
-import * as _ from "lodash"
+import _ from "lodash"
+import { faker } from "@faker-js/faker"
 
 import { config } from "dotenv"
 config()
-
-import * as faker from "faker"
 
 const notion = new Client({ auth: process.env["NOTION_KEY"] })
 
@@ -68,7 +67,7 @@ function makeFakePropertiesData(
     } else if (property.type === "number") {
       propertyValues[name] = {
         type: "number",
-        number: faker.datatype.number(),
+        number: faker.number.int({ max: 99999 }),
       }
     } else if (property.type === "title") {
       propertyValues[name] = {
@@ -86,14 +85,14 @@ function makeFakePropertiesData(
         rich_text: [
           {
             type: "text",
-            text: { content: faker.name.firstName() },
+            text: { content: faker.person.firstName() },
           },
         ],
       }
     } else if (property.type === "phone_number") {
       propertyValues[name] = {
         type: "phone_number",
-        phone_number: faker.phone.phoneNumber(),
+        phone_number: faker.phone.number(),
       }
     } else {
       console.log("unimplemented property type: ", property.type)
@@ -366,7 +365,7 @@ async function exerciseFilters(
     )
   }
   const textColumnId = decodeURIComponent(textColumn.id)
-  const letterToFind = faker.lorem.word(1)
+  const letterToFind = faker.string.alpha({ length: 1, casing: "lower" })
 
   console.log(
     `\n\nLooking for text column with id "${textColumnId}" contains letter "${letterToFind}"`
