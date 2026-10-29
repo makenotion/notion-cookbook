@@ -19,7 +19,7 @@ test("Claude Code artifact resolves its manifest, registers no hooks, and loads 
     )
   )
   assert.equal(manifest.hooks, undefined)
-  // Claude Code loads only a .mcp.json at the plugin root; Codex's is in the skill.
+  // Claude Code loads any .mcp.json at the plugin root; this plugin has none.
   assert.equal(fs.existsSync(path.join(f.installed, ".mcp.json")), false)
   for (const command of ["hook", "worker"]) {
     const result = await f.exec([command, "session-start"])
@@ -148,10 +148,13 @@ test("Claude Code sync requires a pinned workspace and refuses a mismatch", asyn
   assert.equal(result.code, 1)
   assert.match(result.stderr, /does not match expectedWorkspaceId/)
   assert.deepEqual(f.pages(), [])
-  assert.equal(
-    fs.existsSync(path.join(f.home, "notion-memory/state.json")),
-    false
-  )
+  for (const workspace of ["other", "synthetic-workspace"])
+    assert.equal(
+      fs.existsSync(
+        path.join(f.home, "notion-memory", workspace, "state.json")
+      ),
+      false
+    )
 })
 
 test("expired sign-in, tool errors, and an unreachable server fail without writing", async (t) => {

@@ -1,0 +1,12 @@
+interface:
+  display_name: "Sync Memory"
+  short_description: "Copy Codex memory Markdown into Notion Memories"
+  default_prompt: "Use $sync-memory to preview my Codex memory files, then sync them into Notion Memories."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "notion"
+      description: "Notion MCP server used to create, update and read Memories pages"
+      transport: "streamable_http"
+      url: "https://mcp.notion.com/mcp"

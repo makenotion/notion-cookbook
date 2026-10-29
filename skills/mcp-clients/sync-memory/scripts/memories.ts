@@ -2,7 +2,7 @@ import crypto from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
 import { loadState, log, saveState, type State } from "./config.ts"
-import type { CallTool } from "./mcp.ts"
+import { type CallTool, NotionToolError } from "./mcp.ts"
 
 // Mirrors an agent's memory files into the user's Notion Memories with the same Notion MCP
 // tools any agent uses. One source file becomes one page, and its Markdown passes through
@@ -35,6 +35,34 @@ export interface MemorySource {
   inventory(): MemoryInventory
 }
 
+// Notion Markdown reads `<name ...>` outside code as a Notion tag such as <page> and
+// rejects the whole page when one is misplaced. Memory files are plain Markdown, so
+// escape tag-like text outside code to keep it as literal text.
+export function escapeNotionTags(markdown: string): string {
+  let fence: string | undefined
+  return markdown
+    .split("\n")
+    .map((line) => {
+      const marker = line.match(/^ {0,3}(`{3,}|~{3,})/)?.[1]
+      if (fence) {
+        if (marker?.[0] === fence[0] && marker.length >= fence.length)
+          fence = undefined
+        return line
+      }
+      if (marker) {
+        fence = marker
+        return line
+      }
+      // A code span opens and closes with the same number of backticks. Autolinks
+      // such as <https://…> and <me@example.com> are valid Notion Markdown.
+      return line.replace(
+        /(`+)[\s\S]*?(?<!`)\1(?!`)|(?<!\\)<(?=[A-Za-z/!])(?![A-Za-z][\w+.-]*:[^\s<>]*>|[^\s<>@]+@[^\s<>]+>)/g,
+        (match, ticks) => (ticks ? match : "\\<")
+      )
+    })
+    .join("\n")
+}
+
 export interface MemoryInventory {
   files: MemoryFile[]
   // Other entries in the memory directory, which are reported but not copied.
@@ -56,6 +84,7 @@ export async function syncMemories(call: CallTool, source: MemorySource) {
     updated: 0,
     unchanged: 0,
     changedInNotion: 0,
+    rejected: [] as { path: string; reason: string }[],
   }
   let destinationChecked = false
   for (const file of files) {
@@ -78,6 +107,7 @@ export async function syncMemories(call: CallTool, source: MemorySource) {
       destinationChecked = true
     }
     let pageId: string
+    let attributed = false
     if (previous) {
       const page = await snapshot(call, previous.pageId)
       if (page.deleted || page.hash !== previous.pageHash) {
@@ -86,6 +116,7 @@ export async function syncMemories(call: CallTool, source: MemorySource) {
         result.changedInNotion++
         continue
       }
+      attributed = page.lastUpdatedBy === source.name
     }
     const content = renderMemory(source, file, new Date().toISOString())
     state.pending ??= {}
@@ -99,11 +130,14 @@ export async function syncMemories(call: CallTool, source: MemorySource) {
     saveState(state)
     try {
       if (previous) {
-        await call("update-page", {
-          page_id: previous.pageId,
-          command: "update_properties",
-          properties: { "Last updated by": source.name },
-        })
+        // Each extra write widens the window in which a failure leaves an unknown
+        // outcome, so only restore attribution when the page lost it.
+        if (!attributed)
+          await call("update-page", {
+            page_id: previous.pageId,
+            command: "update_properties",
+            properties: { "Last updated by": source.name },
+          })
         await call("update-page", {
           page_id: previous.pageId,
           command: "replace_content",
@@ -134,6 +168,14 @@ export async function syncMemories(call: CallTool, source: MemorySource) {
         pageId = page.id
       }
     } catch (error) {
+      // Notion validates input before writing, so a validation rejection is a known
+      // non-write: report this file and keep syncing the others.
+      if (error instanceof NotionToolError && error.invalidInput) {
+        delete state.pending[file.name]
+        saveState(state)
+        result.rejected.push({ path: file.name, reason: error.reason })
+        continue
+      }
       throw new Error(
         `Unknown ${previous ? "update" : "create"} outcome for ${file.name}${previous ? ` (page ${previous.pageId})` : ""}; run status for the reconcile command and instructions. No write will be retried. ${error instanceof Error ? error.message : String(error)}`,
         { cause: error }
@@ -197,7 +239,7 @@ export function memoryStatus() {
       operation: pending.operation,
       pageId: pending.pageId ?? null,
       instructions:
-        "Inspect the affected page in the pinned workspace. If a create response was lost, locate the page by its title and Source path; never assume it was not created. With explicit user approval, keep that Notion page and release this source path from future sync using these command arguments. If the page cannot be identified or fetched, keep the pending entry and report the unresolved outcome.",
+        "Inspect the affected page in the pinned workspace. If a create response was lost, locate the page by its title and Source path; never assume it was not created. With explicit user approval, keep that Notion page and release this source path from future sync using these command arguments. If the user confirms in Notion that no page with this title and Source path exists, `reconcile <source-path> --not-created` clears the entry so the next sync creates it. Otherwise keep the pending entry and report the unresolved outcome.",
       command: [
         "node",
         "scripts/main.ts",
@@ -208,6 +250,22 @@ export function memoryStatus() {
       ],
     })),
   }
+}
+
+// The user has confirmed in Notion that an unknown create left no page, for example
+// because the workspace rejected it. Clearing the entry lets the next sync create the
+// page; an update or a create with a known page ID must use --keep-notion instead.
+export function discardUnknownCreate(name: string) {
+  const state = loadState()
+  const pending = state.pending?.[name]
+  if (!pending) throw new Error(`No pending write for ${name}`)
+  if (pending.operation !== "create" || pending.pageId)
+    throw new Error(
+      `${name} has a known page; inspect it and use --keep-notion ${pending.pageId ?? "<page-id>"}`
+    )
+  delete state.pending![name]
+  saveState(state)
+  return { path: name, discarded: true }
 }
 
 // Recovery preserves the reviewed remote page and retires this mapping; it never
@@ -305,7 +363,7 @@ export function renderMemory(
     "Synced at": syncedAt,
     "Synced by": "notion-memory",
   }
-  return `# ${source.name} memory source\n\n\`\`\`json\n${JSON.stringify(metadata, null, 2)}\n\`\`\`\n\n---\n\n${file.content}`
+  return `# ${source.name} memory source\n\n\`\`\`json\n${JSON.stringify(metadata, null, 2)}\n\`\`\`\n\n---\n\n${escapeNotionTags(file.content)}`
 }
 
 export function digest(text: string): string {
@@ -334,6 +392,7 @@ async function snapshot(call: CallTool, id: string) {
   const content = text.slice(start + "<content>".length, end).trim()
   return {
     deleted: /<page\b[^>]*\sdeleted\b/.test(text),
+    lastUpdatedBy: properties["Last updated by"],
     hash: digest(
       JSON.stringify([
         properties.Title ?? properties.title,

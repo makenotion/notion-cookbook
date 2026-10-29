@@ -4,7 +4,7 @@
   "plugins": [
     {
       "name": "sync-memory",
-      "source": { "source": "local", "path": "./build/sync-memory" },
+      "source": { "source": "local", "path": "./plugins/sync-memory" },
       "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
       "category": "Productivity"
     }

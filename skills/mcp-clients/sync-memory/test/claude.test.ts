@@ -10,6 +10,10 @@ import { fakeNotionMcp } from "./fakeNotionMcp.ts"
 const home = fs.mkdtempSync(path.join(os.tmpdir(), "claude-notion-memory-"))
 process.env.NOTION_MEMORY_AGENT = "claude"
 process.env.CLAUDE_CONFIG_DIR = home
+fs.writeFileSync(
+  path.join(home, "notion-memory.json"),
+  JSON.stringify({ expectedWorkspaceId: "synthetic-workspace" })
+)
 const FIXTURES = fileURLToPath(
   new URL("fixtures/claude/memory", import.meta.url)
 )

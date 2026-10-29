@@ -5,6 +5,9 @@ export const toolNames = ["get-self", "fetch", "create-pages", "update-page"]
 const collection = "collection://00000000-0000-0000-0000-000000000001"
 const stateFile = process.env.FIXTURE_STATE
 const callsFile = process.env.FIXTURE_CALLS
+// The workspace the synthetic connection is authorized for; pages are visible
+// only inside the workspace that created them.
+const workspace = process.env.FIXTURE_WORKSPACE || "synthetic-workspace"
 assert.ok(stateFile && callsFile, "fixture paths must be explicitly supplied")
 
 export function record(method) {
@@ -31,18 +34,40 @@ export function invoke(name, args) {
     save()
     throw new Error(`Synthetic ${phase} failure`)
   }
+  // Notion answers both bad input and missing access with a 400 validation_error;
+  // only additional_data.tool_error_class tells them apart.
+  const reject = (content) => {
+    for (const [text, errorClass] of [
+      [process.env.FIXTURE_INVALID_TEXT, "validation"],
+      [process.env.FIXTURE_DENIED_TEXT, "permission_denied"],
+    ])
+      if (text && content.includes(text))
+        throw new Error(
+          JSON.stringify({
+            name: "APIResponseError",
+            code: "validation_error",
+            status: 400,
+            body: JSON.stringify({ message: `Synthetic ${errorClass} error` }),
+            additional_data: { tool_error_class: errorClass },
+          })
+        )
+  }
   switch (tool) {
     case "get-self":
       return {
         user: { name: "Casey Synthetic" },
-        workspace: { id: "synthetic-workspace" },
+        workspace: { id: workspace, name: `${workspace} name` },
       }
     case "fetch": {
       if (args.id === "memory")
         return { text: `<data-source url="${collection}">` }
       failOnce("fetch")
       if (state.failReadback) failOnce(state.failReadback)
-      const page = state.pages.find((p) => p.id === args.id)
+      const page = state.pages.find(
+        (p) =>
+          p.id === args.id &&
+          (p.workspace ?? "synthetic-workspace") === workspace
+      )
       assert.ok(page, "unknown fixture page")
       if (process.env.FIXTURE_READBACK === "malformed")
         return { text: "<page><content>broken</content></page>" }
@@ -56,6 +81,9 @@ export function invoke(name, args) {
           args.parent?.page_id ||
           args.creation_mode === "draft"
       )
+      // Rejected before any page exists, like a workspace over its block limit.
+      failOnce("create-rejected")
+      for (const p of args.pages) reject(p.content)
       const pages = args.pages.map((p) => {
         assert.equal(
           p.properties.Source,
@@ -65,6 +93,7 @@ export function invoke(name, args) {
         )
         const page = {
           id: `synthetic-${state.pages.length + 1}`,
+          workspace,
           title: p.properties.title,
           type: p.properties.Type,
           source: p.properties.Source,
@@ -83,7 +112,11 @@ export function invoke(name, args) {
       return { pages }
     }
     case "update-page": {
-      const page = state.pages.find((p) => p.id === args.page_id)
+      const page = state.pages.find(
+        (p) =>
+          p.id === args.page_id &&
+          (p.workspace ?? "synthetic-workspace") === workspace
+      )
       assert.ok(page, "unknown fixture page")
       if (args.command === "update_properties") {
         if (args.properties.Source !== undefined)
@@ -94,6 +127,7 @@ export function invoke(name, args) {
         return {}
       }
       assert.equal(args.command, "replace_content")
+      reject(args.new_str)
       page.content = importedContent(args.new_str)
       if (process.env.FIXTURE_FAIL_ONCE?.startsWith("update-readback"))
         state.failReadback = process.env.FIXTURE_FAIL_ONCE

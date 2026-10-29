@@ -131,15 +131,37 @@ test("append, override and empty content update the same page", async (t) => {
   const id = f.pages().find((p) => p.title === "memory_summary.md")?.id
   for (const text of ["baseline\nappended\n", "replacement\n", ""]) {
     fs.writeFileSync(path.join(f.home, "memories_v2/memory_summary.md"), text)
+    const updatesBefore = f.calls().filter((c) => c === "update-page").length
     const r = await f.exec(["sync"])
     assert.equal(r.code, 0, r.stderr)
     assert.equal(JSON.parse(r.stdout).updated, 1)
+    assert.equal(
+      f.calls().filter((c) => c === "update-page").length - updatesBefore,
+      1,
+      "an attributed page needs only the content write"
+    )
     assert.equal(
       copiedPage(f.pages().find((p) => p.id === id)?.content).original,
       text
     )
     assert.equal(f.pages().length, 2)
   }
+})
+
+test("an update restores missing Codex attribution before replacing content", async (t) => {
+  const f = fixture(t)
+  f.seed()
+  assert.equal((await f.exec(["sync"])).code, 0)
+  const pages = f.pages()
+  const page = pages.find((p) => p.title === "memory_summary.md")
+  assert.ok(page)
+  page.lastUpdatedBy = undefined
+  f.savePages(pages)
+  fs.writeFileSync(path.join(f.home, "memories_v2/memory_summary.md"), "next\n")
+  const r = await f.exec(["sync"])
+  assert.equal(r.code, 0, r.stderr)
+  assert.equal(JSON.parse(r.stdout).updated, 1)
+  assert.equal(f.pages().find((p) => p.id === page.id)?.lastUpdatedBy, "Codex")
 })
 
 test("manual Notion changes are protected when the source changes", async (t) => {
@@ -291,29 +313,6 @@ test("source metadata stays in the body and metadata-only updates preserve ident
   assert.equal((await f.exec(["verify"])).code, 0)
 })
 
-test("existing mappings without metadata hashes backfill once without creating pages", async (t) => {
-  const f = fixture(t)
-  f.seed()
-  assert.equal((await f.exec(["sync"])).code, 0)
-  const stateFile = path.join(f.home, "notion-memory/state.json")
-  const state = object(JSON.parse(fs.readFileSync(stateFile, "utf8")))
-  const files = object(state.files)
-  for (const value of Object.values(files)) delete object(value).metadataHash
-  fs.writeFileSync(stateFile, JSON.stringify(state))
-  const ids = f.pages().map((page) => page.id)
-  const backfill = await f.exec(["sync"])
-  assert.equal(backfill.code, 0, backfill.stderr)
-  assert.equal(JSON.parse(backfill.stdout).updated, 2)
-  assert.equal(JSON.parse(backfill.stdout).created, 0)
-  assert.deepEqual(
-    f.pages().map((page) => page.id),
-    ids
-  )
-  const again = await f.exec(["sync"])
-  assert.equal(again.code, 0, again.stderr)
-  assert.equal(JSON.parse(again.stdout).unchanged, 2)
-})
-
 test("unavailable birth time stays empty rather than falling back to ctime", () => {
   for (const value of [0, -1, NaN, Infinity, 9e18])
     assert.equal(sourceCreatedAt(value), null)
@@ -326,11 +325,7 @@ test("acknowledged create survives failed readback without creating duplicates",
   const failed = await f.exec(["sync"], { FIXTURE_FAIL_ONCE: "fetch" })
   assert.equal(failed.code, 1)
   assert.equal(f.pages().length, 1)
-  const state = object(
-    JSON.parse(
-      fs.readFileSync(path.join(f.home, "notion-memory/state.json"), "utf8")
-    )
-  )
+  const state = object(JSON.parse(fs.readFileSync(f.stateFile(), "utf8")))
   assert.equal(object(object(state.pending)["MEMORY.md"]).phase, "readback")
   const retried = await f.exec(["sync"])
   assert.equal(retried.code, 0, retried.stderr)
@@ -368,11 +363,7 @@ for (const operation of ["create", "update"]) {
     assert.match(retried.stderr, /readback.*reconcil/i)
     assert.equal(writes(), before)
     assert.deepEqual(f.pages(), pages)
-    const state = object(
-      JSON.parse(
-        fs.readFileSync(path.join(f.home, "notion-memory/state.json"), "utf8")
-      )
-    )
+    const state = object(JSON.parse(fs.readFileSync(f.stateFile(), "utf8")))
     assert.equal(object(object(state.pending)["MEMORY.md"]).phase, "readback")
   })
 }
@@ -435,22 +426,6 @@ test("successful immediate readback accepts Markdown normalization", async (t) =
   assert.equal(f.pages().length, 2)
 })
 
-test("legacy pending readback without a submitted fingerprint requires reconciliation", async (t) => {
-  const f = fixture(t)
-  f.seed()
-  assert.equal((await f.exec(["sync"], { FIXTURE_FAIL_ONCE: "fetch" })).code, 1)
-  const stateFile = path.join(f.home, "notion-memory/state.json")
-  const state = object(JSON.parse(fs.readFileSync(stateFile, "utf8")))
-  delete object(object(state.pending)["MEMORY.md"]).expectedPageHash
-  fs.writeFileSync(stateFile, JSON.stringify(state))
-  const before = f.pages()
-  const retried = await f.exec(["sync"])
-  assert.equal(retried.code, 1)
-  assert.match(retried.stderr, /readback.*reconcil/i)
-  assert.deepEqual(f.pages(), before)
-  assert.equal(f.calls().filter((call) => call === "create-pages").length, 1)
-})
-
 for (const operation of ["create", "update"]) {
   test(`lost ${operation} response persists unknown outcome and blocks mutating retries`, async (t) => {
     const f = fixture(t)
@@ -493,11 +468,7 @@ test("deleted or malformed pending readback is never confirmed", async (t) => {
   const retry = await f.exec(["sync"])
   assert.equal(retry.code, 1)
   assert.match(retry.stderr, /Pending readback page deleted/)
-  const state = object(
-    JSON.parse(
-      fs.readFileSync(path.join(f.home, "notion-memory/state.json"), "utf8")
-    )
-  )
+  const state = object(JSON.parse(fs.readFileSync(f.stateFile(), "utf8")))
   assert.equal(object(object(state.pending)["MEMORY.md"]).phase, "readback")
   assert.equal(
     f.calls().filter((call) => call === "create-pages").length,
@@ -540,7 +511,7 @@ for (const operation of ["create", "update"]) {
     assert.equal(typeof page.id, "string")
     page.content = "Human content kept during recovery"
     f.savePages(pages)
-    const statePath = path.join(f.home, "notion-memory/state.json")
+    const statePath = f.stateFile()
     const before = fs.readFileSync(statePath, "utf8")
     const args = ["reconcile", name, "--keep-notion", String(page.id)]
     const failed = await f.exec(args, { FIXTURE_READBACK: "malformed" })
@@ -601,3 +572,53 @@ for (const operation of ["create", "update"]) {
     )
   })
 }
+
+test("a rejected create is recovered with --not-created and then created once", async (t) => {
+  const f = fixture(t)
+  f.seed()
+  const rejected = await f.exec(["sync"], {
+    FIXTURE_FAIL_ONCE: "create-rejected",
+  })
+  assert.equal(rejected.code, 1)
+  assert.match(rejected.stderr, /Unknown create outcome/)
+  const [recovery] = JSON.parse((await f.exec(["status"])).stdout).recovery
+  assert.equal(recovery.pageId, null)
+  assert.match(recovery.instructions, /--not-created/)
+  const name = String(recovery.path)
+  assert.equal(
+    f.pages().filter((page) => page.title === name).length,
+    0,
+    "the rejected create left no page"
+  )
+  const cleared = await f.exec(["reconcile", name, "--not-created"])
+  assert.equal(cleared.code, 0, cleared.stderr)
+  assert.deepEqual(JSON.parse(cleared.stdout), { path: name, discarded: true })
+  const retried = await f.exec(["sync"])
+  assert.equal(retried.code, 0, retried.stderr)
+  assert.equal(f.pages().filter((page) => page.title === name).length, 1)
+  assert.equal((await f.exec(["verify"])).code, 0)
+})
+
+test("--not-created refuses an update, whose page is known", async (t) => {
+  const f = fixture(t)
+  f.seed()
+  assert.equal((await f.exec(["sync"])).code, 0)
+  fs.writeFileSync(
+    path.join(f.home, "memories_v2/memory_summary.md"),
+    "updated source"
+  )
+  assert.equal(
+    (await f.exec(["sync"], { FIXTURE_FAIL_ONCE: "update-response" })).code,
+    1
+  )
+  const [recovery] = JSON.parse((await f.exec(["status"])).stdout).recovery
+  const statePath = f.stateFile()
+  const before = fs.readFileSync(statePath, "utf8")
+  const refused = await f.exec([
+    "reconcile",
+    String(recovery.path),
+    "--not-created",
+  ])
+  assert.equal(refused.code, 1)
+  assert.equal(fs.readFileSync(statePath, "utf8"), before)
+})

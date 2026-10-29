@@ -95,10 +95,7 @@ test("an explicit destination never falls back and workspace mismatch writes not
     const result = await f.exec(["sync"])
     assert.equal(result.code, 1)
     assert.deepEqual(f.pages(), [])
-    assert.equal(
-      fs.existsSync(path.join(f.home, "notion-memory/state.json")),
-      false
-    )
+    assert.equal(fs.existsSync(f.stateFile()), false)
   }
 })
 
@@ -147,16 +144,4 @@ test("server requests cannot consume client responses with the same ID", async (
   assert.equal(f.pages().length, 2)
   assert.ok(f.calls().includes("server-response:server-request:-32601"))
   assert.ok(f.calls().includes("server-response:1:-32601"))
-})
-
-test("removed hook and worker commands fail without connecting or writing", async (t) => {
-  const f = fixture(t)
-  f.seed()
-  for (const command of ["hook", "worker"]) {
-    const result = await f.exec([command, "session-start"])
-    assert.equal(result.code, 1)
-    assert.match(result.stderr, /Unknown Sync Memory command/)
-  }
-  assert.deepEqual(f.calls(), [])
-  assert.deepEqual(f.pages(), [])
 })

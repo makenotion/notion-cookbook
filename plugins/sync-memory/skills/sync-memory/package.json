@@ -1,0 +1,22 @@
+{
+  "name": "@notion-cookbook/sync-memory",
+  "version": "0.4.11",
+  "private": true,
+  "description": "Sync Memory copies local memory Markdown into Notion Memories through an existing MCP connection.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "node --test \"test/*.test.ts\"",
+    "preview": "node scripts/main.ts preview",
+    "sync": "node scripts/main.ts sync",
+    "status": "node scripts/main.ts status"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.0",
+    "typescript": "^5.9.0"
+  },
+  "license": "MIT"
+}

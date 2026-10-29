@@ -28,16 +28,18 @@ export type PendingWrite =
       hash: string
       metadataHash: string
       pageId: string
-      expectedPageHash?: string
+      expectedPageHash: string
     }
 
 export interface State {
+  // The workspace whose page IDs this mapping holds.
+  workspaceId: string
   pending?: Record<string, PendingWrite>
   files: Record<
     string,
     {
       hash: string
-      metadataHash?: string
+      metadataHash: string
       pageId: string
       pageHash: string
       released?: boolean
@@ -62,7 +64,7 @@ export const CONFIG_FILE =
 export const DATA_DIR =
   process.env.NOTION_MEMORY_DATA || path.join(AGENT_HOME, "notion-memory")
 export const LOG_FILE = path.join(DATA_DIR, "notion-memory.log")
-const STATE_FILE = path.join(DATA_DIR, "state.json")
+const WORKSPACE_ID = /^[A-Za-z0-9-]+$/
 
 export function loadConfig(): Config {
   let file: Partial<Config> = {}
@@ -78,9 +80,36 @@ export function loadConfig(): Config {
   }
 }
 
-export function loadState(): State {
-  if (!fs.existsSync(STATE_FILE)) return { files: {} }
-  const state = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"))
+// Page IDs belong to one workspace, so each pinned workspace keeps its own
+// mapping. Switching back to a workspace reuses its mapping instead of creating
+// duplicate pages.
+export function stateFile(workspaceId: string): string {
+  if (!WORKSPACE_ID.test(workspaceId))
+    throw new Error(`Invalid workspace ID: ${workspaceId}`)
+  return path.join(DATA_DIR, workspaceId, "state.json")
+}
+
+export function pinnedWorkspace(): string {
+  const workspaceId = loadConfig().expectedWorkspaceId?.trim()
+  if (!workspaceId)
+    throw new Error(
+      "Set expectedWorkspaceId in the approved config before using the mapping. Run use-workspace to confirm the destination workspace."
+    )
+  return workspaceId
+}
+
+export function hasState(workspaceId: string): boolean {
+  return fs.existsSync(stateFile(workspaceId))
+}
+
+export function loadState(workspaceId = pinnedWorkspace()): State {
+  const file = stateFile(workspaceId)
+  if (!fs.existsSync(file)) return { workspaceId, files: {} }
+  const state = JSON.parse(fs.readFileSync(file, "utf8"))
+  if (state.workspaceId !== workspaceId)
+    throw new Error(
+      `Mapping ${file} belongs to workspace ${state.workspaceId}, not ${workspaceId}`
+    )
   if (
     !state.files ||
     typeof state.files !== "object" ||
@@ -109,8 +138,7 @@ export function loadState(): State {
         (entry.operation === "update" && typeof entry.pageId !== "string") ||
         (entry.phase === "readback" &&
           (typeof entry.pageId !== "string" ||
-            (entry.expectedPageHash !== undefined &&
-              typeof entry.expectedPageHash !== "string")))
+            typeof entry.expectedPageHash !== "string"))
       )
         throw new Error(
           "Invalid pending write journal; preserve state.json for reconciliation"
@@ -121,9 +149,25 @@ export function loadState(): State {
 }
 
 export function saveState(state: State): void {
-  fs.mkdirSync(DATA_DIR, { recursive: true })
-  fs.writeFileSync(`${STATE_FILE}.tmp`, JSON.stringify(state, null, 2))
-  fs.renameSync(`${STATE_FILE}.tmp`, STATE_FILE)
+  const file = stateFile(state.workspaceId)
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  fs.writeFileSync(`${file}.tmp`, JSON.stringify(state, null, 2))
+  fs.renameSync(`${file}.tmp`, file)
+}
+
+// Rewrites only the pin, keeping every other approved setting in the file.
+export function pinWorkspace(workspaceId: string): void {
+  stateFile(workspaceId)
+  const file: Record<string, unknown> = fs.existsSync(CONFIG_FILE)
+    ? JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8"))
+    : {}
+  fs.mkdirSync(path.dirname(CONFIG_FILE), { recursive: true })
+  fs.writeFileSync(
+    `${CONFIG_FILE}.tmp`,
+    JSON.stringify({ ...file, expectedWorkspaceId: workspaceId }, null, 2) +
+      "\n"
+  )
+  fs.renameSync(`${CONFIG_FILE}.tmp`, CONFIG_FILE)
 }
 
 export function log(...parts: unknown[]): void {

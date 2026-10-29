@@ -6,6 +6,9 @@ on:
       - ".agents/plugins/marketplace.json"
       - ".claude-plugin/marketplace.json"
       - "skills/mcp-clients/sync-memory/**"
+      - "plugins/sync-memory/**"
+      - "plugins/sync-memory-claude/**"
+      - "scripts/build-plugins.mjs"
       - "skills/mcp-clients/setup/SKILL.md"
       - ".github/workflows/sync-memory-test.yml"
   push:
@@ -14,6 +17,9 @@ on:
       - ".agents/plugins/marketplace.json"
       - ".claude-plugin/marketplace.json"
       - "skills/mcp-clients/sync-memory/**"
+      - "plugins/sync-memory/**"
+      - "plugins/sync-memory-claude/**"
+      - "scripts/build-plugins.mjs"
       - "skills/mcp-clients/setup/SKILL.md"
       - ".github/workflows/sync-memory-test.yml"
   workflow_dispatch:
@@ -50,5 +56,5 @@ jobs:
           "$CLAUDE_TEST_BINARY" --version
           node --version
           npm run check
-          npm run build:plugin
+          node ../../../scripts/build-plugins.mjs --dryRun
           npm test

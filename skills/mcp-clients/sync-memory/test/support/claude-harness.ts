@@ -5,8 +5,13 @@ import os from "node:os"
 import path from "node:path"
 import readline from "node:readline"
 import type { TestContext } from "node:test"
-import { buildPlugin } from "../../scripts/build-plugin.mjs"
 import { object, recipe, run, support } from "./harness.ts"
+
+// The checked-in Claude Code plugin; `npm run plugins:build` regenerates its `skills/`.
+export const claudePlugin = path.resolve(
+  recipe,
+  "../../../plugins/sync-memory-claude"
+)
 
 // An installed copy of the plugin in a path with spaces, an empty Claude Code home, a
 // project directory, and the offline Notion server from fake-notion-http.mjs.
@@ -21,8 +26,7 @@ export async function claudeFixture(t: TestContext, failure = "") {
     path.join(home, "notion-memory.json"),
     JSON.stringify({ expectedWorkspaceId: "synthetic-workspace" })
   )
-  // The same built plugin the Codex harness installs.
-  buildPlugin(installed)
+  fs.cpSync(claudePlugin, installed, { recursive: true })
   const skill = path.join(installed, "skills/sync-memory")
   const memoryDir = path.join(
     home,

@@ -127,7 +127,7 @@ test(
       .map(object)
       .find((s) => s.name === "sync-memory:notion-setup")
     assert.ok(setup, "packaged onboarding skill must be discoverable")
-    assert.equal(setup.path, path.join(cache, "skills/setup/SKILL.md"))
+    assert.equal(setup.path, path.join(cache, "skills/notion-setup/SKILL.md"))
     assert.equal(
       fs.readFileSync(String(setup.path), "utf8"),
       fs.readFileSync(path.resolve(recipe, "../setup/SKILL.md"), "utf8")
