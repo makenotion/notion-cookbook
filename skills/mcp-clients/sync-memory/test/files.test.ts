@@ -308,29 +308,6 @@ test("source metadata stays in the body and metadata-only updates preserve ident
   assert.equal((await f.exec(["verify"])).code, 0)
 })
 
-test("existing mappings without metadata hashes backfill once without creating pages", async (t) => {
-  const f = fixture(t)
-  f.seed()
-  assert.equal((await f.exec(["sync"])).code, 0)
-  const stateFile = f.stateFile()
-  const state = object(JSON.parse(fs.readFileSync(stateFile, "utf8")))
-  const files = object(state.files)
-  for (const value of Object.values(files)) delete object(value).metadataHash
-  fs.writeFileSync(stateFile, JSON.stringify(state))
-  const ids = f.pages().map((page) => page.id)
-  const backfill = await f.exec(["sync"])
-  assert.equal(backfill.code, 0, backfill.stderr)
-  assert.equal(JSON.parse(backfill.stdout).updated, 2)
-  assert.equal(JSON.parse(backfill.stdout).created, 0)
-  assert.deepEqual(
-    f.pages().map((page) => page.id),
-    ids
-  )
-  const again = await f.exec(["sync"])
-  assert.equal(again.code, 0, again.stderr)
-  assert.equal(JSON.parse(again.stdout).unchanged, 2)
-})
-
 test("unavailable birth time stays empty rather than falling back to ctime", () => {
   for (const value of [0, -1, NaN, Infinity, 9e18])
     assert.equal(sourceCreatedAt(value), null)
@@ -442,22 +419,6 @@ test("successful immediate readback accepts Markdown normalization", async (t) =
     assert.equal(verified.code, 0, verified.stderr)
   }
   assert.equal(f.pages().length, 2)
-})
-
-test("legacy pending readback without a submitted fingerprint requires reconciliation", async (t) => {
-  const f = fixture(t)
-  f.seed()
-  assert.equal((await f.exec(["sync"], { FIXTURE_FAIL_ONCE: "fetch" })).code, 1)
-  const stateFile = f.stateFile()
-  const state = object(JSON.parse(fs.readFileSync(stateFile, "utf8")))
-  delete object(object(state.pending)["MEMORY.md"]).expectedPageHash
-  fs.writeFileSync(stateFile, JSON.stringify(state))
-  const before = f.pages()
-  const retried = await f.exec(["sync"])
-  assert.equal(retried.code, 1)
-  assert.match(retried.stderr, /readback.*reconcil/i)
-  assert.deepEqual(f.pages(), before)
-  assert.equal(f.calls().filter((call) => call === "create-pages").length, 1)
 })
 
 for (const operation of ["create", "update"]) {

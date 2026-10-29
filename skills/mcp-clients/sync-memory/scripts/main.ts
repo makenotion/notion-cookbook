@@ -5,7 +5,6 @@ import {
   loadState,
   log,
   pinWorkspace,
-  saveState,
   withLock,
 } from "./config.ts"
 import { type CallTool, CodexNotionMcp } from "./mcp.ts"
@@ -113,9 +112,6 @@ async function useWorkspace(
             throw new Error(
               `Workspace ${previous} has unresolved pending writes (${pending.join(", ")}); run status and reconcile them before switching.`
             )
-          // Moves a legacy mapping under the workspace it was made for.
-          if (Object.keys(state.files).length && !hasState(previous))
-            saveState(state)
         }
         const hasMapping = hasState(workspaceId)
         pinWorkspace(workspaceId)

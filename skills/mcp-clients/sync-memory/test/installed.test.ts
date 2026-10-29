@@ -145,15 +145,3 @@ test("server requests cannot consume client responses with the same ID", async (
   assert.ok(f.calls().includes("server-response:server-request:-32601"))
   assert.ok(f.calls().includes("server-response:1:-32601"))
 })
-
-test("removed hook and worker commands fail without connecting or writing", async (t) => {
-  const f = fixture(t)
-  f.seed()
-  for (const command of ["hook", "worker"]) {
-    const result = await f.exec([command, "session-start"])
-    assert.equal(result.code, 1)
-    assert.match(result.stderr, /Unknown Sync Memory command/)
-  }
-  assert.deepEqual(f.calls(), [])
-  assert.deepEqual(f.pages(), [])
-})

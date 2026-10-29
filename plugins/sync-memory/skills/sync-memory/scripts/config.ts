@@ -26,18 +26,18 @@ export type PendingWrite =
       hash: string
       metadataHash: string
       pageId: string
-      expectedPageHash?: string
+      expectedPageHash: string
     }
 
 export interface State {
-  // The workspace whose page IDs this mapping holds; absent in legacy state.
-  workspaceId?: string
+  // The workspace whose page IDs this mapping holds.
+  workspaceId: string
   pending?: Record<string, PendingWrite>
   files: Record<
     string,
     {
       hash: string
-      metadataHash?: string
+      metadataHash: string
       pageId: string
       pageHash: string
       released?: boolean
@@ -54,8 +54,6 @@ export const CONFIG_FILE =
 export const DATA_DIR =
   process.env.NOTION_MEMORY_DATA || path.join(CODEX_HOME, "notion-memory")
 export const LOG_FILE = path.join(DATA_DIR, "notion-memory.log")
-// Mappings from before per-workspace state, adopted by the pinned workspace.
-const LEGACY_STATE_FILE = path.join(DATA_DIR, "state.json")
 const WORKSPACE_ID = /^[A-Za-z0-9-]+$/
 
 export function loadConfig(): Config {
@@ -94,16 +92,11 @@ export function hasState(workspaceId: string): boolean {
 
 export function loadState(workspaceId = pinnedWorkspace()): State {
   const file = stateFile(workspaceId)
-  const source = fs.existsSync(file)
-    ? file
-    : fs.existsSync(LEGACY_STATE_FILE)
-      ? LEGACY_STATE_FILE
-      : undefined
-  if (!source) return { workspaceId, files: {} }
-  const state = JSON.parse(fs.readFileSync(source, "utf8"))
-  if (state.workspaceId !== undefined && state.workspaceId !== workspaceId)
+  if (!fs.existsSync(file)) return { workspaceId, files: {} }
+  const state = JSON.parse(fs.readFileSync(file, "utf8"))
+  if (state.workspaceId !== workspaceId)
     throw new Error(
-      `Mapping ${source} belongs to workspace ${state.workspaceId}, not ${workspaceId}`
+      `Mapping ${file} belongs to workspace ${state.workspaceId}, not ${workspaceId}`
     )
   if (
     !state.files ||
@@ -133,29 +126,24 @@ export function loadState(workspaceId = pinnedWorkspace()): State {
         (entry.operation === "update" && typeof entry.pageId !== "string") ||
         (entry.phase === "readback" &&
           (typeof entry.pageId !== "string" ||
-            (entry.expectedPageHash !== undefined &&
-              typeof entry.expectedPageHash !== "string")))
+            typeof entry.expectedPageHash !== "string"))
       )
         throw new Error(
           "Invalid pending write journal; preserve state.json for reconciliation"
         )
     }
   }
-  return { ...state, workspaceId }
+  return state
 }
 
-// Saving under the workspace also completes the move of a legacy mapping.
 export function saveState(state: State): void {
-  const workspaceId = state.workspaceId ?? pinnedWorkspace()
-  const file = stateFile(workspaceId)
-  const adoptsLegacy = !fs.existsSync(file)
+  const file = stateFile(state.workspaceId)
   fs.mkdirSync(path.dirname(file), { recursive: true })
   fs.writeFileSync(
     `${file}.tmp`,
-    JSON.stringify({ ...state, workspaceId }, null, 2)
+    JSON.stringify(state, null, 2)
   )
   fs.renameSync(`${file}.tmp`, file)
-  if (adoptsLegacy) fs.rmSync(LEGACY_STATE_FILE, { force: true })
 }
 
 // Rewrites only the pin, keeping every other approved setting in the file.

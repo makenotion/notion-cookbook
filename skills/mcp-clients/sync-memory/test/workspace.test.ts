@@ -82,33 +82,6 @@ test("use-workspace refuses to leave unresolved pending writes behind", async (t
   assert.equal(fs.existsSync(f.stateFile(other)), false)
 })
 
-test("a legacy mapping moves under the workspace it was made for", async (t) => {
-  const f = fixture(t)
-  f.seed()
-  assert.equal((await f.exec(["sync"])).code, 0)
-  const legacy = path.join(f.home, "notion-memory/state.json")
-  const state = object(JSON.parse(fs.readFileSync(f.stateFile(), "utf8")))
-  delete state.workspaceId
-  fs.writeFileSync(legacy, JSON.stringify(state))
-  fs.rmSync(path.dirname(f.stateFile()), { recursive: true })
-
-  const switched = await f.exec(["use-workspace", "--confirm", other], {
-    FIXTURE_WORKSPACE: other,
-  })
-  assert.equal(switched.code, 0, switched.stderr)
-  assert.equal(fs.existsSync(legacy), false)
-  const moved = object(JSON.parse(fs.readFileSync(f.stateFile(), "utf8")))
-  assert.equal(moved.workspaceId, "synthetic-workspace")
-  assert.deepEqual(
-    Object.keys(object(moved.files)).sort(),
-    Object.keys(object(state.files)).sort()
-  )
-
-  const created = await f.exec(["sync"], { FIXTURE_WORKSPACE: other })
-  assert.equal(created.code, 0, created.stderr)
-  assert.equal(JSON.parse(created.stdout).created, 2)
-})
-
 test("a mapping is never used for a workspace it does not belong to", async (t) => {
   const f = fixture(t)
   f.seed()
