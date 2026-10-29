@@ -2,7 +2,7 @@
 
 Follow the [shared evaluation protocol](../../evaluations.md). These scenarios
 check how the agent uses the skill and reports results. They are not executed by
-`npm test` and are excluded from the installed plugin.
+`npm test` and are not shipped with the skill.
 
 | Scenario                                                        | Main checks                                                                                                                                                |
 | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |

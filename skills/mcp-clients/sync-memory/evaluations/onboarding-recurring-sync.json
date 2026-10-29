@@ -1,6 +1,6 @@
 {
   "name": "Reuse Sync Memory from onboarding and native scheduled tasks",
-  "skills": ["notion-setup", "sync-memory"],
+  "skills": ["notion-setup", "notion-sync-memory"],
   "query": "Set up Notion and keep my local memory in sync using the installed Sync Memory skill.",
   "context": {
     "host": "Codex desktop with a native local scheduler",

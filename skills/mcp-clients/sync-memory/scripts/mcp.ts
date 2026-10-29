@@ -3,9 +3,9 @@
 // ephemeral thread (no model call, and ephemeral threads never feed Codex's memory
 // pipeline), and uses `mcpServer/tool/call`.
 //
-// Resolve tools from the bundled `notion` MCP server or an already-connected Notion
-// app on `codex_apps`. This standalone plugin does not register a hosted app. Tool names
-// differ in prefix and separators, so callers use logical names such as "create-pages".
+// Resolve tools from a configured `notion` MCP server or an already-connected Notion
+// app on `codex_apps`. Tool names differ in prefix and separators, so callers use
+// logical names such as "create-pages".
 import { type ChildProcess, spawn } from "node:child_process"
 import readline from "node:readline"
 

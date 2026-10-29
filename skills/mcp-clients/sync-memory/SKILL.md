@@ -1,5 +1,5 @@
 ---
-name: sync-memory
+name: notion-sync-memory
 description: Copy local memory Markdown into Notion Memories, preview the files, or verify managed pages. Use when the user asks to sync or check memory in Notion. The current source adapter requires Codex.
 metadata:
   requires-client: codex

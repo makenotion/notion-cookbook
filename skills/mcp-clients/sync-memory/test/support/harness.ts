@@ -8,8 +8,8 @@ import { fileURLToPath } from "node:url"
 
 export const recipe = fileURLToPath(new URL("../../", import.meta.url))
 export const support = fileURLToPath(new URL("./", import.meta.url))
-// The checked-in plugin; `npm run plugins:build` regenerates its `skills/`.
-export const plugin = path.resolve(recipe, "../../../plugins/sync-memory")
+// Tests run a copy of the skill as it ships, without maintainer-only files.
+const MAINTAINER_ONLY = new Set(["test", "evaluations", "node_modules"])
 
 export function object(value: unknown): Record<string, unknown> {
   assert.ok(isObject(value))
@@ -59,16 +59,20 @@ export async function run(
 }
 
 export function fixture(t: TestContext) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "notion-plugin-test-"))
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "notion-sync-memory-test-")
+  )
   const home = path.join(root, "home")
-  const installed = path.join(root, "installed plugin")
-  const installedSkill = path.join(installed, "skills/sync-memory")
+  const installed = path.join(root, "installed skill")
   fs.mkdirSync(home)
   fs.writeFileSync(
     path.join(home, "notion-memory.json"),
     JSON.stringify({ expectedWorkspaceId: "synthetic-workspace" })
   )
-  fs.cpSync(plugin, installed, { recursive: true })
+  fs.cpSync(recipe, installed, {
+    recursive: true,
+    filter: (source) => !MAINTAINER_ONLY.has(path.basename(source)),
+  })
   fs.chmodSync(path.join(support, "fake-codex.mjs"), 0o755)
   const env: NodeJS.ProcessEnv = {
     PATH: path.dirname(process.execPath),
@@ -129,7 +133,7 @@ export function fixture(t: TestContext) {
     exec(args: string[], extra: NodeJS.ProcessEnv = {}, timeout = 15_000) {
       return run(
         process.execPath,
-        [path.join(installedSkill, "scripts/main.ts"), ...args],
+        [path.join(installed, "scripts/main.ts"), ...args],
         { ...env, ...extra },
         root,
         timeout,

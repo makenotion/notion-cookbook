@@ -32,7 +32,7 @@ test("a memory with Notion tags in its text syncs as literal text", async (t) =>
   const name = "tags.md"
   fs.writeFileSync(
     path.join(f.home, "memories_v2", name),
-    "Notion pages nest as <page url=\"x\">Child</page>; keep `<page>`.\n"
+    'Notion pages nest as <page url="x">Child</page>; keep `<page>`.\n'
   )
   const result = await f.exec(["sync"])
   assert.equal(result.code, 0, result.stderr)

@@ -2,13 +2,13 @@ import assert from "node:assert/strict"
 import fs from "node:fs"
 import path from "node:path"
 import { test } from "node:test"
-import { fixture, object, recipe, run, support } from "./support/harness.ts"
+import { fixture, object, run, support } from "./support/harness.ts"
 import { appServer } from "./support/rpc.ts"
 
 const binary = process.env.CODEX_TEST_BINARY
 
 test(
-  "real Codex installs Sync Memory, discovers its desktop-only skill without hooks, and syncs through a local MCP server",
+  "real Codex discovers the installed Sync Memory skill and syncs through a local MCP server",
   {
     skip: !binary && "set CODEX_TEST_BINARY to an installed Codex executable",
     timeout: 60_000,
@@ -19,86 +19,14 @@ test(
     const env = { ...f.env, CODEX_PATH: binary }
     const config = `model = "synthetic-no-generation"\nmodel_provider = "fixture"\n[model_providers.fixture]\nname = "Offline fixture"\nbase_url = "http://127.0.0.1:9/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n[features]\nmemories = false\napps = false\nremote_plugin = false\n[analytics]\nenabled = false\n[mcp_servers.notion]\ncommand = ${JSON.stringify(process.execPath)}\nargs = [${JSON.stringify(path.join(support, "mcp-standin.mjs"))}]\n[mcp_servers.notion.env]\nFIXTURE_STATE = ${JSON.stringify(f.env.FIXTURE_STATE)}\nFIXTURE_CALLS = ${JSON.stringify(f.env.FIXTURE_CALLS)}\n`
     fs.writeFileSync(path.join(f.home, "config.toml"), config)
-    const marketplace = f.root
-    fs.mkdirSync(path.join(marketplace, ".agents/plugins"), { recursive: true })
-    const registry = object(
-      JSON.parse(
-        fs.readFileSync(
-          path.resolve(recipe, "../../../.agents/plugins/marketplace.json"),
-          "utf8"
-        )
-      )
-    )
-    assert.ok(Array.isArray(registry.plugins))
-    const plugin = registry.plugins
-      .map(object)
-      .find((p) => p.name === "sync-memory")
-    assert.ok(plugin)
-    object(plugin.source).path = "./installed plugin"
-    fs.writeFileSync(
-      path.join(marketplace, ".agents/plugins/marketplace.json"),
-      JSON.stringify({ ...registry, plugins: [plugin] })
-    )
-    const add = await run(
-      binary,
-      ["plugin", "marketplace", "add", marketplace],
-      env,
-      f.root
-    )
-    assert.equal(add.code, 0, add.stderr)
-    const install = await run(
-      binary,
-      ["plugin", "add", "sync-memory@notion-cookbook", "--json"],
-      env,
-      f.root
-    )
-    assert.equal(install.code, 0, install.stderr)
-    const installed = object(JSON.parse(install.stdout))
-    assert.equal(installed.authPolicy, "ON_INSTALL")
-    assert.equal(typeof installed.installedPath, "string")
-    const cache = String(installed.installedPath)
-    assert.notEqual(cache, path.resolve(recipe, "../.."))
-    const installedSkill = path.join(cache, "skills/sync-memory")
-    assert.equal(
-      fs.readFileSync(path.join(installedSkill, "scripts/main.ts"), "utf8"),
-      fs.readFileSync(path.join(recipe, "scripts/main.ts"), "utf8")
-    )
+    const userSkill = path.join(f.home, "skills/notion-sync-memory")
+    fs.cpSync(f.installed, userSkill, { recursive: true })
     const server = appServer(binary, env, f.root)
     f.cleanupBeforeFiles(() => server.close())
     await server.call("initialize", {
       clientInfo: { name: "sync-memory-runtime-test", version: "0.1.0" },
       capabilities: { experimentalApi: true },
     })
-    const details = object(
-      object(
-        await server.call("plugin/read", {
-          marketplacePath: path.join(
-            marketplace,
-            ".agents/plugins/marketplace.json"
-          ),
-          pluginName: "sync-memory",
-        })
-      ).plugin
-    )
-    const onboarding = object(details.onboardingSkill)
-    assert.equal(onboarding.name, "sync-memory:notion-setup")
-    assert.equal(onboarding.enabled, true)
-    assert.equal(
-      fs.readFileSync(String(onboarding.path), "utf8"),
-      fs.readFileSync(path.resolve(recipe, "../setup/SKILL.md"), "utf8")
-    )
-    const hooks = object(await server.call("hooks/list", { cwds: [f.root] }))
-    assert.ok(Array.isArray(hooks.data))
-    const definitions = hooks.data.flatMap((entry) => {
-      const items = object(entry).hooks
-      assert.ok(Array.isArray(items))
-      return items
-    })
-    assert.deepEqual(
-      definitions,
-      [],
-      "installation must register no lifecycle hooks"
-    )
     const thread = object(
       await server.call("thread/start", { ephemeral: true, cwd: f.root })
     )
@@ -119,26 +47,20 @@ test(
     assert.ok(Array.isArray(skillEntry.skills))
     const skill = skillEntry.skills
       .map(object)
-      .find((s) => s.name === "sync-memory:sync-memory")
+      .find((s) => s.name === "notion-sync-memory")
     assert.ok(skill, "installed Sync Memory skill must be discoverable")
-    assert.equal(skill.path, path.join(installedSkill, "SKILL.md"))
-    assert.equal(skill.enabled, true)
-    const setup = skillEntry.skills
-      .map(object)
-      .find((s) => s.name === "sync-memory:notion-setup")
-    assert.ok(setup, "packaged onboarding skill must be discoverable")
-    assert.equal(setup.path, path.join(cache, "skills/notion-setup/SKILL.md"))
     assert.equal(
-      fs.readFileSync(String(setup.path), "utf8"),
-      fs.readFileSync(path.resolve(recipe, "../setup/SKILL.md"), "utf8")
+      fs.realpathSync(String(skill.path)),
+      fs.realpathSync(path.join(userSkill, "SKILL.md"))
     )
+    assert.equal(skill.enabled, true)
     assert.deepEqual(f.pages(), [], "installation and discovery must not write")
 
     f.seed()
     const execute = () =>
       run(
         process.execPath,
-        [path.join(installedSkill, "scripts/main.ts"), "sync"],
+        [path.join(userSkill, "scripts/main.ts"), "sync"],
         env,
         f.root,
         20_000

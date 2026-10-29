@@ -50,7 +50,7 @@ export const CODEX_HOME =
 export const CONFIG_FILE =
   process.env.NOTION_MEMORY_CONFIG ||
   path.join(CODEX_HOME, "notion-memory.json")
-// Keep the mapping namespace stable across plugin upgrades and explicit runs.
+// Keep the mapping namespace stable across skill upgrades and explicit runs.
 export const DATA_DIR =
   process.env.NOTION_MEMORY_DATA || path.join(CODEX_HOME, "notion-memory")
 export const LOG_FILE = path.join(DATA_DIR, "notion-memory.log")

@@ -1,16 +1,16 @@
 # Sync Memory
 
 Copy Codex's memory Markdown files into Notion Memories, one file per page. The
-plugin calls Notion through Codex's existing MCP connection and runs no model.
+skill calls Notion through Codex's existing MCP connection and runs no model.
 `SKILL.md` is the agent entrypoint; `scripts/` holds the copy commands.
 
-This directory is the source. `npm run plugins:build` copies it and the shared
-[Notion setup skill](../setup/SKILL.md) into
-[`plugins/sync-memory/`](../../../plugins/sync-memory/), leaving out tests,
-evaluations and dependencies. The plugin's manifest, Notion connection and icon are
-written by hand. Commit the regenerated copy; `npm run plugins:check` fails when it
-is stale. The plugin supports Codex memory only, declares desktop-only execution,
-and installs no hooks or background service.
+The skill supports Codex memory only and installs no hooks or background service.
+It declares `metadata.requires-client: codex`, so `npm run plugins:build` leaves it
+out of the portable plugins under [`plugins/`](../../../plugins/). A Codex plugin
+that bundles it ships `SKILL.md`, `agents/`, `scripts/`, `package.json` and
+`tsconfig.json` as `skills/notion-sync-memory/`, leaves out `test/`, `evaluations/`
+and `node_modules/`, and must declare `requires_local_executor: true` because the
+scripts run on the user's computer.
 
 ## Behavior
 
@@ -53,13 +53,11 @@ written for it and other files continue.
 
 ## Setup
 
-Requires Node.js 22.18+, Codex with plugin support (tested with 0.165.0), Codex v2
+Requires Node.js 22.18+, Codex (tested with 0.165.0), Codex v2
 memories, and a Notion workspace with Memories.
 
-```sh
-codex plugin marketplace add /absolute/path/to/notion-cookbook
-codex plugin add sync-memory@notion-cookbook
-```
+To install it by hand, copy this directory without `test/`, `evaluations/` and
+`node_modules/` to `~/.codex/skills/notion-sync-memory/`, and connect Notion in Codex.
 
 Settings live in `~/.codex/notion-memory.json`. `use-workspace --confirm <id>` writes
 `expectedWorkspaceId`, which `sync`, `verify`, `status` and `reconcile` require.
@@ -75,7 +73,7 @@ workspace keeps its own mapping under `~/.codex/notion-memory/<workspace-id>/`.
 ```
 
 Bulk copying of local memory and its consent, exclusion and forget behavior remain
-release review items. Public listing goes through OpenAI's
+release review items. Listing a Codex plugin that bundles it goes through OpenAI's
 [desktop-only submission process](https://developers.openai.com/plugins/deploy/desktop-only).
 
 ## Commands
@@ -120,8 +118,9 @@ npm test
 CODEX_TEST_BINARY="$(command -v codex)" NOTION_TEST_SLOW=1 npm test
 ```
 
-The slow tests install the checked-in plugin in an isolated Codex home and drive a
-Notion fixture through the real app-server without a model. The
+The `CODEX_TEST_BINARY` tests install the skill in an isolated Codex home, check
+that Codex discovers it, and drive a Notion fixture through the real app-server
+without a model. The
 `sync-memory-test.yml` workflow runs them on Node.js 22.18.0 and 22.23.4 with Codex
 0.165.0. OAuth in the desktop app and rendering in real Notion need separate live
 checks.
