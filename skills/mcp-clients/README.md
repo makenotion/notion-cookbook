@@ -1,6 +1,6 @@
 # MCP client skills for Notion
 
-Seven self-contained skills for working with Notion through any MCP client
+Self-contained skills for working with Notion through any MCP client
 connected to the [Notion MCP server](https://developers.notion.com/docs/notion-mcp),
 including Claude and ChatGPT.
 The workflows are independent of the AI provider; installation and invocation
@@ -17,6 +17,7 @@ depend on your client.
 | [Research and documentation](research-documentation/SKILL.md) | Find information across a workspace, synthesize it, and publish a cited report in Notion.                |
 | [Spec to implementation](spec-to-implementation/SKILL.md)     | Convert a product or technical spec into an implementation plan and trackable Notion tasks.              |
 | [Setup](setup/SKILL.md)                                       | Set up Notion as shared agent context by following the official setup guide after install.               |
+| [Organize my semester](school-workspace/SKILL.md)             | Create a personal study space with course notes and upcoming assignments.                                |
 
 ## Install
 
@@ -40,6 +41,7 @@ from your connected Notion MCP server and follow its available input schema.
 
 ```text
 mcp-clients/
+├── school-workspace/
 ├── database-designer/
 ├── weekly-project-digest/
 ├── knowledge-capture/

@@ -165,6 +165,7 @@ find and inspect an issue in Sentry, then declare an incident in PagerDuty.
 - [Developer guides](docs/) — including the
   [Notion MCP client integration guide](docs/mcp-client-integration.md)
 - [Agent skills](skills/) — reusable Notion workflows for any MCP client
+- [Organize my semester](skills/mcp-clients/school-workspace/SKILL.md) — Create a personal study space with course notes and upcoming assignments.
 - [Notion developer documentation](https://developers.notion.com)
 - [Notion API reference](https://developers.notion.com/reference)
 - [Contributing](CONTRIBUTING.md) — add or improve an example, Worker, skill, or
