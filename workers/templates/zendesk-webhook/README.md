@@ -86,7 +86,7 @@ database only with people who are allowed to read them.
    (`{ticket:{...}}`) shapes are both supported.
 4. `enrichTicketWithComments` fetches the full comment thread and canonical
    status from the Zendesk REST API and merges them into the ticket.
-5. `upsertZendeskTicket` queries the Notion database for an existing row
+5. `upsertZendeskTicket` resolves the database's data source and queries it for an existing row
    matching the Zendesk Ticket ID. It updates the row if found, otherwise
    creates a new page. The page body is replaced with the formatted description
    and comment thread.
@@ -127,6 +127,10 @@ Exactly one of `ZENDESK_BASIC_AUTH_TOKEN`, `ZENDESK_AUTHORIZATION`, or
 `ZENDESK_API_TOKEN + ZENDESK_API_USER_EMAIL` is required to fetch comments.
 
 ## Required Notion database schema
+
+The destination database must contain exactly one data source. The worker uses
+that data source for ticket lookup and page creation; it rejects empty or
+multi-source databases before writing.
 
 | Property name       | Notion type | Notes                                                         |
 | ------------------- | ----------- | ------------------------------------------------------------- |

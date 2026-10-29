@@ -1,4 +1,8 @@
-import type { Client } from "@notionhq/client"
+import {
+  isFullDatabase,
+  type Client,
+  type CreatePageParameters,
+} from "@notionhq/client"
 import {
   ASSIGNEE_PROPERTY,
   CREATED_AT_PROPERTY,
@@ -134,7 +138,7 @@ async function syncTicketDescriptionBlocks(
     const batch = children.slice(i, i + NOTION_APPEND_BLOCK_BATCH_SIZE)
     await notion.blocks.children.append({
       block_id: pageId,
-      children: batch as never,
+      children: batch,
     })
   }
 }
@@ -145,11 +149,6 @@ function richTextProperty(content: string) {
 
 function titleProperty(content: string) {
   return { title: richTextChunks(content) }
-}
-
-function urlProperty(url: string) {
-  if (!url) return undefined
-  return { url }
 }
 
 function dateProperty(isoDate: string) {
@@ -164,8 +163,10 @@ function statusProperty(status: string) {
   return notionApiStatusProperty(status)
 }
 
-function buildTicketProperties(ticket: ZendeskTicket): Record<string, unknown> {
-  const properties: Record<string, unknown> = {}
+function buildTicketProperties(
+  ticket: ZendeskTicket
+): CreatePageParameters["properties"] {
+  const properties: CreatePageParameters["properties"] = {}
 
   if (ticket.subject) {
     properties[SUBJECT_PROPERTY] = richTextProperty(ticket.subject)
@@ -174,7 +175,7 @@ function buildTicketProperties(ticket: ZendeskTicket): Record<string, unknown> {
     properties[TICKET_ID_PROPERTY] = titleProperty(ticket.ticketId)
   }
   if (ticket.ticketUrl) {
-    properties[TICKET_URL_PROPERTY] = urlProperty(ticket.ticketUrl)
+    properties[TICKET_URL_PROPERTY] = { url: ticket.ticketUrl }
   }
   if (ticket.email) {
     properties[REQUESTER_PROPERTY] = richTextProperty(ticket.email)
@@ -202,11 +203,11 @@ function buildTicketProperties(ticket: ZendeskTicket): Record<string, unknown> {
 
 async function findPageByTicketId(
   notion: Client,
-  databaseId: string,
+  dataSourceId: string,
   ticketId: string
 ): Promise<string | null> {
-  const response = await notion.databases.query({
-    database_id: databaseId,
+  const response = await notion.dataSources.query({
+    data_source_id: dataSourceId,
     filter: {
       property: TICKET_ID_PROPERTY,
       title: { equals: ticketId },
@@ -240,26 +241,31 @@ export async function upsertZendeskTicket(
     )
   }
 
+  const dataSourceId = await getDatabaseDataSourceId(
+    notion,
+    normalizedDatabaseId
+  )
+
   let pageId: string
   let action: UpsertTicketResult["action"]
 
   const existingPageId = await findPageByTicketId(
     notion,
-    normalizedDatabaseId,
+    dataSourceId,
     ticket.ticketId
   )
 
   if (existingPageId) {
     await notion.pages.update({
       page_id: existingPageId,
-      properties: properties as never,
+      properties,
     })
     pageId = existingPageId
     action = "updated"
   } else {
     const created = await notion.pages.create({
-      parent: { database_id: normalizedDatabaseId },
-      properties: properties as never,
+      parent: { data_source_id: dataSourceId },
+      properties,
     })
     pageId = typeof created.id === "string" ? created.id : ""
     if (!pageId) {
@@ -270,4 +276,21 @@ export async function upsertZendeskTicket(
 
   await syncTicketDescriptionBlocks(notion, pageId, ticket.description)
   return { action, pageId }
+}
+
+async function getDatabaseDataSourceId(
+  notion: Client,
+  databaseId: string
+): Promise<string> {
+  const database = await notion.databases.retrieve({ database_id: databaseId })
+  if (!isFullDatabase(database)) {
+    throw new Error(`No read permissions on Notion database ${databaseId}.`)
+  }
+  const [dataSource] = database.data_sources
+  if (database.data_sources.length !== 1 || !dataSource) {
+    throw new Error(
+      "The Zendesk destination database must contain exactly one data source."
+    )
+  }
+  return dataSource.id
 }
