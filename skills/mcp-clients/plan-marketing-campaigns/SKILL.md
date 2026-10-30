@@ -97,6 +97,8 @@ Create real destinations and useful record bodies. Set page width, typography, c
 campaigns and content being planned.
 Review the result against the user’s workflow and the composition guidance.
 
+For a worked example, see [a product launch with connected working drafts](examples/product-launch.md).
+
 ## Build and verify in Notion
 
 Use the connected client's exposed tool names and current schemas. Read its
