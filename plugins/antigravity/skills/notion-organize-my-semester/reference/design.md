@@ -3,19 +3,9 @@
 The learner's habits and subject material determine the page. A semester of
 courses, a single research seminar, and exam revision need different homes.
 
-## Template design references
-
-The inspected preview of [Student dashboard by Janice Studies](https://www.notion.com/templates/student-dashboard)
-uses a soft photographic cover, playful icon, and personal widget row. Borrow
-its sense of ownership and personal scale, not its widgets automatically.
-[Class Notes by Notion](https://www.notion.com/templates/class-notes) is the
-structural reference in [template.md](template.md). The inspected preview of
-[Brand Guidelines by Notion](https://www.notion.com/templates/brand-guidelines)
-shows how headings and dividers can keep reading comfortable.
-
-The gallery previews were inspected on October 29, 2026; observations are not
-claims about every interaction. Use these documented design patterns as the quality standard.
-Select patterns for this learner rather than copying one screenshot.
+Use a personal scale, a subject-relevant cover when useful, and a recognizable
+icon. Keep reading comfortable with clear headings and dividers; add widgets
+only when they serve the learner’s work.
 
 ## Make the desk fit the learner
 
@@ -24,8 +14,7 @@ and capture actions, a course gallery in the main area, and the next assignments
 close beneath it. Make the cards useful with subject identity, the next deadline,
 and a route into course material. For a single course, use a continuous reading
 page with notes and work close together. Choose the composition for the learner's
-work, not for a tool limitation. Keep design-process commentary out of the created
-study pages; preserve citations for the learning material itself.
+work, not for a tool limitation. Preserve citations for the learning material itself.
 
 Give subjects stable visual identities, such as a botanical green for biology
 and a warm paper tone for design history, when consistent with the user's taste.

@@ -59,7 +59,7 @@ scroll. Open a course, then an assignment, and follow the route home. Inspect th
 Calendar and Completed views; confirm completed work leaves Upcoming and undated
 work remains discoverable. Restore the everyday view before delivery.
 
-Compare the result with the design references for card density, subject identity,
+Check the result for card density, subject identity,
 side-column balance, and reading comfort. Correct clipped dates, unreadable
 cards, awkward wrapping, and excessive setup prose. A page with working links but
 no substantive course material or clear study workflow is not complete.

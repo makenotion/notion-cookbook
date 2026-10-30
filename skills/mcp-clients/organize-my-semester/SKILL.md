@@ -55,14 +55,8 @@ Put the next academic action above the full library. Use short course names,
 consistent subject icons, and a quiet visual style suitable for
 reading. Keep extracurricular and personal tracking out unless requested.
 
-Read [the Class Notes template reference](reference/template.md) for structural
-inspiration and [design guidance](reference/design.md) before composing the page.
-Draw visual inspiration from both Notion-created and community templates, respecting
-any explicit source restrictions from the user. Borrow design patterns without
-copying artwork or claiming an exact clone. Keep design-research attribution and
-process commentary out of the created study pages unless requested. Preserve
-citations for the learner's actual source material.
-Do not infer popularity rankings from a gallery listing.
+Read [design guidance](reference/design.md) before composing the page.
+Preserve citations for the learner’s source material.
 
 ## Lay out the study desk
 
