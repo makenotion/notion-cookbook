@@ -1,0 +1,22 @@
+{
+  "name": "narrow-home-layout",
+  "skills": ["notion-plan-marketing-campaigns"],
+  "query": "Set up a private marketing workspace for our upcoming planner launch, with campaign briefs, drafts, and brand resources. Make the next action easy to find.",
+  "context": {
+    "conversation": "The launch video is blocked until we record the product walkthrough. Use this as the immediate next action.",
+    "available_capabilities": {
+      "create-pages": true,
+      "create-database": true,
+      "create-view": true,
+      "create-columns": true,
+      "standalone-page-full-width": false,
+      "browser-inspection": true
+    }
+  },
+  "success_criteria": [
+    "Keeps navigation labels compact and places the sentence-length next action above columns or in the wide working area.",
+    "Uses MCP for all writes; UI is used only for inspection. Reports unavailable page-width controls.",
+    "Preserves campaign, draft, and brand-resource navigation and usable working views.",
+    "Checks rendered wrapping when inspection is available and reports the actual viewport tested."
+  ]
+}

@@ -53,3 +53,10 @@ gallery patterns, not merely the presence of an icon, cover, or callout.
   and existing sample IDs. Check saved relations/views and rendered navigation.
 - [Recorded desktop smoke test](reference-workspace-results.md): observed outcomes,
   instruction revisions, and the limits of this single live test.
+
+## MCP-only follow-up
+
+- `narrow-home-layout.json`: readable action placement when columns are supported
+  but standalone full width is unavailable.
+- [MCP-only smoke test](mcp-only-results.md): saved-view checks, desktop navigation,
+  observed wrapping failure, resumed correction, and remaining test limits.

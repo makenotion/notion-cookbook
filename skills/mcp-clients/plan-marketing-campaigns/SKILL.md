@@ -58,9 +58,8 @@ even when only one campaign exists today.
   dates distinguishable; never invent approvals, budgets, or performance.
 - Configure database-page layouts and property visibility when supported: keep
   operational properties visible near the title, secondary fields in details,
-  and do not repeat the property panel as prose. Inspect the native UI when the
-  connector cannot configure these settings and UI tools are available. If a
-  setting cannot be changed, describe the actual limitation rather than claim it.
+  and do not repeat the property panel as prose. If MCP cannot configure a
+  setting, report the limitation and the manual step left.
 - Give each content record a usable working body appropriate to its format:
   article argument and draft, video beats and script, email subject and body,
   social copy and hook. Develop proposed material from the supplied brief where
@@ -102,6 +101,10 @@ for this output; do not merely rename a sibling skill's page or recolor its bloc
 Review the result against the user’s workflow and the composition guidance.
 
 ## Build and verify in Notion
+
+Use Notion MCP for all workspace mutations, including layout, cover, and view
+changes. Browser or native UI tools may inspect the result read-only; do not use
+them to complete or repair the workspace.
 
 Use the connected client's exposed tool names and current schemas. Read its
 formatting documentation before emitting unfamiliar Notion-specific markup.
