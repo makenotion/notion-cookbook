@@ -44,5 +44,9 @@ success criteria and existing sample page IDs. Record the first result, inspect
 the saved views and relations, and walk the rendered workspace in Notion. Compare
 workflow, hierarchy, visible metadata and detail-page usefulness against the
 intended directory and request-desk composition, not exact prose or pixels.
-A reviewer-polished output is
-not a passing forward test. Report retries and unavailable visual checks.
+Maintain two separate results: the best designed artifact and the independent
+skill-execution result. UI-assisted refinement can establish the design benchmark
+and its PNGs, but does not prove MCP-only reproduction. Record each UI adjustment,
+the equivalent missing MCP capability, and whether that gap was verified or is
+still suspected. Preserve the initial output and report retries and unavailable
+checks. Do not lower the benchmark to match current tool support.
