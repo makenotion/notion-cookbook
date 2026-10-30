@@ -89,5 +89,9 @@ specific unfinished feature and its effect separately from the artifact;
 do not present an incomplete rendering as the finished design. With no write
 connection, provide the proposed structure and content and say it was not created.
 
+Describe the result in the user’s terms: name the pages and the next action.
+Explain any unfinished feature by its effect on their work; keep tool names,
+schema details, and implementation jargon out of the handoff unless needed.
+
 Return the home link, what is ready, one useful first action, and any unfinished
 work or unverified behavior.

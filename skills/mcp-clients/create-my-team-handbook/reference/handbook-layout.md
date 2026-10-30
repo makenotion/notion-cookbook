@@ -21,11 +21,11 @@ asset previews. Provide clear navigation to the request desk and maintenance vie
 
 Separate surfaces with native page tabs or durable child destinations:
 
-- **Browse guidance:** reader-facing routes and guidance cards.
-- **Maintain the handbook:** a table showing procedure, area, steward, review
+- **Procedures:** reader-facing routes and guidance cards.
+- **Owners & reviews:** a table showing procedure, area, steward, review
   state, and review date supported by evidence. Make ownership and stale
   guidance easy to scan.
-- **Request desk:** actionable requests with title, status, coordinator, and due
+- **Requests:** actionable requests with title, status, coordinator, and due
   date. Offer open and completed views; preserve undated and unassigned work.
 
 Choose a request table or list for the actual workflow. Keep important dates and

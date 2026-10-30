@@ -4,6 +4,17 @@ Answer “how do I get this done?” for someone who does not know which team or
 database owns the process. Make useful instructions approachable while giving
 operators a clear place to maintain guidance and handle requests.
 
+## Write labels employees can act on
+
+Prefer “Procedures,” “Owners & reviews,” and “Requests” for the three main views.
+Use specific route names such as “Getting started,” “Buying tools,” and “Client
+handoffs” instead of broad verbs such as “Join,” “Buy,” and “Deliver.” Adapt them
+to the actual procedures; keep established team labels when they are clear.
+For new properties, “Procedure owner” explains “Steward,” and “Review status”
+explains an ambiguous “Review.” Keep request responsibility distinct from the
+person maintaining a procedure. Write instructions such as “Open a request to
+see what to do next,” rather than describing records, relations, or execution.
+
 ## Orient the reader
 
 Give the home a clear identity, team overview, and concise introduction. Use
