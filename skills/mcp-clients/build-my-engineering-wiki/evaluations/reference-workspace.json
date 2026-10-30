@@ -14,7 +14,7 @@
     "Read and visually inspect saved output; failures repaired by runner using skill guidance, not reviewer polish.",
     "Preserve existing comparison pages and unrelated pages.",
     "Six work records and three technical docs preserve all supplied states. Chart status counts are 1 Blocked, 1 Building, 1 Review, 1 Ready and 2 Done; Open work has four.",
-    "The summary/chart remains above the native work/library tabs when supported; a misplaced tab group is repaired and read back.",
+    "The summary/chart remains above the native work/library tabs; a misplaced tab group is repaired and read back.",
     "Accepted retention policy remains distinct from proposed lock design; no invented readiness percentage appears.",
     "At normal desktop zoom with the sidebar visible, the full-width home shows the release decision and chart before detailed work; title, status, priority and engineer fit together in the work table."
   ]

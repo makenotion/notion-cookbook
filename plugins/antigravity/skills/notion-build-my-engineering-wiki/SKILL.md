@@ -42,7 +42,7 @@ issue tracker when GitHub, Linear, or an existing Notion database already owns w
   development, and operating the system. Include only sections with useful
   material or an explicit next step; do not create empty departments.
 - Docs: title, topic, owner when known, and maturity such as draft or accepted
-  only when supported. Technical pages can include context, design or procedure,
+  only when supported by evidence. Technical pages can include context, design or procedure,
   tradeoffs, open questions, and evidence links.
 - When requested, delivery work can use title, status, owner, and project. Add
   priority or target date only from evidence. Surface active and blocked work;
@@ -87,8 +87,7 @@ Use connected Notion MCP to create content and configure settings. Keep useful
 information visible. Use authorized UI editing for presentation settings.
 Use the connected client's exposed tool names and current schemas. Read its
 formatting documentation before emitting unfamiliar Notion-specific markup.
-Use native pages,
-databases, typed properties, and views when supported. Resolve real people and
+Use native pages, databases, typed properties, and views. Resolve real people and
 relation targets; create targets before relations and properties before views.
 For SQL DDL relations, use the bare data-source UUID from the fetched
 collection URL; do not pass the collection:// prefix as the RELATION target.
