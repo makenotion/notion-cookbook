@@ -78,12 +78,7 @@ Avoid duplicate database titles, repeated slogans, dense metadata chips, and a
 wide status board dominating a narrow landing page. Creating this system does
 not authorize publishing content or sending email.
 
-Read [design guidance](reference/design.md) before composing the page. The
-[content calendar reference](reference/content-calendar-reference.md) offers optional content-calendar inspiration.
-Draw visual inspiration from both Notion-created and community templates, respecting
-any explicit source restrictions from the user. Attribute the actual creator;
-borrow design patterns rather than copying artwork or claiming an exact clone.
-Do not infer popularity rankings from a gallery listing.
+Read [design guidance](reference/design.md) before composing the page.
 
 ## Arrange the campaign home
 
@@ -100,7 +95,7 @@ with routes back to shared content and brand resources. Use
 [design guidance](reference/design.md) for composition at each destination.
 
 Create real destinations and useful record bodies. Select supported page settings
-for this output; do not merely rename a sibling skill's page or recolor its blocks.
+for the campaign and content workflow.
 Review the result against the user’s workflow and the composition guidance.
 
 ## Build and verify in Notion

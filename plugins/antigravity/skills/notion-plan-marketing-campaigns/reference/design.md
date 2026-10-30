@@ -3,15 +3,9 @@
 Begin with the thing being published and the production rhythm. A publication
 calendar, campaign launch, and asset library are different editorial products.
 
-## Optional visual references
-
-[Brand Guide by Matt Bio](https://www.notion.com/templates/brand-guide-bio) offers
-inspiration for a compact index, strong typography, and coordinated brand panels.
-[Brand Assets by Notion](https://www.notion.com/templates/brand-assets) is a reference
-for recognizable asset previews, short labels, and category tabs. The
-[content calendar reference](content-calendar-reference.md) supports the production model.
-Inspect current previews when adapting their visual details; previews alone do
-not establish underlying automation or interactions.
+Use a compact index, strong typography, and coordinated brand sections. Give
+real assets recognizable previews, short labels, and category tabs. Track content
+with an author, content type, production status, and publication date.
 
 ## Compose a connected editorial system
 
@@ -23,13 +17,8 @@ crowding the marketing home. Use existing brand resources or a useful separate
 brand page when the brief supplies guidance. Do not require identical page
 structures or a fixed number of databases for every request.
 
-Use the reference patterns at the level where they help: the Brand Guide's
-compact index and coordinated sections for brand guidance; the content calendar's
-publishing model for the shared production destination; asset previews in a real
-asset library. Naming a reference is not evidence that a layout reflects it.
-If closer visual fidelity is needed, inspect the linked previews and record the
-specific hierarchy, spacing, navigation, or preview treatment being adapted.
-Keep this design rationale in the delivery or test report, not the user's work surface.
+Use a compact index and coordinated sections for brand guidance, publishing
+views for shared content production, and asset previews in a real asset library.
 
 ## Give each destination its own job
 

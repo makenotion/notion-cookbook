@@ -84,8 +84,8 @@ the working first screen.
 Verify home → record → related work → home, actual view filters and counts, and
 at least one alternate view. Restore the intended everyday default view after
 testing alternates so delivery opens on useful work. Inspect the rendered result at normal zoom with the
-sidebar visible. Compare hierarchy, density and navigation against the selected
-reference. Check useful work is visible above the fold, long titles wrap, and
+sidebar visible. Check that hierarchy, density and navigation make the next
+campaign and editorial action easy to find. Check useful work is visible above the fold, long titles wrap, and
 essential columns do not overflow. Correct failures before delivery. If rendering
 or a capability is unavailable, report that exact gap without claiming parity.
 
