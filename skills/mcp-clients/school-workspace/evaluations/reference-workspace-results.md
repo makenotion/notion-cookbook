@@ -1,4 +1,4 @@
-# MCP-only school smoke test — 2026-10-29
+# School workflow smoke test — 2026-10-29
 
 An independent agent received the runtime skill and fictional semester brief,
 without baseline page IDs or grading criteria. It created a new private workspace
@@ -35,7 +35,8 @@ The runner revised the reusable limited-width guidance before resuming the same
 workspace through MCP. The resulting continuous layout puts a concise priority
 and compact course navigation above the working assignment table, followed by
 reminders and substantive course cards. All record and database IDs were retained.
-The final rendered workflow passed the desktop checks above. This is a resumed
+The final rendered workflow passed the desktop checks above, but the simplified
+continuous layout did not establish the target study-desk design. This is a resumed
 test after instruction changes, not an untouched first-pass success. The harness
 also removed its test label from the page title as a separate cleanup.
 
@@ -55,3 +56,41 @@ width without requiring unsupported layout settings.
 
 The earlier UI-assisted sample does not establish MCP-only parity. This smoke
 test also does not establish reliability across different semester briefs.
+
+## Design acceptance correction
+
+The earlier desktop pass established working data, navigation, and readable
+deadlines. It did not establish the intended composition of a compact action
+rail, useful course gallery, and inline upcoming assignments. Keep that target
+in the runtime skill regardless of current MCP coverage. The continuous layout
+was a temporary implementation compromise, not a replacement benchmark.
+
+Use the best rendered workspace for design screenshots, including UI-assisted
+settings when needed. Record each such setting, its visible effect, and the
+missing MCP operation here rather than changing the design target. Keep this
+benchmark evidence distinct from independent execution results. The visual refinement below followed this instruction revision; it is not a new
+independent skill execution.
+
+## Refined design reference — 2026-10-29
+
+![Study desk with course cards, reminders, and upcoming assignments](images/design-reference.png)
+
+Refined the existing test workspace through MCP, then inspected and adjusted
+its presentation in Notion. The protected original semester page was untouched.
+The initial desktop screen now shows a narrow reminder rail, three course cards,
+and actual upcoming deadlines. This applies the assignment-tracker reference's
+asymmetric composition and useful course summaries. The existing records remain
+connected. Course is still available on assignment records; adding it to the
+compact home table and testing narrower screens remain acceptance follow-ups.
+
+| Setting                                                                  | Execution evidence                                                                                     |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| Columns, colored headings, priority, native gallery and assignment table | Created through MCP.                                                                                   |
+| Standalone home full width                                               | Applied in UI; current page-update schema exposes no standalone width control.                         |
+| Gallery small card size and wrapping                                     | Applied in UI; the current view DSL exposes card layout, not these two controls.                       |
+| Hide existing assignment source title                                    | Applied in UI; update-view has no title visibility field. Creation of new linked views does expose it. |
+
+The PNG records the strongest inspected version from this refinement, including
+UI settings. It is a design reference, not proof of MCP-only reproduction or a
+fresh unassisted skill pass. The runtime instructions retain the complete design
+target. Capability findings belong in this evidence, not in reduced requirements.

@@ -11,10 +11,10 @@
     "Course-assignment relations; notes and briefs contain useful material.",
     "Calendar and completed views work; submitted work excluded from upcoming.",
     "No extra design coaching; revised skill alone supplies composition.",
-    "Read and visually inspect saved output; failures repaired by runner using skill guidance, not reviewer polish.",
+    "Read and visually inspect saved output. Use the runtime guidance to produce the design; preserve any UI-assisted benchmark refinements separately from an independent skill test.",
     "Preserve original benchmarks and unrelated pages.",
     "Three courses and five assignments preserve dates, weights and states; Upcoming has four, Completed has one, Calendar has five, Undated has zero for this brief.",
     "Each course view excludes other courses, and static next-assignment cards are explicitly snapshots.",
-    "All content and layout mutations use Notion MCP; UI is read-only inspection. Record missing settings separately from passed checks. UI-assisted outputs cannot pass MCP-only visual parity."
+    "Grade the designed result independently of the execution channel. Record MCP-created features and any UI-assisted settings separately; do not treat a readable fallback as proof that the target composition was achieved."
   ]
 }

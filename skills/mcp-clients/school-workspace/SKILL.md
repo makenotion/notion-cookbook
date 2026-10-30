@@ -1,14 +1,14 @@
 ---
 name: notion-school-workspace
-description: Build a personalized Notion school workspace from course notes, syllabi, assignments, and chat context. Use when getting organized for a course or semester, with clear notes and upcoming work.
+description: Organize a semester in Notion from course notes, syllabi, assignments, and chat context. Use when getting organized for a course or semester, with clear notes and upcoming work.
 ---
 
-# School workspace
+# Organize my semester
 
-Turn the user's existing information into a useful, inviting starting point in
-Notion. Build a populated workspace that makes the next action clear. Use this
-for getting started or reorganizing this domain; routine record edits and pure
-research do not need a new workspace.
+Create a study desk that helps the learner choose a course, see what is due, and
+start studying. Connect course material, notes, and assignment briefs from the
+conversation and sources. Use this for organizing a course or semester; keep
+routine record edits inside the existing workspace.
 
 ## Start from context
 
@@ -52,7 +52,7 @@ workflow; do not assume every school request needs a personal student dashboard.
   progress percentages, study schedules, or assignment completion.
 
 Put the next academic action above the full library. Use short course names,
-consistent subject icons if supported, and a quiet visual style suitable for
+consistent subject icons, and a quiet visual style suitable for
 reading. Keep extracurricular and personal tracking out unless requested.
 
 Read [template reference](reference/template.md) for the original structural
@@ -78,11 +78,9 @@ Make the learning material the center of the page: course navigation, substantiv
 notes, and the next assignment belong together. Choose a notebook or study-desk
 composition from the actual courses and habits, using [design guidance](reference/design.md).
 
-Create real destinations and useful record bodies. Select supported page settings
-for this output; do not merely rename a sibling skill's page or recolor its blocks.
-When testing multiple skills, make independent private homes unless the user asks
-for a shared container; an optional index can link to them. Review the result
-against the relevant template research and actual user workflow.
+Create real destinations and useful record bodies. Set the page width, typography,
+course cards, and visible properties for the learning workflow. Review the result
+against the design guidance and the learner's next actions.
 
 ## Build and verify in Notion
 
@@ -93,10 +91,10 @@ databases, typed properties, and views when supported. Resolve real people and
 relation targets; create targets before relations and properties before views.
 Do not manufacture unsupported view, cover, formula, or automation arguments.
 
-If a requested feature is unavailable, create the useful supported parts and
-explain the precise manual step left. A plain table or static list is a fallback,
-not a working database view. With no write connection, deliver a ready-to-use
-outline and content in chat and state that nothing was created in Notion.
+Use available tools to complete the designed workspace. If a required control is
+inaccessible, report the unfinished setting and its effect; keep the intended
+design as the target. With no write connection, deliver an outline and content in
+chat and state that nothing was created in Notion.
 
 Preserve original sources and unrelated existing content. Do not change sharing
 or publish a workspace as part of setup. After a timeout or uncertain write,
@@ -112,7 +110,3 @@ for unsupported or unverified features.
 
 Return the home link, a brief explanation of what is ready, one concrete first
 action, and any remaining gaps. Avoid a long technical inventory.
-
-Build and revise the workspace through Notion MCP. UI inspection must not change
-content or layout settings. Report unsupported presentation settings as capability
-gaps; an output polished through the UI is not an MCP-only skill pass.

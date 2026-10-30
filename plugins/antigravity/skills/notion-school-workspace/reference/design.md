@@ -19,20 +19,18 @@ Select patterns for this learner rather than copying one screenshot.
 
 ## Make the desk fit the learner
 
-For several courses, use an asymmetric notebook layout only when the available
-width keeps its rail readable and upcoming dates visible. With unavailable or
-unverified home-width controls, use a continuous study desk: concise next action,
-compact course navigation, full-available-width assignment table, then reminders
-and useful course material. Let the gallery stack below the work if necessary;
-do not force three cards into a row. For a single course, prefer a continuous
-reading page with notes and work close together. Do not create empty columns to
-satisfy a diagram. Keep template attribution and design-process commentary in the
-agent's research, not the created workspace, unless the user requests provenance.
+For several courses, build an asymmetric study desk: a compact rail for reminders
+and capture actions, a course gallery in the main area, and the next assignments
+close beneath it. Make the cards useful with subject identity, the next deadline,
+and a route into course material. For a single course, use a continuous reading
+page with notes and work close together. Choose the composition for the learner's
+work, not for a tool limitation. Keep design-process commentary out of the created
+workspace; preserve citations for the learning material itself.
 
 Give subjects stable visual identities, such as a botanical green for biology
 and a warm paper tone for design history, when consistent with the user's taste.
 Use subject titles and an occasional illustration or cover that belongs to the
-material. A reading font can work if supported. Avoid motivational slogans and
+material. Choose a reading font that suits the material. Avoid motivational slogans and
 an obligatory pair of “focus” and “keep in mind” boxes.
 
 Put an actionable study prompt beside its source explanation. A biology learner
@@ -49,9 +47,8 @@ material. Suggested questions are labeled, grades and progress are not invented.
 Open a course, an assignment, and the return route. Can the learner see what to
 study and begin without setup? Check note readability, subject identity, and
 upcoming/undated work. On a narrow screen, course navigation should precede the
-study area in a sensible order. If imagery or page fonts are unavailable, use
-hierarchy and subject color; disclose unperformed visual inspection.
+study area in a sensible order. Inspect the chosen typography, subject color, and imagery together; disclose any
+unperformed visual inspection.
 
-Apply supported page settings deliberately. A demo has its own private home by
-default; an optional comparison index links to it without owning its design.
-Do not assume moving a page changes its font, width, or block arrangement.
+Set page width and typography deliberately. Give the study desk its own home;
+keep an optional index separate from the learning workspace.

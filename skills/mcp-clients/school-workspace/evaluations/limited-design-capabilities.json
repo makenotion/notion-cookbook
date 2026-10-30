@@ -21,6 +21,7 @@
     "Creates a concise readable page with meaningful hierarchy and a specific domain-appropriate next step without a style questionnaire.",
     "Uses supported text, headings, and links instead of fake buttons, unsupported columns, or claims of live views.",
     "Keeps empty states honest and helpful; does not fabricate tasks, metrics, sources, covers, or completion states.",
-    "Reports unperformed rendered verification accurately rather than claiming mobile or visual checks passed."
+    "Reports unperformed rendered verification accurately rather than claiming mobile or visual checks passed.",
+    "Preserves the intended study-desk design as the target and reports incomplete capabilities separately. A usable partial page does not pass full design acceptance."
   ]
 }
