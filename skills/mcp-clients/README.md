@@ -17,6 +17,7 @@ depend on your client.
 | [Research and documentation](research-documentation/SKILL.md) | Find information across a workspace, synthesize it, and publish a cited report in Notion.                |
 | [Spec to implementation](spec-to-implementation/SKILL.md)     | Convert a product or technical spec into an implementation plan and trackable Notion tasks.              |
 | [Setup](setup/SKILL.md)                                       | Set up Notion as shared agent context by following the official setup guide after install.               |
+| [Build my content calendar](marketing-workspace/SKILL.md)     | Plan publication and production with actionable content briefs.                                          |
 | [Create my team handbook](operations-workspace/SKILL.md)      | Find complete procedures and handle operational requests.                                                |
 
 ## Install
@@ -41,6 +42,7 @@ from your connected Notion MCP server and follow its available input schema.
 
 ```text
 mcp-clients/
+├── marketing-workspace/
 ├── operations-workspace/
 ├── database-designer/
 ├── weekly-project-digest/
