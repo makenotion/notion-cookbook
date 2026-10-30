@@ -8,7 +8,7 @@ description: Create a team handbook in Notion from scattered processes, team ref
 Turn existing team knowledge into a handbook people can use to get work done.
 Help employees find dependable instructions and operators handle requests.
 Use this skill to establish or reorganize that system; routine record edits
-and pure research do not need a new workspace.
+and pure research do not need a new handbook.
 
 ## Gather the working context
 
@@ -52,7 +52,7 @@ and a separate request desk when recurring work needs tracking.
   within the user's authorized scope.
 
 Read [design guidance](reference/design.md) and
-[workspace composition](reference/workspace-pattern.md) before composing the
+[handbook layout](reference/workspace-pattern.md) before composing the
 home. Use the [template reference](reference/template.md) for structural
 inspiration. Draw from Notion-created and community designs unless the user
 restricts sources. Borrow composition patterns, attribute actual creators,
@@ -84,7 +84,7 @@ and reuse successful objects. On a repeat request, match existing work first.
 
 Read back the home and records. Check source fidelity, row coverage, native
 relations, filters, sorts, and navigation, including undated and unassigned work.
-Walk the rendered workspace as both an employee and an operator. Check the first
+Walk the handbook and request desk as both an employee and an operator. Check the first
 screen, procedure readability, visible metadata, and paths back to the home.
 Correct design and navigation problems before calling the result complete.
 
