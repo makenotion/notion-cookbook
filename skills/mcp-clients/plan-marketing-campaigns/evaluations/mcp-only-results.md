@@ -47,6 +47,34 @@ mobile, and normalized-zoom checks were not performed. No cover or original
 artwork was exercised. This verifies the connected workflow and the observed
 wrapping correction, not visual equivalence to every reference template.
 
-The new narrow-home scenario is an evaluation specification, not an executed
-independent test. A fresh run of the final runtime remains necessary before
-claiming that it reproduces the corrected layout without intervention.
+## Independent run of the revised runtime
+
+A second isolated agent executed runtime commit `d2ab309` using the same raw
+brief, without evaluations, previous outputs, scoring criteria, or design
+coaching. It created a new private workspace entirely through Notion Dev MCP.
+No parent correction or UI write was applied to this output.
+
+The next action appeared above the columns without intervention. The home had
+compact navigation, a campaign gallery, and a two-item editorial review list.
+Readback verified six related deliverables, two reviews, two drafts, one blocked
+video, one undated idea, and three substantive brand resources. Owners remained
+empty, all publication states were Not scheduled, and proposed dates were
+marked Tentative. Campaign and content record layouts were fetched successfully.
+
+Parent read-only inspection in the same desktop window confirmed readable action
+placement, home-to-campaign-to-article navigation, pinned record properties, and
+all six campaign table rows with wrapped titles. The article contained a developed
+draft and editorial checks. Review-list titles were truncated at this viewport;
+full titles were available in the records. Calendar, sidebar, narrow-screen, and
+artwork coverage remain outside this check.
+
+This independent smoke test passes the connected-workflow and narrow-action
+placement checks. It does not establish full visual benchmark parity or
+cross-model reliability. The standalone narrow-home mock case remains a scenario
+specification rather than an automated test execution.
+
+### Screenshots of the independent output
+
+[Home](../../../../docs/images/marketing-mcp-test/home.png) and
+[campaign deliverables](../../../../docs/images/marketing-mcp-test/campaign.png)
+show the actual MCP-created output; no visual settings were repaired in the UI.
