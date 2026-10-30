@@ -18,7 +18,7 @@ depend on your client.
 | [Spec to implementation](spec-to-implementation/SKILL.md)     | Convert a product or technical spec into an implementation plan and trackable Notion tasks.              |
 | [Setup](setup/SKILL.md)                                       | Set up Notion as shared agent context by following the official setup guide after install.               |
 | [Build my content calendar](marketing-workspace/SKILL.md)     | Plan publication and production with actionable content briefs.                                          |
-| [Organize my semester](school-workspace/SKILL.md)             | Create a personal study space with course notes and upcoming assignments.                                |
+| [Organize my semester](organize-my-semester/SKILL.md)         | Create a personal study space with course notes and upcoming assignments.                                |
 
 ## Install
 
@@ -43,7 +43,7 @@ from your connected Notion MCP server and follow its available input schema.
 ```text
 mcp-clients/
 ├── marketing-workspace/
-├── school-workspace/
+├── organize-my-semester/
 ├── database-designer/
 ├── weekly-project-digest/
 ├── knowledge-capture/

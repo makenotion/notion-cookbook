@@ -1,6 +1,6 @@
 {
   "name": "preview-and-provenance",
-  "skills": ["notion-school-workspace"],
+  "skills": ["notion-organize-my-semester"],
   "query": "Show me a starter layout in chat using only Notion-created templates. Do not create anything yet.",
   "context": {
     "conversation": "Biology lecture notes: cell membranes regulate transport. Essay deadline November 12, 2026. Reading chapter 4 has no due date. I prefer a minimal page.",

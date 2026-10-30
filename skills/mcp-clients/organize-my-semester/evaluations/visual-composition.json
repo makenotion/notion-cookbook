@@ -1,6 +1,6 @@
 {
   "name": "visual-composition",
-  "skills": ["notion-school-workspace"],
+  "skills": ["notion-organize-my-semester"],
   "query": "Organize my semester in Notion under https://notion.so/home using the context we discussed.",
   "context": {
     "conversation": "Biology has one lecture note about cell membranes and an essay with no due date.",

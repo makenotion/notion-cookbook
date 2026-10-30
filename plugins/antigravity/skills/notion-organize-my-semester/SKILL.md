@@ -1,5 +1,5 @@
 ---
-name: notion-school-workspace
+name: notion-organize-my-semester
 description: Organize a semester in Notion from course notes, syllabi, assignments, and chat context. Use when getting organized for a course or semester to keep notes clear and upcoming work easy to find.
 ---
 

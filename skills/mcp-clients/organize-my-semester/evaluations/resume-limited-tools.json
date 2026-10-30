@@ -1,6 +1,6 @@
 {
   "name": "resume-limited-tools",
-  "skills": ["notion-school-workspace"],
+  "skills": ["notion-organize-my-semester"],
   "query": "Finish setting up the workspace under https://notion.so/team-home; the last attempt timed out.",
   "context": {
     "conversation": "Biology lecture notes: cell membranes regulate transport. Essay deadline November 12, 2026. Reading chapter 4 has no due date. I prefer a minimal page.",
