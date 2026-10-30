@@ -151,12 +151,13 @@ Default-export each workflow and sync from a direct TypeScript file in its
 capability directory; the filename is its stable key. Named workflow/sync
 exports and workflow discovery from `src/app.ts` are not supported.
 Default-export one connection per direct file in `src/connections/` and import
-it into handlers. Use provider factories such as `connections.calendar(...)`
-and `connections.mail()`. To register a connection declared elsewhere,
+it into handlers. Use provider factories such as `connections.calendar(...)`,
+`connections.mail(...)`, and `connections.slack(...)`. To register a connection declared elsewhere,
 re-export its default from `src/app.ts` under a stable name. Register each
 connection only once. Import and call connections directly in handlers;
 do not declare workflow-local `connections` or use `context.connections`.
-Calendar targets are flat properties, such as `calendar.meetings`. Put capability-specific helpers in
+Calendar, Mail, and Slack targets are flat properties, such as `calendar.meetings`
+or `inbox.support`. Pass them instead of id strings or other identifiers. Put capability-specific helpers in
 `src/workflows/lib/` (or the matching capability directory's `lib/`) and shared
 helpers in `src/lib/`. Discovery only reads direct children, so these helpers
 are not treated as capabilities.
