@@ -71,9 +71,9 @@ Set width, card size, wrapped content and property visibility deliberately.
 Check data-source update capabilities for database-record layouts, not just page
 update capabilities. On connections exposing `page_layout`, read
 `notion://docs/database-page-layouts`: pinned properties, sidebar details and
-record full width can be configured there before read-only UI inspection. For
-settings unavailable through MCP, report the remaining manual step instead of
-changing them through the UI. Hide duplicate linked-database titles.
+record full width can be configured there before UI inspection. Use
+available UI controls for settings absent from MCP; do not simply describe how
+the user could finish a supported layout. Hide duplicate linked-database titles.
 A tab intended as a working table must contain an inline database/view, not merely
 a link to its full-page source. In Notion Markdown, verify `inline="true"` for
 embedded work surfaces; reserve `inline="false"` for navigation destinations.

@@ -19,7 +19,7 @@ The [mcp-clients](mcp-clients/) directory contains reusable workflows for any MC
 - **[research-documentation](mcp-clients/research-documentation/)**: Research topics and document findings in Notion
 - **[spec-to-implementation](mcp-clients/spec-to-implementation/)**: Parse specifications and create implementation plans with task tracking
 - **[setup](mcp-clients/setup/)**: Onboarding skill that sets up Notion by following the official setup guide
-- **[campaign-workspace](mcp-clients/campaign-workspace/)**: Connect campaign briefs, content production, and brand resources.
+- **[plan-marketing-campaigns](mcp-clients/plan-marketing-campaigns/)**: Connect campaign briefs, content production, and brand resources.
 
 ## Using skills
 
