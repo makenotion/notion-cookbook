@@ -76,6 +76,8 @@ Create real destinations and useful record bodies. Set the page width, typograph
 course cards, and visible properties for the learning workflow. Review the result
 against the design guidance and the learner's next actions.
 
+For a worked example, see [three courses organized into a study desk](examples/fall-semester.md).
+
 ## Build and verify in Notion
 
 Use the connected client's exposed tool names and current schemas. Read its
