@@ -80,8 +80,7 @@ against the design guidance and the learner's next actions.
 
 Use the connected client's exposed tool names and current schemas. Read its
 formatting documentation before emitting unfamiliar Notion-specific markup.
-Use native pages,
-databases, typed properties, and views when supported. Resolve real people and
+Use native pages, databases, typed properties, and views. Resolve real people and
 relation targets; create targets before relations and properties before views.
 
 Preserve original sources and unrelated existing content. Do not change sharing
