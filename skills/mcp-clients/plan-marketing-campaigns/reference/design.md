@@ -7,6 +7,22 @@ Use a compact index, strong typography, and coordinated brand sections. Give
 real assets recognizable previews, short labels, and category tabs. Track content
 with an author, content type, production status, and publication date.
 
+## Write for the people planning the campaign
+
+Use concrete destinations such as “Campaigns,” “Content,” and “Brand resources.”
+Keep the same name in the sidebar, page title, and links; do not alternate between
+“Brand kit” and “Brand resources” for one destination. Keep established brand or
+team names, and prefer “Marketing” or “Campaigns” to an invented “Studio” label
+when it would hide the page’s purpose.
+
+Use “Status,” “Launch date,” and “Campaign lead” instead of “Lifecycle state” or
+unexplained short labels. Use “No publish date” for content without a date.
+Write actions in the reader’s terms: “Add an idea to Content and choose its
+campaign,” not “Add a record and relate it to the campaign.” Say which link to
+check—for example, “Check where the sign-up link goes”—rather than “Confirm the
+CTA destination.” Keep familiar marketing terms when the audience uses them,
+and preserve the difference between draft, approved, scheduled, and published.
+
 ## Compose a connected editorial system
 
 The marketing home is an index into work, not a container for every work surface.
@@ -24,7 +40,7 @@ views for shared content production, and asset previews in a real asset library.
 
 - **Marketing home:** a short identity, recognizable navigation, active campaigns,
   and the few items needing attention. No repeated hero slogans or welcome essay.
-- **Campaign page:** visible lifecycle properties; a concise brief and linked
+- **Campaign page:** visible status, launch date, and campaign lead; a concise brief and linked
   content filtered to this campaign. Use a readable table/list for a handful of
   deliverables. A campaign is part of the larger collection, not a free-floating
   document that duplicates its metadata in paragraphs.

@@ -7,13 +7,13 @@ action, tinted section headings, and visual campaign cards.
 ## First screen and connected destinations
 
 Use a full-width home, roughly one-quarter navigation and three-quarters working
-area. Put Campaigns, Content, and a substantive Brand kit in the navigation column, followed by
+area. Put Campaigns, Content, and substantive Brand resources in the navigation column, followed by
 one contextual next action linking directly to its draft. Keep capture guidance
 collapsed or use real configured creation controls; never draw fake buttons.
 
 The main area starts with active campaign gallery cards. Use a coherent palette
 and meaningful colored icons: campaign/launch, article, video, email, brand.
-Show title, lifecycle state, planned launch, and lead; avoid redundant labels.
+Show title, status, launch date, and campaign lead; avoid redundant labels.
 Use small cards at ordinary desktop widths so a handful of campaigns can share a
 row. Wrap titles and useful summaries. Follow with a compact filtered editorial
 review list. Keep full production boards and publishing calendars in Content.
