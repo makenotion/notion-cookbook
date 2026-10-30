@@ -35,3 +35,13 @@ do not count mock structural checks as proof of rendered beauty.
 `default-private-destination.json` checks that an omitted destination uses the
 connection's private default. Grade visual composition against the relevant
 gallery patterns, not merely the presence of an icon, cover, or callout.
+
+## Reference workspace replay
+
+`reference-workspace.json` supplies a fictional brief for an authorized private
+workspace. Give the runner only its query/context and the runtime skill; withhold
+success criteria and existing sample page IDs. Record the first result, inspect
+the saved views and relations, and walk the rendered workspace in Notion. Compare
+workflow, hierarchy, visible metadata and detail-page usefulness with the reviewed
+reference composition, not exact prose or pixels. A reviewer-polished output is
+not a passing forward test. Report retries and unavailable visual checks.

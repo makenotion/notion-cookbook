@@ -53,7 +53,8 @@ issue tracker when GitHub, Linear, or an existing Notion database already owns w
 - Preserve code snippets and operational caveats. Keep secrets out of the home;
   link to approved credential-access instructions, never copy credential values.
 
-Lead with how to get started and where active work lives. Use short navigation
+For a team wiki, lead with how to get started; for a release workspace, lead with
+the current release, blocker and delivery state. Use short navigation
 labels and consistent technical page structure. Put large code samples and deep
 architecture detail on child pages so the home remains scannable. A workspace
 setup request does not authorize changes to code, issues, deployments, or alerts.
@@ -65,11 +66,21 @@ any explicit source restrictions from the user. Attribute the actual creator;
 borrow design patterns rather than copying artwork or claiming an exact clone.
 Do not infer popularity rankings from a gallery listing.
 
+## Apply the workspace pattern
+
+Read [workspace composition and acceptance walk](reference/workspace-pattern.md)
+before creating the home. Use its domain-specific pattern when the brief fits;
+adapt the amount of structure to the supplied work. The first screen, connected
+record bodies, visual settings and rendered acceptance walk are part of the
+deliverable, not optional polish after setup.
+
 ## Produce the designed result
 
-Build a technical manual with direct routes to setup, current architecture,
-operations, and proposals. Choose the library organization for the actual system
-using [design guidance](reference/design.md); do not inherit a generic workspace shell.
+For a wiki brief, build a technical manual with direct routes to setup, current
+architecture, operations and proposals. For a release brief with tracked work,
+use the release summary, live status chart and issue/spec views in the workspace
+pattern. Choose the organization for the actual system; do not inherit a generic
+workspace shell.
 
 Create real destinations and useful record bodies. Select supported page settings
 for this output; do not merely rename a sibling skill's page or recolor its blocks.
@@ -79,11 +90,15 @@ against the relevant template research and actual user workflow.
 
 ## Build and verify in Notion
 
+Use connected Notion MCP for every Notion content and settings mutation. UI access is
+read-only inspection and navigation; never use it to fill a missing write capability.
 Use the connected client's exposed tool names and current schemas. Read its
 formatting documentation before emitting unfamiliar Notion-specific markup.
 Check available capabilities once, reusing the result. Use native pages,
 databases, typed properties, and views when supported. Resolve real people and
 relation targets; create targets before relations and properties before views.
+For SQL DDL relations, use the bare data-source UUID from the fetched
+collection URL; do not pass the collection:// prefix as the RELATION target.
 Do not manufacture unsupported view, cover, formula, or automation arguments.
 
 If a requested feature is unavailable, create the useful supported parts and
