@@ -8,10 +8,8 @@ headings, and visual campaign cards.
 
 Use a full-width home, roughly one-quarter navigation and three-quarters working
 area. Put Campaigns, Content, and a substantive Brand kit in the rail, followed by
-one contextual next action linking directly to its draft. When standalone page
-width cannot be configured through MCP, keep the narrow rail for short navigation
-and capture labels; put the next-action callout above the columns or in the wide
-main area. Do not squeeze a sentence-length action into a quarter-width rail.
+one contextual next action linking directly to its draft. Keep rail labels short;
+place a longer next-action callout above the columns or in the main area.
 Keep capture guidance collapsed or use real configured creation controls; never draw fake buttons.
 
 The main area starts with active campaign gallery cards. Use a coherent palette
@@ -28,8 +26,7 @@ absence is not a reason to omit authorized original design. Create original
 artwork with an available image/vector tool, attach it, and use it as the campaign
 gallery preview. Keep text readable at small card size, and distinguish proposed
 creative from approved assets. The cover must not displace primary work beyond
-the first screen. If artwork creation or attachment is unavailable, record that
-specific gap instead of counting a text-only gallery as visual parity. For briefs
+the first screen. For briefs
 that do not call for creative, choose imagery only when it helps recognition. Never
 fabricate product screenshots or use random photos to fill deliverable cards.
 
@@ -66,17 +63,13 @@ does not establish that moved blocks retained the intended order: inspect the
 saved page and correct misplaced sections while preserving existing objects.
 If moving existing database blocks into a new tab/column container changes sibling
 order, fetch the saved hierarchy, then reapply the intended complete composition
-using those same object IDs. Verify the second readback before deciding the native
-layout is unavailable; do not discard working tabs merely because their first
-move reordered the page.
+using those same object IDs. Verify the saved layout and preserve the working tabs.
 
 Set width, card size, wrapped content and property visibility deliberately.
-Check data-source update capabilities for database-record layouts, not just page
-update capabilities. On connections exposing `page_layout`, read
+Configure database-record layouts through the data source. For `page_layout`, read
 `notion://docs/database-page-layouts`: pinned properties, sidebar details and
-record full width can be configured there before read-only UI inspection. For
-settings unavailable through MCP, report the remaining manual step instead of
-changing them through the UI. Hide duplicate linked-database titles.
+record full width can be configured there before read-only UI inspection.
+Hide duplicate linked-database titles.
 A tab intended as a working table must contain an inline database/view, not merely
 a link to its full-page source. In Notion Markdown, verify `inline="true"` for
 embedded work surfaces; reserve `inline="false"` for navigation destinations.
@@ -89,8 +82,7 @@ at least one alternate view. Restore the intended everyday default view after
 testing alternates so delivery opens on useful work. Inspect the rendered result at normal zoom with the
 sidebar visible. Compare hierarchy, density and navigation against the selected
 reference. Check useful work is visible above the fold, long titles wrap, and
-essential columns do not overflow. Correct failures before delivery. If rendering
-or a capability is unavailable, report that exact gap without claiming parity.
+essential columns do not overflow. Correct failures before delivery.
 
 During skill evaluation, preserve the first result and the run's evidence. If
 review finds a miss, change the reusable instructions and rerun or resume the

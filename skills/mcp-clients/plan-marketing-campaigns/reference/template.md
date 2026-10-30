@@ -10,6 +10,6 @@ in this skill is a recommended adaptation, not an inventory of the template's
 exact blocks or views.
 
 When an exact gallery layout is requested, inspect the current preview or
-accessible source and explain any inaccessible portions. Community designs are
+source material. Community designs are
 also eligible inspiration; see [design guidance](design.md). Honor explicit user
 source restrictions and verify creator attribution when selecting a reference.

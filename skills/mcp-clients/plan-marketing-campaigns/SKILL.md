@@ -58,8 +58,7 @@ even when only one campaign exists today.
   dates distinguishable; never invent approvals, budgets, or performance.
 - Configure database-page layouts and property visibility when supported: keep
   operational properties visible near the title, secondary fields in details,
-  and do not repeat the property panel as prose. If MCP cannot configure a
-  setting, report the limitation and the manual step left.
+  and do not repeat the property panel as prose.
 - Give each content record a usable working body appropriate to its format:
   article argument and draft, video beats and script, email subject and body,
   social copy and hook. Develop proposed material from the supplied brief where
@@ -108,15 +107,9 @@ them to complete or repair the workspace.
 
 Use the connected client's exposed tool names and current schemas. Read its
 formatting documentation before emitting unfamiliar Notion-specific markup.
-Check available capabilities once, reusing the result. Use native pages,
+Use native pages,
 databases, typed properties, and views when supported. Resolve real people and
 relation targets; create targets before relations and properties before views.
-Do not manufacture unsupported view, cover, formula, or automation arguments.
-
-If a requested feature is unavailable, create the useful supported parts and
-explain the precise manual step left. A plain table or static list is a fallback,
-not a working database view. With no write connection, deliver a ready-to-use
-outline and content in chat and state that nothing was created in Notion.
 
 Preserve original sources and unrelated existing content. Do not change sharing
 or publish a workspace as part of setup. After a timeout or uncertain write,
@@ -130,7 +123,7 @@ preview is available, open the sidebar, home, a campaign, and representative
 content records. Inspect hierarchy, density, property visibility, and navigation
 in the actual rendered workspace, including narrow-screen readability when possible;
 otherwise disclose that appearance was not visually verified. Do not claim success
-for unsupported or unverified features.
+for unverified features.
 
 Return the home link, a brief explanation of what is ready, one concrete first
 action, and any remaining gaps. Avoid a long technical inventory.
