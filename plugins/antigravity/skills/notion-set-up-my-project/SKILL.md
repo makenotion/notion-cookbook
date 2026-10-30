@@ -144,7 +144,7 @@ sending assignments, calendar invitations, or changing external issues.
 
 ## Compose the project home
 
-Read [project layout and usability checks](reference/workspace-pattern.md).
+Read [project layout and usability checks](reference/project-home-layout.md).
 Build the destinations and populated records, then compose the home around them.
 Keep the current decision, team, and first actionable task visible together.
 Use [design guidance](reference/design.md) to set hierarchy, density, and visual
