@@ -1,4 +1,4 @@
-# Design an editorial workspace
+# Design campaign and content pages
 
 Begin with the thing being published and the production rhythm. A publication
 calendar, campaign launch, and asset library are different editorial products.
@@ -39,7 +39,7 @@ Keep this design rationale in the delivery or test report, not the user's work s
   content filtered to this campaign. Use a readable table/list for a handful of
   deliverables. A campaign is part of the larger collection, not a free-floating
   document that duplicates its metadata in paragraphs.
-- **Content workspace:** room for a production board or publishing calendar.
+- **Content production:** room for a production board or publishing calendar.
   Provide an undated view. Choose the default from the actual work, hide redundant
   card properties (especially status when already grouped by status), and avoid
   an overflowing wall of one-card columns.
@@ -51,7 +51,7 @@ Keep this design rationale in the delivery or test report, not the user's work s
   Use recognizable previews only when assets exist. Never fabricate screenshots
   or fill an empty gallery with decorative stock images.
 
-Use typography, spacing, and restrained color consistently across the workspace,
+Use typography, spacing, and restrained color consistently across the campaign and content pages,
 while varying composition by purpose. Select actual page width, font, and database
 page layouts where available; neither nesting nor an emoji supplies those settings.
 Show fewer properties in overview views than on the record page. Avoid duplicate
