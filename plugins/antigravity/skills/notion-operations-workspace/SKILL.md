@@ -1,6 +1,6 @@
 ---
 name: notion-operations-workspace
-description: Create a team handbook in Notion from scattered processes, team references, requests, and chat context. Organize findable procedures, clear ownership, and a connected request desk.
+description: Create a team handbook in Notion from scattered processes, team references, requests, and chat context. Make procedures easy to find, show who maintains them, and connect them to a request desk.
 ---
 
 # Create my team handbook
@@ -36,10 +36,10 @@ Identify the primary job: finding procedures, onboarding, or handling requests.
 Build a connected system with an approachable home, complete guidance records,
 and a separate request desk when recurring work needs tracking.
 
-- Organize procedure routes around employee intent, such as joining, buying,
-  and delivering. Lead each route to complete instructions.
-- Give guidance records a title, purpose or area, confirmed steward, and review
-  state. Add last-reviewed dates only when supported by evidence; copying or
+- Organize links to procedures around what employees need to do, such as
+  joining, buying, and delivering. Lead each route to complete instructions.
+- Give guidance records a title, purpose or area, confirmed steward
+  (the person responsible for keeping it current), and review state. Add last-reviewed dates only when supported by evidence; copying or
   editing a page is not a policy review.
 - Write when to use each procedure, required inputs, ordered steps, expected
   result, exceptions or escalation, and sources. Mark unresolved steps as open
@@ -58,7 +58,7 @@ inspiration. Draw from Notion-created and community designs unless the user
 restricts sources. Borrow composition patterns, attribute actual creators,
 and avoid copied artwork or unsupported popularity claims.
 
-## Design the working surfaces
+## Design the handbook and request views
 
 Make the employee's route to useful instructions obvious on arrival. Give the
 handbook an identity through a coherent palette, meaningful colored icons, clear
@@ -66,8 +66,8 @@ section hierarchy, and a relevant cover when it adds orientation. Keep long
 procedures inside their records.
 
 Build a browsable guidance library, a maintenance table for owners and reviews,
-and a request desk for execution. Choose gallery, table, or list views for the
-job they serve. Show ownership, review state, status, and dates where readers
+and a request desk for handling individual requests. Choose gallery, table, or
+list views for the job they serve. Show ownership, review state, status, and dates where readers
 make decisions. Keep the primary work visible and use related pages for depth.
 
 ## Create and verify in Notion

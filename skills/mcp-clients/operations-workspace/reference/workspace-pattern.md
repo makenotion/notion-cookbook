@@ -6,9 +6,9 @@ without forcing every visitor through an operational dashboard.
 
 ## Compose the handbook home
 
-Give the home a recognizable identity, a concise purpose, and an intent-based
-index. Use a relevant cover and a restrained accent palette to establish that
-identity; use meaningful colored page icons throughout links and mentions.
+Give the home a recognizable identity, a concise purpose, and an index organized
+around what employees need to do. Use a relevant cover and a restrained accent
+palette to establish that identity; use meaningful colored page icons throughout links and mentions.
 Group routes such as joining, buying, and delivering with short section headings.
 Use color and spacing to distinguish sections without repeating the same callout
 for every item. Each route opens an existing, complete procedure.
@@ -23,7 +23,8 @@ Separate surfaces with native page tabs or durable child destinations:
 
 - **Browse guidance:** reader-facing routes and guidance cards.
 - **Maintain the handbook:** a table showing procedure, area, steward, review
-  state, and evidenced review date. Make ownership and stale guidance easy to scan.
+  state, and review date supported by evidence. Make ownership and stale
+  guidance easy to scan.
 - **Request desk:** actionable requests with title, status, coordinator, and due
   date. Offer open and completed views; preserve undated and unassigned work.
 
@@ -50,7 +51,7 @@ track individual onboarding work separately only when that execution needs it.
 
 Set page width and column balance for the content. Configure record layouts so
 operational metadata stays near the title and secondary details remain accessible.
-Choose semantic icons for handbook, procedure, request, and contact pages. Use
+Choose meaningful icons for handbook, procedure, request, and contact pages. Use
 section backgrounds and status colors consistently, and keep duplicate database
 titles out of the reading flow. Keep long reference material in detail pages.
 

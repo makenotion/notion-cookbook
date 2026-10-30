@@ -1,4 +1,4 @@
-# Design a service directory
+# Design the team handbook
 
 Answer “how do I get this done?” for someone who does not know which team or
 database owns the process. Make useful instructions approachable while giving
@@ -12,14 +12,14 @@ headings and dividers in
 [Brand Guidelines by Notion](https://www.notion.com/templates/brand-guidelines)
 to make procedures readable. Combine these with the
 [structural reference](template.md), a browsable guidance library, and a separate
-maintenance surface. Adapt the composition to the actual team and its work.
+maintenance view. Adapt the composition to the actual team and its work.
 
 ## Make the routes recognizable
 
 Label entry points in plain language, such as “Set up a laptop” and “Buy software.”
 Group a larger handbook by reader intent. Use a compact index and gallery cards
 with enough context to identify the right procedure. Give sections distinct
-headings and use a coherent accent palette, semantic colored icons, and a
+headings and use a coherent accent palette, meaningful colored icons, and a
 relevant cover to make the home feel considered and recognizable.
 
 Keep the request desk accessible without making every employee read the queue.
