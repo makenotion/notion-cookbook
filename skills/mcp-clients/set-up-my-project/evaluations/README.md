@@ -40,5 +40,15 @@ delivered before team and placement questions. `refine-team-and-placement.json`
 checks that answers refine and place the same home without duplicates or inferred
 assignments. `epd-project.json` covers an already-authorized new private Projects
 database without a repeated question. `reuse-project.json` covers reuse of a
-matching project and existing shared tasks. Grade visual composition against the
-gallery research, not merely the presence of an icon, cover, or callout.
+matching project and existing shared tasks. Grade visual composition against the actionable EPD layout principles,
+not merely the presence of an icon, cover, or callout.
+
+## Reference workspace replay
+
+`reference-workspace.json` supplies a fictional brief for an authorized private
+workspace. Give the runner only its query/context and the runtime skill; withhold
+success criteria and existing sample page IDs. Record the first result, inspect
+the saved views and relations, and walk the rendered workspace in Notion. Compare
+workflow, hierarchy, visible metadata and detail-page usefulness against the EPD
+composition principles, not exact prose or pixels. A reviewer-polished output is
+not a passing forward test. Report retries and unavailable visual checks.

@@ -145,6 +145,14 @@ the Notion brief around them. Do not create a competing tracker or claim a live
 sync without an explicit migration or integration request. Setup does not imply
 sending assignments, calendar invitations, or changing external issues.
 
+## Apply the workspace pattern
+
+Read [workspace composition and acceptance walk](reference/workspace-pattern.md)
+before creating the home. Use its domain-specific pattern when the brief fits;
+adapt the amount of structure to the supplied work. The first screen, connected
+record bodies, visual settings and rendered acceptance walk are part of the
+deliverable, not optional polish after setup.
+
 ## Produce the designed result
 
 Follow the domain composition in [design guidance](reference/design.md), not a
@@ -159,6 +167,11 @@ extra art direction to obtain either. Preserve their preferences and source
 facts, and distinguish demo inputs from real work.
 
 ## Create, populate, and check
+
+Use the connected Notion MCP for every Notion content or settings mutation, including page
+layout, views, icons, and property visibility. Browser or desktop UI is read-only
+inspection; never use it to fill an MCP capability gap. Report unsupported settings
+precisely and continue with supported content.
 
 Use the connection's current schemas and exposed tools. Check capabilities once,
 and consult its formatting documentation before using unfamiliar Notion markup.
