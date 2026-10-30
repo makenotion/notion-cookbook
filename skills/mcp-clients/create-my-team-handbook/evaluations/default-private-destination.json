@@ -1,6 +1,6 @@
 {
   "name": "default-private-destination",
-  "skills": ["notion-operations-workspace"],
+  "skills": ["notion-create-my-team-handbook"],
   "query": "Use the context above to set this up in Notion.",
   "context": {
     "conversation": "Create a small demo using clearly marked mock content so I can see what the skill produces. No destination is specified.",

@@ -1,6 +1,6 @@
 {
   "name": "resume-limited-tools",
-  "skills": ["notion-operations-workspace"],
+  "skills": ["notion-create-my-team-handbook"],
   "query": "Finish setting up the workspace under https://notion.so/team-home; the last attempt timed out.",
   "context": {
     "conversation": "Laptop setup needs a checklist. Equipment requests have no owner yet. Link our policies; do not copy them.",

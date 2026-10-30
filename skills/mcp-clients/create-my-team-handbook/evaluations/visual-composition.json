@@ -1,6 +1,6 @@
 {
   "name": "visual-composition",
-  "skills": ["notion-operations-workspace"],
+  "skills": ["notion-create-my-team-handbook"],
   "query": "Create my team handbook in Notion under https://notion.so/home using the context we discussed.",
   "context": {
     "conversation": "We need laptop setup instructions and one equipment request with no owner.",

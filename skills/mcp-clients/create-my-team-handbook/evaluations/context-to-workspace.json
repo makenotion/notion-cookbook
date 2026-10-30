@@ -1,6 +1,6 @@
 {
   "name": "context-to-workspace",
-  "skills": ["notion-operations-workspace"],
+  "skills": ["notion-create-my-team-handbook"],
   "query": "Create an operations home from our onboarding notes and existing process docs. Create it under https://notion.so/team-home.",
   "context": {
     "conversation": "Laptop setup needs a checklist. Equipment requests have no owner yet. Link our policies; do not copy them.",

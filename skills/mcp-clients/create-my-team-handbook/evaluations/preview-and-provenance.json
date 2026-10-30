@@ -1,6 +1,6 @@
 {
   "name": "preview-and-provenance",
-  "skills": ["notion-operations-workspace"],
+  "skills": ["notion-create-my-team-handbook"],
   "query": "Show me a starter layout in chat using only Notion-created templates. Do not create anything yet.",
   "context": {
     "conversation": "Laptop setup needs a checklist. Equipment requests have no owner yet. Link our policies; do not copy them.",
