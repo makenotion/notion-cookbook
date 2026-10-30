@@ -32,7 +32,6 @@
     "Meets the documented layout and usability criteria without extra design coaching in the user request. Adapts the composition to the supplied work rather than reproducing one fixed example.",
     "A first-time employee can find a complete procedure directly from an intent-based directory; the operator request queue is secondary to that route.",
     "When compared with sibling skill outputs, the primary workflow, hierarchy, density, and navigation are purpose-built; swapping titles, colors, and icons does not make the pages interchangeable.",
-    "Keeps employee guidance, policy maintenance, and request execution distinct when all three are needed; ownership, review state, and due dates remain visible where decisions are made.",
-    "Preserves the intended design when an MCP control is missing. Records UI-assisted completion and MCP capability gaps separately; required metadata and layout elements must be present for a visual pass."
+    "Keeps employee guidance, policy maintenance, and request execution distinct when all three are needed; ownership, review state, and due dates remain visible where decisions are made."
   ]
 }

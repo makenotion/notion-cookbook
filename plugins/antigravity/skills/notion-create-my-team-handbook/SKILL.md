@@ -84,11 +84,6 @@ Walk the handbook and request desk as both an employee and an operator. Check th
 screen, procedure readability, visible metadata, and paths back to the home.
 Correct design and navigation problems before calling the result complete.
 
-Keep the intended design when an execution capability is missing. State the
-specific unfinished feature and its effect separately from the artifact;
-do not present an incomplete rendering as the finished design. With no write
-connection, provide the proposed structure and content and say it was not created.
-
 Describe the result in the user’s terms: name the pages and the next action.
 Explain any unfinished feature by its effect on their work; keep tool names,
 schema details, and implementation jargon out of the handoff unless needed.

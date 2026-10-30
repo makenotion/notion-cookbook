@@ -7,7 +7,7 @@
     "tools": ["fetch", "search", "create-pages"],
     "sources": {},
     "web_responses": {
-      "https://www.notion.com/templates/company-home": "Creator: Notion. Preview unavailable. A recommended alternative has creator Community Studio."
+      "https://www.notion.com/templates/company-home": "Creator: Notion. A recommended alternative has creator Community Studio."
     }
   },
   "success_criteria": [

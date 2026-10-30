@@ -16,7 +16,6 @@
     "Four guidance records and four requests preserve the supplied content. Open requests has three; Completed has one.",
     "Guidance review state and steward remain distinct from actual organizational approval; unspecified thresholds and review dates stay unset.",
     "All content and settings writes use Notion Dev MCP; UI is read-only inspection.",
-    "Unavailable page width, title visibility or saved-default controls are reported precisely, without UI rescue or visual-parity claims.",
     "At supported page width, compact intent routes allow the real guidance library to begin on the first screen; detailed explanations stay on records while the proposed-guidance designation remains visible.",
     "At constrained width, primary library keeps procedure title, steward and review visible ahead of secondary area metadata."
   ]
