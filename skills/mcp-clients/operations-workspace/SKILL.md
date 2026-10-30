@@ -52,7 +52,8 @@ Add a processes or requests database only when the user's recurring work needs i
   onboarding run, but do not claim it repeats automatically without a configured,
   supported automation and explicit scope to set it up.
 
-Lead with quick links and the most useful next action. Use plain language labels
+Lead with the reader’s most useful procedure routes or the operator’s working queue,
+according to the brief. Use plain language labels
 such as “How we work” and “Open requests.” Keep detailed procedures on child pages,
 with a consistent body structure and minimal decorative blocks.
 
@@ -62,6 +63,14 @@ Draw visual inspiration from both Notion-created and community templates, respec
 any explicit source restrictions from the user. Attribute the actual creator;
 borrow design patterns rather than copying artwork or claiming an exact clone.
 Do not infer popularity rankings from a gallery listing.
+
+## Apply the workspace pattern
+
+Read [workspace composition and acceptance walk](reference/workspace-pattern.md)
+before creating the home. Use its domain-specific pattern when the brief fits;
+adapt the amount of structure to the supplied work. The first screen, connected
+record bodies, visual settings and rendered acceptance walk are part of the
+deliverable, not optional polish after setup.
 
 ## Produce the designed result
 
@@ -77,7 +86,10 @@ against the relevant template research and actual user workflow.
 
 ## Build and verify in Notion
 
-Use the connected client's exposed tool names and current schemas. Read its
+Use Notion Dev MCP for every workspace content or settings mutation. UI access
+is only for read-only inspection. Disclose precise unsupported capabilities; do
+not silently use UI mutations or claim visual parity. Use the connected client's
+exposed tool names and current schemas. Read its
 formatting documentation before emitting unfamiliar Notion-specific markup.
 Check available capabilities once, reusing the result. Use native pages,
 databases, typed properties, and views when supported. Resolve real people and
