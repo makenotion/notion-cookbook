@@ -49,7 +49,7 @@ collections; it does not create a second copy of the assignments.
 | Light model critique         | Design studio | November 5 | In progress | 25%    |
 | Confidence interval exercise | Statistics    | November 6 | Not started | 10%    |
 | Sampling methods reading     | Statistics    | —          | Not started | —      |
-| Material journal             | Design studio | October 27 | Submitted   | 5%     |
+| Material journal             | Design studio | Empty      | Submitted   | 5%     |
 
 ## The study desk on arrival
 
@@ -78,8 +78,8 @@ assignment rows visible with the course cards, without a long welcome message.
 
 Use alternate views of the same Assignments collection:
 
-- **Calendar:** all four dated items, including the submitted journal.
-- **No due date:** Sampling methods reading.
+- **Calendar:** the three assignments with known due dates.
+- **No due date:** unfinished assignments with an empty Due property; Sampling methods reading.
 - **Submitted:** Material journal.
 
 Upcoming excludes Submitted and undated items. The visible No due date tab keeps
@@ -154,7 +154,9 @@ the model, taking three comparable photographs, and annotating the decisions.
 **Confidence interval exercise** retains the calculation and interpretation
 requirements. Its next step is to obtain the dataset; no values or answers are
 invented. **Sampling methods reading** keeps its due date and weight empty.
-**Material journal** remains Submitted and is reachable through that view.
+**Material journal** remains Submitted and is reachable through that view. Its
+page records “Submitted October 27”; its Due property stays empty because the
+brief does not supply a due date.
 
 The learner can choose a course, read actual material, open the next assignment,
 and return to upcoming work without first filling in empty pages.
