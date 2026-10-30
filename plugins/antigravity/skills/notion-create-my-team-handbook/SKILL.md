@@ -52,7 +52,7 @@ and a separate request desk when recurring work needs tracking.
   within the user's authorized scope.
 
 Read [design guidance](reference/design.md) and
-[handbook layout](reference/workspace-pattern.md) before composing the home.
+[handbook layout](reference/handbook-layout.md) before composing the home.
 
 ## Design the handbook and request views
 
