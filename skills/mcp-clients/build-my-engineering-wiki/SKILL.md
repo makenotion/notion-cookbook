@@ -63,7 +63,7 @@ Read [design guidance](reference/design.md) before composing the page.
 
 ## Lay out the engineering home
 
-Read [engineering layout and usability checks](reference/workspace-pattern.md)
+Read [engineering layout and usability checks](reference/release-overview-layout.md)
 before creating the home. Use its domain-specific pattern when the brief fits;
 adapt the amount of structure to the supplied work. The first screen, connected
 record bodies, visual settings and rendered acceptance walk are part of the
