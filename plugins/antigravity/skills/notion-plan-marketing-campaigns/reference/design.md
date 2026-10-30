@@ -9,7 +9,7 @@ calendar, campaign launch, and asset library are different editorial products.
 inspiration for a compact index, strong typography, and coordinated brand panels.
 [Brand Assets by Notion](https://www.notion.com/templates/brand-assets) is a reference
 for recognizable asset previews, short labels, and category tabs. The
-[content calendar reference](template.md) supports the production model.
+[content calendar reference](content-calendar-reference.md) supports the production model.
 Inspect current previews when adapting their visual details; previews alone do
 not establish underlying automation or interactions.
 

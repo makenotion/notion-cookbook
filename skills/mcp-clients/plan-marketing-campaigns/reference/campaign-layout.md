@@ -1,13 +1,13 @@
-# Campaign studio composition
+# Campaign page layout
 
 Use this pattern for a marketing system with campaigns and deliverables. A solo
-calendar request can stay smaller. Use a narrow action rail, tinted section
-headings, and visual campaign cards.
+calendar request can stay smaller. Use a narrow navigation column with a next
+action, tinted section headings, and visual campaign cards.
 
 ## First screen and connected destinations
 
 Use a full-width home, roughly one-quarter navigation and three-quarters working
-area. Put Campaigns, Content, and a substantive Brand kit in the rail, followed by
+area. Put Campaigns, Content, and a substantive Brand kit in the navigation column, followed by
 one contextual next action linking directly to its draft. Keep capture guidance
 collapsed or use real configured creation controls; never draw fake buttons.
 
@@ -30,7 +30,7 @@ specific gap instead of counting a text-only gallery as visual parity. For brief
 that do not call for creative, choose imagery only when it helps recognition. Never
 fabricate product screenshots or use random photos to fill deliverable cards.
 
-## Campaign and deliverable depth
+## Campaign briefs and content drafts
 
 Campaigns are database records, not loose documents. Pin stage, launch and lead
 near the title. Put the promise, audience/action, and current decision first;
@@ -44,7 +44,7 @@ with editorial checks, a video with timed beats, an email with subject and body.
 Use different reading structures for each. Brand guidance belongs in its own
 readable destination and includes voice, message, and reusable creative direction.
 
-## Acceptance walk
+## Check navigation and usability
 
 At normal zoom with sidebar visible, identify the next campaign, its state/date,
 and the next editorial action without scrolling through an introduction. Open a

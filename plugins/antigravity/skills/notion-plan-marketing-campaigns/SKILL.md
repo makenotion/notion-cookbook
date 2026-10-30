@@ -77,21 +77,21 @@ wide status board dominating a narrow landing page. Creating this system does
 not authorize publishing content or sending email.
 
 Read [design guidance](reference/design.md) before composing the page. The
-[template reference](reference/template.md) offers optional content-calendar inspiration.
+[content calendar reference](reference/content-calendar-reference.md) offers optional content-calendar inspiration.
 Draw visual inspiration from both Notion-created and community templates, respecting
 any explicit source restrictions from the user. Attribute the actual creator;
 borrow design patterns rather than copying artwork or claiming an exact clone.
 Do not infer popularity rankings from a gallery listing.
 
-## Apply the workspace pattern
+## Arrange the campaign home
 
-Read [workspace composition and acceptance walk](reference/campaign-layout.md)
+Read [campaign layout and usability checks](reference/campaign-layout.md)
 before creating the home. Use its domain-specific pattern when the brief fits;
 adapt the amount of structure to the supplied work. The first screen, connected
-record bodies, visual settings and rendered acceptance walk are part of the
+record bodies, visual settings, and navigation and usability checks are part of the
 deliverable, not optional polish after setup.
 
-## Produce the designed result
+## Build the pages and working drafts
 
 Make the editorial workflow navigable: marketing home → campaign → deliverable,
 with routes back to shared content and brand resources. Use
