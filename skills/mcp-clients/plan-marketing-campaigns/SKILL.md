@@ -1,9 +1,9 @@
 ---
-name: notion-marketing-workspace
-description: Build a personalized Notion marketing workspace from campaign briefs, content ideas, and chat or connected-source context. Use to connect campaign briefs, content production, and brand resources into a working marketing system.
+name: notion-plan-marketing-campaigns
+description: Organize campaign briefs, content ideas, and production work in Notion. Use when planning a marketing campaign, building a content calendar, or tracking content production.
 ---
 
-# Marketing workspace
+# Plan marketing campaigns
 
 Turn the user's existing information into a useful, inviting starting point in
 Notion. Build a populated workspace that makes the next action clear. Use this
@@ -19,7 +19,7 @@ stays in chat unless the user asks to save it.
 
 Read supplied sources and inspect the intended Notion parent and its relevant
 children. Search the named workspace area and available connected sources for
-missing context or an existing home, using distinctive course, team, or project
+missing context or an existing home, using distinctive campaign, team, or project
 terms. Honor the user's source restrictions. Keep discovery bounded to information
 that changes the structure or populated content; do not search unrelated personal
 material. If discovery is incomplete, say so rather than asserting nothing exists.
@@ -76,22 +76,22 @@ Avoid duplicate database titles, repeated slogans, dense metadata chips, and a
 wide status board dominating a narrow landing page. Creating this system does
 not authorize publishing content or sending email.
 
-Read [template reference](reference/template.md) for the original structural
-reference and [design guidance](reference/design.md) before composing the page.
+Read [design guidance](reference/design.md) before composing the page. The
+[content calendar reference](reference/content-calendar-reference.md) offers optional content-calendar inspiration.
 Draw visual inspiration from both Notion-created and community templates, respecting
 any explicit source restrictions from the user. Attribute the actual creator;
 borrow design patterns rather than copying artwork or claiming an exact clone.
 Do not infer popularity rankings from a gallery listing.
 
-## Apply the workspace pattern
+## Arrange the campaign home
 
-Read [workspace composition and acceptance walk](reference/workspace-pattern.md)
+Read [campaign layout and usability checks](reference/campaign-layout.md)
 before creating the home. Use its domain-specific pattern when the brief fits;
 adapt the amount of structure to the supplied work. The first screen, connected
-record bodies, visual settings and rendered acceptance walk are part of the
+record bodies, visual settings, and navigation and usability checks are part of the
 deliverable, not optional polish after setup.
 
-## Produce the designed result
+## Build the pages and working drafts
 
 Make the editorial workflow navigable: marketing home → campaign → deliverable,
 with routes back to shared content and brand resources. Use
@@ -99,10 +99,7 @@ with routes back to shared content and brand resources. Use
 
 Create real destinations and useful record bodies. Select supported page settings
 for this output; do not merely rename a sibling skill's page or recolor its blocks.
-Sample information is test input, not a reason to make a miniature showcase.
-Build the same connected workspace the skill would produce for real work. A
-comparison index may link to independent workspaces; it should not own them.
-Review the result against the relevant template research and actual user workflow.
+Review the result against the user’s workflow and the composition guidance.
 
 ## Build and verify in Notion
 
