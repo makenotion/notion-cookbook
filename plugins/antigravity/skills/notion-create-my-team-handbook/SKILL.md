@@ -53,6 +53,7 @@ and a separate request desk when recurring work needs tracking.
 
 Read [design guidance](reference/design.md) and
 [handbook layout](reference/handbook-layout.md) before composing the home.
+For a populated example, see [a studio handbook and request desk](examples/studio-handbook.md).
 
 ## Design the handbook and request views
 
