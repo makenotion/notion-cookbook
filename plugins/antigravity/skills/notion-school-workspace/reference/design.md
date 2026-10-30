@@ -19,11 +19,15 @@ Select patterns for this learner rather than copying one screenshot.
 
 ## Make the desk fit the learner
 
-For several courses, try an asymmetric notebook layout: a narrow course rail and
-a wider study area. Course links remain easy to find while the active assignment
-and its useful notes get the most space. For a single course, prefer a continuous
+For several courses, use an asymmetric notebook layout only when the available
+width keeps its rail readable and upcoming dates visible. With unavailable or
+unverified home-width controls, use a continuous study desk: concise next action,
+compact course navigation, full-available-width assignment table, then reminders
+and useful course material. Let the gallery stack below the work if necessary;
+do not force three cards into a row. For a single course, prefer a continuous
 reading page with notes and work close together. Do not create empty columns to
-satisfy a diagram.
+satisfy a diagram. Keep template attribution and design-process commentary in the
+agent's research, not the created workspace, unless the user requests provenance.
 
 Give subjects stable visual identities, such as a botanical green for biology
 and a warm paper tone for design history, when consistent with the user's taste.

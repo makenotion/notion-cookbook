@@ -1,17 +1,30 @@
 # Semester study-desk composition
 
-For several courses with assignments, use compact navigation at the top,
-reminders in a narrow column, course cards, and focused assignment views
-underneath. A single reading seminar can use the notebook pattern in design.md
-instead.
+For several courses with assignments, combine a clear next action, a working
+assignment view and substantive course material. Choose their arrangement for
+the available page width. A single reading seminar can use the notebook pattern
+in design.md instead. Keep design-research attribution and process commentary
+out of the created workspace unless requested; preserve citations and source
+qualifications for actual learning material.
 
 ## First screen
 
-Prefer a full-width page with a quiet subject palette when MCP exposes that setting. Start with a collapsed guide
-or compact table of contents, not a welcome essay. A roughly 22–28% side column
-holds this week's real priority, a few supplied reminders, course/assignment
-navigation, and a collapsed weekly reset. The larger column starts with course
-cards in one row when space allows, followed by upcoming incomplete work.
+Prefer a full-width page with a quiet subject palette when MCP exposes that
+setting. Do not assume full width was applied to a standalone home merely
+because database records support it. If home width is unavailable or unverified,
+use a continuous single-column study desk: one short priority with its deadline,
+compact course navigation, then the inline Upcoming assignment table across the
+available page width. Place reminders, course cards and substantive study material
+after the working table. Keep the guide and weekly reset collapsed below the work.
+Do not place the assignment table inside a narrow column or let stacked course
+cards push the next deadlines below the first screen.
+
+Use a roughly 22–28% side rail only after rendered inspection confirms that
+reminders remain readable and the courses and next deadlines fit. A wide layout
+may place courses before assignments if they fit in a single compact row. If
+they stack or text wraps excessively, apply the single-column arrangement through
+MCP rather than forcing the reference proportions. Course navigation is a compact
+wayfinding aid, not a substitute for the useful course records and their material.
 
 Give each course a meaningful colored icon carried through its assignment and
 note references. Small gallery cards with wrapped content can fit three courses
@@ -35,8 +48,9 @@ answer graded work on behalf of the learner when the request is only organizatio
 
 ## Acceptance walk
 
-See this week's priority, course choices and the next deadline on the initial
-screen. Open a course and assignment, return home, and switch to Calendar and
+See this week's priority, course choices and actual upcoming assignment dates on
+the initial screen. At limited width, inspect the continuous layout rather than
+requiring a side rail or one-row gallery. Open a course and assignment, return home, and switch to Calendar and
 Completed. Check the completed item disappears from Upcoming without being lost.
 Check unknown dates remain discoverable. Compare card density and side-column
 balance with the reference; a course-link list beside generic callouts fails.
