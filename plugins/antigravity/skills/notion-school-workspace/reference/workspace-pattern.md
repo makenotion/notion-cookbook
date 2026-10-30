@@ -2,7 +2,7 @@
 
 Bring course choices, the next academic action, and actual upcoming deadlines
 onto the first screen. Use a quiet subject palette and purposeful colored icons.
-For a single reading seminar, use the notebook composition in design.md.
+For a single reading seminar, use the [notebook layout](design.md).
 
 ## Compose the first screen
 
@@ -15,7 +15,7 @@ question. Place the current priority beside the working material it belongs to.
 Show courses as compact gallery cards in the main area. Give each course a
 recognizable subject icon, a useful next-assignment summary, and a route to its
 notes and briefs. Use a consistent card size and readable wrapped text; expose
-only the properties that help a learner decide where to start. Derive next-work
+only the properties that help a learner decide where to start. Derive upcoming-assignment
 summaries from related assignments. Label static summaries as snapshots.
 
 Place the Upcoming assignment table directly below the course gallery. Show

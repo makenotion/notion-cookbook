@@ -3,7 +3,7 @@
 The learner's habits and subject material determine the page. A semester of
 courses, a single research seminar, and exam revision need different homes.
 
-## Research to use
+## Template design references
 
 The inspected preview of [Student dashboard by Janice Studies](https://www.notion.com/templates/student-dashboard)
 uses a soft photographic cover, playful icon, and personal widget row. Borrow
@@ -14,7 +14,7 @@ structural reference in [template.md](template.md). The inspected preview of
 shows how headings and dividers can keep reading comfortable.
 
 The gallery previews were inspected on October 29, 2026; observations are not
-claims about every interaction. The full research sets the quality standard.
+claims about every interaction. Use these documented design patterns as the quality standard.
 Select patterns for this learner rather than copying one screenshot.
 
 ## Make the desk fit the learner

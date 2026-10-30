@@ -1,6 +1,6 @@
 ---
 name: notion-school-workspace
-description: Organize a semester in Notion from course notes, syllabi, assignments, and chat context. Use when getting organized for a course or semester, with clear notes and upcoming work.
+description: Organize a semester in Notion from course notes, syllabi, assignments, and chat context. Use when getting organized for a course or semester to keep notes clear and upcoming work easy to find.
 ---
 
 # Organize my semester
@@ -55,8 +55,8 @@ Put the next academic action above the full library. Use short course names,
 consistent subject icons, and a quiet visual style suitable for
 reading. Keep extracurricular and personal tracking out unless requested.
 
-Read [template reference](reference/template.md) for the original structural
-reference and [design guidance](reference/design.md) before composing the page.
+Read [the Class Notes template reference](reference/template.md) for structural
+inspiration and [design guidance](reference/design.md) before composing the page.
 Draw visual inspiration from both Notion-created and community templates, respecting
 any explicit source restrictions from the user. Borrow design patterns without
 copying artwork or claiming an exact clone. Keep design-research attribution and
@@ -66,10 +66,10 @@ Do not infer popularity rankings from a gallery listing.
 
 ## Apply the workspace pattern
 
-Read [workspace composition and acceptance walk](reference/workspace-pattern.md)
+Read [study-desk layout and usability checks](reference/workspace-pattern.md)
 before creating the home. Use its domain-specific pattern when the brief fits;
 adapt the amount of structure to the supplied work. The first screen, connected
-record bodies, visual settings and rendered acceptance walk are part of the
+record bodies, visual settings and checks of the rendered page are part of the
 deliverable, not optional polish after setup.
 
 ## Produce the designed result
