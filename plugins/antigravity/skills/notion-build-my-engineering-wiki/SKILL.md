@@ -83,11 +83,9 @@ engineering workflow.
 
 ## Build and verify in Notion
 
-Use connected Notion MCP for content and settings it supports. Keep the intended
-design independent of the tools available: missing controls are capability gaps,
-not reasons to hide useful information or lower the design requirements. Use
-authorized UI editing for unavailable presentation controls when available, and
-report which settings required it.
+Use connected Notion MCP for content and settings it supports. Keep useful
+information visible. Use authorized UI editing for unavailable presentation
+controls when available, and report which settings required it.
 Use the connected client's exposed tool names and current schemas. Read its
 formatting documentation before emitting unfamiliar Notion-specific markup.
 Check available capabilities once, reusing the result. Use native pages,

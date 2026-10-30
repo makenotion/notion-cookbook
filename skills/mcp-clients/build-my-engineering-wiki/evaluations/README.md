@@ -42,6 +42,6 @@ gallery patterns, not merely the presence of an icon, cover, or callout.
 workspace. Give the runner only its query/context and the runtime skill; withhold
 success criteria and existing sample page IDs. Record the first result, inspect
 the saved views and relations, and walk the rendered workspace in Notion. Compare
-workflow, hierarchy, visible metadata and detail-page usefulness with the reviewed
-reference composition, not exact prose or pixels. A reviewer-polished output is
+workflow, hierarchy, visible metadata and detail-page usefulness with the documented
+layout guidance, not exact prose or pixels. A reviewer-polished output is
 not a passing forward test. Report retries and unavailable visual checks.

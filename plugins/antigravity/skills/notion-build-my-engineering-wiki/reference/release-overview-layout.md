@@ -63,8 +63,7 @@ record full width can be configured there before UI inspection.
 
 Hide duplicate database titles when the tab already names the destination.
 Use the connected tools for available controls and authorized UI editing for
-presentation controls they lack. Record unsupported settings separately from
-the target design; do not describe a partial implementation as visual parity.
+presentation controls they lack. Report unfinished settings and their effect on readability or navigation.
 A tab intended as a working table must contain an inline database/view, not merely
 a link to its full-page source. In Notion Markdown, verify `inline="true"` for
 embedded work surfaces; reserve `inline="false"` for navigation destinations.
