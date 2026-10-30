@@ -77,14 +77,17 @@ use the release summary, live status chart and issue/spec views in the engineeri
 pattern. Choose the organization for the actual system; do not inherit a generic
 page structure.
 
-Create real destinations and useful record bodies. Select supported page settings
-for this output. Review the result against the design guidance and the user’s
+Create real destinations and useful record bodies. Set page width, visible
+properties, view defaults and typography for this output. Review the result against the design guidance and the user’s
 engineering workflow.
 
 ## Build and verify in Notion
 
-Use connected Notion MCP for every Notion content and settings mutation. UI access is
-read-only inspection and navigation; never use it to fill a missing write capability.
+Use connected Notion MCP for content and settings it supports. Keep the intended
+design independent of the tools available: missing controls are capability gaps,
+not reasons to hide useful information or lower the design requirements. Use
+authorized UI editing for unavailable presentation controls when available, and
+report which settings required it.
 Use the connected client's exposed tool names and current schemas. Read its
 formatting documentation before emitting unfamiliar Notion-specific markup.
 Check available capabilities once, reusing the result. Use native pages,

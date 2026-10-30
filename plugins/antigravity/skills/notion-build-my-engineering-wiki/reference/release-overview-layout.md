@@ -2,8 +2,7 @@
 
 For a release-oriented brief with tracked work, use a restrained two-column
 composition: interpretation on the left, measured state on the right. For a pure
-engineering
-wiki, retain the topic-library pattern in design.md; do not invent a release.
+engineering wiki, retain the topic-library pattern in design.md; do not invent a release.
 
 ## First screen
 
@@ -17,16 +16,18 @@ percentage. Static prose beside it is a dated snapshot, not a synchronized metri
 Keep the palette restrained and use color to distinguish actual states. Put the
 summary and chart before the issue table, source links, and tabbed library. A
 large cover, ornamental cards, or every technical detail above the fold obscures
-the release state. With too little data or no chart capability, use an
-honest compact state summary and report the missing live view.
+the release state. With too little data for a meaningful chart, use a compact state summary.
+When records support a live chart, retain that requirement even if the current
+connection cannot create it; report the missing capability separately.
 
 ## Work and technical library
 
-Below the overview, provide native Open work and Specs & runbooks tabs when
-supported, keeping the summary/chart outside and above the tab group. Use separate
-working destinations only when tabs are unavailable. The primary issue view shows title, status and engineer when known. Keep
-priority visible only when those essential columns fit; otherwise retain priority
-in record details or an alternate view. Completed work remains reachable separately. A blocked item must remain
+Below the overview, provide native Open work and Specs & runbooks tabs, keeping
+the summary/chart outside and above the tab group. The primary issue view shows
+title, status, priority and engineer when known. Use full page width, deliberate
+column widths and wrapped titles so these fields remain readable together.
+Choose visible properties for the engineering workflow, not to work around
+missing tool controls. Completed work remains reachable separately. A blocked item must remain
 visible. Technical records distinguish current behavior, proposed specs, accepted
 decisions and runbooks; bodies carry real context, acceptance criteria or
 operational steps. Link issues to relevant documents without creating a competing
@@ -60,11 +61,10 @@ update capabilities. On connections exposing `page_layout`, read
 `notion://docs/database-page-layouts`: pinned properties, sidebar details and
 record full width can be configured there before UI inspection.
 
-All Notion content and settings mutations must use connected Notion MCP. UI access
-is read-only inspection and navigation. If MCP cannot set width, font, column
-widths, title visibility or other settings, report each exact unavailable setting;
-do not rescue the result with UI edits or claim visual parity. Hide duplicate
-linked-database titles when the exposed MCP operation supports it.
+Hide duplicate database titles when the tab already names the destination.
+Use the connected tools for available controls and authorized UI editing for
+presentation controls they lack. Record unsupported settings separately from
+the target design; do not describe a partial implementation as visual parity.
 A tab intended as a working table must contain an inline database/view, not merely
 a link to its full-page source. In Notion Markdown, verify `inline="true"` for
 embedded work surfaces; reserve `inline="false"` for navigation destinations.
@@ -73,17 +73,16 @@ colored dot. Keep original assets and long detail accessible without dominating
 the working first screen.
 
 Verify home → record → related work → home, actual view filters and counts, and
-at least one alternate view. Configure the intended everyday default through MCP
-when supported; do not
-change persisted defaults through UI. Report if that setting is unavailable.
+at least one alternate view. Set the intended everyday default so reopening the home restores the useful
+working view.
 Inspect the rendered result at normal zoom with the
 sidebar visible. Check that hierarchy, density and navigation make the release
 state and technical details easy to find. Check useful work is visible above the fold, long titles wrap, and
 essential columns do not overflow. Accessibility text can include off-screen
 properties: confirm essential columns in the screenshot before claiming they
-are visible. If MCP cannot adjust home or table widths, report the clipped
-property and its record-detail route. Correct supported failures before delivery. If rendering
-or a capability is unavailable, report that exact gap without claiming parity.
+are visible. Correct clipped fields and excessive whitespace before delivery. If a missing
+control prevents correction, name the affected setting and user impact while
+keeping the intended layout requirement intact.
 
 During skill evaluation, preserve the first result and the run's evidence. If
 review finds a miss, change the reusable instructions and rerun or resume the
