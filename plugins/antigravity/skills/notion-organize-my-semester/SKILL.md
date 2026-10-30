@@ -60,7 +60,7 @@ Preserve citations for the learner’s source material.
 
 ## Lay out the study desk
 
-Read [study-desk layout and usability checks](reference/workspace-pattern.md)
+Read [study-desk layout and usability checks](reference/study-desk-layout.md)
 before creating the home. Use its domain-specific pattern when the brief fits;
 adapt the amount of structure to the supplied work. The first screen, connected
 record bodies, visual settings and checks of the rendered page are part of the
