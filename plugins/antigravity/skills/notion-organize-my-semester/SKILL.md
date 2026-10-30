@@ -80,14 +80,9 @@ against the design guidance and the learner's next actions.
 
 Use the connected client's exposed tool names and current schemas. Read its
 formatting documentation before emitting unfamiliar Notion-specific markup.
-Check available capabilities once, reusing the result. Use native pages,
+Use native pages,
 databases, typed properties, and views when supported. Resolve real people and
 relation targets; create targets before relations and properties before views.
-Do not manufacture unsupported view, cover, formula, or automation arguments.
-
-Use available tools to complete the study desk. If a required control is
-inaccessible, report which setting remains unfinished and how it affects use. With no write connection, deliver an outline and content in
-chat and state that nothing was created in Notion.
 
 Preserve original sources and unrelated existing content. Do not change sharing
 or publish a workspace as part of setup. After a timeout or uncertain write,
@@ -99,7 +94,7 @@ correctness. Check source fidelity, row coverage, navigation targets, relations,
 and actual filters and sorts, including undated and unassigned work. When a visual
 preview is available, inspect hierarchy, density, and narrow-screen readability;
 otherwise disclose that appearance was not visually verified. Do not claim success
-for unsupported or unverified features.
+for unverified features.
 
 Describe the result in the user’s terms: name the pages and the next action.
 Explain any unfinished feature by its effect on their work; keep tool names,
