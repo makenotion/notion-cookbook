@@ -184,6 +184,10 @@ were imported. Confirm shared views exclude other projects. If rendering is
 available, inspect hierarchy and readability; otherwise say visual appearance
 was not verified. Do not claim unsupported features were created.
 
+Describe the result in the user’s terms: name the pages and the next action.
+Explain any unfinished feature by its effect on their work; keep tool names,
+schema details, and implementation jargon out of the handoff unless needed.
+
 Lead delivery with the project link and what is ready, then ask the relevant
 team, cadence, and placement questions above. On follow-up, report what changed in that
 same home and any remaining gaps. Avoid a technical inventory of properties.

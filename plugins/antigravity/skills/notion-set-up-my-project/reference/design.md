@@ -3,6 +3,20 @@
 Read this before composing or polishing the output. Treat the layouts as starting
 points; adapt them to the user's content and working rhythm.
 
+## Write for the project team
+
+Use the project’s actual name and familiar labels: “Tasks,” “Docs & decisions,”
+“Meetings,” and “Overview.” Prefer “Target date” to an unexplained “Target,” and
+“Next milestone” to “Checkpoint” when introducing a new label. Keep the team’s
+established terms and status values. Do not use “EPD,” “canonical,” or “relation”
+as setup instructions for the reader.
+
+Ask “How often does the team meet?” rather than “What is your cadence?” Call
+reusable agenda pages “Reusable agendas,” and explain how to use them without
+calling ordinary pages native database templates. In project summaries, describe
+what success looks like instead of referring to an “acceptance approach.” Keep
+technical acceptance criteria where they help the team do the work.
+
 ## Compose an EPD project home
 
 - Start with the actual project name and one sentence about the user problem.
