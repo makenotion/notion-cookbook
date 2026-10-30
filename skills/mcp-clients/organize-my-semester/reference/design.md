@@ -25,7 +25,7 @@ and capture actions, a course gallery in the main area, and the next assignments
 close beneath it. Make the cards useful with subject identity, the next deadline,
 and a route into course material. For a single course, use a continuous reading
 page with notes and work close together. Choose the composition for the learner's
-work, not for a tool limitation. Preserve citations for the learning material itself.
+work. Preserve citations for the learning material itself.
 
 Give subjects stable visual identities, such as a botanical green for biology
 and a warm paper tone for design history, when consistent with the user's taste.

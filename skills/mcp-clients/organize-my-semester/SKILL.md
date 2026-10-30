@@ -86,8 +86,7 @@ relation targets; create targets before relations and properties before views.
 Do not manufacture unsupported view, cover, formula, or automation arguments.
 
 Use available tools to complete the study desk. If a required control is
-inaccessible, report the unfinished setting and its effect; keep the intended
-design as the target. With no write connection, deliver an outline and content in
+inaccessible, report which setting remains unfinished and how it affects use. With no write connection, deliver an outline and content in
 chat and state that nothing was created in Notion.
 
 Preserve original sources and unrelated existing content. Do not change sharing
