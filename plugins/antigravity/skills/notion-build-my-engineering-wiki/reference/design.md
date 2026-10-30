@@ -4,14 +4,9 @@ An engineer needs to find an answer, distinguish running behavior from proposals
 and follow the path into code or operational detail. Let the system's information
 architecture determine the page, not a general productivity dashboard.
 
-## Research to use
-
-The inspected preview of [Engineering Dashboard by Matt Bio](https://www.notion.com/templates/notion-engineering-dashboard)
-puts frequent actions and focused view tabs within reach. Borrow that directness;
-a wiki does not inherit its sprint schedule. The [Engineering Wiki reference](template.md)
-supplies topic organization. [Brand Guidelines by Notion](https://www.notion.com/templates/brand-guidelines)
-shows clear reference hierarchy. Preview observations date to October 29, 2026;
-verify actual capabilities rather than assuming the screenshots prove them.
+Keep frequent actions and focused view tabs within reach. Organize technical
+knowledge by topic with clear headings; do not add a sprint schedule to a wiki
+unless it is part of the requested workflow.
 
 ## Make a navigable manual
 
@@ -44,6 +39,5 @@ useful even after removing its title and icon; topic structure must identify its
 purpose. Inspect long lines, tables, and code at available widths. State honestly
 when rendering or an external link could not be checked.
 
-Create an independent private demo home. A comparison index may link to it, but
-its density and navigation are chosen for reference reading. Do not assume a
-parent determines or prevents a page's layout.
+Choose density and navigation for technical reading. Do not assume a parent
+determines or prevents a page's layout.

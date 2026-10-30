@@ -16,8 +16,8 @@ percentage. Static prose beside it is a dated snapshot, not a synchronized metri
 
 Keep the palette restrained and use color to distinguish actual states. Put the
 summary and chart before the issue table, source links, and tabbed library. A
-large cover, ornamental cards, or every technical detail above the fold defeats
-the reference's clarity. With too little data or no chart capability, use an
+large cover, ornamental cards, or every technical detail above the fold obscures
+the release state. With too little data or no chart capability, use an
 honest compact state summary and report the missing live view.
 
 ## Work and technical library
@@ -77,8 +77,8 @@ at least one alternate view. Configure the intended everyday default through MCP
 when supported; do not
 change persisted defaults through UI. Report if that setting is unavailable.
 Inspect the rendered result at normal zoom with the
-sidebar visible. Compare hierarchy, density and navigation against the selected
-reference. Check useful work is visible above the fold, long titles wrap, and
+sidebar visible. Check that hierarchy, density and navigation make the release
+state and technical details easy to find. Check useful work is visible above the fold, long titles wrap, and
 essential columns do not overflow. Accessibility text can include off-screen
 properties: confirm essential columns in the screenshot before claiming they
 are visible. If MCP cannot adjust home or table widths, report the clipped

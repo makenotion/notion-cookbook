@@ -59,12 +59,7 @@ labels and consistent technical page structure. Put large code samples and deep
 architecture detail on child pages so the home remains scannable. An engineering-home
 setup request does not authorize changes to code, issues, deployments, or alerts.
 
-Read [template reference](reference/template.md) for the original structural
-reference and [design guidance](reference/design.md) before composing the page.
-Draw visual inspiration from both Notion-created and community templates, respecting
-any explicit source restrictions from the user. Attribute the actual creator;
-borrow design patterns rather than copying artwork or claiming an exact clone.
-Do not infer popularity rankings from a gallery listing.
+Read [design guidance](reference/design.md) before composing the page.
 
 ## Lay out the engineering home
 
@@ -83,10 +78,8 @@ pattern. Choose the organization for the actual system; do not inherit a generic
 page structure.
 
 Create real destinations and useful record bodies. Select supported page settings
-for this output; do not merely rename a sibling skill's page or recolor its blocks.
-When testing multiple skills, make independent private homes unless the user asks
-for a shared container; an optional index can link to them. Review the result
-against the relevant template research and actual user workflow.
+for this output. Review the result against the design guidance and the user’s
+engineering workflow.
 
 ## Build and verify in Notion
 
