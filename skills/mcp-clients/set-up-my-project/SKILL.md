@@ -81,12 +81,9 @@ placement is complete. Do not change sharing beyond the user's chosen placement.
 
 ## Build the project structure
 
-Use [Notion's Projects & Tasks reference](reference/template.md) for inspiration.
-Read [design guidance](reference/design.md) before composing the page. Both
-Notion-created and community templates can provide visual inspiration unless the
-user restricts the sources. Attribute the actual creator and borrow patterns,
-not artwork. Adapt the structure to the project instead of claiming an exact clone
-or adding portfolio dashboards beyond the chosen Projects collection.
+Read [design guidance](reference/design.md) before composing the page. Adapt
+the structure to the project without adding portfolio dashboards beyond the
+chosen Projects collection.
 
 - **Project home:** concrete project name, concise problem and outcome, status,
   known product/design/engineering leads, target date when agreed, scope, and the
