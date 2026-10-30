@@ -6,7 +6,8 @@ description: Organize campaign briefs, content ideas, and production work in Not
 # Plan marketing campaigns
 
 Turn the user's existing information into a useful, inviting starting point in
-Notion. Build connected campaign and content pages that makes the next action clear. Use this
+Notion. Build populated, connected campaign and content pages that make the next
+action clear. Use this
 for getting started or reorganizing this domain; routine record edits and pure
 research do not need a new campaign system.
 
@@ -34,7 +35,8 @@ permission to take unrelated actions.
 
 ## Organize campaigns and content
 
-Design the connected campaign and content pages before composing its landing page. Decide what
+Design the connected campaign and content pages before composing the marketing
+home. Decide what
 belongs in the sidebar, what is a database record, and what work belongs inside
 each destination. Match scope: a request for a solo content calendar can stay
 small; a campaign system needs a campaign lifecycle and connected deliverables,
