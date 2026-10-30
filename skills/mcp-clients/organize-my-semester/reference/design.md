@@ -7,6 +7,17 @@ Use a personal scale, a subject-relevant cover when useful, and a recognizable
 icon. Keep reading comfortable with clear headings and dividers; add widgets
 only when they serve the learner’s work.
 
+## Write labels for the learner
+
+Use familiar labels such as “Courses,” “Notes,” “Assignments,” and “No due date.”
+For a weekly planning section, prefer “Plan your week” to “Weekly reset.” Keep
+existing course names and clear labels the learner already uses. Write buttons
+as actions, such as “Add an assignment” or “Add a note,” when those actions exist.
+For a static course summary, say “Updated [date]; check Assignments for changes”
+using the actual update date. Do not leave “snapshot” unexplained or imply that
+static text updates automatically. Keep setup terms such as “record” and
+“relation” out of study instructions.
+
 ## Make the desk fit the learner
 
 For several courses, build an asymmetric study desk: a compact rail for reminders

@@ -16,12 +16,13 @@ Show courses as compact gallery cards in the main area. Give each course a
 recognizable subject icon, a useful next-assignment summary, and a route to its
 notes and briefs. Use a consistent card size and readable wrapped text; expose
 only the properties that help a learner decide where to start. Derive upcoming-assignment
-summaries from related assignments. Label static summaries as snapshots.
+summaries from related assignments. Label static summaries with their update date and explain that they do not
+update automatically.
 
 Place the Upcoming assignment table directly below the course gallery. Show
 title, course, due date, and status; size columns so dates and titles remain
 readable. Provide calendar, completed, and undated views without creating a new
-copy of the assignments. Keep the weekly reset and longer guidance collapsed
+copy of the assignments. Keep the weekly planning section and longer guidance collapsed
 below the working area. Use source dates, not decorative progress figures.
 
 Balance the rail, card row, and table so course choices and upcoming work are
