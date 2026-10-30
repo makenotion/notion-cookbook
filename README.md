@@ -166,6 +166,7 @@ find and inspect an issue in Sentry, then declare an incident in PagerDuty.
   [Notion MCP client integration guide](docs/mcp-client-integration.md)
 - [Agent skills](skills/) — reusable Notion workflows for any MCP client
 - [Build my content calendar](skills/mcp-clients/marketing-workspace/SKILL.md) — Plan publication and production with actionable content briefs.
+- [Set up my project](skills/mcp-clients/set-up-my-project/SKILL.md) — Build an EPD home with tasks, docs, meeting notes, and progressive team and placement refinement.
 - [Notion developer documentation](https://developers.notion.com)
 - [Notion API reference](https://developers.notion.com/reference)
 - [Contributing](CONTRIBUTING.md) — add or improve an example, Worker, skill, or

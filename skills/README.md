@@ -21,6 +21,7 @@ The [mcp-clients](mcp-clients/) directory contains reusable workflows for any MC
 - **[setup](mcp-clients/setup/)**: Onboarding skill that sets up Notion by following the official setup guide
 
 - **[Build my content calendar](mcp-clients/marketing-workspace/)**: Plan publication and production with actionable content briefs.
+- **[Set up my project](mcp-clients/set-up-my-project/)**: Build an EPD home with tasks, docs, meeting notes, and progressive team and placement refinement.
 
 ## Using skills
 
