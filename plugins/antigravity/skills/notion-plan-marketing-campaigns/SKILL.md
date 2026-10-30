@@ -85,7 +85,7 @@ Do not infer popularity rankings from a gallery listing.
 
 ## Apply the workspace pattern
 
-Read [workspace composition and acceptance walk](reference/workspace-pattern.md)
+Read [workspace composition and acceptance walk](reference/campaign-layout.md)
 before creating the home. Use its domain-specific pattern when the brief fits;
 adapt the amount of structure to the supplied work. The first screen, connected
 record bodies, visual settings and rendered acceptance walk are part of the
