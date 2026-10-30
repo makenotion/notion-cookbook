@@ -8,6 +8,18 @@ Keep frequent actions and focused view tabs within reach. Organize technical
 knowledge by topic with clear headings; do not add a sprint schedule to a wiki
 unless it is part of the requested workflow.
 
+## Write for the people using the docs
+
+Use the system’s name and specific destinations such as “Getting started,”
+“Architecture,” “Runbooks,” and “Proposals.” For a release overview, name charts
+for what they measure, such as “Work by status”; do not imply a readiness score
+from task counts. Prefer “Document status” to “Maturity” when introducing a new
+property, while keeping established team terminology and exact technical names.
+Retain useful terms such as “runbook” for an engineering audience. Explain an
+unfamiliar acronym on first use; do not simplify commands, identifiers, or code.
+Keep instructions concrete: “Open the blocked issue,” not “Inspect the linked
+record.”
+
 ## Make a navigable manual
 
 Use the system name and a concise statement of its purpose. Lead with a topic

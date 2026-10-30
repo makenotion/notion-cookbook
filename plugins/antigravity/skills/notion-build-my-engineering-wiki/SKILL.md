@@ -111,5 +111,9 @@ preview is available, inspect hierarchy, density, and narrow-screen readability;
 otherwise disclose that appearance was not visually verified. Do not claim success
 for unsupported or unverified features.
 
+Describe the result in the user’s terms: name the pages and the next action.
+Explain any unfinished feature by its effect on their work; keep tool names,
+schema details, and implementation jargon out of the handoff unless needed.
+
 Return the home link, a brief explanation of what is ready, one concrete first
 action, and any remaining gaps. Avoid a long technical inventory.
