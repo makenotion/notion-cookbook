@@ -1,6 +1,6 @@
 {
   "name": "limited-design-capabilities",
-  "skills": ["notion-engineering-workspace"],
+  "skills": ["notion-build-my-engineering-wiki"],
   "query": "Create a beautiful, simple starting page under https://notion.so/home from what you know. Choose the layout for me.",
   "context": {
     "conversation": "I am starting fresh and have no real records or images to import yet. Please do not invent examples.",

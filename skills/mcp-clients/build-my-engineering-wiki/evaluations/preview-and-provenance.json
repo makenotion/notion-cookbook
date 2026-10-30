@@ -1,6 +1,6 @@
 {
   "name": "preview-and-provenance",
-  "skills": ["notion-engineering-workspace"],
+  "skills": ["notion-build-my-engineering-wiki"],
   "query": "Show me a starter layout in chat using only Notion-created templates. Do not create anything yet.",
   "context": {
     "conversation": "Auth uses sessions today. Stateless tokens are only a proposal. Work is already tracked in GitHub; link it rather than making a second tracker.",

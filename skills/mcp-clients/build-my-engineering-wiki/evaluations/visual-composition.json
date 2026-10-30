@@ -1,6 +1,6 @@
 {
   "name": "visual-composition",
-  "skills": ["notion-engineering-workspace"],
+  "skills": ["notion-build-my-engineering-wiki"],
   "query": "Set up our engineering wiki in Notion under https://notion.so/home using the context we discussed.",
   "context": {
     "conversation": "We have setup instructions and a draft architecture proposal. Active issues live in GitHub; link them.",

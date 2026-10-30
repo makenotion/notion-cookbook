@@ -1,6 +1,6 @@
 {
   "name": "resume-limited-tools",
-  "skills": ["notion-engineering-workspace"],
+  "skills": ["notion-build-my-engineering-wiki"],
   "query": "Finish setting up the workspace under https://notion.so/team-home; the last attempt timed out.",
   "context": {
     "conversation": "Auth uses sessions today. Stateless tokens are only a proposal. Work is already tracked in GitHub; link it rather than making a second tracker.",

@@ -1,6 +1,6 @@
 {
   "name": "context-to-workspace",
-  "skills": ["notion-engineering-workspace"],
+  "skills": ["notion-build-my-engineering-wiki"],
   "query": "Create an engineering home from our auth project discussion and technical docs. Create it under https://notion.so/team-home.",
   "context": {
     "conversation": "Auth uses sessions today. Stateless tokens are only a proposal. Work is already tracked in GitHub; link it rather than making a second tracker.",
