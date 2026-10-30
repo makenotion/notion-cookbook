@@ -8,7 +8,9 @@ useful detail records. Keep portfolio navigation distinct from project execution
 When placement is agreed, the project home is a record in a broader Projects
 database with shared Tasks, Docs and Meetings. Reuse existing collections first.
 A requested new portfolio gets a compact gallery with project outcome, status
-and target, plus simple navigation to the shared collections. Do not put all
+and target, plus simple navigation to the shared collections. If a full outcome
+clips in gallery cards, show a short faithful summary there and keep the complete
+outcome in the project; do not truncate the source value. Do not put all
 projects' working tables on the portfolio home. If placement is unresolved,
 follow SKILL.md: deliver the private initial project before asking to tune it.
 
@@ -16,7 +18,15 @@ follow SKILL.md: deliver the private initial project before asking to tune it.
 
 Use full width for EPD work. Show status, lead and target near the title using the
 native database-page layout. If a property type cannot be pinned, keep it visible
-in the ordered native properties group; do not duplicate it in body text. Show a one-sentence purpose, then a roughly 65/35
+in a compact native properties group when that improves readability. If a tall
+properties section pushes work below the fold, move it out of the main reading
+flow using supported layout controls (for example, a sidebar with secondary
+properties hidden): retain essential status/date pins and show the lead once in the
+compact team area. Preserve the underlying properties and their source values. A
+rejected mixed-property pinning request does not prove all pinning is unsupported:
+try a smaller supported subset once before falling back. Show the full outcome
+once near the top, not both as a visible property and repeated body text. Keep
+secondary metadata out of the first screen so the working tabs remain in reach. Show a one-sentence purpose, then a roughly 65/35
 row: current milestone/decision on the left, known collaborators and responsibilities
 on the right. A restrained blue milestone panel is enough; the team area need
 not be another callout. Avoid repeating pinned metadata in the body.
