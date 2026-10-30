@@ -1,6 +1,6 @@
 # Build a connected EPD project home
 
-Create a delivery workspace that makes the next decision and the work behind it
+Create a project home that makes the next decision and the work behind it
 clear. Give the portfolio, project home, and detail records distinct jobs.
 
 ## Organize the project inside the team system
@@ -44,7 +44,7 @@ paths to the project. Preserve proposed dates and decisions as proposals.
 Prepare weekly reviews or standups to match the team's cadence; follow
 [meeting setup](meetings.md) to connect agendas, notes, and follow-ups.
 
-## Inspect the finished workspace
+## Inspect the project and connected records
 
 Enter through the portfolio. Read the project's status, outcome, next milestone,
 and team, then act on a task without scrolling through introductory prose.
@@ -58,7 +58,7 @@ visible properties, and the amount of work above the fold. Correct clipping,
 stranded headings, excessive empty space, and duplicate database titles. Preserve
 existing objects and verify the saved hierarchy after moving blocks.
 
-Compare the rendered workspace with the project design principles, not merely
+Compare the rendered project home and connected records with the project design principles, not merely
 its schema. A polished home with missing docs, disconnected tasks, or empty
 meeting placeholders fails. Share the usable initial home before asking team,
 cadence, and placement questions; reuse known answers.

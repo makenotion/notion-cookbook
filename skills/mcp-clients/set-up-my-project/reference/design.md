@@ -40,7 +40,7 @@ and clear next-agenda entry; keep the full agenda inside its record. Adapt to th
 team's context; a personal checklist or event brief can remain smaller. Use
 connected records, clear states, and carefully chosen density for visual character.
 
-## Keep the delivery workspace focused
+## Keep the project home focused
 
 Set the page to full width for dense team work. Keep the overview short
 enough that work is visible without scrolling through a long introduction. Use
