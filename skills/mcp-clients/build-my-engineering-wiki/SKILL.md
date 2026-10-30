@@ -60,6 +60,7 @@ architecture detail on child pages so the home remains scannable. An engineering
 setup request does not authorize changes to code, issues, deployments, or alerts.
 
 Read [design guidance](reference/design.md) before composing the page.
+For a populated example, see [a webhook release and its technical docs](examples/webhook-release.md).
 
 ## Lay out the engineering home
 
