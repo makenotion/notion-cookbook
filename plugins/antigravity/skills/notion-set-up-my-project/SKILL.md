@@ -11,6 +11,8 @@ next. For engineering, product, and design (EPD) work, build a project home conn
 to Tasks, Docs, and meeting notes. Adapt lighter personal or event projects to
 their actual needs.
 
+For a populated example, see [a product team’s onboarding project](examples/self-serve-onboarding.md).
+
 ## Start with what is known
 
 Read the conversation for the project name, outcome, audience, scope, constraints,
