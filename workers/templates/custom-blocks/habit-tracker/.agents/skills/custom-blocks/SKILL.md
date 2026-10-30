@@ -353,9 +353,9 @@ Resolve each database to its data-source ID with
 Match the declared data-source keys and map declared property keys to actual
 property IDs. Do not use property names as IDs or invent a mapping.
 
-The schema returns percent-encoded property IDs. Decode each ID once before using
-it in `property_ids_by_key`: `yG%5DC` becomes `yG]C`, `%5C` becomes `\`, and
-`title` stays `title`. In a JSON file, escape a decoded backslash as `\\`.
+Use property IDs exactly as returned by the schema in `property_ids_by_key`.
+The API resolves encoded IDs and rejects unknown IDs or mappings incompatible
+with the definition's declared property types.
 
 If `make --help` lists `--bindings`, write `bindings.json` as an array:
 
@@ -404,10 +404,9 @@ After saving, fetch the instance with `ntn api v1/blocks/<instance-id>` or
 `ntn api v1/pages/<instance-id>`. Check the saved definition, data source IDs, and
 property mappings.
 
-The API returns the saved mappings even when they contain unknown property IDs.
-To validate the mappings, compare every mapped ID against the decoded schema IDs
-and confirm that its property type matches the declaration. Then verify that the
-instance renders with the expected data.
+Verify that the instance renders with the expected data and its main interaction
+works. Report any permission, feature-gate, or verification failure instead of
+claiming setup is complete.
 
 [Share the Worker](https://developers.notion.com/workers/guides/sharing-workers) with **Can connect** access when another workspace member must
 insert the block. **Full access** also permits Worker management and deployment.
