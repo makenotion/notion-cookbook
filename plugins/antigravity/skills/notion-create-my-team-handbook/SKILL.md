@@ -52,11 +52,7 @@ and a separate request desk when recurring work needs tracking.
   within the user's authorized scope.
 
 Read [design guidance](reference/design.md) and
-[handbook layout](reference/workspace-pattern.md) before composing the
-home. Use the [template reference](reference/template.md) for structural
-inspiration. Draw from Notion-created and community designs unless the user
-restricts sources. Borrow composition patterns, attribute actual creators,
-and avoid copied artwork or unsupported popularity claims.
+[handbook layout](reference/workspace-pattern.md) before composing the home.
 
 ## Design the handbook and request views
 

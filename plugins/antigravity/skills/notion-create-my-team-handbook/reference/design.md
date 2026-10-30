@@ -4,15 +4,11 @@ Answer “how do I get this done?” for someone who does not know which team or
 database owns the process. Make useful instructions approachable while giving
 operators a clear place to maintain guidance and handle requests.
 
-## Apply the reference patterns
+## Orient the reader
 
-Use the home identity, team overview, and concise orientation shown in
-[Team home by Notion](https://www.notion.com/templates/team-home-v4). Borrow the
-headings and dividers in
-[Brand Guidelines by Notion](https://www.notion.com/templates/brand-guidelines)
-to make procedures readable. Combine these with the
-[structural reference](template.md), a browsable guidance library, and a separate
-maintenance view. Adapt the composition to the actual team and its work.
+Give the home a clear identity, team overview, and concise introduction. Use
+headings and dividers to make procedures readable. Provide a browsable guidance
+library and a separate maintenance view, adapted to the team and its work.
 
 ## Make the routes recognizable
 
