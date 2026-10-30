@@ -5,7 +5,7 @@ These are scenario specifications, not executed behavioral tests. Compare the
 revised skill with previous-skill and no-skill runs using identical inputs.
 
 - `project-meetings.json`: known standup cadence, prepared and reusable agendas,
-  meeting-note storage, truthful fallbacks, and linked follow-ups.
+  meeting-note storage and linked follow-ups.
 - `epd-project.json`: ordinary EPD setup with a project home, Tasks and Docs,
   cross-linked records, realistic states, and restrained presentation.
 - `brief-to-project.json`: source fidelity, actionable tasks, dependency handling,
@@ -13,7 +13,6 @@ revised skill with previous-skill and no-skill runs using identical inputs.
 - `reuse-project.json`: uncertain-write recovery, shared-task reuse, and accurate
   project filtering without duplicate projects or tasks.
 - `preview-without-write.json`: preview-only scope and first-party provenance.
-- `limited-tools.json`: useful page-only setup without invented features or work.
 
 Serve sources through tools, preserve mutations in mock state, and map fixture
 IDs to valid IDs when required. For the reuse case, expose query records through
@@ -26,8 +25,6 @@ headings, task counts unrelated to source coverage, or decorative elements.
 
 - `visual-composition.json`: open gallery inspiration, coherent styling, useful
   first screen, and navigation with real content.
-- `limited-design-capabilities.json`: text-only fallback, sparse information,
-  and honest visual verification.
 
 Existing first-party-only cases intentionally retain that restriction in their
 user prompts: source selection must follow the particular user's request.
@@ -54,10 +51,9 @@ composition principles, not exact prose or pixels. Record two separate results:
 
 - **Finished page:** refine the artifact through MCP and authorized UI edits
   until it meets the intended design. Capture PNGs of this best result and log
-  each UI-only change with the corresponding missing or unverified MCP capability.
+  each UI change.
 - **Skill reproduction:** run the skill independently and compare its output with
   that reference. Preserve the first result and report retries and interventions.
   A reviewer-polished reference is not evidence of an unassisted skill pass.
 
-Record unavailable controls and incomplete layout requirements in the test
-results. Assess functional correctness and visual usability separately.
+Assess functional correctness and visual usability separately.

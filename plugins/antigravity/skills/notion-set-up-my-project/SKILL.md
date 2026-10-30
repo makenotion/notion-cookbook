@@ -75,9 +75,8 @@ collection with no parent, use the private default without another destination
 question. Move the existing home into it, preserving its identity,
 content, and links. Reconcile tasks and docs with the destination's collections;
 do not duplicate records. Verify project relations and filtered views after the
-move. If moving or reconciling is unsupported, retain the draft and explain the
-precise remaining step instead of silently creating a second home or claiming
-placement is complete. Do not change sharing beyond the user's chosen placement.
+move. Preserve the same project home and its records throughout placement.
+Do not change sharing beyond the user's chosen placement.
 
 ## Build the project structure
 
@@ -153,8 +152,8 @@ preferences and source facts; distinguish fictional inputs from real work.
 
 ## Create, populate, and check
 
-Use the connection's current schemas and exposed tools. Check capabilities once,
-and consult its formatting documentation before using unfamiliar Notion markup.
+Use the connection's current schemas and exposed tools. Consult its formatting
+documentation before using unfamiliar Notion markup.
 Inspect existing data-source properties, status options, and relation targets.
 Resolve actual people before assigning owners; retain an unmatched name in the
 body without inventing an identity. Create relation targets before dependent
@@ -162,10 +161,7 @@ records, and properties before views. Preserve existing data and source pages;
 do not change sharing or publish the project as part of setup.
 
 Build the native databases, relations, views, and page layouts the project needs.
-Use available authorized tools to finish the intended design. If execution is
-blocked, identify the unfinished part without calling a substitute equivalent.
-Without write access, return a ready-to-use project outline and state that
-nothing was created. After an uncertain write,
+Use authorized tools to complete the project. After an uncertain write,
 inspect resulting state before retrying; reuse successful object IDs and resume
 only missing work. Repeated setup should update or reuse the matching project.
 
@@ -182,7 +178,7 @@ A polished home with missing docs or empty record bodies fails this check.
 Paginate reads needed to establish coverage; a sample does not prove all tasks
 were imported. Confirm shared views exclude other projects. If rendering is
 available, inspect hierarchy and readability; otherwise say visual appearance
-was not verified. Do not claim unsupported features were created.
+was not verified.
 
 Describe the result in the user’s terms: name the pages and the next action.
 Explain any unfinished feature by its effect on their work; keep tool names,

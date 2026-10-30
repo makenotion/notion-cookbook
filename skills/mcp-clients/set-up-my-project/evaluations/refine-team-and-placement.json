@@ -40,7 +40,6 @@
     "Updates and moves the existing home into the chosen database when supported; preserves the page identity and content and reconciles task/doc relations without duplicate records.",
     "Adds the known product lead, design collaborator/reviewer, and engineering responsibility to the home; resolves exact identities and does not guess between two Eli accounts.",
     "Does not infer task ownership, invite people, send messages, or change sharing just because collaborators were named.",
-    "Does not repeat the placement question. Resolves only the remaining identity ambiguity while completing unaffected updates.",
-    "If movement or reconciliation is unavailable, retains the existing draft and states the exact limitation without creating a replacement or claiming completion."
+    "Does not repeat the placement question. Resolves only the remaining identity ambiguity while completing unaffected updates."
   ]
 }

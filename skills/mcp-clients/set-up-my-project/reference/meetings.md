@@ -16,7 +16,6 @@ Use the current tool schemas and the connection's dedicated meeting-note tool
 when available for actual meeting notes. A reusable agenda template is not a
 meeting that has happened. If the tool requires an agreed date or attendees,
 create a clearly labeled ordinary agenda draft instead of inventing those values.
-State any unsupported native meeting feature accurately.
 
 ## Prepare the agenda from actual project context
 

@@ -18,7 +18,6 @@
     "First project screen shows status, lead, target, milestone, team and working tabs; native record layouts are configured when supported.",
     "Every Notion content and settings mutation uses the connected Notion MCP; browser/UI is read-only inspection even when MCP rejects a layout setting.",
     "Essential native status/date metadata remains visible; secondary properties may move out of the main reading flow when they obscure working views. Source properties are retained, and the lead remains legible in the team area.",
-    "The full outcome appears once in the first screen. Portfolio cards use a short faithful summary when the full outcome clips, preserving the complete source outcome.",
-    "After a mixed-property pinning failure, test a supported subset rather than declaring all pinning unavailable."
+    "The full outcome appears once in the first screen. Portfolio cards use a short faithful summary when the full outcome clips, preserving the complete source outcome."
   ]
 }

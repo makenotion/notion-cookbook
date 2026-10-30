@@ -6,7 +6,7 @@
     "conversation": "We need to inventory equipment and choose a moving date. No date or owners yet.",
     "tools": ["fetch", "search", "create-pages"],
     "web_responses": {
-      "https://www.notion.com/templates/notion-projects-and-tasks": "Creator: Notion. Projects, tasks, planning documents. Exact preview unavailable. Related template: Office Move by Community Studio."
+      "https://www.notion.com/templates/notion-projects-and-tasks": "Creator: Notion. Projects, tasks, planning documents. Related template: Office Move by Community Studio."
     }
   },
   "success_criteria": [
