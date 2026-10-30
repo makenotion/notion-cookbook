@@ -15,7 +15,7 @@
     "Preserve existing comparison pages and unrelated pages.",
     "Two Projects records share Tasks, Docs and Meetings. The main project has six tasks, three docs, two dated agendas and a reusable async standup; any additional meeting format has a distinct purpose and is not fabricated history.",
     "The second project task is excluded from every main-project view; undated second-project work remains available in shared Tasks.",
-    "First project screen shows status, lead, target, milestone, team and working tabs; native record layouts are configured when supported.",
+    "First project screen shows status, lead, target, milestone, team and working tabs; native record layouts are configured.",
     "Every Notion content and settings mutation uses the connected Notion MCP; browser/UI is read-only inspection even when MCP rejects a layout setting.",
     "Essential native status/date metadata remains visible; secondary properties may move out of the main reading flow when they obscure working views. Source properties are retained, and the lead remains legible in the team area.",
     "The full outcome appears once in the first screen. Portfolio cards use a short faithful summary when the full outcome clips, preserving the complete source outcome."

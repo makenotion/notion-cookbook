@@ -100,6 +100,6 @@ Review the artifact itself, not its Markdown source or the final response:
   rendering is available. Check for clipping, stranded headings, confusing
   reading order, excessive empty space, and missing undated work.
 
-Revise a failed result before presenting it as finished. If rendering is
-unavailable, distinguish structural validation from unperformed visual inspection.
+Revise a failed result before presenting it as finished. Record structural
+validation and visual inspection separately.
 Do not claim visual quality was verified by frontmatter, lint, or schema checks.
