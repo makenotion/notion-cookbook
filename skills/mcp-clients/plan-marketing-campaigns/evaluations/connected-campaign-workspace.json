@@ -20,7 +20,7 @@
     "Creates a durable private marketing home with recognizable sidebar destinations, not a showcase under a comparison/demo parent.",
     "Campaign is a record in a Campaigns collection even with one initial campaign; content uses native campaign relations and correctly filtered campaign views.",
     "The home is an orientation surface; shared production, campaign context, and working drafts have distinct reachable destinations.",
-    "Visible campaign and content page properties convey lifecycle, dates, format, and relationships without repeating them as body text; unavailable layout controls are reported honestly.",
+    "Visible campaign and content page properties convey lifecycle, dates, format, and relationships without repeating them as body text.",
     "All six deliverables are preserved, including undated and blocked work, and proposed dates/approval states remain truthful.",
     "At least article, video, and email pages contain useful proposed work in format-specific bodies; no identical generic brief shells or fabricated assets.",
     "Rendered review covers sidebar, home, campaign, and two different-format records; assesses density, clipping, hierarchy and navigation instead of treating Markdown readback as visual verification.",
