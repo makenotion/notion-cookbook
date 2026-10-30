@@ -6,7 +6,7 @@ clear. Give the portfolio, project home, and detail records distinct jobs.
 ## Organize the project inside the team system
 
 Place the project in the agreed Projects database and reuse its shared Tasks,
-Docs, and Meetings collections. When placement is unresolved, follow SKILL.md:
+Docs, and Meetings collections. When placement is unresolved, follow [the setup workflow](../SKILL.md):
 deliver the private initial project before asking where it belongs.
 
 Build the portfolio as a compact project gallery. Show each project's outcome,
@@ -32,7 +32,7 @@ Overview rather than above the work.
 Set Tasks to actionable work with title, status, owner, and due date; retain a
 completed view. Show Docs as compact cards or a list with document type and
 review state. Show the next prepared meeting agenda and reusable format clearly
-separated from meeting history. Give projects, tasks, docs, and meetings semantic
+separated from meeting history. Give projects, tasks, docs, and meetings meaningful
 colored icons so their mentions and return links remain recognizable.
 
 ## Connect useful detail

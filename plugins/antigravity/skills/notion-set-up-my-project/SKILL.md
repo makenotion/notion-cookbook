@@ -1,6 +1,6 @@
 ---
 name: notion-set-up-my-project
-description: Create a useful initial Notion project home with tasks, docs, and meeting notes, then refine its team and placement in a Projects database with the user. Use when starting or organizing a project in Notion; routine task edits, status reports, and implementing a technical spec are separate workflows.
+description: Create a useful initial Notion project home with tasks, docs, and meeting notes, then work with the user to confirm the team and choose a Projects database. Use when starting or organizing a project in Notion; routine task edits, status reports, and implementing a technical spec are separate workflows.
 ---
 
 # Set up my project
@@ -147,7 +147,7 @@ sending assignments, calendar invitations, or changing external issues.
 
 ## Compose the project home
 
-Read [workspace composition and acceptance walk](reference/workspace-pattern.md).
+Read [project layout and usability checks](reference/workspace-pattern.md).
 Build the destinations and populated records, then compose the home around them.
 Keep the current decision, team, and first actionable task visible together.
 Use [design guidance](reference/design.md) to set hierarchy, density, and visual

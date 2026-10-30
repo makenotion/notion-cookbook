@@ -18,7 +18,7 @@ depend on your client.
 | [Spec to implementation](spec-to-implementation/SKILL.md)     | Convert a product or technical spec into an implementation plan and trackable Notion tasks.              |
 | [Setup](setup/SKILL.md)                                       | Set up Notion as shared agent context by following the official setup guide after install.               |
 | [Build my content calendar](marketing-workspace/SKILL.md)     | Plan publication and production with actionable content briefs.                                          |
-| [Set up my project](set-up-my-project/SKILL.md)               | Build an EPD home with tasks, docs, meeting notes, and progressive team and placement refinement.        |
+| [Set up my project](set-up-my-project/SKILL.md)               | Set up a project with tasks, docs, and meeting notes, then confirm the team and where it belongs.        |
 
 ## Install
 

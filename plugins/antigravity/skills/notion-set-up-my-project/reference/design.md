@@ -1,4 +1,4 @@
-# Design for a useful, beautiful starting point
+# Design the project home
 
 Read this before composing or polishing the output. Treat the layouts as starting
 points; adapt them to the user's content and working rhythm.
@@ -25,7 +25,7 @@ points; adapt them to the user's content and working rhythm.
   invent a phase sequence to fill the page. Put detailed sequencing in tasks or
   the rollout doc instead of adding another home-page module.
 
-The settled home is the body of a record in the chosen Projects database; the
+The final project home is the body of a record in the chosen Projects database; the
 initial version can be a private draft while placement is unresolved. Surface
 existing project properties instead of duplicating editable status and ownership
 in body text. Once placement is known, filter Tasks and Docs views to that project
@@ -46,10 +46,10 @@ Set the page to full width for dense team work. Keep the overview short
 enough that work is visible without scrolling through a long introduction. Use
 compact properties and view tabs rather than many colored summary panels.
 
-## Build a finished artifact
+## Build the connected pages
 
 Create the real destinations and records, then compose the home around their
-actual URLs and views. Embed the primary work surface in the home; a full-page
+actual URLs and views. Embed the main working view in the home; a full-page
 database link alone is not equivalent. Move the
 view into its intended position if the tool initially appends it. Keep source
 briefs and evaluation notes behind a secondary link or collapsed section so they
