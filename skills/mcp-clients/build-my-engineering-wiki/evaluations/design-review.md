@@ -13,6 +13,10 @@ describes the page before this refinement.
 
 ![Technical library with proposal, accepted decision and current runbook](images/technical-library.png)
 
+Screenshots refreshed on 2026-10-30 in the same Notion Dev window with one
+app tab open and the sidebar closed. No page content or skill guidance changed
+during this capture refresh.
+
 ## Changes and inspection
 
 - Replaced the test-oriented page title with a short release title and a blue
@@ -27,8 +31,8 @@ describes the page before this refinement.
   Accepted and Current states.
 - Walked home → blocker → details → related spec → home. The spec has substantive
   behavior, unresolved decisions and rollout gates; its related work is preserved.
-- Used the desktop app's Actual Size command and kept the sidebar visible for
-  capture. No new window was opened. Narrow-screen behavior was not tested.
+- Used the desktop app's Actual Size command and inspected with the sidebar visible
+  during the original review. No new window was opened. Narrow-screen behavior was not tested.
 
 ## MCP capability gaps
 
