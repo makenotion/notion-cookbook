@@ -379,6 +379,29 @@
       }
     },
     {
+      "id": "referral-tracker",
+      "title": "Referral tracker App",
+      "summary": "Add a Notion row for each referral or resume email, with the candidate's email, attachments, and the email text.",
+      "path": "apps/templates/referral-tracker",
+      "kind": "app-default",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-apps", "notion-workflow", "notion-mail"],
+      "entrypoints": [
+        "src/workflows/trackReferrals.ts",
+        "src/connections/inbox.ts",
+        "src/notion.ts"
+      ],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn apps deploy --name \"Referral Tracker\""
+      }
+    },
+    {
       "id": "statsig-rollout",
       "title": "Statsig rollout App",
       "summary": "Add IDs entered in a Notion database to a Statsig ID List segment, with per-row status.",
