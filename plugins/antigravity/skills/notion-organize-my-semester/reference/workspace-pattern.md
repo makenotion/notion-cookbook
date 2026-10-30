@@ -42,7 +42,7 @@ material accessible, and use clear headings and generous reading space inside
 notes. Choose a relevant cover or illustration when it helps establish the
 subject; do not add unrelated decorative widgets.
 
-## Build and inspect the workspace
+## Build and inspect the study desk
 
 Create records and views before composing the home. Use the connection's current
 formatting and view documentation. Preserve existing page and database identities

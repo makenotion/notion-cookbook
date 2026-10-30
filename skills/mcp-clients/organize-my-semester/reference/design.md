@@ -25,7 +25,7 @@ close beneath it. Make the cards useful with subject identity, the next deadline
 and a route into course material. For a single course, use a continuous reading
 page with notes and work close together. Choose the composition for the learner's
 work, not for a tool limitation. Keep design-process commentary out of the created
-workspace; preserve citations for the learning material itself.
+study pages; preserve citations for the learning material itself.
 
 Give subjects stable visual identities, such as a botanical green for biology
 and a warm paper tone for design history, when consistent with the user's taste.
@@ -51,4 +51,4 @@ study area in a sensible order. Inspect the chosen typography, subject color, an
 unperformed visual inspection.
 
 Set page width and typography deliberately. Give the study desk its own home;
-keep an optional index separate from the learning workspace.
+keep an optional index separate from the study desk.
