@@ -84,10 +84,8 @@ connection**. Its in-memory data is reseeded whenever the Worker starts.
 6. Set external-service credentials with `ntn workers env set`; never commit
    secrets or generated local Worker state.
 
-Workers require Node.js 22.23.4 and npm 11.11.0 or newer. Some tests are entirely
+Workers require Node.js 22.23.4 and npm 10.9.9 or newer. Some tests are entirely
 offline; live verification and deployment may still require service accounts.
-See [npm versions and lockfile migration](../docs/worker-npm-lockfiles.md) for
-toolchain setup and the one-time repair of older locks.
 
 ## Naming and discovery
 
