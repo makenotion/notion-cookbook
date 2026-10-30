@@ -383,7 +383,7 @@ When `ntn datasources query <id>` returns 404 or "Could not find data source", t
 
 ## Build, Test, and Development Commands
 
-- Node >= 22.23.4 and npm >= 10.9.9 (see `package.json` engines).
+- Node >= 22.23.4 and npm >= 11.11.0 (see `package.json` engines).
 - `npm run build`: compile TypeScript to `dist/`.
 - `npm run check`: type-check only (no emit).
 - `ntn login`: connect to a Notion workspace.

@@ -56,7 +56,7 @@ the same environment variables.
 5. State clearly when a live check was not run because credentials or external
    access were unavailable.
 
-For Workers, Node.js 22.23.4 and npm 10.9.9 or newer are required. Authenticate and
+For Workers, Node.js 22.23.4 and npm 11.11.0 or newer are required. Authenticate and
 deploy only when the user asks for a live deployment. Treat generated
 `workers.json` files as local state unless a tracked fixture explicitly says
 otherwise.
