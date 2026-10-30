@@ -1,7 +1,7 @@
 # Design for a useful, beautiful starting point
 
 Read this before composing or polishing the output. Treat the layouts as starting
-points; adapt them to the user's content and supported Notion features.
+points; adapt them to the user's content and working rhythm.
 
 ## Compose an EPD project home
 
@@ -33,23 +33,24 @@ relation. Keep team context compact: names, responsibilities, and relevant
 review roles. Add it from known context or the user's post-delivery answers,
 without an empty roster or fabricated assignments.
 
-Default EPD composition: visible metadata → milestone and team → tabbed Tasks,
-Docs and Meeting notes. Keep expanded scope in Overview. Keep meeting notes to a compact recent-notes view
-and a clear next-agenda entry; do not expand the full agenda on the home. Adapt to the team's context; a personal checklist or event brief
-can remain smaller. Serious does not mean bare: useful content, connected records,
-clear states, and carefully chosen density supply the visual character.
+Compose visible metadata → milestone and team → tabbed Tasks, Docs, and Meeting
+notes. Fit the first actionable task into the initial screen with the context
+needed to act on it. Keep expanded scope in Overview. Show a compact notes view
+and clear next-agenda entry; keep the full agenda inside its record. Adapt to the
+team's context; a personal checklist or event brief can remain smaller. Use
+connected records, clear states, and carefully chosen density for visual character.
 
 ## Keep the delivery workspace focused
 
-Choose page settings for dense team work when supported. Keep the overview short
+Set the page to full width for dense team work. Keep the overview short
 enough that work is visible without scrolling through a long introduction. Use
 compact properties and view tabs rather than many colored summary panels.
 
 ## Build a finished artifact
 
 Create the real destinations and records, then compose the home around their
-actual URLs and views. When inline views are supported, put the primary work
-surface in the home; a full-page database link alone is not equivalent. Move the
+actual URLs and views. Embed the primary work surface in the home; a full-page
+database link alone is not equivalent. Move the
 view into its intended position if the tool initially appends it. Keep source
 briefs and evaluation notes behind a secondary link or collapsed section so they
 do not dominate the product experience.
@@ -77,7 +78,7 @@ Review the artifact itself, not its Markdown source or the final response:
   intentional across the home and child pages? Plain can be polished; random
   decoration and bare boilerplate both fail.
 - **Immediate utility:** can a new user start doing the work from this page?
-  Check a real item, its detail, and the return path. Verify supported action
+  Check a real item, its detail, and the return path. Verify action
   configuration without triggering unrelated writes.
 - **Depth and fidelity:** are records populated with the supplied context and
   useful structure, while preserving uncertainty, blockers, and provenance?

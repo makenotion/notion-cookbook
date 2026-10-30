@@ -40,10 +40,9 @@ assign each collaborator work. Detailed discussions can link to a follow-up doc.
 
 ## Make the next meeting easy
 
-Use a native reusable database template when supported, with a clean agenda and
-project links; create the first agenda from it. Otherwise create a clearly named
-reusable agenda page plus a populated first-meeting draft and explain how to
-duplicate the clean agenda. Do not claim a plain page is a native template.
+Create a native reusable database template with a clean agenda and project
+links, then prepare the first agenda from it. Keep the reusable template separate
+from that meeting's notes and outcomes.
 
 Make the notes area visible on the home through a compact list or table with
 meeting title, date, and status. Keep the undated prepared agenda visible and

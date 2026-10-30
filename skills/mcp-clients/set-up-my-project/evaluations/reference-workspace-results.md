@@ -1,4 +1,10 @@
-# MCP-only project smoke test — 2026-10-29
+# Project workflow smoke test — 2026-10-29
+
+**Scope:** this historical run establishes functional workflow coverage only. It
+does not meet the full design bar: actual task rows were below the first screen,
+and normal-zoom/sidebar and narrow-screen coverage were not established. Preserve
+these observations as evidence while a separate polished design reference is built.
+The runtime now describes that target independently of MCP capability gaps.
 
 An isolated agent used the fictional project brief and revised runtime skill to
 create a private portfolio with two Projects records and shared Tasks, Docs and
@@ -81,3 +87,53 @@ a useful timed agenda, pre-read and task links. This is a desktop workflow pass
 for the resumed output. No zoom-change or narrow-screen pass was performed.
 Parent screenshots are saved as portfolio-retest and home-retest in temporary
 evidence. No further page changes were made after this verification.
+
+## Capability evidence for the design reference
+
+| Intended result                                              | Evidence from this run                                                                                                                              | Remaining verification                                                                                                       |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Native status, lead, and target metadata in a compact header | Status and Target pins succeeded. The initial mixed request also omitted a required properties module, so it does not establish a Lead-pinning gap. | Test Lead pinning with a valid layout before classifying it as unsupported.                                                  |
+| Secondary metadata outside the reading flow                  | The sidebar properties module saved and rendered.                                                                                                   | Supported; this is not an MCP gap.                                                                                           |
+| Readable portfolio cards with useful project context         | Short summaries fit; the full source outcome was preserved.                                                                                         | Inspect card size and wrap controls separately; do not assume shorter text proves a control is unavailable.                  |
+| First actionable task alongside project context              | Task tabs reached the first-screen edge; task rows required scrolling.                                                                              | Design miss. Refine the composition and record any specific UI-only adjustment; do not attribute it to MCP without evidence. |
+| Weekly/standup workflow                                      | Agendas and reusable format records were created.                                                                                                   | Native reusable/recurring template support was not established. Ordinary agenda records do not prove scheduled recurrence.   |
+
+No new execution or visual verification is claimed by this documentation update.
+Capture the best design reference separately, identify the tools used for each
+adjustment, and test skill reproduction against that fixed quality target.
+
+## Refined design reference — 2026-10-29
+
+![Project context and actionable tasks on the initial screen](images/design-reference.png)
+
+Shortened the milestone and team blocks through MCP while preserving their
+meaning. Inspected the project in Notion with the sidebar visible: native status
+and target, outcome, milestone, team, and actionable task rows now appear on the
+initial desktop screen. This addresses the earlier above-the-fold failure as a
+composition problem; no new UI presentation setting was needed for this change.
+The layout follows the project-hub principle of concise context above connected
+work, with restrained color and purposeful icons.
+
+![Connected docs with types and review states](images/design-docs.png)
+
+![Prepared meetings and reusable agenda pages](images/design-meetings.png)
+
+Switched among Tasks, Docs & decisions, and Meetings. The docs view shows three
+records with their type and review state. Meetings shows two prepared dated
+agendas and two clearly labeled reusable pages. These existing pages are not
+native database templates and do not establish scheduled recurrence. Creating
+and verifying a native reusable meeting template remains an acceptance follow-up;
+the runtime continues to require it.
+
+| Setting                                                                  | Execution evidence                                                              |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| Compact milestone and team composition                                   | Updated through MCP; task rows visibly fit with the sidebar open.               |
+| Project-record width, status and target pins, secondary property sidebar | Previously configured through MCP and visibly retained.                         |
+| Lead pinning                                                             | Not retested with a valid layout request; no unsupported-capability conclusion. |
+| Native meeting template and recurrence                                   | Not established by ordinary reusable agenda records; remains unverified.        |
+
+These PNGs document the refined design reference. They are not a fresh independent
+skill run. Prior record/filter checks remain separately recorded above. This
+revision retains the full design target, removes MCP-specific compromises from
+runtime guidance, and keeps capability findings in evaluation evidence. No
+narrow-screen pass is claimed.

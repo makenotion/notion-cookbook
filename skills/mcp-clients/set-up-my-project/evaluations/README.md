@@ -50,5 +50,15 @@ workspace. Give the runner only its query/context and the runtime skill; withhol
 success criteria and existing sample page IDs. Record the first result, inspect
 the saved views and relations, and walk the rendered workspace in Notion. Compare
 workflow, hierarchy, visible metadata and detail-page usefulness against the EPD
-composition principles, not exact prose or pixels. A reviewer-polished output is
-not a passing forward test. Report retries and unavailable visual checks.
+composition principles, not exact prose or pixels. Record two separate results:
+
+- **Design reference:** refine the artifact through MCP and authorized UI edits
+  until it meets the intended design. Capture PNGs of this best result and log
+  each UI-only change with the corresponding missing or unverified MCP capability.
+- **Skill reproduction:** run the skill independently and compare its output with
+  that reference. Preserve the first result and report retries and interventions.
+  A reviewer-polished reference is not evidence of an unassisted skill pass.
+
+Keep capability gaps in evaluation evidence. Do not rewrite the desired layout
+or lower acceptance criteria to match the current connector. Treat the historical
+workflow pass as functional evidence, not a full design pass.

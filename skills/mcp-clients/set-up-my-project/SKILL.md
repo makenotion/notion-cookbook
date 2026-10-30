@@ -7,9 +7,9 @@ description: Create a useful initial Notion project home with tasks, docs, and m
 
 Turn what the user has already shared into a project they can start managing in
 Notion: what success means, what needs doing, who owns known work, and what comes
-next. For engineering, product, and design (EPD) work, provide a project home, Tasks
-database, Docs database, and a ready-to-use meeting-notes workflow as the core structure. Adapt lighter personal or
-event projects to their actual needs rather than forcing an EPD process.
+next. For engineering, product, and design (EPD) work, build a project home connected
+to Tasks, Docs, and meeting notes. Adapt lighter personal or event projects to
+their actual needs.
 
 ## Start with what is known
 
@@ -72,7 +72,7 @@ invitations, notifications, or permission changes.
 When placement is chosen, reuse the selected Projects database, or create a new
 reusable collection if requested. Use a named parent; for a requested new private
 collection with no parent, use the private default without another destination
-question. Move the existing home into it when supported, preserving its identity,
+question. Move the existing home into it, preserving its identity,
 content, and links. Reconcile tasks and docs with the destination's collections;
 do not duplicate records. Verify project relations and filtered views after the
 move. If moving or reconciling is unsupported, retain the draft and explain the
@@ -105,12 +105,12 @@ or adding portfolio dashboards beyond the chosen Projects collection.
   plan; create the ones supported by context, not an empty checklist of every
   possible document. Populate bodies from the actual material. Draft proposals
   and open decisions must remain distinct from approved specifications. Link
-  tasks to their relevant docs, using a relation when supported. Existing Figma
+  tasks to their relevant docs using native relations. Existing Figma
   designs and external specs remain canonical; retain their links.
 - **Meeting notes:** give team projects a ready-to-use agenda and a dedicated
   project-filtered notes view. Reuse an existing Meetings collection; otherwise
-  use meeting-note records in Docs with type, date, participants, and status
-  when supported. A separate Meetings database is useful when the team already
+  use meeting-note records in Docs with type, date, participants, and status.
+  A separate Meetings database is useful when the team already
   uses one, not mandatory for every project. Read [meeting setup](reference/meetings.md)
   to choose the cadence, prepare the first agenda, and connect follow-ups.
 - **Project relationship:** reuse the selected Projects database's associated
@@ -125,7 +125,7 @@ or adding portfolio dashboards beyond the chosen Projects collection.
   using known dates only. A short section often suffices; use a separate database
   only when independently tracking milestones serves the user's workflow.
 - **Blockers and decisions:** expose unresolved dependencies and decisions with
-  their source, impact, and next action. Link prerequisite tasks when supported.
+  their source, impact, and next action. Link prerequisite tasks.
   Do not infer that a task is ready when its prerequisite is incomplete, or turn
   a tentative proposal into an accepted decision.
 
@@ -145,33 +145,16 @@ the Notion brief around them. Do not create a competing tracker or claim a live
 sync without an explicit migration or integration request. Setup does not imply
 sending assignments, calendar invitations, or changing external issues.
 
-## Apply the workspace pattern
+## Compose the project home
 
-Read [workspace composition and acceptance walk](reference/workspace-pattern.md)
-before creating the home. Use its domain-specific pattern when the brief fits;
-adapt the amount of structure to the supplied work. The first screen, connected
-record bodies, visual settings and rendered acceptance walk are part of the
-deliverable, not optional polish after setup.
-
-## Produce the designed result
-
-Follow the domain composition in [design guidance](reference/design.md), not a
-generic welcome-page scaffold. Translate reference patterns into the actual
-layout, native Notion blocks, populated work surfaces, and useful record bodies.
-Build the destinations and records, then compose the home around them. An emoji,
-a callout, and links to empty databases are not a finished output.
-
-Use the design guide's quality review before delivery. Useful structure and
-visual character are part of the skill's job; the user should not need to supply
-extra art direction to obtain either. Preserve their preferences and source
-facts, and distinguish demo inputs from real work.
+Read [workspace composition and acceptance walk](reference/workspace-pattern.md).
+Build the destinations and populated records, then compose the home around them.
+Keep the current decision, team, and first actionable task visible together.
+Use [design guidance](reference/design.md) to set hierarchy, density, and visual
+character across the portfolio, project, and detail pages. Preserve the user's
+preferences and source facts; distinguish fictional inputs from real work.
 
 ## Create, populate, and check
-
-Use the connected Notion MCP for every Notion content or settings mutation, including page
-layout, views, icons, and property visibility. Browser or desktop UI is read-only
-inspection; never use it to fill an MCP capability gap. Report unsupported settings
-precisely and continue with supported content.
 
 Use the connection's current schemas and exposed tools. Check capabilities once,
 and consult its formatting documentation before using unfamiliar Notion markup.
@@ -181,10 +164,11 @@ body without inventing an identity. Create relation targets before dependent
 records, and properties before views. Preserve existing data and source pages;
 do not change sharing or publish the project as part of setup.
 
-Use native databases and views when supported. If a feature is unavailable,
-create useful supported content and identify the precise remaining manual step.
-A static list is not a live board. Without write access, return a ready-to-use
-project outline and state that nothing was created. After an uncertain write,
+Build the native databases, relations, views, and page layouts the project needs.
+Use available authorized tools to finish the intended design. If execution is
+blocked, identify the unfinished part without calling a substitute equivalent.
+Without write access, return a ready-to-use project outline and state that
+nothing was created. After an uncertain write,
 inspect resulting state before retrying; reuse successful object IDs and resume
 only missing work. Repeated setup should update or reuse the matching project.
 

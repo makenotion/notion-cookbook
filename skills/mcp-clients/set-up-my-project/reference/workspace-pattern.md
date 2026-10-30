@@ -1,99 +1,64 @@
-# A connected EPD project home
+# Build a connected EPD project home
 
-Use compact orientation, visible native metadata, connected work surfaces and
-useful detail records. Keep portfolio navigation distinct from project execution.
+Create a delivery workspace that makes the next decision and the work behind it
+clear. Give the portfolio, project home, and detail records distinct jobs.
 
-## Project inside the team system
+## Organize the project inside the team system
 
-When placement is agreed, the project home is a record in a broader Projects
-database with shared Tasks, Docs and Meetings. Reuse existing collections first.
-A requested new portfolio gets a compact gallery with project outcome, status
-and target, plus simple navigation to the shared collections. If a full outcome
-clips in gallery cards, show a short faithful summary there and keep the complete
-outcome in the project; do not truncate the source value. Do not put all
-projects' working tables on the portfolio home. If placement is unresolved,
-follow SKILL.md: deliver the private initial project before asking to tune it.
+Place the project in the agreed Projects database and reuse its shared Tasks,
+Docs, and Meetings collections. When placement is unresolved, follow SKILL.md:
+deliver the private initial project before asking where it belongs.
 
-## First screen of the project
+Build the portfolio as a compact project gallery. Show each project's outcome,
+status, lead, and target with a meaningful colored icon. Write a concise outcome
+summary for the card and retain the full outcome in the project. Use consistent
+card proportions and wrapped text. Keep shared collection navigation easy to
+find; keep individual projects' work surfaces inside their homes.
 
-Use full width for EPD work. Show status, lead and target near the title using the
-native database-page layout. If a property type cannot be pinned, keep it visible
-in a compact native properties group when that improves readability. If a tall
-properties section pushes work below the fold, move it out of the main reading
-flow using supported layout controls (for example, a sidebar with secondary
-properties hidden): retain essential status/date pins and show the lead once in the
-compact team area. Preserve the underlying properties and their source values. A
-rejected mixed-property pinning request does not prove all pinning is unsupported:
-try a smaller supported subset once before falling back. Show the full outcome
-once near the top, not both as a visible property and repeated body text. Keep
-secondary metadata out of the first screen so the working tabs remain in reach. Show a one-sentence purpose, then a roughly 65/35
-row: current milestone/decision on the left, known collaborators and responsibilities
-on the right. A restrained blue milestone panel is enough; the team area need
-not be another callout. Avoid repeating pinned metadata in the body.
+## Compose the first screen
 
-Below that, use native tabs for Tasks, Docs & decisions, Meetings and Overview
-when supported. Otherwise use clearly named sections with compact views. Tasks
-defaults to actionable work, with completed records reachable. Docs may use
-compact cards or a list showing type and review state. Meetings shows the next
-prepared agenda and reusable format, clearly distinguished from meeting history.
-Overview holds scope, outcomes and working agreements rather than crowding the
-first screen. Choose semantic colored icons for project, tasks, docs and meetings.
+Set the EPD home to full width. Pin status, lead, and target near the title; group
+secondary properties in details. Show the full outcome once. Use a roughly 65/35
+row for the current milestone or decision on the left and known collaborators
+with responsibilities on the right. Give the milestone a restrained accent and
+keep the team readable without repeating the metadata.
 
-## Connected detail and honest team work
+Place native Tasks, Docs & decisions, Meetings, and Overview tabs immediately
+below that context. Keep the first actionable task visible on the initial screen.
+Adjust the length of the introduction, spacing, and metadata grouping until the
+work and its context fit together. Keep expanded scope and working agreements in
+Overview rather than above the work.
 
-Filter every project view by the exact project relation, including meetings.
+Set Tasks to actionable work with title, status, owner, and due date; retain a
+completed view. Show Docs as compact cards or a list with document type and
+review state. Show the next prepared meeting agenda and reusable format clearly
+separated from meeting history. Give projects, tasks, docs, and meetings semantic
+colored icons so their mentions and return links remain recognizable.
+
+## Connect useful detail
+
+Filter every embedded view by the exact project relation, including meetings.
 Populate task completion criteria, substantive brief/design/decision documents,
-and a contextual agenda. Link tasks to their relevant specifications and let
-records lead back to the project. Proposed dates and decisions remain proposals.
-Weekly reviews and standups are prepared when requested; agenda pages do not
-schedule meetings or enable recurrence. See meetings.md for cadence handling.
+and a contextual agenda. Link tasks to the relevant specifications and return
+paths to the project. Preserve proposed dates and decisions as proposals.
+Prepare weekly reviews or standups to match the team's cadence; follow
+[meeting setup](meetings.md) to connect agendas, notes, and follow-ups.
 
-## Acceptance walk
+## Inspect the finished workspace
 
-Enter through the portfolio when one exists. The project's first screen makes
-its state, next milestone and team legible; its tabs expose work without a long
-scroll. Open Tasks, Docs and Meetings and inspect one real record in each. Verify
-another project's record is excluded from these views. Team questions come after
-this usable initial home, and known information is not asked again. A polished
-page with missing docs, disconnected tasks or empty meeting placeholders fails.
+Enter through the portfolio. Read the project's status, outcome, next milestone,
+and team, then act on a task without scrolling through introductory prose.
+Switch among Tasks, Docs, and Meetings; open a real record in each and follow its
+links back. Verify that another project's records are excluded and that blocked,
+undated, and unassigned work remains discoverable.
 
-## Render and inspect the saved result
+Inspect the home and detail pages at normal desktop zoom with the sidebar visible,
+and at a narrow width. Check text wrapping, card proportions, aligned columns,
+visible properties, and the amount of work above the fold. Correct clipping,
+stranded headings, excessive empty space, and duplicate database titles. Preserve
+existing objects and verify the saved hierarchy after moving blocks.
 
-Build records and views first, then compose their existing blocks into the home.
-Read the connection's current Markdown and view/layout documentation. For native
-toggles and tabs, separate their label from child blocks with a blank line.
-Preserve exact child-page/database tags during edits. A tool's success response
-does not establish that moved blocks retained the intended order: inspect the
-saved page and correct misplaced sections while preserving existing objects.
-If moving existing database blocks into a new tab/column container changes sibling
-order, fetch the saved hierarchy, then reapply the intended complete composition
-using those same object IDs. Verify the second readback before deciding the native
-layout is unavailable; do not discard working tabs merely because their first
-move reordered the page.
-
-Set width, card size, wrapped content and property visibility deliberately.
-Check data-source update capabilities for database-record layouts, not just page
-update capabilities. On connections exposing `page_layout`, read
-`notion://docs/database-page-layouts`: pinned properties, sidebar details and
-record full width can be configured there before UI inspection. Use the connected Notion MCP for all settings changes. UI inspection is read-only;
-if MCP cannot express a setting, report the specific limitation. Hide duplicate linked-database titles.
-A tab intended as a working table must contain an inline database/view, not merely
-a link to its full-page source. In Notion Markdown, verify `inline="true"` for
-embedded work surfaces; reserve `inline="false"` for navigation destinations.
-Use semantic colored page icons so mentions are recognizable, not a repeated
-colored dot. Keep original assets and long detail accessible without dominating
-the working first screen.
-
-Verify home → record → related work → home, actual view filters and counts, and
-at least one alternate view. Restore the intended everyday default view after
-testing alternates so delivery opens on useful work. Inspect the rendered result at normal zoom with the
-sidebar visible. Compare hierarchy, density and navigation against the selected
-reference. Check useful work is visible above the fold, long titles wrap, and
-essential columns do not overflow. Correct failures before delivery. If rendering
-or a capability is unavailable, report that exact gap without claiming parity.
-
-During skill evaluation, preserve the first result and the run's evidence. If
-review finds a miss, change the reusable instructions and rerun or resume the
-skill with only that revised guidance. Reviewer hand-polishing is not a passing
-skill test. Equivalent layout and workflow matter more than identical wording,
-page IDs, image pixels, or arbitrary record counts.
+Compare the rendered workspace with the project design principles, not merely
+its schema. A polished home with missing docs, disconnected tasks, or empty
+meeting placeholders fails. Share the usable initial home before asking team,
+cadence, and placement questions; reuse known answers.
