@@ -197,6 +197,25 @@ root. Use `context.notion` for Notion API access. Deployed apps receive Notion c
 local execution needs `NOTION_API_TOKEN` in `.env` before making API requests.
 Never commit tokens or generated `dist/` and `.notion/` state.
 
+## Report platform feedback
+
+Report substantive SDK, Apps platform, or documentation friction, not bugs in
+the App's code or configuration. Use the installed SDK's `notion-apps feedback`
+command with `--title`, `--severity` (`P0`–`P3`), and sanitized Markdown details
+on stdin. Read `node_modules/@notionhq/apps/README.md` for detailed usage and
+severity guidance. It uses `NOTION_API_TOKEN`, the same PAT used for Workers
+and Apps; for dev/local, set `NOTION_BASE_URL` to the internal app origin,
+not the public API `/v1` URL.
+
+Include a minimal repro, expected and observed behavior, impact, workaround,
+and SDK version if known. Separate observations from hypotheses. Redact
+credentials and customer data; never automatically upload whole files, logs,
+or transcripts. Report once, preserve the submission ID, and do not
+automatically retry an unknown outcome; reuse that ID for an explicit retry.
+If submission fails or the installed SDK does not support the command, retain
+a sanitized local issue and tell the user without blocking their main task.
+Do not invent `ntn apps feedback` or another submission route.
+
 ## Verification and deployment
 
 Run `npm run check` and `npm run build` from the app root after changes.
