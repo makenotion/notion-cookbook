@@ -1,0 +1,55 @@
+{
+  "name": "extend-existing-calendar",
+  "skills": ["notion-make-a-plan"],
+  "query": "Add next week\u2019s two draft posts to our existing calendar; keep everything already there.",
+  "context": {
+    "conversation": "Voice is practical. Channel LinkedIn. Themes: interview notes and research summaries. Draft two ideas without assigning publication dates.",
+    "search_routes": [
+      {
+        "intent": "Find existing content calendar",
+        "results": [
+          {
+            "url": "https://notion.so/content",
+            "title": "Content"
+          }
+        ]
+      }
+    ],
+    "sources": {
+      "https://notion.so/content": {
+        "schema": {
+          "Name": "title",
+          "Stage": "status",
+          "Publish date": "date",
+          "Channel": "select"
+        },
+        "records": [
+          {
+            "id": "existing-post",
+            "title": "Start with the question",
+            "Stage": "Published",
+            "Publish date": "2026-10-20"
+          }
+        ]
+      }
+    },
+    "tools": [
+      "search",
+      "connector-search",
+      "fetch",
+      "get-users",
+      "create-pages",
+      "create-database",
+      "update-pages",
+      "update-data-source",
+      "create-view",
+      "query-data-sources"
+    ]
+  },
+  "success_criteria": [
+    "Reuses the existing collection and preserves the published record and its date.",
+    "Adds exactly two distinct drafted posts, retaining unknown publication dates and leaving publication state unpublished.",
+    "Makes undated drafts discoverable beyond a date-only calendar and saves substantive copy inside each record.",
+    "Does not create a new home, duplicate tracker, campaign portfolio, form, or meeting merely to match a template."
+  ]
+}

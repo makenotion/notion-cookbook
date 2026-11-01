@@ -21,6 +21,8 @@ The [mcp-clients](mcp-clients/) directory contains reusable workflows for any MC
 - **[setup](mcp-clients/setup/)**: Onboarding skill that sets up Notion by following the official setup guide
 - **[plan-marketing-campaigns](mcp-clients/plan-marketing-campaigns/)**: Connect campaign briefs, content production, and brand resources.
 
+- **[Make a plan](mcp-clients/make-a-plan/)**: Organize events, trips, job searches, launches, and other multi-step goals into connected plans.
+
 ## Using skills
 
 1. Connect your MCP client to the [Notion MCP server](https://developers.notion.com/docs/notion-mcp).

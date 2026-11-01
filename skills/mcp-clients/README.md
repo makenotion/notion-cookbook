@@ -18,6 +18,7 @@ depend on your client.
 | [Spec to implementation](spec-to-implementation/SKILL.md)     | Convert a product or technical spec into an implementation plan and trackable Notion tasks.              |
 | [Setup](setup/SKILL.md)                                       | Set up Notion as shared agent context by following the official setup guide after install.               |
 | [Plan marketing campaigns](plan-marketing-campaigns/SKILL.md) | Connect campaign briefs, content production, and brand resources.                                        |
+| [Make a plan](make-a-plan/SKILL.md)                           | Turn a multi-step goal into milestones, connected tasks, and useful working pages.                       |
 
 ## Install
 
@@ -41,6 +42,7 @@ from your connected Notion MCP server and follow its available input schema.
 
 ```text
 mcp-clients/
+├── make-a-plan/
 ├── plan-marketing-campaigns/
 ├── database-designer/
 ├── weekly-project-digest/

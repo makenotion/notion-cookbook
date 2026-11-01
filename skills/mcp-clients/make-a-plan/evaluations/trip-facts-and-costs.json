@@ -1,0 +1,32 @@
+{
+  "name": "trip-facts-and-costs",
+  "skills": ["notion-make-a-plan"],
+  "query": "Organize our booked Boston trip and preparation tasks in Notion. No recommendations or bookings needed.",
+  "context": {
+    "conversation": "Two travelers; Dec4\u20136,2026. Train arrives Boston Dec4 at 11:30 local; confirmed fare $160 total. Hotel reserved for two nights, estimated $420 total, not paid. Dinner idea has no time or price. $800 budget. Need packing checklist and to confirm hotel cancellation terms.",
+    "search_routes": [
+      {
+        "intent": "Find existing trip plan",
+        "results": []
+      }
+    ],
+    "tools": [
+      "search",
+      "connector-search",
+      "fetch",
+      "get-users",
+      "create-pages",
+      "create-database",
+      "update-pages",
+      "update-data-source",
+      "create-view",
+      "query-data-sources"
+    ]
+  },
+  "success_criteria": [
+    "Preserves train confirmation versus hotel reservation/estimate and dinner idea; does not invent availability, confirmation codes, prices, or cancellation terms.",
+    "Separates itinerary dates/times from preparation deadlines; dinner remains reachable without a date.",
+    "Distinguishes $160 confirmed fare and $420 estimated hotel cost, with unpriced expenses disclosed instead of claiming an exact remaining budget.",
+    "Creates useful packing/preparation content and routes between home and booking records; performs no purchase or outreach."
+  ]
+}

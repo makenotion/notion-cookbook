@@ -1,0 +1,34 @@
+{
+  "name": "event-from-notes",
+  "skills": ["notion-make-a-plan"],
+  "query": "Create our printmaking workshop plan in Notion from the notes. Draft the invitation and run sheet; do not send anything.",
+  "context": {
+    "conversation": "December 12, 2026, 14:00\u201317:00 America/New_York; 24 guests; $900 budget. Maya coordinates, Jules handles materials. Room hold expires Nov20; booking and price unconfirmed. Materials estimated $180. Materials list due Nov23. RSVP deadline Dec5. No guest names. Invitations depend on room confirmation. No destination supplied.",
+    "search_routes": [
+      {
+        "intent": "Find an existing workshop plan or tracker",
+        "results": []
+      }
+    ],
+    "users": [],
+    "tools": [
+      "search",
+      "connector-search",
+      "fetch",
+      "get-users",
+      "create-pages",
+      "create-database",
+      "update-pages",
+      "update-data-source",
+      "create-view",
+      "query-data-sources"
+    ]
+  },
+  "success_criteria": [
+    "Creates a private plan without asking for destination or repeated context; no outline/row approval gate.",
+    "Saves a usable invitation draft and proposed timed run sheet, not empty headings or writing instructions.",
+    "Preserves unconfirmed booking, unknown room/refreshment costs and unknown owners; does not assign fictional people or calculate misleading remaining budget.",
+    "Separates guest data from preparations, creates no fabricated guests, and sends or shares nothing.",
+    "Connects records to the plan, retains undated tasks, and makes the booking decision and its real deadline clear on the rendered home."
+  ]
+}
