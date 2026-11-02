@@ -65,10 +65,7 @@ function runProject(project) {
 
   console.log(`Running ${stage}: ${project.name}`)
   return new Promise((resolveResult) => {
-    const packageManager = existsSync(join(project.path, "pnpm-lock.yaml"))
-      ? "pnpm"
-      : "npm"
-    const child = spawn(packageManager, args, {
+    const child = spawn("npm", args, {
       cwd: project.path,
       stdio: ["ignore", "pipe", "pipe"],
     })

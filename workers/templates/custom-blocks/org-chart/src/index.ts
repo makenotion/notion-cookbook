@@ -5,7 +5,7 @@ export default worker
 
 worker.customBlock("orgChart", {
   path: "./blocks/org-chart",
-  command: "pnpm exec vite build",
+  command: "npx vite build",
   output: "dist",
   name: "Org chart",
   description:

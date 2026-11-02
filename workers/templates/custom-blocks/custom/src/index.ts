@@ -5,7 +5,7 @@ export default worker
 
 worker.customBlock("helloWorld", {
   path: "./blocks/hello-world",
-  command: "pnpm exec vite build",
+  command: "npx vite build",
   output: "dist",
   name: "Hello world",
   description: 'A minimal custom block that renders "Hello world".',

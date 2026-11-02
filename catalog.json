@@ -208,10 +208,10 @@
       "integrations": ["notion-workers", "notion-custom-blocks"],
       "entrypoints": ["src/index.ts"],
       "commands": {
-        "install": "pnpm install",
-        "check": "pnpm run check",
-        "test": "pnpm test",
-        "build": "pnpm run build",
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
         "deploy": "ntn workers deploy --name custom"
       }
     },
@@ -227,10 +227,10 @@
       "integrations": ["notion-workers", "notion-custom-blocks"],
       "entrypoints": ["src/index.ts"],
       "commands": {
-        "install": "pnpm install",
-        "check": "pnpm run check",
-        "test": "pnpm test",
-        "build": "pnpm run build",
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
         "deploy": "ntn workers deploy --name habit-tracker"
       }
     },
@@ -246,10 +246,10 @@
       "integrations": ["notion-workers", "notion-custom-blocks"],
       "entrypoints": ["src/index.ts"],
       "commands": {
-        "install": "pnpm install",
-        "check": "pnpm run check",
-        "test": "pnpm test",
-        "build": "pnpm run build",
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
         "deploy": "ntn workers deploy --name org-chart"
       }
     },
@@ -265,10 +265,10 @@
       "integrations": ["notion-workers", "notion-custom-blocks"],
       "entrypoints": ["src/index.ts"],
       "commands": {
-        "install": "pnpm install",
-        "check": "pnpm run check",
-        "test": "pnpm test",
-        "build": "pnpm run build",
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
         "deploy": "ntn workers deploy --name whiteboard"
       }
     },

@@ -24,7 +24,6 @@ function fixture() {
   writeFileSync(
     join(root, "bin/npm"),
     `#!/usr/bin/env bash
-printf '%s %s %s\\n' "\${0##*/}" "\${PWD##*/}" "$*" >> "$EVENTS.commands"
 printf 'start %s\\n' "\${PWD##*/}" >> "$EVENTS"
 if [[ "\${PWD##*/}" == "three" ]]; then sleep 0.3; else sleep 0.1; fi
 printf 'end %s\\n' "\${PWD##*/}" >> "$EVENTS"
@@ -34,8 +33,7 @@ if [[ "\${PWD##*/}" == "$FAIL_PROJECT" ]]; then
 fi
 `
   )
-  copyFileSync(join(root, "bin/npm"), join(root, "bin/pnpm"))
-  spawnSync("chmod", ["+x", join(root, "bin/npm"), join(root, "bin/pnpm")])
+  spawnSync("chmod", ["+x", join(root, "bin/npm")])
   for (const name of ["one", "two", "three"]) {
     const dir = join(root, "examples", name)
     mkdirSync(dir, { recursive: true })
@@ -94,23 +92,3 @@ test("reports a failing project and stops starting new work", () => {
     rmSync(root, { recursive: true, force: true })
   }
 })
-
-for (const stage of ["install", "typecheck", "test"]) {
-  test(`uses pnpm for a locked project during ${stage}, retaining npm for other projects`, () => {
-    const { root, events } = fixture()
-    try {
-      writeFileSync(
-        join(root, "examples/one/pnpm-lock.yaml"),
-        "lockfileVersion: '9.0'\n"
-      )
-      const result = run(root, events, stage)
-      assert.equal(result.status, 0, result.stderr)
-      const calls = readFileSync(`${events}.commands`, "utf8")
-      const command = stage === "typecheck" ? "run check" : stage
-      assert.ok(calls.includes(`pnpm one ${command}\n`), calls)
-      assert.ok(calls.includes(`npm two ${command}\n`), calls)
-    } finally {
-      rmSync(root, { recursive: true, force: true })
-    }
-  })
-}

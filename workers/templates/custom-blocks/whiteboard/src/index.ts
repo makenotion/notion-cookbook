@@ -5,7 +5,7 @@ export default worker
 
 worker.customBlock("whiteboard", {
   path: "./blocks/whiteboard",
-  command: "pnpm exec vite build",
+  command: "npx vite build",
   output: "dist",
   name: "Whiteboard",
   description:
