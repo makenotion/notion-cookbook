@@ -99,8 +99,10 @@ function expectedKind(path, id) {
   return "worker-tool"
 }
 
-function validateNpmScripts(command, scripts, label) {
-  for (const match of command.matchAll(/\bnpm\s+run\s+(?:--\s+)?([\w:.-]+)/g)) {
+function validatePackageScripts(command, scripts, label) {
+  for (const match of command.matchAll(
+    /\b(?:npm|pnpm)\s+run\s+(?:--\s+)?([\w:.-]+)/g
+  )) {
     const script = match[1]
     if (typeof scripts?.[script] !== "string") {
       report(
@@ -110,7 +112,7 @@ function validateNpmScripts(command, scripts, label) {
   }
 
   for (const match of command.matchAll(
-    /\bnpm\s+(test|start|stop|restart)\b/g
+    /\b(?:npm|pnpm)\s+(test|start|stop|restart)\b/g
   )) {
     const script = match[1]
     if (typeof scripts?.[script] !== "string") {
@@ -241,8 +243,14 @@ async function validateRecipe(recipe, index, projects, readme, ids, paths) {
   ) {
     report(`${label}.commands must be an object`)
   } else {
-    if (recipe.commands.install !== "npm install") {
-      report(`${label}.commands.install must be "npm install"`)
+    const packageManager = (await isFile(
+      resolve(repoRoot, path, "pnpm-lock.yaml")
+    ))
+      ? "pnpm"
+      : "npm"
+    const installCommand = `${packageManager} install`
+    if (recipe.commands.install !== installCommand) {
+      report(`${label}.commands.install must be "${installCommand}"`)
     }
 
     for (const [name, command] of Object.entries(recipe.commands)) {
@@ -252,7 +260,7 @@ async function validateRecipe(recipe, index, projects, readme, ids, paths) {
       if (typeof command !== "string" || command.trim() === "") {
         report(`${label}.commands.${name} must be a non-empty string`)
       } else if (project) {
-        validateNpmScripts(
+        validatePackageScripts(
           command,
           project.scripts,
           `${label}.commands.${name}`

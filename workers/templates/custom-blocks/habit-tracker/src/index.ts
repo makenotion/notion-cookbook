@@ -5,7 +5,7 @@ export default worker
 
 worker.customBlock("habitTracker", {
   path: "./blocks/habit-tracker",
-  command: "npx vite build",
+  command: "pnpm exec vite build",
   output: "dist",
   name: "Habit tracker",
   description: "Track habits and daily progress in a month-at-a-glance grid.",

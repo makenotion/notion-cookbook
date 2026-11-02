@@ -58,6 +58,10 @@ For a new project, create a Worker from a custom block template:
 ntn workers new my-worker-name --template <template>
 ```
 
+Use `pnpm install` in the new Worker root and keep `pnpm-lock.yaml` when deploying.
+Hosted builds select pnpm from that lockfile; do not replace it with an npm lockfile.
+For an existing npm project, keep its package manager unless asked to migrate it.
+
 There are 4 templates to choose from: `custom` (minimal), `whiteboard`, `habit-tracker`, and `org-chart`.
 
 Keep the declaration in `src/index.ts` and frontend files in `blocks/<key>/`:
@@ -79,8 +83,8 @@ Do not create a `package.json` inside the block directory.
 For React with Vite, run these commands from the Worker root:
 
 ```shell
-npm install @notionhq/custom-blocks react react-dom
-npm install --save-dev @notionhq/custom-blocks-dev-shell @types/react @types/react-dom @vitejs/plugin-react vite
+pnpm add @notionhq/custom-blocks react react-dom
+pnpm add --save-dev @notionhq/custom-blocks-dev-shell @types/react @types/react-dom @vitejs/plugin-react vite
 ```
 
 ### 2. Declare the block
@@ -96,7 +100,7 @@ worker.customBlock(
     description: "View and update issues",
     icon: { type: "emoji", emoji: "📋" },
     path: "./blocks/issue-board",
-    command: "npx vite build",
+    command: "pnpm exec vite build",
     output: "dist",
     slashCommand: "issues",
     version: 1,
@@ -238,9 +242,9 @@ Add one `tsc -p blocks/<key>/tsconfig.json --noEmit` command for each block.
 Run the available check, test, and build scripts from the Worker root:
 
 ```shell
-npm run check
-npm test
-npm run build
+pnpm run check
+pnpm test
+pnpm run build
 ```
 
 ## SDK APIs

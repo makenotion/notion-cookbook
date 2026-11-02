@@ -6,12 +6,15 @@ point for a new block.
 
 ## Quickstart
 
+Requires Node.js >= 22.23.4 and pnpm >= 10.
+Keep `pnpm-lock.yaml` in the project; hosted deploys use it to select pnpm.
+
 From the repository root:
 
 ```zsh
 cd workers/templates/custom-blocks/custom
-npm install
-npm run check
+pnpm install
+pnpm run check
 ntn customblocks dev
 ```
 
@@ -48,7 +51,7 @@ blocks/hello-world/
 ## Verification
 
 ```zsh
-npm run check
-npm test
-npm run build
+pnpm run check
+pnpm test
+pnpm run build
 ```
