@@ -6,14 +6,18 @@ creates a row in a Habits Log database, so history stays in plain Notion data.
 
 ## Quickstart
 
+Requires Node.js >= 22.23.4.
+
+pnpm is recommended for new projects; npm also works.
+
 From the repository root:
 
 ```zsh
 npm install --global ntn
 cd workers/templates/custom-blocks/habit-tracker
-npm install
-npm run check
-npm test
+pnpm install
+pnpm run check
+pnpm test
 ntn customblocks dev
 ```
 

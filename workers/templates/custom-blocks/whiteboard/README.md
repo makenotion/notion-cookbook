@@ -7,14 +7,18 @@ any other page data.
 
 ## Quickstart
 
+Requires Node.js >= 22.23.4.
+
+pnpm is recommended for new projects; npm also works.
+
 From the repository root:
 
 ```zsh
 npm install --global ntn
 cd workers/templates/custom-blocks/whiteboard
-npm install
-npm run check
-npm test
+pnpm install
+pnpm run check
+pnpm test
 ntn customblocks dev
 ```
 

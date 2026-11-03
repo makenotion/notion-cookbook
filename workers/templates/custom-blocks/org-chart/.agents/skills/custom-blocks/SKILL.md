@@ -58,6 +58,8 @@ For a new project, create a Worker from a custom block template:
 ntn workers new my-worker-name --template <template>
 ```
 
+pnpm is recommended for new projects; npm also works.
+
 There are 4 templates to choose from: `custom` (minimal), `whiteboard`, `habit-tracker`, and `org-chart`.
 
 Keep the declaration in `src/index.ts` and frontend files in `blocks/<key>/`:
@@ -79,8 +81,8 @@ Do not create a `package.json` inside the block directory.
 For React with Vite, run these commands from the Worker root:
 
 ```shell
-npm install @notionhq/custom-blocks react react-dom
-npm install --save-dev @notionhq/custom-blocks-dev-shell @types/react @types/react-dom @vitejs/plugin-react vite
+pnpm add @notionhq/custom-blocks react react-dom
+pnpm add --save-dev @notionhq/custom-blocks-dev-shell @types/react @types/react-dom @vitejs/plugin-react vite
 ```
 
 ### 2. Declare the block
@@ -238,9 +240,9 @@ Add one `tsc -p blocks/<key>/tsconfig.json --noEmit` command for each block.
 Run the available check, test, and build scripts from the Worker root:
 
 ```shell
-npm run check
-npm test
-npm run build
+pnpm run check
+pnpm test
+pnpm run build
 ```
 
 ## SDK APIs
