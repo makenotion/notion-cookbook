@@ -169,6 +169,7 @@ find and inspect an issue in Sentry, then declare an incident in PagerDuty.
 - [Create my team handbook](skills/mcp-clients/create-my-team-handbook/SKILL.md) — Find complete procedures and handle operational requests.
 - [Set up my project](skills/mcp-clients/set-up-my-project/SKILL.md) — Build an EPD home with tasks, docs, meeting notes, and progressive team and placement refinement.
 - [Organize my semester](skills/mcp-clients/organize-my-semester/SKILL.md) — Create a personal study space with course notes and upcoming assignments.
+- [Build my engineering wiki](skills/mcp-clients/build-my-engineering-wiki/SKILL.md) — Navigate setup, current architecture, operations, and proposals.
 - [Notion developer documentation](https://developers.notion.com)
 - [Notion API reference](https://developers.notion.com/reference)
 - [Contributing](CONTRIBUTING.md) — add or improve an example, Worker, skill, or
