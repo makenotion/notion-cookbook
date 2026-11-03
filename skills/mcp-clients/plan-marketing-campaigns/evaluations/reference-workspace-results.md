@@ -12,7 +12,7 @@ without conversation history, reference workspace IDs or grading criteria.
   record; editorial review returns three.
 - Distinct article draft, timed video storyboard and email subject/body. Unknown
   trial links, approvals, performance and footage were not invented.
-- Home uses an asymmetric action rail and three illustrated campaign cards.
+- Home uses a narrow navigation column with a next action and three illustrated campaign cards.
   Original cover and campaign title treatments are attached and render in Notion.
 - Native campaign and content layouts expose pinned operational properties,
   keeping secondary details separate from working drafts.

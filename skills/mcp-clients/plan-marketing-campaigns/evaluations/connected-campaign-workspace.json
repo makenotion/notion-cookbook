@@ -1,6 +1,6 @@
 {
   "name": "connected-campaign-workspace",
-  "skills": ["notion-marketing-workspace"],
+  "skills": ["notion-plan-marketing-campaigns"],
   "query": "Set up our marketing workspace in Notion from these campaign notes. Use a new private workspace; don't search existing company information.",
   "context": {
     "conversation": "Fictional Northline campaign: Get Friday back, launches November 12, 2026. Lightweight invoicing for independent architects: unpaid-invoice visibility and editable reminder drafts, not automated collection. Candid, practical voice; deep blue. Article in review, planned Nov 12, approval pending. 45-second walkthrough in production for Nov 12, storyboard unpaid list > select invoice > edit reminder; no final video. Customer email drafting for Nov 13, consented existing customers only. LinkedIn idea undated/unapproved. Partner blurb blocked on confirmation, undated. Reminder how-to not started, proposed Nov 17. No assets, named owners, budgets, or performance supplied.",

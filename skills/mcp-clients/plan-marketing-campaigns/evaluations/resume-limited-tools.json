@@ -1,6 +1,6 @@
 {
   "name": "resume-limited-tools",
-  "skills": ["notion-marketing-workspace"],
+  "skills": ["notion-plan-marketing-campaigns"],
   "query": "Finish setting up the workspace under https://notion.so/team-home; the last attempt timed out.",
   "context": {
     "conversation": "We need a launch blog and a LinkedIn post. Mira owns the blog draft. No publish dates agreed. Keep it clean and compact.",

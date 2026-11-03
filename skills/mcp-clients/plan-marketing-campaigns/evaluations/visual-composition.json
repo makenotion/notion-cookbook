@@ -1,6 +1,6 @@
 {
   "name": "visual-composition",
-  "skills": ["notion-marketing-workspace"],
+  "skills": ["notion-plan-marketing-campaigns"],
   "query": "Build my content calendar in Notion under https://notion.so/home using the context we discussed.",
   "context": {
     "conversation": "We have a blog draft and an unapproved social post idea, both undated.",
