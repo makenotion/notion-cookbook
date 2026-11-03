@@ -16,6 +16,7 @@
     "typescript": "^5.8.0"
   },
   "dependencies": {
+    "@notionhq/client": "^5.13.0",
     "@notionhq/workers": ">=0.0.0",
     "pptxgenjs": "^4.0.1"
   }
