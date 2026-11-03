@@ -1,0 +1,5 @@
+interface:
+  display_name: "Plan and track work"
+  short_description: "Plan anything with steps, dates and things to track"
+policy:
+  allow_implicit_invocation: true
