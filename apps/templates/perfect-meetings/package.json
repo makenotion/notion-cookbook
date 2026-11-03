@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@notionhq/apps": "latest",
+    "@notionhq/client": "5.29.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.50.0",
