@@ -1,15 +1,19 @@
 ---
 name: notion-planner
-description: Plan and track multi-step work in Notion, with a plan page, a Tasks database, and the views, reminders and sharing that fit. Use for "help me plan…", "make a plan for…", "set up this project", "break this down", "what's next", "update the plan", "we slipped", "weekly check-in", "a month of posts", "I need to post more", covering events, launches, campaigns, content calendars, trips, job searches and moves. Not for a quick list, a single post, comparing options, or turning a spec into engineering tasks.
+description: Guides people from a multi-step goal to a working Notion plan, recommending a setup and building useful tasks, drafts and views. Keeps the same plan current as priorities and dates change. Use proactively for planning requests, without waiting for the user to name the skill, including "help me plan…", "make a plan for…", "set up this project", "break this down", "what's next", "update the plan", "we slipped", "weekly check-in", "a month of posts", "I need to post more", covering events, launches, campaigns, content calendars, trips, job searches and moves. Not for a quick list, a single post, comparing options, or turning a spec into engineering tasks.
 ---
 
 # Plan and track work
 
-Help people plan and run work in Notion the way Notion is meant to be used. They should leave with a working project they understand, built from pieces they can reuse, and with a reason to come back.
+Guide the person from a goal to a working Notion plan. Recommend a setup, help them choose what fits, and build useful tasks, drafts and views. Keep the same plan current as priorities and dates change.
+
+Before a setup question, briefly explain what you will deliver, for example: "I’ll turn this into a Notion plan with next steps, dates, and working drafts. First, let’s choose how to organize it." Ask one brief setup question only when the conversation has not already settled the choice. If the person specified the structure or asked you to proceed, use that direction and build.
 
 Every plan is built from the same few building blocks; only the context changes. Keep the structure fixed and adapt the names, fields and content to the person's work.
 
 ## When to use it
+
+Recognize planning requests proactively; the person does not need to name this skill. A passing mention of future work is not a request to create a plan.
 
 - **Start a plan:** a goal with several steps, dates or people.
 - **Update a plan:** add or break down work, move dates, handle a slip or a scope change, answer "what's next?"
@@ -36,7 +40,7 @@ Read [the Notion way](reference/notion-way.md) the first time you use this skill
    - **pieces added only when they pay off:** forms and connected apps bring data in, reminders and automations keep it moving, AI helps, sharing brings people in
 2. **Start simple:** one plan page and one Tasks database, then add one piece at a time.
 3. **Reuse first:** if the person already has Projects or Tasks databases, add to them ([where to save](reference/where-to-save.md)).
-4. **Show the bricks once:** after building, say in a sentence or two what each piece is, e.g. "Your tasks live in a database; Board and Calendar are two views of the same tasks." Skip this if they already work this way.
+4. **Explain how the plan is organized:** after building, explain in a sentence or two how the pages, tasks and views connect, e.g. "Your tasks live in a database; Board and Calendar are two views of the same tasks." Skip this if they already work this way.
 5. **Advise; they decide:** the person makes the structural choices through choice cards. You draft the content.
 6. **Leave a reason to come back:** pin the new plan to their Favorites, give a dated next action, and for plans that run over weeks offer to keep it moving with a scheduled check-in.
 
@@ -45,7 +49,7 @@ Read [the Notion way](reference/notion-way.md) the first time you use this skill
 When the person needs to make a choice, show a **choice card**, never a plain-text question:
 
 - **Use the platform's built-in choice UI.** For example, the ask-user-question tool in Claude, clickable choices in ChatGPT, and `request_user_input` in Codex. Put the question in the question field and each option as its own clickable choice.
-- **Shape:** 2–4 options. The recommended option goes first, marked "(Recommended)". Every option shows its full one-line description, not just a name; if the UI only shows labels, write "Name: description" in the label. Use multi-select for adding pieces.
+- **Shape:** 2–4 options. The recommended option goes first, marked "(Recommended)". Every option shows its full one-line description, not just a name; if the UI only shows labels, write "Name: description" in the label. Use multi-select for optional additions.
 - **Fallback:** only if the platform has no choice UI at all, show a numbered list with the descriptions and say "reply with a number."
 - **Limits:**
   - At most one card before the first build, and one after it.
@@ -64,9 +68,9 @@ The card wording and when to show each card are in [choice cards](reference/choi
    - Write real content into task pages, such as drafts, run sheets or captions.
    - Compose the home following [page layout](reference/page-layout.md).
    - Never invent people, bookings, prices, approvals or completed work.
-4. **Pin it and show it.** Add a new plan to the person's Favorites (`update-page-favorites`) and say so in one line: "I pinned it to your Favorites; unpin anytime." Don't pin again on updates or check-ins. Then give the link, what's ready, the bricks line (first time only), and the next action.
-5. **Pieces card.** A multi-select card with 2–4 pieces that fit this plan, taken from the use case's likely pieces. Build what they pick. For anything the connection can't create, give the exact manual step; never claim it exists.
-6. **Close with the reason to come back.** For a plan that runs over weeks, include "Keep it moving" on the pieces card: a scheduled weekly check-in run by the agent's own scheduler (see [review and re-plan](reference/review-and-replan.md)). Confirm the day, time and where results go before creating it.
+4. **Pin it and show it.** Add a new plan to the person's Favorites (`update-page-favorites`) and say so in one line: "I pinned it to your Favorites; unpin anytime." Don't pin again on updates or check-ins. Then give the link, what's ready, a brief explanation of how the plan is organized (first time only), and the next action.
+5. **Offer useful additions.** A multi-select card with 2–4 useful additions that fit this plan, taken from the use case's suggested additions. Build what they pick. For anything the connection can't create, give the exact manual step; never claim it exists.
+6. **Close with the reason to come back.** For a plan that runs over weeks, include "Keep it moving" on the choice card for useful additions: a scheduled weekly check-in run by the agent's own scheduler (see [review and re-plan](reference/review-and-replan.md)). Confirm the day, time and where results go before creating it.
 
 ## Update a plan or check in
 

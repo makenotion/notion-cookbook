@@ -20,11 +20,11 @@ The agent drafts the content, and the person chooses the structure. Explain how 
 
 ## How much structure to start with
 
-| Situation                                      | Build                                                                                                             | Grow it later by                                                   |
-| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Fewer than about 5 steps, one person, one-off  | A plan page with a checklist                                                                                      | Turning the checklist into a Tasks database when it grows          |
-| The usual case: several steps, dates or people | A plan page plus a Tasks database, with a board or table view and a "Needs a date" view                           | Adding views, reminders, a form or sharing through the pieces card |
-| A team, several projects, or ongoing work      | **Notion Projects:** a Projects database (this plan is one project row) and a shared Tasks database related to it | Reusing it for every future project                                |
+| Situation                                      | Build                                                                                                             | Grow it later by                                                                        |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Fewer than about 5 steps, one person, one-off  | A plan page with a checklist                                                                                      | Turning the checklist into a Tasks database when it grows                               |
+| The usual case: several steps, dates or people | A plan page plus a Tasks database, with a board or table view and a "Needs a date" view                           | Adding views, reminders, a form or sharing through the choice card for useful additions |
+| A team, several projects, or ongoing work      | **Notion Projects:** a Projects database (this plan is one project row) and a shared Tasks database related to it | Reusing it for every future project                                                     |
 
 - **Use Notion's typed databases when creating new ones:** `projects` and `tasks` (`create-database` with `database_type`). Notion recognizes these, so other features work with them.
 - **Reuse an existing Projects or Tasks database** before creating anything.
@@ -41,9 +41,9 @@ Keep the four core fields: Status, Owner, Due and Project. Rename the status ste
 | Launch     | Deliverables    | To do → In review → Done                             | Workstream                      |
 | Trip       | Itinerary items | To book → Booked → Done                              | Time and timezone, Confirmation |
 
-## Show the bricks, once
+## Explain how the plan is organized
 
-After the first build, name the pieces in one or two sentences, using the person's own words:
+After the first build, explain how the pages, tasks and views connect in one or two sentences, using the person's own words:
 
 > "Your offsite tasks live in a database: each task is its own page. Board and Calendar are two views of the same tasks, so update a task anywhere and it changes everywhere."
 

@@ -49,9 +49,9 @@ The **Offsite tasks** database (inside the page) has Status (To do → In progre
 > so each one is its own page, and the board and the "Needs a date" list are two
 > views of the same tasks. First up: shortlist three venues by Jan 15.
 
-## Card 2: pieces (multi-select, only what fits)
+## Card 2: offer useful additions (multi-select, only what fits)
 
-> **Want to add any of these to the offsite?**
+> **Would any of these help with the offsite?**
 >
 > - **Calendar view:** see every due date on a calendar.
 > - **RSVP form:** the team confirms attendance and dietary needs through a form that fills your guest list.

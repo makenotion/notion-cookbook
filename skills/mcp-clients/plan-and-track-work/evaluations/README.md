@@ -6,16 +6,16 @@ These are specifications, not completed runs.
 
 ## Scenarios
 
-| Scenario                                                  | What it checks                                                                                                                                         |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [start-plan-choice-card](start-plan-choice-card.json)     | Setup card using the built-in choice UI; the Notion-way structure; showing the bricks once; a pieces card with fitting options only; no invented facts |
-| [reuse-notion-projects](reuse-notion-projects.json)       | Adds to an existing Projects and Tasks pair instead of creating databases; filtered project view; no re-teaching                                       |
-| [small-plan-checklist](small-plan-checklist.json)         | Starts simple: a checklist for a tiny plan, no extra structure or offers                                                                               |
-| [content-calendar-visuals](content-calendar-visuals.json) | Posts database with calendar and "Needs a date" views; concepts first, then Canva for finished posts as a card option                                  |
-| [own-design-tool-wins](own-design-tool-wins.json)         | The user's own tool (Figma) replaces any partner suggestion                                                                                            |
-| [mid-project-slip](mid-project-slip.json)                 | Triggers mid-project; updates the same records; trade-off card; decision log                                                                           |
-| [weekly-checkin](weekly-checkin.json)                     | Evidence rules; Moved, Stuck, Next written in the Status section; an offer to repeat                                                                   |
-| [no-choice-ui-fallback](no-choice-ui-fallback.json)       | A numbered list with full descriptions only when there's no choice UI                                                                                  |
+| Scenario                                                  | What it checks                                                                                                                                                                                |
+| --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [start-plan-choice-card](start-plan-choice-card.json)     | Setup card using the built-in choice UI; the Notion-way structure; explaining how the plan is organized once; a choice card for useful additions with fitting options only; no invented facts |
+| [reuse-notion-projects](reuse-notion-projects.json)       | Adds to an existing Projects and Tasks pair instead of creating databases; filtered project view; no re-teaching                                                                              |
+| [small-plan-checklist](small-plan-checklist.json)         | Starts simple: a checklist for a tiny plan, no extra structure or offers                                                                                                                      |
+| [content-calendar-visuals](content-calendar-visuals.json) | Posts database with calendar and "Needs a date" views; concepts first, then Canva for finished posts as a card option                                                                         |
+| [own-design-tool-wins](own-design-tool-wins.json)         | The user's own tool (Figma) replaces any partner suggestion                                                                                                                                   |
+| [mid-project-slip](mid-project-slip.json)                 | Triggers mid-project; updates the same records; trade-off card; decision log                                                                                                                  |
+| [weekly-checkin](weekly-checkin.json)                     | Evidence rules; Moved, Stuck, Next written in the Status section; an offer to repeat                                                                                                          |
+| [no-choice-ui-fallback](no-choice-ui-fallback.json)       | A numbered list with full descriptions only when there's no choice UI                                                                                                                         |
 
 ## How to grade choice cards
 

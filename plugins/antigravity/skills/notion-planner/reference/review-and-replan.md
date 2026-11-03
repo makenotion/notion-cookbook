@@ -37,7 +37,7 @@ With no previous check-in, write a clearly labeled first snapshot, and don't cla
 
 ## Bring them back
 
-Offer one way to make the check-in happen again, as a pieces-card option, in this order of preference:
+Offer one way to make the check-in happen again, as a optional addition, in this order of preference:
 
 - **A scheduled check-in run by the agent** ("Keep it moving"): a scheduled task in Claude, an automation in Codex, a task in ChatGPT. Each run finds the plan, does the check-in above and writes it to the Status section. Name the plan's URL in the scheduled instructions. Confirm the day, time and how the person hears about it.
 - **A recurring Notion Calendar event** (`notion-calendar-create-events` with a weekly recurrence rule) with a meeting note linked to the plan, for a check-in held with people. Confirm the time and attendees first.

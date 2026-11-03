@@ -7,7 +7,7 @@ A choice card is a question with clickable options. It lets the person make the 
 - **Use the platform's built-in choice UI,** never plain text: the ask-user-question tool in Claude, clickable choices in ChatGPT, `request_user_input` in Codex. Put the question text in the question field and each option as its own choice.
 - **2–4 options. The recommended option goes first, marked "(Recommended)".**
 - **Every option shows its full description,** exactly as written below, adapted to the person's words. If the UI only shows labels, write "Name: description" in the label. Never show an option name alone.
-- **Use multi-select** for the pieces card; everything else is single-select.
+- **Use multi-select** for the choice card for useful additions; everything else is single-select.
 - **Fallback:** only if there is no choice UI at all, show a numbered list with the descriptions and end with "Reply with a number."
 - **When:**
   - At most one card before the first build, and one after it.
@@ -42,11 +42,11 @@ Choose the variant from what you found.
 
 If you find several Projects databases, list the most likely two by name and add "Somewhere else."
 
-## Card 2: pieces (after the first build, multi-select)
+## Card 2: offer useful additions (after the first build, multi-select)
 
-> **Want to add any of these to [plan name]?**
+> **Would any of these help with [plan name]?**
 
-Offer only the 2–4 pieces that fit this plan, using the use case's likely pieces. Example options:
+Offer only the 2–4 useful additions that fit this plan, using the use case's suggested additions. Example options:
 
 - **Calendar view:** see every due date on a calendar.
 - **Timeline:** see milestones and how the work overlaps.
