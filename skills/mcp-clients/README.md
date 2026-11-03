@@ -20,6 +20,7 @@ depend on your client.
 | [Plan marketing campaigns](plan-marketing-campaigns/SKILL.md) | Connect campaign briefs, content production, and brand resources.                                        |
 | [Create my team handbook](create-my-team-handbook/SKILL.md)   | Find complete procedures and handle operational requests.                                                |
 | [Set up my project](set-up-my-project/SKILL.md)               | Set up a project with tasks, docs, and meeting notes, then confirm the team and where it belongs.        |
+| [Organize my semester](organize-my-semester/SKILL.md)         | Create a personal study space with course notes and upcoming assignments.                                |
 
 ## Install
 
@@ -46,6 +47,7 @@ mcp-clients/
 ├── plan-marketing-campaigns/
 ├── create-my-team-handbook/
 ├── set-up-my-project/
+├── organize-my-semester/
 ├── database-designer/
 ├── weekly-project-digest/
 ├── knowledge-capture/
