@@ -21,3 +21,8 @@ nnnnnnnn    nnnnnnn     nnnnnn     nnn
 ```
 
 This feature is in private alpha. Coming soon.
+
+## Build and runtime dependencies
+
+Each template uses one shared `package.json`. If a dependency is needed for
+neither the Worker runtime nor repository operations, put it in `devDependencies`.
