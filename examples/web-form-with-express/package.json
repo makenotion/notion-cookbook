@@ -5,7 +5,7 @@
   "description": "Internal Notion integration demo app using Express.js for a server.",
   "main": "server.ts",
   "scripts": {
-    "start": "ts-node server.ts"
+    "start": "tsx server.ts"
   },
   "dependencies": {
     "@notionhq/client": "^5.4.0",
@@ -14,9 +14,9 @@
   },
   "devDependencies": {
     "@types/express": "^4.17.13",
-    "@types/node": "^18.0.0",
-    "ts-node": "^10.8.2",
-    "typescript": "^4.7.4"
+    "@types/node": "^22.20.5",
+    "typescript": "^7.0.2",
+    "tsx": "^4.23.15"
   },
   "engines": {
     "node": ">=22.23.4",

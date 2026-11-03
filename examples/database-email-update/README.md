@@ -59,3 +59,9 @@ not sent later because each restart takes a new initial snapshot.
 
 This example expects a title property named **Name** and a select property
 named **Status**, as provided by the example database.
+
+## TypeScript compatibility
+
+This example uses TypeScript 6.0.3 because SendGrid's published declarations
+[do not yet support TypeScript 7](https://github.com/sendgrid/sendgrid-nodejs/pull/1458).
+The example runs with `tsx`; typechecking still checks dependency declarations.
