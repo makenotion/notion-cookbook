@@ -24,10 +24,11 @@ Read the relevant package documentation before changing either part.
 
 Take into account these limits when building a custom block:
 
-- **Network access:** The custom block frontend cannot call external APIs or load dependencies from CDNs.
-  Bundle scripts, styles, fonts, and other required assets with the deployed artifact.
-  Use the custom blocks SDK to access Notion data.
-  Images can also use `data:` URLs and permitted Notion-hosted sources.
+- **Network access:** Workspace owners can approve external HTTPS origins for fetches, images,
+  stylesheets, fonts, media, and nested iframes. Ask for only the origins the block needs.
+  Bundle scripts; runtime CDN scripts are blocked even for approved origins.
+  Notion-hosted images, audio, and video, plus Google Fonts, work without approval.
+  Use the custom blocks SDK to access Notion data. Keep secrets in the Worker.
 - **Query size:** `useDataSource` returns at most 999 rows per query. The default limit is 20.
   Use filters to select relevant rows and sorts to order them.
   Load rows progressively by increasing `limit` as needed, up to 999.
@@ -42,7 +43,8 @@ Take into account these limits when building a custom block:
 - **Page creation:** `pages.create` cannot set an icon or cover.
   Create the page first. Then use `pages.update` to set its icon or cover.
 - **Availability:** Custom blocks require private-alpha access.
-  Page guests cannot view custom blocks. Notion Sites does not render them.
+  Page guests can view blocks if they can access the containing page and every bound data source.
+  Notion Sites does not render them.
 
 ## Build the block
 
@@ -266,16 +268,30 @@ Do not call the Notion API or host bridge directly from the iframe.
 Each block runs in a sandboxed iframe. It cannot access Notion's DOM,
 cookies, storage, session, or API credentials.
 
-- The sandbox blocks external API requests and CDN dependencies.
-  Bundle scripts, styles, fonts, and other runtime dependencies.
-  Network requests are restricted to the block's bundle endpoints.
-  Navigation can reach only the block's origin.
-- Images support bundled files, `data:` URLs, and permitted Notion-hosted images.
-- Fonts support bundled files and `data:` URLs.
-- Within a workspace, instances of the same Worker capability share an origin and `localStorage`.
-  `sessionStorage` is also scoped to the browser tab.
-  Different capability keys or Workers have separate origins and storage.
-- Forms and `<base>` elements are not allowed.
+- Scripts must be bundled. External requests and resource loads require workspace-approved HTTPS
+  origins, except permitted Notion-hosted media and Google Fonts. External APIs must also allow the
+  block origin through CORS. The workspace allowlist does not change CORS.
+- Nested iframes require an approved origin and a page that permits embedding. An external page
+  uses its own CSP for its requests and forms; approve only origins whose pages you trust.
+- Browser workers, `<object>`, `<embed>`, manifests, and `<base>` are blocked.
+  Popups and top-level navigation are blocked, including in approved nested pages.
+- Instances of the same block definition share `localStorage` in a browser profile and
+  `sessionStorage` within a tab. Different definitions have separate origins and storage.
+- Standard forms support validation and submit events. The block document uses
+  `form-action 'none'`, so uncancelled native GET and POST submissions are blocked.
+
+### Forms
+
+Use a standard `<form>` with `onSubmit`. Call `event.preventDefault()` synchronously before
+any `await`, then validate input and save with SDK `pages.create` or `pages.update`.
+Keep submit buttons as `type="submit"` so Enter-to-submit and native constraint validation work.
+Use labels, make controls keyboard-accessible, disable duplicate saves while pending, announce
+pending and error states, and preserve input when a write fails. Handle permission errors even
+when initialization succeeded. See the installed SDK's `docs/forms.md` for an example.
+
+Forms inside approved external iframe documents follow that document's own CSP and may submit.
+The block's `form-action 'none'` does not apply inside those documents. Popups and top-level
+navigation remain blocked.
 
 ### Permissions
 
@@ -287,7 +303,8 @@ Containing-page access does not grant this access.
 Handle write-access errors even after initialization succeeds.
 
 Block instances inherit page permissions. Users with edit access can change bindings.
-Page guests cannot view custom blocks. Notion Sites does not render them.
+Page guests can view blocks when they can access the containing page and every bound data source.
+Notion Sites does not render them.
 
 Only trust custom blocks from trusted authors. Malicious blocks can copy private viewer data
 to pages or data sources their authors can read.
@@ -322,7 +339,9 @@ In React blocks, press `\` to toggle the SDK debug console.
 See the dev shell package documentation for details.
 
 Report what you tested and any checks you could not complete.
-Dev shell tests do not verify production permissions or sandbox behavior.
+Use the dev shell for iframe sandbox and local CSP checks. Read the installed dev shell docs for
+local origin approval and development exceptions. Preview tests use sample data; verify production
+permissions and navigation containment after deployment.
 
 ## Deploy and share
 
