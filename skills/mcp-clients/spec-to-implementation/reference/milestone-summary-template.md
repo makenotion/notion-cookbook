@@ -12,7 +12,7 @@ Use this when completing major phases or milestones.
 
 ### Deliverables
 
-- <mention-page url="...">Deliverable 1</mention-page>
+- <mention url="...">Deliverable 1</mention>
 - [Link to PR/deployment]
 
 ### Metrics

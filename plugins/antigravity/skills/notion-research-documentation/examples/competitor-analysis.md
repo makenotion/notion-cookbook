@@ -1,5 +1,9 @@
 # Example: Competitor Analysis
 
+This fictional walkthrough uses illustrative tool labels and arguments, not a
+copy-and-run transcript. Use your connection's current tool names and schemas,
+and replace sample IDs, URLs, and properties with values from actual tool results.
+
 ## User Request
 
 > "Research competitor pricing models and create a comparison document"
@@ -120,7 +124,7 @@ We analyzed four major payment processor competitors: Stripe, Square, PayPal, an
 
 **Best for**: Startups and growth-stage companies needing quick integration
 
-**Source**: <mention-page url="...">Competitor Analysis - Stripe</mention-page>
+**Source**: <mention url="...">Competitor Analysis - Stripe</mention>
 
 ### Square
 
@@ -145,7 +149,7 @@ We analyzed four major payment processor competitors: Stripe, Square, PayPal, an
 
 **Best for**: Brick-and-mortar retail and restaurants
 
-**Source**: <mention-page url="...">Market Research Q3 2024</mention-page>
+**Source**: <mention url="...">Market Research Q3 2024</mention>
 
 ### PayPal
 
@@ -169,7 +173,7 @@ We analyzed four major payment processor competitors: Stripe, Square, PayPal, an
 
 **Best for**: Businesses where PayPal brand trust matters (e-commerce, marketplaces)
 
-**Source**: <mention-page url="...">Pricing Strategy Discussion</mention-page>
+**Source**: <mention url="...">Pricing Strategy Discussion</mention>
 
 ### Adyen
 
@@ -196,7 +200,7 @@ We analyzed four major payment processor competitors: Stripe, Square, PayPal, an
 
 **Best for**: Enterprise with $1M+/month processing volume
 
-**Source**: <mention-page url="...">Competitor Feature Matrix</mention-page>
+**Source**: <mention url="...">Competitor Feature Matrix</mention>
 
 ## Pricing Trends & Insights
 
@@ -272,10 +276,10 @@ Small / Simple Complex / International
 ## Sources
 
 ### Primary Research
-- <mention-page url="...">Competitor Analysis - Stripe</mention-page>
-- <mention-page url="...">Market Research Q3 2024</mention-page>
-- <mention-page url="...">Pricing Strategy Discussion</mention-page>
-- <mention-page url="...">Competitor Feature Matrix</mention-page>
+- <mention url="...">Competitor Analysis - Stripe</mention>
+- <mention url="...">Market Research Q3 2024</mention>
+- <mention url="...">Pricing Strategy Discussion</mention>
+- <mention url="...">Competitor Feature Matrix</mention>
 
 ### External References
 - Stripe.com pricing page (Oct 2025)

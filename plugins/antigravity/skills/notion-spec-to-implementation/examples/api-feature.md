@@ -1,5 +1,9 @@
 # Example: API Feature Implementation
 
+This fictional walkthrough uses illustrative tool labels and arguments, not a
+copy-and-run transcript. Use your connection's current tool names and schemas,
+and replace sample IDs, URLs, and properties with values from actual tool results.
+
 ## User Request
 
 > "Create an implementation plan for the User Profile API spec"
@@ -108,7 +112,7 @@ Build RESTful API for user profile management with CRUD operations, avatar uploa
 
 ## Linked Specification
 
-<mention-page url="...">User Profile API Specification</mention-page>
+<mention url="...">User Profile API Specification</mention>
 
 ## Requirements Summary
 
@@ -160,10 +164,10 @@ Build RESTful API for user profile management with CRUD operations, avatar uploa
 
 **Tasks**:
 
-- [ ] <mention-page url="...">Setup database schema</mention-page>
-- [ ] <mention-page url="...">Configure S3 bucket</mention-page>
-- [ ] <mention-page url="...">Setup Redis cache</mention-page>
-- [ ] <mention-page url="...">Create API scaffolding</mention-page>
+- [ ] <mention url="...">Setup database schema</mention>
+- [ ] <mention url="...">Configure S3 bucket</mention>
+- [ ] <mention url="...">Setup Redis cache</mention>
+- [ ] <mention url="...">Create API scaffolding</mention>
 
 **Deliverables**: Working skeleton with DB, storage, cache ready  
 **Estimated effort**: 2 days
@@ -174,11 +178,11 @@ Build RESTful API for user profile management with CRUD operations, avatar uploa
 
 **Tasks**:
 
-- [ ] <mention-page url="...">Implement GET user profile</mention-page>
-- [ ] <mention-page url="...">Implement PUT update profile</mention-page>
-- [ ] <mention-page url="...">Add input validation</mention-page>
-- [ ] <mention-page url="...">Add JWT authentication middleware</mention-page>
-- [ ] <mention-page url="...">Implement rate limiting</mention-page>
+- [ ] <mention url="...">Implement GET user profile</mention>
+- [ ] <mention url="...">Implement PUT update profile</mention>
+- [ ] <mention url="...">Add input validation</mention>
+- [ ] <mention url="...">Add JWT authentication middleware</mention>
+- [ ] <mention url="...">Implement rate limiting</mention>
 
 **Deliverables**: Working CRUD operations with auth  
 **Estimated effort**: 3 days
@@ -189,10 +193,10 @@ Build RESTful API for user profile management with CRUD operations, avatar uploa
 
 **Tasks**:
 
-- [ ] <mention-page url="...">Implement avatar upload endpoint</mention-page>
-- [ ] <mention-page url="...">Add image validation (size, format)</mention-page>
-- [ ] <mention-page url="...">Process and resize images</mention-page>
-- [ ] <mention-page url="...">Upload to S3 with signed URLs</mention-page>
+- [ ] <mention url="...">Implement avatar upload endpoint</mention>
+- [ ] <mention url="...">Add image validation (size, format)</mention>
+- [ ] <mention url="...">Process and resize images</mention>
+- [ ] <mention url="...">Upload to S3 with signed URLs</mention>
 
 **Deliverables**: Avatar upload/update functionality  
 **Estimated effort**: 2 days
@@ -203,10 +207,10 @@ Build RESTful API for user profile management with CRUD operations, avatar uploa
 
 **Tasks**:
 
-- [ ] <mention-page url="...">Implement user search</mention-page>
-- [ ] <mention-page url="...">Implement public profile endpoint</mention-page>
-- [ ] <mention-page url="...">Add search indexing</mention-page>
-- [ ] <mention-page url="...">Optimize search queries</mention-page>
+- [ ] <mention url="...">Implement user search</mention>
+- [ ] <mention url="...">Implement public profile endpoint</mention>
+- [ ] <mention url="...">Add search indexing</mention>
+- [ ] <mention url="...">Optimize search queries</mention>
 
 **Deliverables**: Search and public profiles working  
 **Estimated effort**: 2 days
@@ -217,11 +221,11 @@ Build RESTful API for user profile management with CRUD operations, avatar uploa
 
 **Tasks**:
 
-- [ ] <mention-page url="...">Write unit tests</mention-page>
-- [ ] <mention-page url="...">Write integration tests</mention-page>
-- [ ] <mention-page url="...">Performance testing</mention-page>
-- [ ] <mention-page url="...">Security audit</mention-page>
-- [ ] <mention-page url="...">API documentation</mention-page>
+- [ ] <mention url="...">Write unit tests</mention>
+- [ ] <mention url="...">Write integration tests</mention>
+- [ ] <mention url="...">Performance testing</mention>
+- [ ] <mention url="...">Security audit</mention>
+- [ ] <mention url="...">API documentation</mention>
 
 **Deliverables**: Tested, documented, production-ready API  
 **Estimated effort**: 3 days
@@ -306,14 +310,14 @@ None currently
 
 ### Documentation
 
-- <mention-page url="...">User Profile API Specification</mention-page> (original spec)
-- <mention-page url="...">Authentication Service Docs</mention-page>
-- <mention-page url="...">AWS S3 Setup Guide</mention-page>
+- <mention url="...">User Profile API Specification</mention> (original spec)
+- <mention url="...">Authentication Service Docs</mention>
+- <mention url="...">AWS S3 Setup Guide</mention>
 
 ### Related Work
 
-- <mention-page url="...">User Authentication API</mention-page> (similar pattern)
-- <mention-page url="...">File Upload Service</mention-page> (avatar upload reference)
+- <mention url="...">User Authentication API</mention> (similar pattern)
+- <mention url="...">File Upload Service</mention> (avatar upload reference)
 
 ### External References
 
@@ -380,7 +384,7 @@ pages: [{
     "Story Points": 3,
     "Tags": "backend, database, api"
   },
-  content: "## Context\nImplementation task for <mention-page url=\"...\">User Profile API Specification</mention-page>\n\nPart of <mention-page url=\"...\">Implementation Plan: User Profile API</mention-page> - Phase 1\n\n## Objective\nCreate database schema for user profile storage\n\n## Requirements\nBased on spec data model:\n- id (UUID, primary key)\n- email (string, unique index)\n- name (string, not null)\n- bio (text, max 500 chars)\n- avatar_url (string, nullable)\n- created_at (timestamp)\n- updated_at (timestamp)\n\n## Acceptance Criteria\n- [ ] Migration file created\n- [ ] Schema includes all required fields\n- [ ] Indexes on email (unique) and name (search)\n- [ ] Constraints validated (bio length, email format)\n- [ ] Migration tested on dev database\n- [ ] Rollback migration created\n\n## Technical Approach\n```sql\nCREATE TABLE user_profiles (\n  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  email VARCHAR(255) UNIQUE NOT NULL,\n  name VARCHAR(255) NOT NULL,\n  bio TEXT CHECK (length(bio) <= 500),\n  avatar_url TEXT,\n  created_at TIMESTAMP DEFAULT NOW(),\n  updated_at TIMESTAMP DEFAULT NOW()\n);\n\nCREATE INDEX idx_user_profiles_email ON user_profiles(email);\nCREATE INDEX idx_user_profiles_name ON user_profiles USING gin(to_tsvector('english', name));\n```\n\n## Dependencies\n- Blocked By: None\n- Blocks: All Phase 2 tasks\n\n## Estimated Effort\n3 story points (half day)\n"
+  content: "## Context\nImplementation task for <mention url=\"...\">User Profile API Specification</mention>\n\nPart of <mention url=\"...\">Implementation Plan: User Profile API</mention> - Phase 1\n\n## Objective\nCreate database schema for user profile storage\n\n## Requirements\nBased on spec data model:\n- id (UUID, primary key)\n- email (string, unique index)\n- name (string, not null)\n- bio (text, max 500 chars)\n- avatar_url (string, nullable)\n- created_at (timestamp)\n- updated_at (timestamp)\n\n## Acceptance Criteria\n- [ ] Migration file created\n- [ ] Schema includes all required fields\n- [ ] Indexes on email (unique) and name (search)\n- [ ] Constraints validated (bio length, email format)\n- [ ] Migration tested on dev database\n- [ ] Rollback migration created\n\n## Technical Approach\n```sql\nCREATE TABLE user_profiles (\n  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  email VARCHAR(255) UNIQUE NOT NULL,\n  name VARCHAR(255) NOT NULL,\n  bio TEXT CHECK (length(bio) <= 500),\n  avatar_url TEXT,\n  created_at TIMESTAMP DEFAULT NOW(),\n  updated_at TIMESTAMP DEFAULT NOW()\n);\n\nCREATE INDEX idx_user_profiles_email ON user_profiles(email);\nCREATE INDEX idx_user_profiles_name ON user_profiles USING gin(to_tsvector('english', name));\n```\n\n## Dependencies\n- Blocked By: None\n- Blocks: All Phase 2 tasks\n\n## Estimated Effort\n3 story points (half day)\n"
 }]
 ````
 
@@ -388,24 +392,23 @@ _[Create similar tasks for all phases - 20 tasks total]_
 
 ### Step 7: Link Plan Back to Spec
 
-```
+Check the fetched spec for an existing implementation link before appending.
+If it already has this section, update it with a targeted edit instead. Replace
+the sample mention URL with the created plan's URL.
+
+```text
 Notion:notion-update-page
-page_id: "user-profile-api-spec-page-id"
-command: "insert_content_after"
-selection_with_ellipsis: "## Acceptance Criteria..."
-new_str: "
-
----
-
-## Implementation
-
-**Implementation Plan**: <mention-page url=\"...\">Implementation Plan: User Profile API</mention-page>
-
-**Implementation Tasks**: See plan for full task breakdown (20 tasks across 5 phases)
-
-**Status**: Planning complete, ready to start implementation
-"
+{
+  "page_id": "user-profile-api-spec-page-id",
+  "command": "insert_content",
+  "content": "\n\n---\n\n## Implementation\n\nImplementation Plan: <mention url=\"...\">Implementation Plan: User Profile API</mention>\n\nImplementation Tasks: See plan for the task breakdown (20 tasks across 5 phases).\n\nStatus: Planning complete; implementation has not started.",
+  "position": {
+    "type": "end"
+  }
+}
 ```
+
+Read back the spec to verify the link and preserve its existing requirements.
 
 ## Summary Provided to User
 
@@ -461,7 +464,7 @@ new_str: "
 
 ### Links Created
 
-✅ Plan page: <mention-page url="...">Implementation Plan: User Profile API</mention-page>
+✅ Plan page: <mention url="...">Implementation Plan: User Profile API</mention>
 ✅ Spec updated with plan link
 ✅ 20 tasks created in task database
 ✅ All tasks linked to plan and spec

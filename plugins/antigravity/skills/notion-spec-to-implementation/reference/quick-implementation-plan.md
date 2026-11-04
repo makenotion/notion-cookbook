@@ -11,7 +11,7 @@ For simpler features or small changes.
 
 ## Spec
 
-<mention-page url="...">Specification</mention-page>
+<mention url="...">Specification</mention>
 
 ## Summary
 
@@ -19,9 +19,9 @@ For simpler features or small changes.
 
 ## Tasks
 
-- [ ] <mention-page url="...">Task 1</mention-page>
-- [ ] <mention-page url="...">Task 2</mention-page>
-- [ ] <mention-page url="...">Task 3</mention-page>
+- [ ] <mention url="...">Task 1</mention>
+- [ ] <mention url="...">Task 2</mention>
+- [ ] <mention url="...">Task 3</mention>
 
 ## Timeline
 

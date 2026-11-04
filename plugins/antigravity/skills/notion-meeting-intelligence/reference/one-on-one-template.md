@@ -8,7 +8,7 @@ Use this template for manager/report one-on-one meetings.
 ## Meeting Details
 
 **Date**: [Date]
-**Last meeting**: <mention-page url="...">Previous 1:1</mention-page>
+**Last meeting**: <mention url="...">Previous 1:1</mention>
 
 ## Agenda
 

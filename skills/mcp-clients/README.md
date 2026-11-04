@@ -41,6 +41,23 @@ The instructions use tool names such as `Notion:notion-search`. Your client may
 expose a different server prefix or tool namespace. Use the corresponding tool
 from your connected Notion MCP server and follow its available input schema.
 
+The worked examples are fictional walkthroughs, not copy-and-run transcripts.
+Replace sample IDs, URLs, and property values with those returned by your
+connection. Tool results and the current formatting specification take precedence
+over sample arguments or markup.
+
+## Plugin workflows and workspace Skills
+
+The skills in this directory are files loaded by your MCP client. They are
+separate from user-owned Skill pages in a Notion workspace. When the connected
+server exposes `get_enabled_skills`, it lists the workspace Skills enabled for
+that user and external clients, not the files installed from this directory.
+Both can be available in the same session; identify which catalog you mean when
+listing skills.
+
+The server may also expose workflow guides as MCP resources. Those are server
+documentation, not either skill catalog.
+
 ## Directory structure
 
 ```text

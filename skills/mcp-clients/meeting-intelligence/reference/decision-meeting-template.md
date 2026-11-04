@@ -21,8 +21,8 @@ Use this template when you need to make an important decision with your team.
 
 **Related Pages**:
 
-- <mention-page url="...">Project Overview</mention-page>
-- <mention-page url="...">Previous Discussion</mention-page>
+- <mention url="...">Project Overview</mention>
+- <mention url="...">Previous Discussion</mention>
 
 ### Current Situation
 

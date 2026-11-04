@@ -1,5 +1,9 @@
 # Example: Decision Record Capture
 
+This fictional walkthrough uses illustrative tool labels and arguments, not a
+copy-and-run transcript. Use your connection's current tool names and schemas,
+and replace sample IDs, URLs, and properties with values from actual tool results.
+
 **User Request**: "Document our decision to move from REST to GraphQL API"
 
 ## Workflow

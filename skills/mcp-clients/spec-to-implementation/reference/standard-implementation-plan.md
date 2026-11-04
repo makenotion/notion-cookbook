@@ -15,7 +15,7 @@ Use this template for most feature implementations.
 
 ## Linked Specification
 
-<mention-page url="...">Original Specification</mention-page>
+<mention url="...">Original Specification</mention>
 
 ## Requirements Summary
 
@@ -62,9 +62,9 @@ Use this template for most feature implementations.
 
 **Tasks**:
 
-- [ ] <mention-page url="...">Database schema design</mention-page>
-- [ ] <mention-page url="...">API scaffolding</mention-page>
-- [ ] <mention-page url="...">Authentication setup</mention-page>
+- [ ] <mention url="...">Database schema design</mention>
+- [ ] <mention url="...">API scaffolding</mention>
+- [ ] <mention url="...">Authentication setup</mention>
 
 **Deliverables**: Working API skeleton
 **Estimated effort**: 3 days
@@ -75,8 +75,8 @@ Use this template for most feature implementations.
 
 **Tasks**:
 
-- [ ] <mention-page url="...">Feature A implementation</mention-page>
-- [ ] <mention-page url="...">Feature B implementation</mention-page>
+- [ ] <mention url="...">Feature A implementation</mention>
+- [ ] <mention url="...">Feature B implementation</mention>
 
 **Deliverables**: Core features working
 **Estimated effort**: 1 week
@@ -87,8 +87,8 @@ Use this template for most feature implementations.
 
 **Tasks**:
 
-- [ ] <mention-page url="...">Frontend integration</mention-page>
-- [ ] <mention-page url="...">Testing & QA</mention-page>
+- [ ] <mention url="...">Frontend integration</mention>
+- [ ] <mention url="...">Testing & QA</mention>
 
 **Deliverables**: Production-ready feature
 **Estimated effort**: 1 week
@@ -149,12 +149,12 @@ Use this template for most feature implementations.
 
 ### Documentation
 
-- <mention-page url="...">Design Doc</mention-page>
-- <mention-page url="...">API Spec</mention-page>
+- <mention url="...">Design Doc</mention>
+- <mention url="...">API Spec</mention>
 
 ### Related Work
 
-- <mention-page url="...">Related Feature</mention-page>
+- <mention url="...">Related Feature</mention>
 
 ## Progress Tracking
 

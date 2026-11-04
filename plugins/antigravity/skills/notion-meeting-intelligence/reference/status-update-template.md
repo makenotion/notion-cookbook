@@ -9,7 +9,7 @@ Use this template for regular project status updates and check-ins.
 
 **Date**: [Date and time]
 **Attendees**: [List]
-**Project**: <mention-page url="...">Project Page</mention-page>
+**Project**: <mention url="...">Project Page</mention>
 
 ## Executive Summary
 

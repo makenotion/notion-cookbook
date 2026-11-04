@@ -1,5 +1,9 @@
 # Example: How-To Guide from Discussion
 
+This fictional walkthrough uses illustrative tool labels and arguments, not a
+copy-and-run transcript. Use your connection's current tool names and schemas,
+and replace sample IDs, URLs, and properties with values from actual tool results.
+
 **User Request**: "Save our discussion about deploying to production as a how-to guide"
 
 ## Workflow
@@ -59,27 +63,27 @@ Production deployment using GitHub Actions with zero-downtime rolling updates.
 ## Deployment Steps
 
 1. **Verify main branch is ready**
+
    ```bash
    git checkout main && git pull
    ```
-````
 
-1. **Tag release**
+2. **Tag release**
 
    ```bash
    git tag -a v1.2.3 -m "Release v1.2.3"
    git push origin v1.2.3
    ```
 
-1. **Trigger deployment**
+3. **Trigger deployment**
    - GitHub Actions auto-starts from tag push
    - Monitor: https://github.com/org/repo/actions
 
-1. **Database migrations** (if needed)
+4. **Database migrations** (if needed)
    - Auto-run in GitHub Actions
    - Check logs for completion
 
-1. **Verify deployment**
+5. **Verify deployment**
    - Wait for health checks (2-3 min)
    - Test key endpoints
    - Check error rates in Datadog
@@ -112,25 +116,41 @@ Production deployment using GitHub Actions with zero-downtime rolling updates.
 
 ## Related Docs
 
-- <mention-page url="...">Rollback Procedure</mention-page>
-- <mention-page url="...">Database Migration Guide</mention-page>
-
-```
+- <mention url="...">Rollback Procedure</mention>
+- <mention url="...">Database Migration Guide</mention>
+````
 
 ### 5. Make Discoverable
+
+Fetch the Engineering Wiki homepage first. Use the exact, unique heading from
+that response as the anchor, and the created guide's URL in the mention. Skip
+this insertion if the guide is already linked.
+
+```text
+Notion:notion-fetch
+id: "engineering-wiki-homepage"
 ```
 
+```text
 Notion:notion-update-page
-page_id: "engineering-wiki-homepage"
-command: "insert_content_after"
-
+{
+  "page_id": "engineering-wiki-homepage",
+  "command": "update_content",
+  "content_updates": [
+    {
+      "old_str": "## How-To Guides",
+      "new_str": "## How-To Guides\n\n- <mention url=\"...\">How to Deploy to Production</mention>"
+    }
+  ]
+}
 ```
-Added link in Engineering Wiki → How-To Guides section
+
+Read back the index to verify the new link and preserve unrelated content.
 
 ## Key Success Factors
+
 - Captured tribal knowledge from discussion
 - Structured as actionable steps
 - Included troubleshooting from experience
 - Made discoverable by linking from wiki index
 - Added metadata (time, complexity)
-```

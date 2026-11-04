@@ -35,7 +35,7 @@ Use when researching multiple options or alternatives. See [comparison-format.md
 
 **Best for**: [Use case]
 
-**Source**: <mention-page url="...">Source Page</mention-page>
+**Source**: <mention url="...">Source Page</mention>
 
 [Repeat for each option]
 

@@ -18,19 +18,19 @@ Use this for most research requests. See [research-summary-format.md](research-s
 
 [Details and supporting evidence]
 
-- Source: <mention-page url="...">Original Page</mention-page>
+- Source: <mention url="...">Original Page</mention>
 
 ### Finding 2: [Clear headline]
 
 [Details and supporting evidence]
 
-- Source: <mention-page url="...">Original Page</mention-page>
+- Source: <mention url="...">Original Page</mention>
 
 ### Finding 3: [Clear headline]
 
 [Details and supporting evidence]
 
-- Source: <mention-page url="...">Original Page</mention-page>
+- Source: <mention url="...">Original Page</mention>
 
 ## Detailed Analysis
 
@@ -54,7 +54,7 @@ Use this for most research requests. See [research-summary-format.md](research-s
 
 ## Sources
 
-- <mention-page url="...">Page Title</mention-page>
-- <mention-page url="...">Page Title</mention-page>
-- <mention-page url="...">Page Title</mention-page>
+- <mention url="...">Page Title</mention>
+- <mention url="...">Page Title</mention>
+- <mention url="...">Page Title</mention>
 ```

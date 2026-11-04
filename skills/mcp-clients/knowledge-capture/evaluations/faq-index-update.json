@@ -1,0 +1,30 @@
+{
+  "name": "Adapt the FAQ example to current tools and preserve the index",
+  "skills": ["notion-knowledge-capture"],
+  "query": "Use the worked FAQ example to save this conversation in https://notion.so/deployment-faq. Add the three FAQ links under Deployment & Troubleshooting in https://notion.so/faq-index. Keep the existing entries and other sections.",
+  "context": {
+    "conversation": "Why does deployment fail with port already in use? A process from the previous deployment is still running. The shared alternatives were lsof -ti:3000 | xargs kill -9, or pm2 restart app for the PM2-managed app. What about cannot connect to database? Check credentials, whether the database is running, and network connectivity. What should I check first? Logs: pm2 logs or docker logs. No review date was agreed.",
+    "sources": {
+      "https://notion.so/deployment-faq": {
+        "data_source_id": "faq-source",
+        "properties": {
+          "Question": "title",
+          "Category": ["Troubleshooting", "Configuration"],
+          "Tags": "multi_select",
+          "Last Reviewed": "date"
+        },
+        "records": []
+      },
+      "https://notion.so/faq-index": "## Deployment & Troubleshooting\n\n- <mention url=\"https://notion.so/existing-faq\">Existing deployment FAQ</mention>\n\n## Access requests\n\nKeep this section unchanged."
+    },
+    "tools": ["fetch", "create-pages", "update-page"]
+  },
+  "success_criteria": [
+    "Reads the worked FAQ example and uses the exposed tools and current schemas, regardless of client prefixes.",
+    "Creates three FAQ records in the supplied data source using the fetched property names and supported values.",
+    "Preserves the source answers and commands without adding unsupported causes, procedures, or review dates.",
+    "Uses the page URLs returned by successful creates in native mentions using the connection's current Markdown specification; saves no placeholder IDs or URLs.",
+    "Fetches the supplied index and inserts the links under the exact Deployment & Troubleshooting heading with a targeted update, preserving the existing FAQ link and Access requests section.",
+    "Checks saved FAQ and index state before claiming completion and reports any incomplete writes."
+  ]
+}

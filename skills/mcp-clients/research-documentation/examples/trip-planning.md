@@ -1,5 +1,9 @@
 # Example: Group Trip Research & Planning
 
+This fictional walkthrough uses illustrative tool labels and arguments, not a
+copy-and-run transcript. Use your connection's current tool names and schemas,
+and replace sample IDs, URLs, and properties with values from actual tool results.
+
 **User Request**: "Research and plan our friends' trip to Japan in March - we're 6 people looking for 10 days"
 
 ## Workflow
@@ -108,7 +112,7 @@ pages: [{
 
 ## Essential Tips
 
-Source: <mention-page url="...">Japan Travel Guide</mention-page>
+Source: <mention url="...">Japan Travel Guide</mention>
 
 - Get pocket WiFi or eSIM on arrival
 - Download: Google Translate, Hyperdia (train routes), Tabelog (restaurants)
@@ -135,9 +139,9 @@ Source: <mention-page url="...">Japan Travel Guide</mention-page>
 
 ## Sources
 
-- <mention-page url="...">Japan Travel Guide</mention-page> (Sarah's 2024 trip)
-- <mention-page url="...">Tokyo Restaurant Recommendations</mention-page>
-- <mention-page url="...">Kyoto Temple Guide</mention-page>
+- <mention url="...">Japan Travel Guide</mention> (Sarah's 2024 trip)
+- <mention url="...">Tokyo Restaurant Recommendations</mention>
+- <mention url="...">Kyoto Temple Guide</mention>
 ```
 
 ## Key Takeaways
