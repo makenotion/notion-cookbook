@@ -97,7 +97,7 @@ pages: [{
 ## Company Overview
 **Company**: Acme Corp (500-person fintech, Series B)
 **Decision Makers**: CTO, VP Product, CFO
-Source: <mention url='...'>CRM Notes</mention>
+Source: <mention url=\"...\">CRM Notes</mention>
 
 ## Their Pain Points → Our Solutions
 - Manual workflows → Workflow automation
