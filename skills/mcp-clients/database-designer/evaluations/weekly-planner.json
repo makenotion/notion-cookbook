@@ -48,7 +48,7 @@
     "Creates a task board grouped by that status property. Any other added view must serve part of the request; an unrequested view, such as a calendar, fails this check. Default views from database creation do not count.",
     "Adds a few example tasks that fit the schema, in one create-pages call whose parent is the task database's data source.",
     "Does every read the tool descriptions require: the Markdown spec before writing page content, the view spec before the first create-view call that uses configure, and a fetch of the new database before adding rows or views.",
-    "Writes the planner page's sections in its create call, with no later update-page call to fill in or rewrite them.",
+    "Includes known content and supported settings in the initial create call. Keeps daily priorities and the task board prominent, with notes and ideas secondary. Targeted follow-up writes needed for the intended layout are allowed; placing the board after supporting sections solely to avoid an update fails this check.",
     "Makes no workspace search and no tool-access check, because the request names no source and every needed tool is listed as available.",
     "Opens the planner with notion-page-panel after its content and database exist. The reply links the planner, says the tasks are examples, and reports any write warnings."
   ]
