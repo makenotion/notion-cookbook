@@ -6,10 +6,10 @@ user-invocable: false
 
 # Custom blocks
 
+> **Warning:** Custom blocks are in private alpha and may be disabled for the user's workspace.
+
 Custom blocks are user-authored interfaces inside Notion. They can connect to
 workspace data, read the current user's identity, and interact with native Notion UI.
-
-Custom blocks are in private alpha and may be disabled for the user's workspace.
 
 A **definition** is a reusable description of a custom block. An **instance**
 places that definition inside Notion. Instances can take different forms,
@@ -56,7 +56,7 @@ files instead of recreating them.
 From the generated Worker root, run `npm install` if dependencies are not already
 installed.
 
-Keep frontend packages in the Worker's root `devDependencies`; `dependencies`
+Keep frontend packages in the Worker's root `devDependencies`. The `dependencies`
 are for the Worker runtime. The frontend can use any
 framework that produces an `index.html` file and browser assets. The templates
 and examples below use React, Vite, and TypeScript.
@@ -82,6 +82,7 @@ worker.customBlock(
       issues: { // Data source key: use in useDataSource("issues").
         name: "Issues",
         description: "Rows shown by the issue board",
+        icon: { type: "emoji", emoji: "🐛" },
         properties: {
           title: { name: "Title", type: "title" },
           status: { // Property key: read with item.getPropertyByKey("status").
@@ -96,7 +97,7 @@ worker.customBlock(
 ```
 
 The declaration key (`issueBoard`) identifies the definition within the Worker.
-`path` selects the frontend directory relative to the Worker root; it does not
+`path` selects the frontend directory relative to the Worker root. It does not
 need to match the key. `command` runs inside that directory, and `output` is
 relative to it.
 
@@ -104,10 +105,13 @@ Set `command` explicitly. Its default, `npm run build`, can build the Worker
 instead of the frontend. For an already-built frontend, use `type: "static"`
 and set `path` to the directory containing its `index.html` and assets.
 
-`dataSources` declares data source and property keys using Notion Public API
-property type names. Each instance binds those declarations to workspace data
-after deployment. Choose descriptive keys rather than matching them to property
-types. See the [Workers SDK reference](https://developers.notion.com/workers/reference/sdk)
+`dataSources` declares the data sources and properties the frontend uses.
+Bindings connect these declarations to workspace data for each instance.
+Refer to data sources and properties by their declared keys so the same frontend
+can work across the workspace without hard-coded IDs. Property `type` values use
+Notion Public API names.
+
+See the [Workers SDK reference](https://developers.notion.com/workers/reference/sdk)
 for declaration fields and defaults.
 
 ### 3. Implement the frontend
@@ -116,7 +120,9 @@ Use `@notionhq/custom-blocks` to access Notion data, read user and app context,
 and interact with Notion UI. Read the installed package's API documentation and
 exported types for current methods, supported operations, and error handling.
 
-Do not call the host bridge or `window.parent.postMessage` directly.
+The library communicates with the Notion app over a `postMessage` bridge.
+The SDK handles that communication and provides a typed API for interacting with
+Notion. Use the SDK rather than the bridge directly.
 
 In the frontend entrypoint, wrap the React app in `NotionCustomBlock`:
 
@@ -144,16 +150,15 @@ ReactDOM.createRoot(root).render(
 )
 ```
 
-`NotionCustomBlock` renders its children after initialization succeeds. Every
-declared data source needs a binding. In Notion, bindings come from instance
-overrides or inherited definition defaults. Call React SDK hooks inside the
-wrapper. For other frameworks, initialize with `initCustomBlock`.
+`NotionCustomBlock` renders its children after initialization succeeds. Call React
+SDK hooks inside the wrapper. For other frameworks, initialize with
+`initCustomBlock`.
 
 Include `NotionTokenScope` and the NDS stylesheet when the UI uses Notion design
 tokens. Make controls keyboard-accessible and expose loading and error states to
 assistive technology.
 
-The React wrapper reports content height automatically; custom pages use the
+The React wrapper reports content height automatically. Custom pages use the
 available page height. Other frameworks can call
 `customBlock.autoResize({ target })` after initialization. See
 [Sizing](https://developers.notion.com/custom-blocks/sdk/appearance#sizing).
@@ -189,7 +194,7 @@ the Worker declaration so it rebuilds the manifest.
 
 In React blocks, press `\` to toggle the SDK debug console. Report what was
 tested and any checks that could not be completed. The dev shell uses a mock
-host; it does not verify production permissions or sandbox behavior.
+host. It does not verify production permissions or sandbox behavior.
 
 ### 5. Deploy the Worker
 
@@ -200,85 +205,64 @@ ntn workers deploy
 ```
 
 Normal deployment builds the Worker and frontend remotely using the declared
-build command. Do not use `ntn workers exec` for a custom block; it has no
+build command. Do not use `ntn workers exec` for a custom block. It has no
 `execute` handler.
 
 ### 6. Create and connect an instance
 
-Check `ntn workers customblocks make --help` for the installed CLI's inputs.
-Run `make` from the deployed Worker root. `--key` selects the capability. With no
-target, it creates a private custom page. An ordinary page or block target
-receives a new inline instance; an existing custom page or custom block target
-is configured in place. Custom database views are not supported by this
-CLI/Public API flow.
+Every declared data source needs a binding before the block can initialize.
+Set bindings on the definition for instances to inherit, or on an individual
+instance to override its defaults.
 
-Use instance bindings when connecting one placement to the user's existing data.
-Definition defaults are shared by instances that inherit them; changing a default
-is not the normal way to configure one placement.
+Resolve each database with `ntn datasources resolve <database-id>` and read its
+schema with `ntn api v1/data_sources/<data-source-id>`. Map declared keys to the
+actual data source and property IDs. Pass property IDs exactly as returned by
+the schema.
 
-Resolve each database to its data-source ID with
-`ntn datasources resolve <database-id>`. Read its schema with
-`ntn api v1/data_sources/<data-source-id>`.
-Match the declared data-source keys and map declared property keys to actual
-property IDs. Do not use property names as IDs or invent a mapping.
-
-Use property IDs exactly as returned by the schema in `property_ids_by_key`.
-The API resolves encoded IDs and rejects unknown IDs or mappings incompatible
-with the definition's declared property types.
-
-If `make --help` lists `--bindings`, write `bindings.json` as an array:
-
-```json
-[
-  {
-    "key": "issues",
-    "data_source_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-    "property_ids_by_key": { "title": "title" }
-  }
-]
-```
-
-Replace the example ID and mappings with the resolved values. Create an inline
-instance under the selected page:
+Run `ntn workers customblocks make --help` before choosing the command. If it
+lists `--bindings`, prepare the binding array described in
+[Instance bindings](reference/instance-bindings.md), then run from the deployed
+Worker root:
 
 ```shell
 ntn workers customblocks make --key issueBoard --target <page-id-or-url> --bindings @bindings.json --json
 ```
 
-Omit `--target` to create a private custom page. Preserve the returned `block_id`
-and `block_url` when present. A supplied binding array replaces the instance's
-overrides. Omit `--bindings` to preserve them; `--bindings '[]'` clears overrides
-so definition defaults apply. Existing targets accept the same definition; a
-different definition is rejected before changing bindings.
+`--key` selects the deployed definition. `--target` places an inline instance
+under a page or block, or configures an existing custom instance. Omit it to
+create a private custom page. Preserve the returned instance ID and URL.
 
-If the installed CLI does not list `--bindings`, create or select the instance
-without that flag, then configure the returned instance ID through `ntn api`
-as below.
-Do not report manual UI connection as required when the API can complete it.
+A supplied binding array replaces all instance overrides. Omit `--bindings` to
+preserve them, or use `--bindings '[]'` to clear them and inherit definition
+defaults. If `--bindings` is unavailable, run `make` without it and configure the
+returned instance through the API. See [Instance bindings](reference/instance-bindings.md)
+for request shapes and later updates.
 
-For later binding edits, prepare `update.json` containing
-`{"custom_block":{"data_sources":[...]}}` for an inline block, or
-`{"custom_page":{"data_sources":[...]}}` for a custom page. Use the same binding
-array shape as above and supply the full desired override list. These are file
-shapes, not literal payloads containing `...`.
-
-```shell
-ntn api v1/blocks/<instance-id> -X PATCH -d @update.json
-```
-
-For a custom page, use `v1/pages/<instance-id>` instead. Omit `definition_id` for a
-bindings-only edit. The API also accepts it when it matches the stored definition;
-it rejects a different definition.
-
-Legacy saved mappings may contain percent-encoded property IDs. The host resolves
-these IDs without rewriting stored bindings. Do not decode an ID just because it
-contains `%`.
+An existing definition can also be placed inline through
+[Notion-flavored Markdown](https://developers.notion.com/custom-blocks/guides/markdown),
+including through MCP page tools. These instances inherit the definition's
+bindings. Markdown does not accept instance bindings. Custom database views are
+not supported by this CLI/Public API flow.
 
 Report any permission, feature-gate, or configuration failure instead of claiming
 setup is complete.
 
-[Share the Worker](https://developers.notion.com/workers/guides/sharing-workers) with **Can connect** access when another workspace member must
-insert the block. **Full access** also permits Worker management and deployment.
+### 7. Share with your teammates
+
+Access to the Worker, instance, data sources, and source code is managed separately.
+
+- **Worker:** Grant **Can connect** to teammates who need to insert instances.
+  Grant **Full access** to teammates who need to manage and deploy the Worker.
+- **Instance:** Share the containing page. View access lets teammates use the
+  block. Edit access also lets them change its bindings.
+- **Data sources:** Share every bound data source with the intended viewers.
+  Page access does not grant data access. Reads and writes use each viewer's
+  permissions.
+- **Source code:** Manage access through the repository or other system that
+  stores the project. Sharing a Worker does not share its source project.
+
+See [Sharing Workers](https://developers.notion.com/workers/guides/sharing-workers)
+and [custom block permissions](https://developers.notion.com/custom-blocks/guides/security#permissions).
 
 ## Security
 
@@ -291,7 +275,7 @@ Each block runs in a sandboxed iframe. It cannot access Notion's DOM,
 cookies, storage, session, or API credentials.
 
 - Workspace owners can approve HTTPS origins for external requests and resources.
-  Bundle JavaScript dependencies; external scripts remain blocked.
+  Bundle JavaScript dependencies. External scripts remain blocked.
 - Notion-hosted media and Google Fonts work without workspace approval.
 - Browser workers, form submissions, popups, top-level navigation, and content
   loaded through `<object>` or `<embed>` are blocked. Use the SDK's `pages.open`
