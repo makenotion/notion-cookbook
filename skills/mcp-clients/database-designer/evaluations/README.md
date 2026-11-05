@@ -8,13 +8,13 @@ specifications, not a bundled runner or runtime skill instructions.
 These cases test whether the assistant makes work easier to manage without asking
 users to design database fields or choose technical implementations.
 
-| Fixture                                                          | User outcome                      | Main checks                                                                               |
-| ---------------------------------------------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------- |
-| [notes-to-tracker.json](notes-to-tracker.json)                   | Stop losing customer requests     | Useful populated tracker, repeated requests consolidated, original notes preserved        |
-| [design-only.json](design-only.json)                             | Organize volunteer requests       | Simple suggested setup, no unrequested writes                                             |
-| [reuse-existing.json](reuse-existing.json)                       | See which requests need attention | Reuse existing work, useful views, preserve customer context                              |
-| [create-with-limited-tools.json](create-with-limited-tools.json) | Track borrowed equipment          | Correct setup, honest reporting of unavailable views                                      |
-| [weekly-planner.json](weekly-planner.json)                       | Plan the week                     | Populated planner, required reads kept, rows batched, no extra discovery, opened in panel |
+| Fixture                                                          | User outcome                      | Main checks                                                                                 |
+| ---------------------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------- |
+| [notes-to-tracker.json](notes-to-tracker.json)                   | Stop losing customer requests     | Useful populated tracker, repeated requests consolidated, original notes preserved          |
+| [design-only.json](design-only.json)                             | Organize volunteer requests       | Simple suggested setup, no unrequested writes                                               |
+| [reuse-existing.json](reuse-existing.json)                       | See which requests need attention | Reuse existing work, useful views, preserve customer context                                |
+| [create-with-limited-tools.json](create-with-limited-tools.json) | Track borrowed equipment          | Correct setup, honest reporting of unavailable views                                        |
+| [weekly-planner.json](weekly-planner.json)                       | Plan the week                     | Populated planner, requested board only, required reads kept, rows batched, opened in panel |
 
 ## Reliability checks
 

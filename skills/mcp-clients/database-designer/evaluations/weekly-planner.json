@@ -29,6 +29,7 @@
     "tool_instructions": [
       "The create-pages and create-view descriptions say to fetch a database before adding pages or views to it, including one created earlier in the same task.",
       "create-pages accepts several pages in one call when they share a parent.",
+      "create-database may add a default table view. It is not counted as an added view.",
       "open-page displays an existing page next to the conversation; it does not create or edit content."
     ],
     "tools": [
@@ -43,7 +44,8 @@
     ]
   },
   "success_criteria": [
-    "Persisted state contains one new private planner page, created without asking for a destination, whose content or child databases cover daily priorities, notes, and ideas; the planner holds one task database with a status-like property and a board view grouped by it.",
+    "Persisted state contains one new private planner page, created without asking for a destination, whose content or child databases cover daily priorities, notes, and ideas. The planner holds one task database with a status-like property.",
+    "The trace creates the requested task board, grouped by its status-like property. Any other added view serves a requested part, such as daily priorities. A view no part of the request asks for, such as a calendar or high-priority list, fails this criterion. Default views from database creation are ignored.",
     "The task database contains a few sample tasks with values that fit its schema; the trace shows them created in one create-pages call whose parent is that database's data source, not one call per task.",
     "Follows the tool descriptions' read instructions: the trace reads the Markdown spec before writing page content, reads the view spec before the first create-view call that uses configure, and fetches the new database before adding rows or views, without skipping a read because a create result looked sufficient.",
     "The planner page receives its authored sections in its create call; the trace has no follow-up update-page call that rewrites or fills in that content.",
