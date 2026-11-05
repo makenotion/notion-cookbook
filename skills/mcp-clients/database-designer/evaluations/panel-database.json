@@ -1,0 +1,35 @@
+{
+  "name": "panel-database",
+  "skills": ["notion-database-designer"],
+  "query": "Create a reading tracker.",
+  "context": {
+    "conversation": "I want to track books by title, author and reading status. Start empty; I will add my books. No existing destination is named, and no Notion page is currently visible in the panel.",
+    "tools": [
+      "fetch",
+      "search",
+      "get-tool-access",
+      "create-pages",
+      "create-database",
+      "update-data-source",
+      "create-view",
+      "notion-page-panel"
+    ],
+    "tool_instructions": [
+      "Create a new tracker in the default private destination. Database creation returns separate database page and data-source IDs.",
+      "Follow all reads required by the exposed create and view tools. Serve current specifications through fetch and make subsequent fetches reflect saved state.",
+      "notion-page-panel opens an existing page or database using its page ID; it does not create or modify content."
+    ],
+    "creation_response": {
+      "database_page_id": "db-page-123",
+      "data_source_id": "source-456",
+      "url": "https://notion.so/db-page-123"
+    },
+    "fixture_setup": "Return creation_response from the first successful database create, adapting field names and IDs to the actual tool schema. Do not deliver it as prior conversation or reveal IDs before creation. Persist the created schema and return it on fetch. Use the same tool schemas and responses for both skill versions."
+  },
+  "success_criteria": [
+    "Creates one private reading tracker with title, author and reading status, without inventing book records.",
+    "After successful creation and any required verification, calls notion-page-panel with the returned database page ID or URL in the same turn, without asking whether to open it or waiting for a second user request. Link-only delivery fails this case.",
+    "Uses db-page-123 or its returned URL, not the data-source ID source-456. Does not create another tracker to display it.",
+    "Returns the saved tracker link and reports only actions that succeeded."
+  ]
+}

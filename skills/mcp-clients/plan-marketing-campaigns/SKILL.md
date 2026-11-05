@@ -105,7 +105,7 @@ Review the result against the user’s workflow and the composition guidance.
 
 Use the connected client's exposed tool names and current schemas. Read its
 formatting documentation before emitting unfamiliar Notion-specific markup.
-Check available capabilities once, reusing the result. Use native pages,
+Use native pages,
 databases, typed properties, and views when supported. Resolve real people and
 relation targets; create targets before relations and properties before views.
 Do not manufacture unsupported view, cover, formula, or automation arguments.
@@ -131,3 +131,36 @@ for unsupported or unverified features.
 
 Return the home link, a brief explanation of what is ready, one concrete first
 action, and any remaining gaps. Avoid a long technical inventory.
+
+## Avoid redundant tool calls
+
+For an explicitly new, self-contained build with enough supplied context and no
+existing destination or system to inspect, skip discovery searches. Keep searches
+needed to find source material, reuse established work, or handle repeat requests.
+
+Plan the content and layout before writing. Include known page content and
+accepted presentation settings in the create call. Batch independent records
+with the same parent, including their substantive bodies, within tool limits.
+Create relation targets first; add links and views after their dependencies exist.
+Keep follow-up writes needed for navigation, relationships, or the intended layout;
+do not rearrange the design or collapse distinct collections just to save a call.
+
+Reuse fresh schemas, IDs and access results. Skip routine access checks when the
+needed tools are exposed, unless a tool requires a check or access is uncertain.
+Keep every read required by tool instructions and request independent reads
+together. Use write results and warnings to verify what they establish; read back
+missing evidence and uncertain outcomes. Keep the visual and usability checks.
+
+## Show the saved result
+
+After creating or updating a Notion artifact, use the connected plugin's page-panel
+tool (such as `notion-page-panel`) when available to show the main result beside
+the conversation. Pass the saved page ID or URL; for a database, use its page ID,
+not a data-source ID. For a connected system, open its home rather than every
+record. Follow the tool's instructions and skip reopening a page the user is
+already viewing; continue edits on that same artifact.
+
+Honor requests for a link only or a different viewing destination. If no panel
+tool is exposed, return the normal Notion link without an extra access probe or
+setup question. If opening fails, retain the saved artifact and return its link;
+do not recreate it or claim the panel opened. Chat-only drafts stay in chat.

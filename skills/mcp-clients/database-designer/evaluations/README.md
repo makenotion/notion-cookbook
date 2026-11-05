@@ -32,3 +32,9 @@ in follow-up runs.
 ## Layout before call count
 
 [Board-first layout](board-first-layout.json) checks that a database appended at creation can still appear before supporting sections. Judge the saved order and usability, not a prohibition on follow-up writes. When a rendered preview is available, verify the board is immediately visible on the first screen. These scenarios are specifications, not completed runs.
+
+## Panel delivery
+
+[panel-database](panel-database.json) starts with a creation request and checks automatic panel delivery in the same turn, without an explicit request to open the result. Also exercise link-only requests and panel-open failures: preserve the saved artifact, return its link, and do not claim an unsuccessful open succeeded.
+
+Additional cases: [link-only request](panel-link-only.json) and [panel failure](panel-open-failure.json).
