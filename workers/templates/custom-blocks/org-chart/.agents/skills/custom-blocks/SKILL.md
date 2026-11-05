@@ -31,7 +31,8 @@ Take into account these limits when building a custom block:
 - **Browser capabilities:** The sandbox and content security policy restrict browser capabilities,
   including browser workers, form submissions, popups, and top-level navigation.
   See [Security](#security) for details.
-- **Query results:** Query results are limited to 1,000 rows. There is no offset pagination.
+- **Data source query results:** Individual queries return up to 1,000 rows.
+  They do not support pagination. Use filters to narrow results and `hasMore` to detect incomplete results.
 - **Page property support:** Property support varies across
   [page reads and writes](https://developers.notion.com/custom-blocks/sdk/pages) and
   [data source queries, filters, and sorts](https://developers.notion.com/custom-blocks/sdk/data-sources).
@@ -210,8 +211,21 @@ build command. Do not use `ntn workers exec` for a custom block. It has no
 
 ### 6. Create and connect an instance
 
-Every declared data source needs a binding before the block can initialize.
-Set shared defaults on the definition or override them for an individual instance.
+After deploying the Worker, create an instance of its definition inside Notion.
+Run `make` from the deployed Worker root:
+
+```shell
+ntn workers customblocks make --key issueBoard --target <page-id-or-url> --json
+```
+
+`--key` selects the deployed definition. `--target` places a custom block instance
+under a page or block, or configures an existing custom instance. Omit `--target`
+to create a private custom page instance. Preserve the returned instance ID and URL.
+
+If the definition declares data sources, each needs a binding before the instance
+can initialize. Instances can inherit bindings from the definition or provide
+their own. When available, `make --bindings` creates the instance and sets its
+bindings in one command. Prepare bindings before running `make` to use this option.
 
 Resolve each database with `ntn datasources resolve <database-id>` and read its
 schema with `ntn api v1/data_sources/<data-source-id>`. Map declared keys to actual
@@ -230,19 +244,19 @@ Write `bindings.json` as an array:
 ```
 
 Replace the example values with the resolved IDs. Check
-`ntn workers customblocks make --help`. If it lists `--bindings`, run from the
-deployed Worker root:
+`ntn workers customblocks make --help`. If it lists `--bindings`, include the
+binding array when creating the instance:
 
 ```shell
 ntn workers customblocks make --key issueBoard --target <page-id-or-url> --bindings @bindings.json --json
 ```
 
-`--key` selects the deployed definition. `--target` places a custom block instance
-under a page or block, or configures an existing custom instance. Omit `--target`
-to create a private custom page instance. Preserve the returned instance ID and URL.
+To add bindings to an instance already created above, use its returned ID as
+`--target` instead of the parent page ID.
 
-If `--bindings` is unavailable, run `make` without it, then configure bindings
-through `ntn api`. Use these endpoints for later updates or definition defaults too:
+If `--bindings` is unavailable, use the basic `make` command above, then configure
+the returned instance through `ntn api`. Use these endpoints for later updates or
+definition defaults too:
 
 | Configure             | Endpoint                                  | Binding array field         |
 | --------------------- | ----------------------------------------- | --------------------------- |
@@ -284,51 +298,13 @@ and [custom block permissions](https://developers.notion.com/custom-blocks/guide
 
 ## Security
 
-Use the custom blocks SDK for Notion data access.
-Do not call the Notion API or host bridge directly from the iframe.
+- **Isolation:** Custom blocks run in sandboxed iframes and cannot access Notion's DOM, session, storage, or API credentials. The block's own `localStorage` is shared across instances of the same definition in the same browser profile. `sessionStorage` is shared within the same tab. Neither is shared with Notion or other definitions.
+- **Permissions:** Reads and writes use the viewer's permissions. A viewer may be able to load the block but not edit its data, so show a clear message when a write is denied.
+- **Data access:** The viewer needs read access to every bound data source before the block can load. Sharing the containing page does not grant that access.
+- **Secrets:** Viewers can inspect custom block code. Do not include secrets or API credentials in the frontend bundle.
+- **External access:** Workspace approval controls external requests and resources. The destination API must also allow requests from the block's origin through CORS.
 
-### Sandbox
-
-Each block runs in a sandboxed iframe. It cannot access Notion's DOM,
-cookies, storage, session, or API credentials.
-
-- Workspace owners can approve HTTPS origins for external requests and resources.
-  Bundle JavaScript dependencies. External scripts remain blocked.
-- Notion-hosted media and Google Fonts work without workspace approval.
-- Browser workers, form submissions, popups, top-level navigation, and content
-  loaded through `<object>` or `<embed>` are blocked. Use the SDK's `pages.open`
-  for Notion pages and `links.open` for external links.
-- Within a workspace, instances of the same Worker capability share an origin and `localStorage`.
-  `sessionStorage` is also scoped to the browser tab.
-  Different capability keys or Workers have separate origins and storage.
-- Forms and `<base>` elements are not allowed.
-
-### Permissions
-
-Reads and writes use the viewer's permissions, including row permissions.
-Results can differ between viewers.
-
-Initialization requires viewer read access to every bound data source.
-Containing-page access does not grant this access.
-Handle write-access errors even after initialization succeeds.
-
-Block instances inherit page permissions. Users with edit access can change bindings.
-Page guests can view custom blocks if they can access the containing page and
-every bound data source. Notion Sites does not render custom blocks.
-
-Only trust custom blocks from trusted authors. Malicious blocks can copy private viewer data
-to pages or data sources their authors can read.
-
-### Secrets and dependencies
-
-Viewers can inspect the frontend bundle.
-Exclude secrets, tokens, and private URLs from the bundle.
-Store secrets in the Worker on the server.
-
-Review third-party dependencies. Pin trusted versions.
-Build tools can access the Worker project despite runtime network restrictions.
-
-See [Security](https://developers.notion.com/custom-blocks/guides/security).
+See [Security](https://developers.notion.com/custom-blocks/guides/security) for browser restrictions, network policy, and dependency guidance.
 
 ## References
 
