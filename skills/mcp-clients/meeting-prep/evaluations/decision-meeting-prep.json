@@ -1,6 +1,6 @@
 {
   "name": "Decision meeting with both documents",
-  "skills": ["notion-meeting-intelligence"],
+  "skills": ["notion-meeting-prep"],
   "query": "Prepare a 45-minute migration decision meeting on October 6, 2026 for Maya and Lee. Save both an internal pre-read and an agenda under https://notion.so/engineering-meetings. Start with https://notion.so/migration.",
   "context": {
     "sources": {

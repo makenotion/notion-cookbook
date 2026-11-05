@@ -1,4 +1,4 @@
-# Meeting intelligence evaluations
+# Meeting prep evaluations
 
 Follow the [shared evaluation protocol](../../evaluations.md) for fixture setup,
 baseline comparisons, quality gates, usage measurements, and selection tests.

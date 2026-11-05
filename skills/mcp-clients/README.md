@@ -13,7 +13,7 @@ depend on your client.
 | [Database designer](database-designer/SKILL.md)                 | Turn notes or a messy workflow into a tracker that shows what needs attention and who is handling it.    |
 | [Weekly project digest](weekly-project-digest/SKILL.md)         | Explain reporting-period changes, continuing blockers, and next steps from project evidence.             |
 | [Knowledge capture](knowledge-capture/SKILL.md)                 | Turn a conversation into a decision record, how-to guide, FAQ, or other durable workspace documentation. |
-| [Meeting intelligence](meeting-intelligence/SKILL.md)           | Prepare agendas, internal pre-reads, and meeting follow-up from Notion context.                          |
+| [Meeting prep](meeting-prep/SKILL.md)                           | Prepare agendas, internal pre-reads, and meeting follow-up from Notion context.                          |
 | [Research and documentation](research-documentation/SKILL.md)   | Find information across a workspace, synthesize it, and publish a cited report in Notion.                |
 | [Spec to implementation](spec-to-implementation/SKILL.md)       | Convert a product or technical spec into an implementation plan and trackable Notion tasks.              |
 | [Setup](setup/SKILL.md)                                         | Set up Notion as shared agent context by following the official setup guide after install.               |
@@ -53,7 +53,7 @@ mcp-clients/
 ├── database-designer/
 ├── weekly-project-digest/
 ├── knowledge-capture/
-├── meeting-intelligence/
+├── meeting-prep/
 ├── research-documentation/
 ├── setup/
 └── spec-to-implementation/

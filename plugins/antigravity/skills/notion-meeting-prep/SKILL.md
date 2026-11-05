@@ -1,9 +1,9 @@
 ---
-name: notion-meeting-intelligence
+name: notion-meeting-prep
 description: Prepares meeting agendas, internal pre-reads, and decision briefs using Notion context and relevant research. Use for preparing the next or upcoming meeting, meeting preparation, recurring meeting context, or updating meeting outcomes; use knowledge-capture for a standalone record of an existing discussion.
 ---
 
-# Meeting intelligence
+# Meeting prep
 
 Prepare materials that help participants reach the meeting's intended outcome.
 Support both a concise agenda and a detailed internal pre-read without requiring

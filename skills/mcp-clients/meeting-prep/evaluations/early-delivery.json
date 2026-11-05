@@ -1,6 +1,6 @@
 {
   "name": "Show an agenda before research and preserve attendees",
-  "skills": ["notion-meeting-intelligence"],
+  "skills": ["notion-meeting-prep"],
   "query": "Prepare for my next meeting in Notion and open the note in the right panel.",
   "context": {
     "current_time": "2026-11-06T16:00:00-05:00",

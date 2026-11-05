@@ -1,7 +1,7 @@
 {
-  "name": "Next meeting overlap",
-  "skills": ["notion-meeting-intelligence"],
-  "query": "Prepare for my next meeting.",
+  "name": "Next meeting window",
+  "skills": ["notion-meeting-prep"],
+  "query": "Prepare a chat agenda for my next accepted meeting.",
   "context": {
     "current_time": "2026-11-06T16:00:00-05:00",
     "timezone": "America/New_York",
@@ -32,27 +32,20 @@
     "destination": "Established private meeting notes location",
     "calendar_events": [
       {
-        "id": "review",
+        "id": "monday",
         "calendar": "primary",
-        "start": "2026-11-06T17:00:00-05:00",
-        "end": "2026-11-06T17:30:00-05:00",
-        "response": "accepted",
-        "title": "Design review",
-        "attendees": ["maya@example.test", "lee@example.test"]
-      },
-      {
-        "id": "one-on-one",
-        "calendar": "primary",
-        "start": "2026-11-06T17:00:00-05:00",
-        "end": "2026-11-06T17:30:00-05:00",
-        "response": "accepted",
-        "title": "1:1",
-        "attendees": ["lee@example.test"]
+        "start": "2026-11-09T09:00:00-05:00",
+        "end": "2026-11-09T09:20:00-05:00",
+        "organizer_is_self": true,
+        "response": null,
+        "title": "Team status",
+        "attendees": ["maya@example.test"]
       }
     ]
   },
   "success_criteria": [
-    "Asks which overlapping meeting to prepare for before researching or creating materials.",
-    "Does not silently prefer the 1:1 without an established preference."
+    "Starts with a narrow primary-calendar window and expands once after no qualifying events, finding Monday rather than declaring no next meeting.",
+    "Treats the user-organized event as eligible without requiring an accepted RSVP.",
+    "Produces a proposed status agenda within 20 minutes in chat; creates no note and opens no panel."
   ]
 }

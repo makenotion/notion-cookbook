@@ -1,18 +1,19 @@
 {
-  "name": "Next accepted meeting",
-  "skills": ["notion-meeting-intelligence"],
+  "name": "Choose a calendar connection before meeting research",
+  "skills": ["notion-meeting-prep"],
   "query": "Prepare for my next accepted meeting in Notion.",
   "context": {
     "current_time": "2026-11-06T16:00:00-05:00",
     "timezone": "America/New_York",
     "primary_calendar": "primary",
     "tools": [
-      "calendar-search",
+      "get-tool-access",
+      "notion-calendar-list-calendars",
+      "notion-calendar-list-events",
+      "direct-calendar-list-events",
       "search",
       "connector-search",
-      "fetch",
       "create-meeting-note",
-      "update-page",
       "notion-page-panel"
     ],
     "search_routes": [
@@ -68,9 +69,29 @@
         ],
         "type": "oneOnOne"
       }
-    ]
+    ],
+    "calendar_access": {
+      "notion-calendar-list-calendars": "available",
+      "notion-calendar-list-events": "available",
+      "direct-calendar-list-events": "available"
+    },
+    "calendar_accounts": [
+      {
+        "account": "work@example.test",
+        "calendar": "primary",
+        "primary": true,
+        "connection": "notion"
+      }
+    ],
+    "tool_contracts": {
+      "notion_calendar": "Access check required unless already known. List calendars returns connected accounts and calendar metadata. List events accepts time range and timezone, returns events across connected calendars, and has no calendar filter.",
+      "direct_calendar": "Available for the same account; accepts a calendar and time range."
+    }
   },
   "success_criteria": [
+    "Checks required Notion tool access once, identifies the primary calendar, and uses Notion calendar events without querying the direct connection.",
+    "Filters returned events using calendar and attendance metadata; does not invent unsupported query parameters.",
+    "Never calls connector-search when Notion calendar tools are available, including after event selection.",
     "Selects one-on-one without asking for confirmation or selecting focus, pending, or optional events.",
     "Creates and requests display of a useful initial agenda before additional research; independent Notion searches run in parallel and empty results do not trigger repeated searches.",
     "Creates one event-linked note with suggested 1:1 questions timed within 30 minutes, an accurate evidence-gap statement, and empty decisions/actions sections.",

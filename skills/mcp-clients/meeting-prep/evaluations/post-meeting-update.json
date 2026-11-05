@@ -1,6 +1,6 @@
 {
   "name": "Record outcomes for a recurring meeting",
-  "skills": ["notion-meeting-intelligence"],
+  "skills": ["notion-meeting-prep"],
   "query": "Update https://notion.so/cache-sync with today's outcome: keep rollout at 10%; Lee owns monitoring; review again October 12. Do not create tasks.",
   "context": {
     "sources": {

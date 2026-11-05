@@ -1,6 +1,6 @@
 {
   "name": "Verify external context when useful",
-  "skills": ["notion-meeting-intelligence"],
+  "skills": ["notion-meeting-prep"],
   "query": "Draft a customer agenda and internal briefing for Acme using https://notion.so/acme. Check their current product launch before recommending discussion topics.",
   "context": {
     "sources": {
