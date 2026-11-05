@@ -56,9 +56,10 @@ files instead of recreating them.
 From the generated Worker root, run `npm install` if dependencies are not already
 installed.
 
-Keep dependencies in the Worker's root `package.json`. The frontend can use any
-framework that produces an `index.html` file and browser assets; the templates
-use React, Vite, and TypeScript.
+Keep frontend packages in the Worker's root `devDependencies`; `dependencies`
+are for the Worker runtime. The frontend can use any
+framework that produces an `index.html` file and browser assets. The templates
+and examples below use React, Vite, and TypeScript.
 
 ### 2. Configure the definition
 
@@ -111,8 +112,11 @@ for declaration fields and defaults.
 
 ### 3. Implement the frontend
 
-Use `@notionhq/custom-blocks` for Notion data and UI interactions. Do not call
-the host bridge or `window.parent.postMessage` directly.
+Use `@notionhq/custom-blocks` to access Notion data, read user and app context,
+and interact with Notion UI. Read the installed package's API documentation and
+exported types for current methods, supported operations, and error handling.
+
+Do not call the host bridge or `window.parent.postMessage` directly.
 
 In the frontend entrypoint, wrap the React app in `NotionCustomBlock`:
 
@@ -273,19 +277,6 @@ setup is complete.
 
 [Share the Worker](https://developers.notion.com/workers/guides/sharing-workers) with **Can connect** access when another workspace member must
 insert the block. **Full access** also permits Worker management and deployment.
-
-## SDK APIs
-
-The custom blocks SDK provides APIs to:
-
-- Read block context, including the containing page, parent, and current user.
-- Read app context, including theme and contrast settings.
-- Read declared data sources and schema metadata.
-- Query, filter, and sort data source rows.
-- Create, read, update, and archive pages.
-- Read and list users.
-
-Read the installed `@notionhq/custom-blocks` documentation and exported types for current methods, API signatures, and error handling.
 
 ## Security
 
