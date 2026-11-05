@@ -404,6 +404,10 @@ After saving, fetch the instance with `ntn api v1/blocks/<instance-id>` or
 `ntn api v1/pages/<instance-id>`. Check the saved definition, data source IDs, and
 property mappings.
 
+Legacy saved mappings may contain percent-encoded property IDs. The host resolves
+these IDs without rewriting stored bindings. Do not decode an ID just because it
+contains `%`.
+
 Verify that the instance renders with the expected data and its main interaction
 works. Report any permission, feature-gate, or verification failure instead of
 claiming setup is complete.
