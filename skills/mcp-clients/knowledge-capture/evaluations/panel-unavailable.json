@@ -1,0 +1,15 @@
+{
+  "name": "panel-unavailable",
+  "skills": ["notion-knowledge-capture"],
+  "query": "Save this decision as a new private page and give me the result.",
+  "context": {
+    "conversation": "Decision: retain the current onboarding flow until usability interviews finish. No owner or deadline was agreed.",
+    "tools": ["fetch", "create-pages"],
+    "tool_instructions": [
+      "create-pages supports a default private page and returns its saved URL. No panel tool is exposed. Read the formatting specification before writing."
+    ]
+  },
+  "success_criteria": [
+    "Saves the supported decision, returns the saved link without an access probe or panel setup question, and does not claim a panel opened."
+  ]
+}

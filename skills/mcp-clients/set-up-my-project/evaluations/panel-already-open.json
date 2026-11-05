@@ -1,0 +1,18 @@
+{
+  "name": "panel-already-open",
+  "skills": ["notion-set-up-my-project"],
+  "query": "Update the project outcome to reduce signup abandonment.",
+  "context": {
+    "conversation": "The user is already viewing project page project-123 in the conversation panel. Its existing content and relationships must be preserved.",
+    "tools": ["fetch", "update-page", "notion-page-panel"],
+    "sources": {
+      "project-123": "Project: Signup improvements. Outcome: simplify signup. Existing Tasks and Docs relations are present."
+    },
+    "tool_instructions": [
+      "The open panel reflects edits. Reopening reloads it; do not call the panel again for an already visible page."
+    ]
+  },
+  "success_criteria": [
+    "Updates the same project without replacing unrelated content or creating another project. Does not reopen the panel."
+  ]
+}

@@ -28,3 +28,9 @@ Inspect the populated tracker and its views, not just the completion message.
 Grade usefulness, data preservation, and requested scope before token or tool-call
 efficiency. Vary relation targets, read-only properties, and unsupported operations
 in follow-up runs.
+
+## Panel delivery
+
+[panel-database](panel-database.json) checks saved-result delivery. Also exercise link-only requests and panel-open failures: preserve the saved artifact, return its link, and do not claim an unsuccessful open succeeded.
+
+Additional cases: [link-only request](panel-link-only.json) and [panel failure](panel-open-failure.json).

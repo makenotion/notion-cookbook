@@ -1,0 +1,15 @@
+{
+  "name": "panel-database",
+  "skills": ["notion-database-designer"],
+  "query": "Open the tracker we just created.",
+  "context": {
+    "conversation": "The requested tracker has been created and verified. Database page ID: db-page-123. Its data-source ID is source-456. The user is not viewing it.",
+    "tools": ["notion-page-panel"],
+    "tool_instructions": [
+      "notion-page-panel opens an existing page or database using its page ID; it does not modify content."
+    ]
+  },
+  "success_criteria": [
+    "Calls the panel with db-page-123, not source-456. Does not recreate or modify the tracker."
+  ]
+}

@@ -57,3 +57,7 @@ composition principles, not exact prose or pixels. Record two separate results:
   A reviewer-polished reference is not evidence of an unassisted skill pass.
 
 Assess functional correctness and visual usability separately.
+
+## Panel delivery
+
+[panel-already-open](panel-already-open.json) checks saved-result delivery. Also exercise link-only requests and panel-open failures: preserve the saved artifact, return its link, and do not claim an unsuccessful open succeeded.

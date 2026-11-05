@@ -103,3 +103,17 @@ schema details, and implementation jargon out of the handoff unless needed.
 
 Return the home link, a brief explanation of what is ready, one concrete first
 action, and any remaining gaps. Avoid a long technical inventory.
+
+## Show the saved result
+
+After creating or updating a Notion artifact, use the connected plugin's page-panel
+tool (such as `notion-page-panel`) when available to show the main result beside
+the conversation. Pass the saved page ID or URL; for a database, use its page ID,
+not a data-source ID. For a connected system, open its home rather than every
+record. Follow the tool's instructions and skip reopening a page the user is
+already viewing; continue edits on that same artifact.
+
+Honor requests for a link only or a different viewing destination. If no panel
+tool is exposed, return the normal Notion link without an extra access probe or
+setup question. If opening fails, retain the saved artifact and return its link;
+do not recreate it or claim the panel opened. Chat-only drafts stay in chat.

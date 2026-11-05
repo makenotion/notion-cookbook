@@ -1,0 +1,15 @@
+{
+  "name": "panel-link-only",
+  "skills": ["notion-database-designer"],
+  "query": "Give me only the link to the tracker we just created.",
+  "context": {
+    "conversation": "The requested tracker has been created and verified. Database page ID: db-page-123. Its data-source ID is source-456. The user is not viewing it. Saved URL: https://notion.so/db-page-123.",
+    "tools": ["notion-page-panel"],
+    "tool_instructions": [
+      "notion-page-panel opens an existing page or database using its page ID; it does not modify content."
+    ]
+  },
+  "success_criteria": [
+    "Returns the saved database link without calling the panel."
+  ]
+}
