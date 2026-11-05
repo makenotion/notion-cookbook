@@ -90,12 +90,22 @@ not change the result:
 - **Keep required reads.** Do every read a tool's description requires, such as
   a format spec before writing content or a fetch of a new database before
   adding rows or views. Request independent reads together.
-- **Write each page once.** Put every section in the page's create call, with
-  any settings the create tool accepts, such as icon, cover, or full width. A
-  database created inside a page goes at its end. So end the page content with
-  the database's heading, such as "Tasks", and put notes, ideas, and other
-  sections above it. Do not insert content after the database with a later
-  update.
+- **Plan the layout before writing.** Include known content and supported page
+  settings, such as icon, cover, or full width, in the initial create call.
+  Place the primary working view where it helps the user most, including above
+  the fold when it is the main focus. Keep supporting notes and ideas secondary.
+  Do not put a database last merely because creation appends it to the page.
+  Use targeted follow-up writes to position views, complete navigation, or add
+  sections after the database when needed for the intended layout. Avoid
+  redundant rewrites, not necessary layout edits.
+- **Embed the working view, not just a database link.** `create-database`
+  creates a full-page database. With `create-view`, `database_id` adds a tab
+  inside that database; `parent_page_id` adds an inline linked view to the
+  containing page. To show task cards directly on a planner, fetch the database
+  and create the board with `parent_page_id` set to the planner and
+  `data_source_id` set to the fetched source, using the current tool schema.
+  Verify that cards are visible on the planner without opening the database;
+  a database link or an internal board tab alone does not satisfy this layout.
 - **Build only what was asked.** Keep free-form parts, such as notes or ideas,
   as page sections. Create only the databases and views the request needs.
 - **Batch rows.** Create rows that share a parent in one call. Once a new
