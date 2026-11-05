@@ -49,6 +49,5 @@ blocks/hello-world/
 
 ```zsh
 npm run check
-npm test
 npm run build
 ```

@@ -210,7 +210,6 @@
       "commands": {
         "install": "npm install",
         "check": "npm run check",
-        "test": "npm test",
         "build": "npm run build",
         "deploy": "ntn workers deploy --name custom"
       }
