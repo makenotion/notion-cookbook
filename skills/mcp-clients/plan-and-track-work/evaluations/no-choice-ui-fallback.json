@@ -1,0 +1,32 @@
+{
+  "name": "no-choice-ui-fallback",
+  "skills": ["notion-planner"],
+  "query": "Help me plan our team offsite in May.",
+  "context": {
+    "client": {
+      "choice_ui": "none"
+    },
+    "search_routes": [
+      {
+        "intent": "Find an existing plan, Projects or Tasks database",
+        "results": []
+      }
+    ],
+    "tools": [
+      "search",
+      "fetch",
+      "get-users",
+      "get-tool-access",
+      "create-pages",
+      "create-database",
+      "update-page",
+      "update-data-source",
+      "create-view",
+      "query-data-sources"
+    ]
+  },
+  "success_criteria": [
+    "With no choice tool, shows the setup choice as a numbered list with each option's full description, recommended first, ending with 'Reply with a number.'",
+    "Asks nothing the conversation already answers and builds right after the reply."
+  ]
+}

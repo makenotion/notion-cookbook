@@ -1,0 +1,80 @@
+{
+  "name": "reuse-notion-projects",
+  "skills": ["notion-planner"],
+  "query": "Set up the Q1 pricing page launch as a project. Target date March 3.",
+  "context": {
+    "conversation": "Workstreams: design, web, marketing. Owners not decided.",
+    "client": {
+      "choice_ui": "ask-user-question"
+    },
+    "search_routes": [
+      {
+        "intent": "Find Projects or Tasks databases",
+        "results": [
+          {
+            "url": "https://notion.so/projects",
+            "title": "Projects"
+          },
+          {
+            "url": "https://notion.so/tasks",
+            "title": "Tasks"
+          }
+        ]
+      }
+    ],
+    "sources": {
+      "https://notion.so/projects": {
+        "database_type": "projects",
+        "schema": {
+          "Project name": "title",
+          "Status": "status",
+          "Owner": "person",
+          "Dates": "date",
+          "Tasks": "relation(Tasks)"
+        },
+        "records": [
+          {
+            "title": "Help center refresh",
+            "Status": "In progress"
+          }
+        ]
+      },
+      "https://notion.so/tasks": {
+        "database_type": "tasks",
+        "schema": {
+          "Task name": "title",
+          "Status": "status",
+          "Assignee": "person",
+          "Due": "date",
+          "Project": "relation(Projects)"
+        },
+        "records": [
+          {
+            "title": "Audit top 20 articles",
+            "Project": "Help center refresh"
+          }
+        ]
+      }
+    },
+    "tools": [
+      "search",
+      "fetch",
+      "get-users",
+      "get-tool-access",
+      "create-pages",
+      "create-database",
+      "update-page",
+      "update-data-source",
+      "create-view",
+      "query-data-sources",
+      "ask-user-question"
+    ]
+  },
+  "success_criteria": [
+    "Setup card offers 'Add to Projects' first (Recommended) and 'Keep it separate', naming the actual databases.",
+    "On 'Add to Projects': creates one project row and related tasks in the existing Tasks database using its own field names (Assignee, Due) and status options; creates no new database.",
+    "The project page shows a tasks view filtered by the Project relation that excludes 'Audit top 20 articles'.",
+    "Does not explain databases and views as if the user were new (they already use them); unknown owners stay empty.",
+    "Leaves the existing project and task untouched."
+  ]
+}

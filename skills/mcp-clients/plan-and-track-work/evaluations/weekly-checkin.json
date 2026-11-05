@@ -1,0 +1,66 @@
+{
+  "name": "weekly-checkin",
+  "skills": ["notion-planner"],
+  "query": "Do our weekly check-in on the offsite plan.",
+  "context": {
+    "search_routes": [
+      {
+        "intent": "Find the offsite plan",
+        "results": [
+          {
+            "url": "https://notion.so/offsite",
+            "title": "Design team offsite"
+          }
+        ]
+      }
+    ],
+    "sources": {
+      "https://notion.so/offsite": {
+        "status_section": "Check-in Jan 6: venue shortlist in progress (owner Priya).",
+        "tasks": [
+          {
+            "title": "Shortlist 3 venues",
+            "Status": "Done",
+            "Done date": "2027-01-10"
+          },
+          {
+            "title": "Book venue",
+            "Status": "In progress",
+            "Due": "2027-01-29"
+          },
+          {
+            "title": "Plan workshop agenda",
+            "Status": "To do",
+            "Due": "2027-02-12",
+            "Last edited": "2027-01-12"
+          },
+          {
+            "title": "Outdoor activity",
+            "Status": "Done",
+            "Done date": null
+          }
+        ]
+      }
+    },
+    "tools": [
+      "search",
+      "fetch",
+      "get-users",
+      "get-tool-access",
+      "create-pages",
+      "create-database",
+      "update-page",
+      "update-data-source",
+      "create-view",
+      "query-data-sources",
+      "notion-calendar-create-events",
+      "create-meeting-note"
+    ]
+  },
+  "success_criteria": [
+    "Compares with the Jan 6 check-in: reports the venue shortlist as done this period (done date Jan 10).",
+    "Reports 'Outdoor activity' as currently marked done without claiming it was done this week; does not treat the agenda's edit time as progress.",
+    "Writes Moved / Stuck / Next (with owners and dates) at the top of the plan's Status section, not as a new page.",
+    "Offers once to repeat the check-in (preferably a recurring Notion Calendar event with a linked meeting note), creates it only after a yes, and claims nothing it didn't schedule."
+  ]
+}
