@@ -31,7 +31,8 @@
       "create-pages accepts several pages in one call when they share a parent.",
       "create-database may add a default table view. It does not count as an added view.",
       "notion-page-panel shows an existing page next to the conversation. It does not create or edit content.",
-      "Creating a database appends it to the parent page. The update-page tool supports inserting content after an existing database block; use the current Markdown specification for its syntax."
+      "Creating a database appends it to the parent page. The update-page tool supports inserting content after an existing database block; use the current Markdown specification for its syntax.",
+      "create-database creates a full-page database. create-view with database_id adds a tab inside it; create-view with parent_page_id and data_source_id appends an inline linked view to the parent. A database link does not render cards on the parent page."
     ],
     "tools": [
       "fetch",
@@ -51,6 +52,7 @@
     "Does every read the tool descriptions require: the Markdown spec before writing page content, the view spec before the first create-view call that uses configure, and a fetch of the new database before adding rows or views.",
     "Preserves the requested board-first layout even when it requires a follow-up page update. Does not place notes or ideas before the board to avoid that update. Keeps all example tasks and the working board intact.",
     "Makes no workspace search and no tool-access check, because the request names no source and every needed tool is listed as available.",
-    "Opens the planner with notion-page-panel after its content and database exist. The reply links the planner, says the tasks are examples, and reports any write warnings."
+    "Opens the planner with notion-page-panel after its content and database exist. The reply links the planner, says the tasks are examples, and reports any write warnings.",
+    "Creates the working board inline on the planner using create-view with parent_page_id equal to the planner page ID and data_source_id equal to the fetched source. Example task cards appear directly on the planner without opening the full-page database; a link or database-internal tab alone fails."
   ]
 }
