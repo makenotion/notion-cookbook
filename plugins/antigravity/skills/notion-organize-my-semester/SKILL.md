@@ -103,3 +103,22 @@ schema details, and implementation jargon out of the handoff unless needed.
 
 Return the home link, a brief explanation of what is ready, one concrete first
 action, and any remaining gaps. Avoid a long technical inventory.
+
+## Avoid redundant tool calls
+
+For an explicitly new, self-contained build with enough supplied context and no
+existing destination or system to inspect, skip discovery searches. Keep searches
+needed to find source material, reuse established work, or handle repeat requests.
+
+Plan the content and layout before writing. Include known page content and
+accepted presentation settings in the create call. Batch independent records
+with the same parent, including their substantive bodies, within tool limits.
+Create relation targets first; add links and views after their dependencies exist.
+Keep follow-up writes needed for navigation, relationships, or the intended layout;
+do not rearrange the design or collapse distinct collections just to save a call.
+
+Reuse fresh schemas, IDs and access results. Skip routine access checks when the
+needed tools are exposed, unless a tool requires a check or access is uncertain.
+Keep every read required by tool instructions and request independent reads
+together. Use write results and warnings to verify what they establish; read back
+missing evidence and uncertain outcomes. Keep the visual and usability checks.

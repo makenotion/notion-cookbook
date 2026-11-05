@@ -46,3 +46,7 @@ For MCP-only runs, all page, record, view and presentation changes must use the
 Notion MCP connection. UI inspection may navigate and capture the result but
 must not repair it. Keep UI-assisted examples separate from passing MCP-only
 evidence. Preserve the initial result when instructions change during a retry.
+
+## Build efficiency
+
+Use [the fresh-build scenario](efficient-new-build.json) to check redundant calls while retaining the existing design and content criteria. Also rerun the existing reuse and retry scenarios; search and readback remain necessary when they establish identity or resolve uncertain writes. Compare call counts and elapsed time only for runs that pass the quality criteria.

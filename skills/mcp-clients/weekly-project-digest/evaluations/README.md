@@ -14,3 +14,12 @@ Require evidence for period claims and correct population definitions before
 comparing efficiency. A brief answer must still disclose material gaps. Additional
 audience tests should ensure an external update does not expose internal source
 details or links.
+
+## Access-check efficiency
+
+Run the existing scenarios with all required tools exposed and no required access
+probe, then with a tool that explicitly requires an access check. The first
+condition should not add a routine probe; the second must honor the requirement
+and reuse its result. Preserve source discovery, required reads, write warnings,
+and uncertain-write recovery in both conditions. Record tool calls alongside
+the original quality criteria.

@@ -53,8 +53,8 @@ Omit empty or redundant sections and follow the user's requested length.
 
 ## Notion execution
 
-Use exposed tools and their current schemas; client prefixes may differ. Check
-tool access once when available before restricted operations and inspect notices
+Use exposed tools and their current schemas; client prefixes may differ. Check access only when a needed tool may be restricted or its instructions
+require it; reuse the result and inspect notices
 for dropped filters or unavailable sources. Do not describe partial search as
 exhaustive. Fetch connected-app results with an appropriate available tool, not
 Notion fetch by assumption. If access is missing, work from supplied content and

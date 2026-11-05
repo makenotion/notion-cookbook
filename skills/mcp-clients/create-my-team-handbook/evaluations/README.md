@@ -44,3 +44,7 @@ Maintain two separate results: the best designed artifact and the independent
 skill-execution result. Screenshots of a UI-assisted result show the finished page, but do not prove
 MCP-only reproduction. Record each UI adjustment and preserve the initial output.
 Report retries and the checks performed.
+
+## Build efficiency
+
+Use [the fresh-build scenario](efficient-new-build.json) to check redundant calls while retaining the existing design and content criteria. Also rerun the existing reuse and retry scenarios; search and readback remain necessary when they establish identity or resolve uncertain writes. Compare call counts and elapsed time only for runs that pass the quality criteria.
