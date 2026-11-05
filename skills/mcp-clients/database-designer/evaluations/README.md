@@ -14,7 +14,7 @@ users to design database fields or choose technical implementations.
 | [design-only.json](design-only.json)                             | Organize volunteer requests       | Simple suggested setup, no unrequested writes                                               |
 | [reuse-existing.json](reuse-existing.json)                       | See which requests need attention | Reuse existing work, useful views, preserve customer context                                |
 | [create-with-limited-tools.json](create-with-limited-tools.json) | Track borrowed equipment          | Correct setup, honest reporting of unavailable views                                        |
-| [weekly-planner.json](weekly-planner.json)                       | Plan the week                     | Populated planner, requested board only, required reads kept, rows batched, opened in panel |
+| [weekly-planner.json](weekly-planner.json)                       | Plan the week                     | Required reads kept, no search or access check, page written once, rows batched, board only |
 
 ## Reliability checks
 

@@ -1,11 +1,11 @@
 {
-  "name": "Build a populated weekly planner without extra discovery",
+  "name": "Build a weekly planner with few tool calls",
   "skills": ["notion-database-designer"],
-  "query": "Can you make me a nice-looking weekly planner? I'd like a board for my tasks, a place for each day's top priorities, plus space for notes and ideas. Add a few sample tasks so I can see how it works, and open it next to our chat when it's ready.",
+  "query": "Create a beautiful weekly planner with a task board, daily priorities, notes, ideas, and example tasks. Open in the side panel",
   "context": {
     "sources": {
-      "notion://docs/notion-flavored-markdown-spec": "Notion Markdown reference. The create-pages and update-page tool descriptions say to read it before writing page content.",
-      "notion://docs/view-dsl-spec": "View configuration reference. The create-view tool description says to read it before using configure, which a board view needs for grouping."
+      "notion://docs/notion-flavored-markdown-spec": "Notion Markdown reference. The create-pages and update-page descriptions say to read it before writing page content.",
+      "notion://docs/view-dsl-spec": "View configuration reference. The create-view description says to read it before using configure, which a grouped board needs."
     },
     "search_routes": [
       {
@@ -29,8 +29,8 @@
     "tool_instructions": [
       "The create-pages and create-view descriptions say to fetch a database before adding pages or views to it, including one created earlier in the same task.",
       "create-pages accepts several pages in one call when they share a parent.",
-      "create-database may add a default table view. It is not counted as an added view.",
-      "open-page displays an existing page next to the conversation; it does not create or edit content."
+      "create-database may add a default table view. It does not count as an added view.",
+      "notion-page-panel shows an existing page next to the conversation. It does not create or edit content."
     ],
     "tools": [
       "fetch",
@@ -40,16 +40,16 @@
       "update-page",
       "create-database",
       "create-view",
-      "open-page"
+      "notion-page-panel"
     ]
   },
   "success_criteria": [
-    "Persisted state contains one new private planner page, created without asking for a destination, whose content or child databases cover daily priorities, notes, and ideas. The planner holds one task database with a status-like property.",
-    "The trace creates the requested task board, grouped by its status-like property. Any other added view serves a requested part, such as daily priorities. A view no part of the request asks for, such as a calendar or high-priority list, fails this criterion. Default views from database creation are ignored.",
-    "The task database contains a few sample tasks with values that fit its schema; the trace shows them created in one create-pages call whose parent is that database's data source, not one call per task.",
-    "Follows the tool descriptions' read instructions: the trace reads the Markdown spec before writing page content, reads the view spec before the first create-view call that uses configure, and fetches the new database before adding rows or views, without skipping a read because a create result looked sufficient.",
-    "The planner page receives its authored sections in its create call; the trace has no follow-up update-page call that rewrites or fills in that content.",
-    "Efficiency: the trace has no workspace search and no tool-access check, because no source is named and every needed tool is exposed and listed as available. This does not apply when a needed tool is conditionally available; checking access once before using it is then correct.",
-    "Opens the planner page with open-page after its content and database exist, and the final reply links the planner, says the tasks are samples, and reports any write warnings rather than claiming success the persisted state does not show."
+    "Creates one new private planner page without asking where to put it. Its content covers daily priorities, notes, and ideas. It holds one task database with a status-like property.",
+    "Creates a task board grouped by that status property. Any other added view must serve part of the request; an unrequested view, such as a calendar, fails this check. Default views from database creation do not count.",
+    "Adds a few example tasks that fit the schema, in one create-pages call whose parent is the task database's data source.",
+    "Does every read the tool descriptions require: the Markdown spec before writing page content, the view spec before the first create-view call that uses configure, and a fetch of the new database before adding rows or views.",
+    "Writes the planner page's sections in its create call, with no later update-page call to fill in or rewrite them.",
+    "Makes no workspace search and no tool-access check, because the request names no source and every needed tool is listed as available.",
+    "Opens the planner with notion-page-panel after its content and database exist. The reply links the planner, says the tasks are examples, and reports any write warnings."
   ]
 }
