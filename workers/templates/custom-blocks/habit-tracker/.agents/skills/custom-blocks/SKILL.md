@@ -26,25 +26,17 @@ Read the relevant package documentation before changing either part.
 
 Take into account these limits when building a custom block:
 
-- **Network access:** The custom block frontend cannot call external APIs or load dependencies from CDNs.
-  Bundle scripts, styles, fonts, and other required assets with the deployed artifact.
-  Use the custom blocks SDK to access Notion data.
-  Images can also use `data:` URLs and permitted Notion-hosted sources.
-- **Query size:** `useDataSource` returns at most 999 rows per query. The default limit is 20.
-  Use filters to select relevant rows and sorts to order them.
-  Load rows progressively by increasing `limit` as needed, up to 999.
-  If `hasMore` is true, show that the results are incomplete.
-  Do not present calculations over incomplete results as totals for the entire data source.
-- **Property support:** Custom blocks do not support every Notion property type or operation.
-  Support varies between reading, writing, filtering, and sorting.
-  Check the installed SDK documentation and types for each required operation.
-- **Query filters:** Filters do not support `or` groups or nested groups.
-  Use one property condition or one `and` group.
-- **External Links and navigation:** Do not implement external link navigation or authentication redirects with `window.open` or `window.location`.
-- **Page creation:** `pages.create` cannot set an icon or cover.
-  Create the page first. Then use `pages.update` to set its icon or cover.
-- **Availability:** Custom blocks require private-alpha access.
-  Page guests cannot view custom blocks. Notion Sites does not render them.
+- **External resources:** External requests and resources require workspace approval.
+  Notion-hosted media and Google Fonts work without approval. Bundle JavaScript dependencies directly.
+- **Browser capabilities:** The sandbox and content security policy restrict browser capabilities,
+  including browser workers, form submissions, popups, and top-level navigation.
+  See [Security](#security) for details.
+- **Query results:** Query results are limited to 1,000 rows. There is no offset pagination.
+- **Page property support:** Property support varies across
+  [page reads and writes](https://developers.notion.com/custom-blocks/sdk/pages) and
+  [data source queries, filters, and sorts](https://developers.notion.com/custom-blocks/sdk/data-sources).
+- **Notion Sites:** Custom blocks do not render on published Notion Sites.
+  This applies to all viewers, including workspace members.
 
 ## Build the block
 
