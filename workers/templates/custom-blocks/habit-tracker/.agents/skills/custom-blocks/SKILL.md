@@ -1,22 +1,24 @@
 ---
 name: custom-blocks
-description: Create, modify, and troubleshoot custom blocks in Notion Workers. Use when the user wants to build interactive UI inside Notion connected to Notion data. Covers the author workflow from project setup to local preview and deployment.
+description: Build interactive UI inside Notion connected to workspace data. Covers creating, modifying, and troubleshooting custom blocks from project setup through deployment.
 user-invocable: false
 ---
 
 # Custom blocks
 
-Custom blocks are user-authored interfaces inside Notion that can connect to
-Notion workspace data.
+Custom blocks are user-authored interfaces inside Notion. They can connect to
+workspace data, read the current user's identity, and interact with native Notion UI.
 
-Custom blocks are in private alpha. The user's workspace might not have custom
-blocks enabled. If Notion reports that the feature is disabled, the workspace
-needs access before the user can use the block.
+Custom blocks are in private alpha and may be disabled for the user's workspace.
 
-A custom block has two parts:
+A **definition** is a reusable description of a custom block. An **instance**
+places that definition inside Notion. Instances can take different forms,
+including blocks, views, and pages.
 
-- A Worker declaration that uses `@notionhq/workers` to define the build and required data.
-- A frontend that uses `@notionhq/custom-blocks` to communicate with Notion from a sandboxed iframe.
+A definition requires two pieces of code:
+
+- A declaration in the Worker file uses `@notionhq/workers` to specify the block's configuration and data requirements.
+- A frontend web app uses `@notionhq/custom-blocks` to implement the UI and interact with Notion.
 
 Read the relevant package documentation before changing either part.
 
