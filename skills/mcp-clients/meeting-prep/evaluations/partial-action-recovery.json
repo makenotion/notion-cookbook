@@ -1,6 +1,6 @@
 {
   "name": "Recover a partially successful action batch",
-  "skills": ["notion-meeting-intelligence"],
+  "skills": ["notion-meeting-prep"],
   "query": "Continue creating the tasks from https://notion.so/meeting. The last batch timed out. Use https://notion.so/tasks and link to https://notion.so/project. Avoid duplicates.",
   "context": {
     "conversation": "User authorized two commitments: Lee validates alerts by October 8, 2026; Maya runs rehearsal with no due date. The batch reported alerts-task created, then timed out before reporting the rehearsal result.",

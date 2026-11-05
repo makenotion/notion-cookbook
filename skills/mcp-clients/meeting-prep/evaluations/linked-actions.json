@@ -1,6 +1,6 @@
 {
   "name": "Reconcile meeting commitments with existing tasks",
-  "skills": ["notion-meeting-intelligence"],
+  "skills": ["notion-meeting-prep"],
   "query": "Record outcomes from https://notion.so/meeting and create any missing committed tasks in https://notion.so/tasks. Link them to this meeting and https://notion.so/project. Do not notify anyone.",
   "context": {
     "sources": {

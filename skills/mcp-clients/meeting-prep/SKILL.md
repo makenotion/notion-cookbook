@@ -1,9 +1,9 @@
 ---
-name: notion-meeting-intelligence
-description: Prepares meeting agendas, internal pre-reads, and decision briefs using Notion context and relevant research. Use for meeting preparation, recurring meeting context, or updating meeting outcomes; use knowledge-capture for a standalone record of an existing discussion.
+name: notion-meeting-prep
+description: Prepares meeting agendas, internal pre-reads, and decision briefs using Notion context and relevant research. Use for preparing the next or upcoming meeting, meeting preparation, recurring meeting context, or updating meeting outcomes; use knowledge-capture for a standalone record of an existing discussion.
 ---
 
-# Meeting intelligence
+# Meeting prep
 
 Prepare materials that help participants reach the meeting's intended outcome.
 Support both a concise agenda and a detailed internal pre-read without requiring
@@ -38,6 +38,16 @@ both for every meeting.
    ambiguity before writing. Fetch a database schema once if needed. Update an
    existing meeting document when appropriate. Check write results and return
    links, noting incomplete work; read back an update if its result is unclear.
+
+## Prepare for the next meeting
+
+For quick preparation when the user says “next” or “upcoming” without naming an
+event, follow [next-meeting preparation](reference/next-meeting.md): select a
+calendar event using Notion calendar tools or a direct calendar connection, run
+create and show an initial agenda with attendees, then improve that same note
+with one focused research pass. Do not use connector search in this path when
+Notion calendar tools are available. This path does not cap research for a requested
+detailed pre-read or replace an explicitly selected meeting.
 
 ## Materials and audiences
 

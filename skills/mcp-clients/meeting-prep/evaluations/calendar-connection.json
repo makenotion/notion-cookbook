@@ -1,0 +1,119 @@
+{
+  "name": "Choose a calendar connection before meeting research",
+  "skills": ["notion-meeting-prep"],
+  "query": "Prepare for my next accepted meeting in Notion.",
+  "context": {
+    "current_time": "2026-11-06T16:00:00-05:00",
+    "timezone": "America/New_York",
+    "primary_calendar": "primary",
+    "tools": [
+      "get-tool-access",
+      "notion-calendar-list-calendars",
+      "notion-calendar-list-events",
+      "direct-calendar-list-events",
+      "search",
+      "connector-search",
+      "create-meeting-note",
+      "notion-page-panel",
+      "fetch",
+      "update-page"
+    ],
+    "search_routes": [
+      {
+        "intent": "Prior notes or recent context for the selected meeting",
+        "results": []
+      }
+    ],
+    "connector_results": [],
+    "meeting_note_creation": {
+      "accepts_event_and_content": false,
+      "contract": "With calendarEvent, reject parent, title, and content. Return status and URL only. Without calendarEvent, title and content are supported. Fetch before a content update unless the current content is already loaded.",
+      "returns": {
+        "status": "created",
+        "url": "https://notion.so/note-123"
+      }
+    },
+    "destination": "Established private meeting notes location",
+    "calendar_events": [
+      {
+        "id": "focus",
+        "calendar": "primary",
+        "start": "2026-11-06T16:30:00-05:00",
+        "type": "focusTime",
+        "response": "accepted"
+      },
+      {
+        "id": "pending",
+        "calendar": "primary",
+        "start": "2026-11-06T17:00:00-05:00",
+        "response": "needsAction",
+        "title": "Launch review"
+      },
+      {
+        "id": "optional",
+        "calendar": "primary",
+        "start": "2026-11-06T17:15:00-05:00",
+        "response": "accepted",
+        "optional": true,
+        "title": "Optional rollout review",
+        "end": "2026-11-06T17:30:00-05:00",
+        "type": "decision",
+        "description": "Decide whether to expand the rollout.",
+        "attendees": [
+          {
+            "name": "Maya",
+            "email": "maya@example.test",
+            "notion_user_id": "maya-id"
+          }
+        ]
+      },
+      {
+        "id": "one-on-one",
+        "calendar": "primary",
+        "start": "2026-11-06T17:30:00-05:00",
+        "end": "2026-11-06T18:00:00-05:00",
+        "response": "accepted",
+        "title": "Weekly 1:1",
+        "attendees": [
+          {
+            "name": "Maya",
+            "email": "maya@example.test"
+          }
+        ],
+        "type": "oneOnOne"
+      }
+    ],
+    "calendar_access": {
+      "notion-calendar-list-calendars": "available",
+      "notion-calendar-list-events": "available",
+      "direct-calendar-list-events": "available"
+    },
+    "calendar_accounts": [
+      {
+        "account": "work@example.test",
+        "calendar": "primary",
+        "primary": true,
+        "connection": "notion"
+      }
+    ],
+    "tool_contracts": {
+      "notion_calendar": "Access check required unless already known. List calendars returns connected accounts and calendar metadata. List events accepts time range and timezone, returns events across connected calendars, and has no calendar filter.",
+      "direct_calendar": "Available for the same account; accepts a calendar and time range."
+    },
+    "sources": {
+      "https://notion.so/note-123": {
+        "content": "<meeting-notes><meeting-notes-section-notes>\n<p />\n</meeting-notes-section-notes></meeting-notes>",
+        "attendees": ["maya-id"]
+      }
+    }
+  },
+  "success_criteria": [
+    "Checks required Notion tool access once, identifies the primary calendar, and uses Notion calendar events without querying the direct connection.",
+    "Filters returned events using calendar and attendance metadata; does not invent unsupported query parameters.",
+    "Never calls connector-search when Notion calendar tools are available, including after event selection.",
+    "Selects the accepted optional 17:15 rollout review, not the later 1:1, without asking for confirmation.",
+    "Creates the note, requests the panel, fetches its current content, then saves an initial agenda before additional research; independent Notion searches run in parallel and empty results do not trigger repeated searches.",
+    "Prepares one event-linked note with suggested decision questions fitting the 15-minute rollout review, an accurate evidence-gap statement, and empty decisions/actions sections.",
+    "Passes only calendarEvent at creation; uses the returned URL for the panel and a separate content update after the required fetch. Never claims the panel request alone makes the agenda readable."
+  ]
+}

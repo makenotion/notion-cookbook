@@ -105,11 +105,11 @@ requests. Explicitly invoking a skill tests execution, not automatic discovery.
 | ------------------------------------------------------------ | ---------------------- |
 | Turn these scattered customer requests into a useful tracker | Database designer      |
 | Draft this week’s project update, compared with last week    | Weekly project digest  |
-| Create follow-up tasks from these meeting notes              | Meeting intelligence   |
+| Create follow-up tasks from these meeting notes              | Meeting prep           |
 | Synthesize customer feedback, preserving segment differences | Research documentation |
 | Update the owner on this one task                            | None of these skills   |
 | Save this conversation as a team FAQ                         | Knowledge capture      |
-| Prepare an agenda from our project notes                     | Meeting intelligence   |
+| Prepare an agenda from our project notes                     | Meeting prep           |
 | Reconcile the workspace sources about our auth approach      | Research documentation |
 | Create implementation tasks from this spec                   | Spec to implementation |
 | Rewrite this one sentence in a warmer tone                   | None of these skills   |

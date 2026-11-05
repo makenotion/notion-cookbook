@@ -1,6 +1,6 @@
 {
   "name": "Small meeting from supplied context",
-  "skills": ["notion-meeting-intelligence"],
+  "skills": ["notion-meeting-prep"],
   "query": "Draft only a 15-minute agenda for my internal check-in with Lee. We need to review the cache rollout, decide whether to expand beyond 10%, and assign the monitoring follow-up.",
   "context": {
     "tools": ["search", "fetch", "create-pages"]

@@ -1,6 +1,6 @@
 {
   "name": "Save a draft in the requested database",
-  "skills": ["notion-meeting-intelligence"],
+  "skills": ["notion-meeting-prep"],
   "query": "Save a draft agenda for a 20-minute cache rollout review in https://notion.so/meetings. Cover rollout status, whether to expand beyond 10%, and monitoring ownership. Do not notify attendees.",
   "context": {
     "sources": {

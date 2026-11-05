@@ -1,0 +1,73 @@
+{
+  "name": "Next meeting existing note",
+  "skills": ["notion-meeting-prep"],
+  "query": "Prepare for my next accepted meeting in Notion.",
+  "context": {
+    "current_time": "2026-11-06T16:00:00-05:00",
+    "timezone": "America/New_York",
+    "primary_calendar": "primary",
+    "tools": [
+      "calendar-search",
+      "search",
+      "connector-search",
+      "fetch",
+      "create-meeting-note",
+      "update-page",
+      "notion-page-panel"
+    ],
+    "search_routes": [
+      {
+        "intent": "Prior Orbit notes",
+        "results": [
+          {
+            "url": "https://notion.so/older",
+            "date": "2026-10-23",
+            "title": "Orbit status"
+          },
+          {
+            "url": "https://notion.so/recent",
+            "date": "2026-10-30",
+            "title": "Orbit status"
+          }
+        ]
+      }
+    ],
+    "connector_results": [],
+    "meeting_note_creation": {
+      "accepts_event_and_content": false,
+      "contract": "With calendarEvent, reject parent, title, and content. Return status and URL only. Without calendarEvent, title and content are supported. Fetch before a content update unless the current content is already loaded.",
+      "returns": {
+        "status": "created",
+        "url": "https://notion.so/note-123"
+      }
+    },
+    "destination": "Established private meeting notes location",
+    "calendar_events": [
+      {
+        "id": "status",
+        "calendar": "primary",
+        "start": "2026-11-06T17:00:00-05:00",
+        "end": "2026-11-06T17:20:00-05:00",
+        "response": "accepted",
+        "title": "Orbit status",
+        "series": "orbit",
+        "linked_note": "https://notion.so/existing"
+      }
+    ],
+    "sources": {
+      "https://notion.so/existing": "Attendee topic: discuss handoff. Preserve this topic.",
+      "https://notion.so/older": "Alert audit and rollback rehearsal both open.",
+      "https://notion.so/recent": "Alert audit completed. Maya still owns rollback rehearsal.",
+      "https://notion.so/note-123": {
+        "content": "<meeting-notes><meeting-notes-section-notes>\n<p />\n</meeting-notes-section-notes></meeting-notes>",
+        "attendees": ["maya-id"]
+      }
+    }
+  },
+  "success_criteria": [
+    "Fetches the most recent relevant prior note rather than choosing the first search result.",
+    "Updates the linked existing note, preserving the handoff topic and carrying forward only the open rehearsal action.",
+    "Does not create a duplicate or invent a rehearsal deadline; fits agenda within 20 minutes.",
+    "Opens the updated existing note, not a newly created page."
+  ]
+}

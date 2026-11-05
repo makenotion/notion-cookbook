@@ -1,0 +1,87 @@
+{
+  "name": "Show an agenda before research and preserve attendees",
+  "skills": ["notion-meeting-prep"],
+  "query": "Prepare for my next meeting in Notion and open the note in the right panel.",
+  "context": {
+    "current_time": "2026-11-06T16:00:00-05:00",
+    "timezone": "America/New_York",
+    "primary_calendar": "primary",
+    "calendar_access": "Notion calendar tools available; access and account already known.",
+    "tools": [
+      "notion-calendar-list-events",
+      "search",
+      "connector-search",
+      "fetch",
+      "get-users",
+      "create-meeting-note",
+      "update-page",
+      "notion-page-panel"
+    ],
+    "calendar_events": [
+      {
+        "id": "review",
+        "calendar": "primary",
+        "start": "2026-11-06T17:00:00-05:00",
+        "end": "2026-11-06T17:30:00-05:00",
+        "response": "accepted",
+        "title": "Launch review",
+        "description": "Decide whether to expand the rollout.",
+        "attendees": [
+          {
+            "email": "maya@example.test",
+            "response": "accepted",
+            "notion_user_id": "maya-id"
+          },
+          {
+            "email": "guest@example.test",
+            "response": "needsAction"
+          }
+        ]
+      }
+    ],
+    "users": [
+      {
+        "id": "maya-id",
+        "email": "maya@example.test"
+      }
+    ],
+    "meeting_note_creation": {
+      "accepts_event_and_content": false,
+      "contract": "With calendarEvent, reject parent, title, and content. Return status and URL only. Without calendarEvent, title and content are supported. Fetch before a content update unless the current content is already loaded.",
+      "returns": {
+        "status": "created",
+        "url": "https://notion.so/note-123"
+      }
+    },
+    "search_routes": [
+      {
+        "intent": "Recent launch review context",
+        "results": [
+          {
+            "url": "https://notion.so/launch",
+            "title": "Launch status",
+            "snippet": "Current rollout review."
+          }
+        ]
+      }
+    ],
+    "sources": {
+      "https://notion.so/launch": "Rollout at 10%. Maya owns the still-open rollback rehearsal. No expansion decision yet.",
+      "https://notion.so/note-123": {
+        "content": "<meeting-notes><meeting-notes-section-notes>\n<p />\n</meeting-notes-section-notes></meeting-notes>",
+        "attendees": []
+      }
+    },
+    "panel_response": {
+      "opened": true
+    },
+    "concurrent_edit": "After panel opening, append user text: Discuss customer support readiness. Expose it on subsequent fetch; targeted writes must preserve it."
+  },
+  "success_criteria": [
+    "Creates the event-linked note without content, requests the panel, fetches the note and attendee data, and saves a 30-minute agenda via update-page before further research.",
+    "Uses known Maya identity without another lookup; repairs the missing attendee field and retains guest email with pending RSVP, without inventing an identity or inviting/sharing.",
+    "Never calls connector-search or repeats calendar/access discovery.",
+    "Adds the 10% rollout and unresolved rehearsal to the same note, cites the source, preserves the user-added support topic, and invents no expansion decision.",
+    "Combines independent lookups/reads where supported; does not create a second note or reopen the panel after updating."
+  ]
+}

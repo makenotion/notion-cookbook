@@ -1,6 +1,6 @@
 {
   "name": "Discover project context for meeting preparation",
-  "skills": ["notion-meeting-intelligence"],
+  "skills": ["notion-meeting-prep"],
   "query": "Prepare a 30-minute Orbit launch readiness agenda and save it in the project meeting area. Carry forward any open actions from the last review.",
   "context": {
     "tool_access": {
