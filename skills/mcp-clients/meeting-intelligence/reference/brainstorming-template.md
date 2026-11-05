@@ -24,8 +24,8 @@ Use this template for creative ideation and brainstorming sessions.
 
 **Related Pages**:
 
-- <mention-page url="...">Context Page 1</mention-page>
-- <mention-page url="...">Context Page 2</mention-page>
+- <mention url="...">Context Page 1</mention>
+- <mention url="...">Context Page 2</mention>
 
 ## Constraints
 

@@ -11,9 +11,9 @@ When creating tasks from spec.
 
 ## Context
 
-Part of implementation for <mention-page url="...">Feature Spec</mention-page>
+Part of implementation for <mention url="...">Feature Spec</mention>
 
-Implementation plan: <mention-page url="...">Implementation Plan</mention-page>
+Implementation plan: <mention url="...">Implementation Plan</mention>
 
 ## Description
 

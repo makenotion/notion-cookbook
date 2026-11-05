@@ -9,6 +9,7 @@
   "success_criteria": [
     "Produces both requested drafts, distinguishing question/answer content from the incident record.",
     "Preserves the cause, remedy, incident window, successful alerting, missing reminder, and action owner.",
+    "Adds no unsupported causes, commands, prevention procedures, or review dates; labels any suggested additions separately.",
     "Does not invent a deadline or publish either draft."
   ]
 }

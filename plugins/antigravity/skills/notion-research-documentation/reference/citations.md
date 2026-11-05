@@ -6,13 +6,13 @@ For Notion sources in saved Notion content, use page mentions. For external
 sources or chat output, use ordinary Markdown links to the original source:
 
 ```markdown
-<mention-page url="https://notion.so/workspace/Page-Title-uuid">Page Title</mention-page>
+<mention url="https://notion.so/workspace/Page-Title-uuid">Page Title</mention>
 ```
 
 The URL must be provided. The title is optional but improves readability:
 
 ```markdown
-<mention-page url="https://notion.so/workspace/Page-Title-uuid"/>
+<mention url="https://notion.so/workspace/Page-Title-uuid"/>
 ```
 
 ## Inline Citations
@@ -20,7 +20,7 @@ The URL must be provided. The title is optional but improves readability:
 Cite immediately after referenced information:
 
 ```markdown
-The Q4 revenue increased by 23% quarter-over-quarter (<mention-page url="...">Q4 Financial Report</mention-page>).
+The Q4 revenue increased by 23% quarter-over-quarter (<mention url="...">Q4 Financial Report</mention>).
 ```
 
 ## Multiple Sources
@@ -28,7 +28,7 @@ The Q4 revenue increased by 23% quarter-over-quarter (<mention-page url="...">Q4
 When information comes from multiple sources:
 
 ```markdown
-Customer satisfaction has improved across all metrics (<mention-page url="...">Q3 Survey Results</mention-page>, <mention-page url="...">Support Analysis</mention-page>).
+Customer satisfaction has improved across all metrics (<mention url="...">Q3 Survey Results</mention>, <mention url="...">Support Analysis</mention>).
 ```
 
 ## Section-Level Citations
@@ -38,7 +38,7 @@ For longer sections derived from one source:
 ```markdown
 ### Engineering Priorities
 
-According to the <mention-page url="...">Engineering Roadmap 2025</mention-page>:
+According to the <mention url="...">Engineering Roadmap 2025</mention>:
 
 - Focus on API scalability
 - Improve developer experience
@@ -53,10 +53,10 @@ inline citations does not need a duplicate list:
 ```markdown
 ## Sources
 
-- <mention-page url="...">Strategic Plan 2025</mention-page>
-- <mention-page url="...">Market Analysis Report</mention-page>
-- <mention-page url="...">Competitor Research: Q3</mention-page>
-- <mention-page url="...">Customer Interview Notes</mention-page>
+- <mention url="...">Strategic Plan 2025</mention>
+- <mention url="...">Market Analysis Report</mention>
+- <mention url="...">Competitor Research: Q3</mention>
+- <mention url="...">Customer Interview Notes</mention>
 ```
 
 Group by category for long lists:
@@ -66,17 +66,17 @@ Group by category for long lists:
 
 ### Primary Sources
 
-- <mention-page url="...">Official Roadmap</mention-page>
-- <mention-page url="...">Strategy Document</mention-page>
+- <mention url="...">Official Roadmap</mention>
+- <mention url="...">Strategy Document</mention>
 
 ### Supporting Research
 
-- <mention-page url="...">Market Trends</mention-page>
-- <mention-page url="...">Customer Feedback</mention-page>
+- <mention url="...">Market Trends</mention>
+- <mention url="...">Customer Feedback</mention>
 
 ### Background Context
 
-- <mention-page url="...">Historical Analysis</mention-page>
+- <mention url="...">Historical Analysis</mention>
 ```
 
 ## Quoting Content
@@ -84,7 +84,7 @@ Group by category for long lists:
 When quoting directly from source:
 
 ```markdown
-The product team noted: "We need to prioritize mobile experience improvements" (<mention-page url="...">Product Meeting Notes</mention-page>).
+The product team noted: "We need to prioritize mobile experience improvements" (<mention url="...">Product Meeting Notes</mention>).
 ```
 
 For block quotes:
@@ -92,7 +92,7 @@ For block quotes:
 ```markdown
 > We need to prioritize mobile experience improvements to meet our Q4 goals. This includes performance optimization and UI refresh.
 >
-> — <mention-page url="...">Product Meeting Notes - Oct 2025</mention-page>
+> — <mention url="...">Product Meeting Notes - Oct 2025</mention>
 ```
 
 ## Data Citations
@@ -105,7 +105,7 @@ When presenting data, cite the source:
 | Revenue | $2.3M | $2.8M | +21.7% |
 | Users   | 12.4K | 15.1K | +21.8% |
 
-Source: <mention-page url="...">Financial Dashboard</mention-page>
+Source: <mention url="...">Financial Dashboard</mention>
 ```
 
 ## Database Citations
@@ -113,7 +113,7 @@ Source: <mention-page url="...">Financial Dashboard</mention-page>
 When referencing database content:
 
 ```markdown
-Based on analysis of the <mention-database url="...">Projects Database</mention-database>, 67% of projects are on track.
+Based on analysis of the <mention type="database" url="...">Projects Database</mention>, 67% of projects are on track.
 ```
 
 ## User Citations
@@ -121,7 +121,7 @@ Based on analysis of the <mention-database url="...">Projects Database</mention-
 When attributing information to specific people:
 
 ```markdown
-<mention-user url="...">Sarah Chen</mention-user> noted in <mention-page url="...">Architecture Review</mention-page> that the microservices migration is ahead of schedule.
+<mention url="...">Sarah Chen</mention> noted in <mention url="...">Architecture Review</mention> that the microservices migration is ahead of schedule.
 ```
 
 ## Citation Frequency
@@ -129,9 +129,9 @@ When attributing information to specific people:
 **Over-citing** (every sentence):
 
 ```markdown
-The revenue increased (<mention-page url="...">Report</mention-page>).
-Costs decreased (<mention-page url="...">Report</mention-page>).
-Margin improved (<mention-page url="...">Report</mention-page>).
+The revenue increased (<mention url="...">Report</mention>).
+Costs decreased (<mention url="...">Report</mention>).
+Margin improved (<mention url="...">Report</mention>).
 ```
 
 **Under-citing** (no attribution):
@@ -143,7 +143,7 @@ The revenue increased, costs decreased, and margin improved.
 **Right balance** (grouped citation):
 
 ```markdown
-The revenue increased, costs decreased, and margin improved (<mention-page url="...">Q4 Financial Report</mention-page>).
+The revenue increased, costs decreased, and margin improved (<mention url="...">Q4 Financial Report</mention>).
 ```
 
 ## Outdated Information
@@ -151,7 +151,7 @@ The revenue increased, costs decreased, and margin improved (<mention-page url="
 Note when source information might be outdated:
 
 ```markdown
-The original API design (<mention-page url="...">API Spec v1</mention-page>, last updated January 2024) has been superseded by the new architecture in <mention-page url="...">API Spec v2</mention-page>.
+The original API design (<mention url="...">API Spec v1</mention>, last updated January 2024) has been superseded by the new architecture in <mention url="...">API Spec v2</mention>.
 ```
 
 ## Cross-References
@@ -163,12 +163,12 @@ Link to related research documents:
 
 This research builds on previous findings:
 
-- <mention-page url="...">Market Analysis - Q2 2025</mention-page>
-- <mention-page url="...">Competitor Landscape Review</mention-page>
+- <mention url="...">Market Analysis - Q2 2025</mention>
+- <mention url="...">Competitor Landscape Review</mention>
 
 For implementation details, see:
 
-- <mention-page url="...">Technical Implementation Guide</mention-page>
+- <mention url="...">Technical Implementation Guide</mention>
 ```
 
 ## Citation Validation
@@ -195,7 +195,7 @@ Revenue grew 23% (Financial Report). Customer count increased 18% (Metrics Dashb
 **Formal style** (full mentions):
 
 ```markdown
-Revenue grew 23% (<mention-page url="...">Q4 Financial Report</mention-page>). Customer count increased 18% (<mention-page url="...">Metrics Dashboard</mention-page>).
+Revenue grew 23% (<mention url="...">Q4 Financial Report</mention>). Customer count increased 18% (<mention url="...">Metrics Dashboard</mention>).
 ```
 
 **Recommend formal style** for most research documentation as it provides clickable navigation.

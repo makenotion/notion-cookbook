@@ -1,5 +1,9 @@
 # Example: Project Decision Meeting Prep
 
+This fictional walkthrough uses illustrative tool labels and arguments, not a
+copy-and-run transcript. Use your connection's current tool names and schemas,
+and replace sample IDs, URLs, and properties with values from actual tool results.
+
 ## User Request
 
 > "Prep for tomorrow's architecture meeting where we need to decide on database migration strategy"
@@ -111,7 +115,7 @@ pages: [{
 
 Our MongoDB database is experiencing performance degradation as we scale. Query response times have increased from 50ms to 400ms average over the past 6 months. The schema-less nature that initially provided flexibility is now causing data consistency issues and making application logic more complex.
 
-**Source**: <mention-page url="...">Current Database Performance Issues</mention-page>
+**Source**: <mention url="...">Current Database Performance Issues</mention>
 
 ### Current Situation
 
@@ -128,7 +132,7 @@ Our MongoDB database is experiencing performance degradation as we scale. Query 
 - Complex data migration scripts for schema changes
 - Limited transaction support causing race conditions
 
-**Source**: <mention-page url="...">Database Migration Proposal</mention-page>
+**Source**: <mention url="...">Database Migration Proposal</mention>
 
 ### Historical Context
 
@@ -138,7 +142,7 @@ We successfully migrated from Redis to Memcached in 2023, which took 6 weeks. Ke
 - Rollback plan was crucial when we discovered compatibility issues
 - Parallel running period (dual writes) was essential for safe migration
 
-**Source**: <mention-page url="...">Previous Migration Post-mortem</mention-page>
+**Source**: <mention url="...">Previous Migration Post-mortem</mention>
 
 ## Decision Required
 
@@ -178,7 +182,7 @@ We successfully migrated from Redis to Memcached in 2023, which took 6 weeks. Ke
 
 **Risk**: Medium - Improvements may not be sufficient
 
-**Source**: <mention-page url="...">Migration Options Analysis</mention-page>
+**Source**: <mention url="...">Migration Options Analysis</mention>
 
 ### Option B: Migrate to PostgreSQL
 
@@ -206,7 +210,7 @@ We successfully migrated from Redis to Memcached in 2023, which took 6 weeks. Ke
 
 **Recommendation**: ✅ **Favored by engineering team**
 
-**Source**: <mention-page url="...">Database Migration Proposal</mention-page>
+**Source**: <mention url="...">Database Migration Proposal</mention>
 
 ### Option C: Hybrid Approach
 
@@ -231,7 +235,7 @@ We successfully migrated from Redis to Memcached in 2023, which took 6 weeks. Ke
 
 **Risk**: Medium - Operational complexity increases
 
-**Source**: <mention-page url="...">Migration Options Analysis</mention-page>
+**Source**: <mention url="...">Migration Options Analysis</mention>
 
 ### Option D: Do Nothing
 
@@ -329,10 +333,10 @@ _[To be filled during meeting]_
 
 ### Primary Sources
 
-- <mention-page url="...">Database Migration Proposal</mention-page>
-- <mention-page url="...">Current Database Performance Issues</mention-page>
-- <mention-page url="...">Migration Options Analysis</mention-page>
-- <mention-page url="...">Previous Migration Post-mortem</mention-page>
+- <mention url="...">Database Migration Proposal</mention>
+- <mention url="...">Current Database Performance Issues</mention>
+- <mention url="...">Migration Options Analysis</mention>
+- <mention url="...">Previous Migration Post-mortem</mention>
 
 ### Supporting Documents
 
@@ -369,7 +373,7 @@ rich_text: [{
 
 ### Agenda Created
 
-<mention-page url="...">Architecture Decision: Database Migration Strategy</mention-page>
+<mention url="...">Architecture Decision: Database Migration Strategy</mention>
 
 ### Pre-Read Summary
 

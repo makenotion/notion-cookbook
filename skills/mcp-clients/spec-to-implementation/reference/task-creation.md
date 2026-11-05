@@ -108,9 +108,9 @@ content: "[Task description using template]"
 
 ## Context
 
-Implementation task for <mention-page url="...">Feature Spec</mention-page>
+Implementation task for <mention url="...">Feature Spec</mention>
 
-Part of <mention-page url="...">Implementation Plan</mention-page> - Phase [N]
+Part of <mention url="...">Implementation Plan</mention> - Phase [N]
 
 ## Objective
 
@@ -147,11 +147,11 @@ Based on spec requirements:
 
 ### Blocked By
 
-- <mention-page url="...">Prerequisite Task</mention-page> or None
+- <mention url="...">Prerequisite Task</mention> or None
 
 ### Blocks
 
-- <mention-page url="...">Dependent Task</mention-page> or None
+- <mention url="...">Dependent Task</mention> or None
 
 ## Resources
 

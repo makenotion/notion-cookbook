@@ -1,5 +1,9 @@
 # Example: Market Research
 
+This fictional walkthrough uses illustrative tool labels and arguments, not a
+copy-and-run transcript. Use your connection's current tool names and schemas,
+and replace sample IDs, URLs, and properties with values from actual tool results.
+
 **User Request**: "Research the current state of AI coding assistants market and create a summary document in Notion"
 
 ## Workflow
@@ -41,7 +45,7 @@ The AI coding assistant market is experiencing 150%+ YoY growth. GitHub Copilot 
 ### Market Size and Growth
 
 $800M in 2024 → $2.5B projected by 2026. Developer adoption: 23% (2023) → 47% (2024).
-Source: <mention-page url="...">Market Trends Q3 2025</mention-page>
+Source: <mention url="...">Market Trends Q3 2025</mention>
 
 ### Competitive Landscape
 
@@ -50,12 +54,12 @@ Source: <mention-page url="...">Market Trends Q3 2025</mention-page>
 - Tabnine: 10% (enterprise, on-premise)
 - Cody: 5% (codebase-aware)
 - CodeWhisperer: 8% (AWS integration)
-  Source: <mention-page url="...">AI Tools Competitive Analysis</mention-page>
+  Source: <mention url="...">AI Tools Competitive Analysis</mention>
 
 ### Technology Trends
 
 Key differentiators: context awareness, customization, multi-modal interfaces, code verification.
-Source: <mention-page url="...">Developer Tools Landscape</mention-page>
+Source: <mention url="...">Developer Tools Landscape</mention>
 
 ## Next Steps
 

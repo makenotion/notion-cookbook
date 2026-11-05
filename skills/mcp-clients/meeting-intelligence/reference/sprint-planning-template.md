@@ -28,21 +28,21 @@ Use this template for agile sprint planning meetings.
 
 [From product backlog, linked from task database]
 
-- <mention-page url="...">Task 1</mention-page> - [Points]
-- <mention-page url="...">Task 2</mention-page> - [Points]
+- <mention url="...">Task 1</mention> - [Points]
+- <mention url="...">Task 2</mention> - [Points]
 
 ## Sprint Backlog
 
 ### Committed Items
 
-- [x] <mention-page url="...">Task</mention-page> - [Points] - @[Owner]
-- [ ] <mention-page url="...">Task</mention-page> - [Points] - @[Owner]
+- [x] <mention url="...">Task</mention> - [Points] - @[Owner]
+- [ ] <mention url="...">Task</mention> - [Points] - @[Owner]
 
 **Total committed**: [Points]
 
 ### Stretch Goals
 
-- [ ] <mention-page url="...">Task</mention-page> - [Points]
+- [ ] <mention url="...">Task</mention> - [Points]
 
 ## Dependencies & Risks
 

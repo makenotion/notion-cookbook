@@ -148,9 +148,9 @@ None
 
 ### Completed Tasks
 
-- <mention-page url="...">Task 1</mention-page> ✅
-- <mention-page url="...">Task 2</mention-page> ✅
-- <mention-page url="...">Task 3</mention-page> ✅
+- <mention url="...">Task 1</mention> ✅
+- <mention url="...">Task 2</mention> ✅
+- <mention url="...">Task 3</mention> ✅
 
 ### Deliverables
 
@@ -229,15 +229,15 @@ Mark completed tasks:
 
 ### Phase 1: Foundation
 
-- [x] <mention-page url="...">Database schema</mention-page>
-- [x] <mention-page url="...">API scaffolding</mention-page>
-- [x] <mention-page url="...">Auth setup</mention-page>
+- [x] <mention url="...">Database schema</mention>
+- [x] <mention url="...">API scaffolding</mention>
+- [x] <mention url="...">Auth setup</mention>
 
 ### Phase 2: Core Features
 
-- [x] <mention-page url="...">User management</mention-page>
-- [ ] <mention-page url="...">Dashboard</mention-page>
-- [ ] <mention-page url="...">Reporting</mention-page>
+- [x] <mention url="...">User management</mention>
+- [ ] <mention url="...">Dashboard</mention>
+- [ ] <mention url="...">Reporting</mention>
 ```
 
 ### Timeline Updates

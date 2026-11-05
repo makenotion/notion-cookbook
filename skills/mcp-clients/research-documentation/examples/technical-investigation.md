@@ -1,5 +1,9 @@
 # Example: Technical Investigation
 
+This fictional walkthrough uses illustrative tool labels and arguments, not a
+copy-and-run transcript. Use your connection's current tool names and schemas,
+and replace sample IDs, URLs, and properties with values from actual tool results.
+
 ## User Request
 
 > "Research our current caching strategy and create a technical summary"
@@ -91,7 +95,7 @@ Our caching infrastructure uses a two-tier approach with Redis for API response 
 - Static content: 1 hour
 - User-specific: 15 minutes
 
-**Source**: <mention-page url="...">System Architecture Overview</mention-page>
+**Source**: <mention url="...">System Architecture Overview</mention>
 
 ### Layer 2: Session Storage (Memcached)
 
@@ -114,7 +118,7 @@ session:{user_id}:{session_id}
 - **Time-based**: TTL expiration for non-critical data
 - **Manual**: Admin tools for emergency cache clear
 
-**Source**: <mention-page url="...">Redis Implementation Guide</mention-page>
+**Source**: <mention url="...">Redis Implementation Guide</mention>
 
 ## Decision Rationale
 
@@ -132,7 +136,7 @@ session:{user_id}:{session_id}
 
 **Decision**: Chosen for flexibility and rich feature set needed for API caching.
 
-**Source**: <mention-page url="...">API Caching Decision Record</mention-page>
+**Source**: <mention url="...">API Caching Decision Record</mention>
 
 ### Why Memcached for Sessions?
 
@@ -156,7 +160,7 @@ session:{user_id}:{session_id}
 | Cache Hit Rate | - | 85% | - |
 | Peak RPS Handled | 1,000 | 4,000 | 4x increase |
 
-**Source**: <mention-page url="...">Performance Optimization - Q3 2024</mention-page>
+**Source**: <mention url="...">Performance Optimization - Q3 2024</mention>
 
 ## Known Issues & Limitations
 
@@ -193,10 +197,10 @@ session:{user_id}:{session_id}
 
 ## Related Documentation
 
-- <mention-page url="...">System Architecture Overview</mention-page>
-- <mention-page url="...">Redis Implementation Guide</mention-page>
-- <mention-page url="...">API Caching Decision Record</mention-page>
-- <mention-page url="...">Performance Optimization - Q3 2024</mention-page>
+- <mention url="...">System Architecture Overview</mention>
+- <mention url="...">Redis Implementation Guide</mention>
+- <mention url="...">API Caching Decision Record</mention>
+- <mention url="...">Performance Optimization - Q3 2024</mention>
 
 ## Appendix: Configuration Examples
 

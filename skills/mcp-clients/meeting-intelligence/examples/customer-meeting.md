@@ -1,5 +1,9 @@
 # Example: Customer Meeting Prep
 
+This fictional walkthrough uses illustrative tool labels and arguments, not a
+copy-and-run transcript. Use your connection's current tool names and schemas,
+and replace sample IDs, URLs, and properties with values from actual tool results.
+
 **User Request**: "Prep for our sales meeting with Acme Corp on Thursday. Save an internal pre-read in our sales team area and a customer agenda in the shared meeting area."
 
 This example assumes the facts below are in the supplied CRM and product sources.
@@ -93,7 +97,7 @@ pages: [{
 ## Company Overview
 **Company**: Acme Corp (500-person fintech, Series B)
 **Decision Makers**: CTO, VP Product, CFO
-Source: <mention-page url='...'>CRM Notes</mention-page>
+Source: <mention url=\"...\">CRM Notes</mention>
 
 ## Their Pain Points → Our Solutions
 - Manual workflows → Workflow automation
