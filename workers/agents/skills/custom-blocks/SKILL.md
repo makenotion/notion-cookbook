@@ -175,11 +175,13 @@ Use the [dev shell](https://developers.notion.com/custom-blocks/guides/preview)
 to test the custom block with local sample data:
 
 ```shell
-ntn workers customblocks dev
+ntn workers customblocks dev -- --json
 ```
 
+The command emits startup JSON and keeps running. Open its `shellUrl` to test
+the block, rather than the frontend URL directly.
+
 The dev shell builds the Worker and runs the frontend locally with hot reload.
-Open the shell URL printed by the command, rather than the frontend URL directly.
 It creates and binds empty sample databases for declared data sources. Add rows
 manually or use `ntn workers customblocks sample` to sample an existing database.
 Check rendering and the main interaction. Restart the dev shell after changing
