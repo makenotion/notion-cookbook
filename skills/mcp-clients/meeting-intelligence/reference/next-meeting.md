@@ -17,11 +17,10 @@ the same schedule, or treat an empty event window as a disconnected account.
 Use the actual tool's filters; if it returns events across calendars, filter the
 results using calendar metadata rather than inventing a primary-calendar parameter.
 
-Do not use connected content search to select an event when a suitable calendar
-tool is available. Connected search remains useful for meeting context after
-selection. If neither calendar route is usable, explain that the next event
-cannot be reliably determined and ask for the meeting details; do not infer
-current attendance or timing from indexed documents.
+When Notion calendar tools are available for this workflow, do not use connector
+search, including for meeting context. Use calendar details, linked materials,
+and Notion-only retrieval. If neither calendar route is usable, ask for meeting
+details rather than inferring current attendance or timing from indexed documents.
 
 ## Select the event
 
@@ -41,41 +40,64 @@ For overlapping qualifying events, use the user's stated preference, such as
 1:1s or meetings they organize. Otherwise ask which event to prepare for when
 both are plausible; do not silently assign importance by meeting size.
 
-## Gather enough context
+## Create a useful note and show it early
 
-Use the event's title, series, attendee names, and email addresses for focused
-queries. Resolve an ambiguous attendee identity before searching by that person;
-do not add identity lookups when the event already supplies it.
-
-Run independent searches for prior meeting notes, recent Notion context, and
-relevant connected sources in parallel. Fetch the most recent relevant note for
-the same series and up to three promising context sources, reusing content
-already available. Carry forward unresolved actions, not completed ones.
-Stop when this pass provides enough context or returns no useful evidence.
-Do not repeatedly rephrase empty searches. A targeted follow-up is appropriate
-only for a material unresolved fact, such as conflicting decision status;
-explain that uncertainty if it remains unresolved. Respect search coverage notices.
-
-## Prepare and save
-
-When no relevant context is found, state that no relevant prior material was
-found in the searched sources. Use the known meeting purpose to propose questions:
+For requested Notion output, create or reuse the event-linked meeting note before
+additional research. Reuse an identified existing note without creating another;
+preserve its content and manually added attendees. Start with the event's known
+purpose and duration, suggested timed topics, and sections for decisions and
+actions. Do not invent project context or commitments. For example:
 
 - **1:1:** priorities, feedback, support, growth, and next steps.
 - **Status:** progress, blockers, decisions needed, and owners.
 - **Customer:** objectives, questions, risks, and next steps; omit internal strategy.
 - **Decision:** options, trade-offs, and decision criteria.
 
-Treat these as suggested topics, not facts about participants. If the purpose is
-unclear, start by establishing the desired outcome. Fit the timed agenda to the
-event's duration and leave sections for decisions and actions to capture during
-the meeting; do not invent commitments.
+Include the event link, time, attendees, and initial agenda at creation whenever
+the tool supports them together. Prefer automatic attendee mapping from the event;
+otherwise reuse known Notion identities or resolve emails, batching lookups when
+supported. Preserve RSVP distinctions: invited does not mean accepted or present.
+Keep unresolved names/emails in the note instead of inventing user IDs or silently
+dropping people. Do not invite users, change calendar RSVPs, or grant access.
 
-For requested Notion output, reuse a note already linked to this event when
-available, preserving existing content. Link a new note to the selected event
-using the exposed tool schema. Provide the event and content together when
-supported. If creation and content updates are separate, use the returned ID
-and a targeted update; skip an intervening fetch only when the response or tool
-contract guarantees the structure needed for that update. Retain the main
-workflow's destination, audience, and uncertain-write checks. Show the saved
-note using the skill's panel-delivery guidance; chat-only requests stay in chat.
+Check returned attendee data against the event. Repair omissions with a targeted
+update when identities are known, preserving manually added attendees. If the
+response omits attendee data, use a required content/schema fetch to check it too;
+otherwise make one focused verification read. Report unresolved mappings without
+blocking the initial agenda or repeating identity searches.
+
+Use the actual creation contract. When event linking and content writes are
+separate, open the returned note immediately, then add the agenda with a targeted
+update. Fetch only when required by the tool or needed to preserve existing
+content; reuse that read for attendee verification. If creation accepts the
+agenda, open the populated note immediately afterward. Follow the main skill's
+panel guidance and accurately distinguish requesting a panel from confirmed
+opening. Do not wait for research or recreate a note if opening fails.
+
+## Improve the same note with focused research
+
+Start with event details already returned. Use a detailed calendar lookup only
+if it exposes additional needed information; do not repeat a listing that already
+contains it. Read relevant descriptions, attachments, and linked notes before
+searching. Use the meeting title, series, and attendee identities from the event;
+resolve identity only where ambiguous.
+
+For remaining context gaps, run independent Notion searches for previous notes
+and relevant project context in parallel. When Notion calendar tools are available,
+never call connector search. Otherwise use connected sources only for a specific
+remaining gap. Fetch the most recent relevant prior note and up to three promising
+context sources, batching independent reads and reusing content already available.
+Stop when this pass provides enough context or returns no useful evidence; do not
+repeatedly rephrase empty queries. A targeted follow-up is appropriate for a
+material unresolved fact such as conflicting decision status.
+
+Update the same note while it is open: add supported context, unresolved actions,
+and source references, and replace suggested prompts where evidence makes them
+more specific. Combine changes into one targeted update where possible. Preserve
+user edits and completed actions; re-read if concurrent changes make the saved
+state uncertain. With no useful results, state what was searched and retain the
+initial agenda rather than generating another one. Respect search coverage notices.
+
+Keep destination, audience, and uncertain-write checks from the main workflow.
+Chat-only requests stay in chat; this early-save sequence does not authorize a
+Notion write for them.

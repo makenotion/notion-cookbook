@@ -26,7 +26,8 @@
       "accepts_event_and_content": true,
       "returns": {
         "page_id": "note-123",
-        "url": "https://notion.so/note-123"
+        "url": "https://notion.so/note-123",
+        "attendees": ["maya@example.test"]
       }
     },
     "destination": "Established private meeting notes location",
@@ -71,7 +72,7 @@
   },
   "success_criteria": [
     "Selects one-on-one without asking for confirmation or selecting focus, pending, or optional events.",
-    "Runs one independent parallel research pass; empty results do not trigger repeated searches or attendee lookups.",
+    "Creates and requests display of a useful initial agenda before additional research; independent Notion searches run in parallel and empty results do not trigger repeated searches.",
     "Creates one event-linked note with suggested 1:1 questions timed within 30 minutes, an accurate evidence-gap statement, and empty decisions/actions sections.",
     "Uses event and content together under the supplied creation contract; opens returned note-123 in the panel without an exploratory fetch or duplicate create."
   ]

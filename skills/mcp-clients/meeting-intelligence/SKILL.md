@@ -44,8 +44,9 @@ both for every meeting.
 For quick preparation when the user says “next” or “upcoming” without naming an
 event, follow [next-meeting preparation](reference/next-meeting.md): select a
 calendar event using Notion calendar tools or a direct calendar connection, run
-one focused research pass, and prepare an agenda even when
-no relevant notes are found. This path does not cap research for a requested
+create and show an initial agenda with attendees, then improve that same note
+with one focused research pass. Do not use connector search in this path when
+Notion calendar tools are available. This path does not cap research for a requested
 detailed pre-read or replace an explicitly selected meeting.
 
 ## Materials and audiences

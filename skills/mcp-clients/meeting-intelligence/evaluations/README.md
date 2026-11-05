@@ -77,5 +77,21 @@ these variants with identical event data:
 - Neither route usable: ask for meeting details without searching indexed content
   for a purported next meeting or creating a guessed event-linked note.
 
-Connected-source searches for prior discussion remain allowed after selection.
+Connector search must not be called at any stage when Notion calendar tools are
+available.
 These cases distinguish missing calendar access from missing meeting context.
+
+## Early delivery and attendee preservation
+
+Run [early delivery](early-delivery.json) with both combined and separate
+creation/content contracts. Verify ordering from the trace: initial note and
+panel request precede research; later findings update that same note. Preserve
+user edits introduced after the panel request. Validate attendee mapping, RSVP
+accuracy, and unresolved email handling without calendar writes or sharing.
+
+Measure wall-clock time from the user request to the panel request, first useful
+agenda, and final update separately. Confirm panel visibility separately from the
+request. Record total elapsed time, including reasoning and time between calls;
+summed tool durations are not end-to-end latency. Targets for routine preparation
+are 15 seconds to a visible note, 30 seconds to a useful agenda, and 60 seconds to
+completion; report actual results rather than treating targets as achieved.
