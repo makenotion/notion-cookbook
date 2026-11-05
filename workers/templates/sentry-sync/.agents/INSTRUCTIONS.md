@@ -334,7 +334,7 @@ Set `schedule` on a sync to control how often it runs:
 
 - `"continuous"`: run as fast as possible
 - `"manual"`: only via CLI trigger
-- Interval string: `"5m"`, `"30m"`, `"1h"`, `"1d"` (min `"1m"`, max `"7d"`)
+- Interval string: `"5m"`, `"30m"`, `"1h"`, `"1d"` (min `"5m"`, max `"7d"`)
 - Default: `"30m"`
 
 #### Relations

@@ -304,7 +304,7 @@ Syncs run as a chain of `execute` calls within a sync cycle:
 
 ### Schedule
 
-By default syncs run every 30 minutes. Set `schedule` to an interval like `"15m"`, `"1h"`, `"1d"` (min `"1m"`, max `"7d"`), `"continuous"`, or `"manual"`:
+By default syncs run every 30 minutes. Set `schedule` to an interval like `"15m"`, `"1h"`, `"1d"` (min `"5m"`, max `"7d"`), `"continuous"`, or `"manual"`:
 
 ```ts
 worker.sync("fastSync", {
