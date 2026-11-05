@@ -23,9 +23,10 @@
     ],
     "connector_results": [],
     "meeting_note_creation": {
-      "accepts_event_and_content": true,
+      "accepts_event_and_content": false,
+      "contract": "With calendarEvent, reject parent, title, and content. Return status and URL only. Without calendarEvent, title and content are supported. Fetch before a content update unless the current content is already loaded.",
       "returns": {
-        "page_id": "note-123",
+        "status": "created",
         "url": "https://notion.so/note-123"
       }
     },
@@ -49,7 +50,13 @@
         "title": "1:1",
         "attendees": ["lee@example.test"]
       }
-    ]
+    ],
+    "sources": {
+      "https://notion.so/note-123": {
+        "content": "<meeting-notes><meeting-notes-section-notes>\n<p />\n</meeting-notes-section-notes></meeting-notes>",
+        "attendees": ["maya-id"]
+      }
+    }
   },
   "success_criteria": [
     "Asks which overlapping meeting to prepare for before researching or creating materials.",

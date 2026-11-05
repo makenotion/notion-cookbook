@@ -28,7 +28,9 @@ Use the current time and the user's timezone. Start with the primary calendar
 and the next 12 hours, unless the user specifies a calendar or period. Exclude
 canceled or declined events, focus time, breaks, out-of-office blocks, and office
 or availability calendars. Prefer accepted meetings or meetings the user organizes;
-for an accepted-only request, exclude tentative, unanswered, and optional events.
+for an accepted-only request, exclude tentative and unanswered invitations.
+An accepted optional invitation still qualifies; exclude optional attendance only
+when the user asks for required meetings only.
 Do not infer attendance or meeting type from a title alone when event metadata
 is available.
 
@@ -42,7 +44,7 @@ both are plausible; do not silently assign importance by meeting size.
 
 ## Create a useful note and show it early
 
-For requested Notion output, create or reuse the event-linked meeting note before
+For requested Notion output, create or reuse the meeting note before
 additional research. Reuse an identified existing note without creating another;
 preserve its content and manually added attendees. Start with the event's known
 purpose and duration, suggested timed topics, and sections for decisions and
@@ -66,8 +68,16 @@ response omits attendee data, use a required content/schema fetch to check it to
 otherwise make one focused verification read. Report unresolved mappings without
 blocking the initial agenda or repeating identity searches.
 
-Use the actual creation contract. When event linking and content writes are
-separate, open the returned note immediately, then add the agenda with a targeted
+Separate event discovery from event linking. A direct Google or Outlook connection
+can find an event without connecting that account to Notion Calendar. In that
+case, reuse a known note or create a note without `calendarEvent`, including its
+title, time, attendee details, agenda, and event URL in the supported fields.
+State that the note is not calendar-linked. Do not fabricate Notion Calendar
+account IDs or retry a known-disconnected link operation.
+
+For a connected Notion Calendar event, `create_meeting_note` takes `calendarEvent`
+without `parent`, `title`, or `content`; it returns a new or existing note. Open
+the returned note immediately, then add the agenda with a separate targeted
 update. Fetch only when required by the tool or needed to preserve existing
 content; reuse that read for attendee verification. If creation accepts the
 agenda, open the populated note immediately afterward. Follow the main skill's

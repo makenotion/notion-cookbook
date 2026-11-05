@@ -1,0 +1,110 @@
+{
+  "name": "Direct calendar with no Notion Calendar connection",
+  "skills": ["notion-meeting-prep"],
+  "query": "Prepare for my next accepted meeting in Notion.",
+  "context": {
+    "current_time": "2026-11-06T16:00:00-05:00",
+    "timezone": "America/New_York",
+    "primary_calendar": "primary",
+    "tools": [
+      "get-tool-access",
+      "notion-calendar-list-calendars",
+      "notion-calendar-list-events",
+      "direct-calendar-list-events",
+      "search",
+      "connector-search",
+      "create-meeting-note",
+      "notion-page-panel",
+      "fetch",
+      "update-page"
+    ],
+    "search_routes": [
+      {
+        "intent": "Prior notes or recent context for the selected meeting",
+        "results": []
+      }
+    ],
+    "connector_results": [],
+    "meeting_note_creation": {
+      "accepts_event_and_content": false,
+      "contract": "The account is disconnected from Notion Calendar. Reject any calendarEvent. Without calendarEvent accept title and content and create a note in the default meeting location. The output is not calendar-linked.",
+      "returns": {
+        "status": "created",
+        "url": "https://notion.so/note-123"
+      }
+    },
+    "destination": "Established private meeting notes location",
+    "calendar_events": [
+      {
+        "id": "focus",
+        "calendar": "primary",
+        "start": "2026-11-06T16:30:00-05:00",
+        "type": "focusTime",
+        "response": "accepted"
+      },
+      {
+        "id": "pending",
+        "calendar": "primary",
+        "start": "2026-11-06T17:00:00-05:00",
+        "response": "needsAction",
+        "title": "Launch review"
+      },
+      {
+        "id": "optional",
+        "calendar": "primary",
+        "start": "2026-11-06T17:15:00-05:00",
+        "response": "accepted",
+        "optional": true,
+        "title": "Optional rollout review",
+        "end": "2026-11-06T17:30:00-05:00",
+        "type": "decision",
+        "description": "Decide whether to expand the rollout.",
+        "attendees": [
+          {
+            "name": "Maya",
+            "email": "maya@example.test",
+            "notion_user_id": "maya-id"
+          }
+        ],
+        "url": "https://calendar.google.com/calendar/event?eid=optional-review"
+      },
+      {
+        "id": "one-on-one",
+        "calendar": "primary",
+        "start": "2026-11-06T17:30:00-05:00",
+        "end": "2026-11-06T18:00:00-05:00",
+        "response": "accepted",
+        "title": "Weekly 1:1",
+        "attendees": [
+          {
+            "name": "Maya",
+            "email": "maya@example.test"
+          }
+        ],
+        "type": "oneOnOne"
+      }
+    ],
+    "calendar_access": {
+      "notion-calendar-list-calendars": "available",
+      "notion-calendar-list-events": "available",
+      "direct-calendar-list-events": "available"
+    },
+    "calendar_accounts": [],
+    "tool_contracts": {
+      "notion_calendar": "Access check required unless already known. List calendars returns connected accounts and calendar metadata. List events accepts time range and timezone, returns events across connected calendars, and has no calendar filter.",
+      "direct_calendar": "Available for the same account; accepts a calendar and time range."
+    },
+    "sources": {
+      "https://notion.so/note-123": {
+        "content": "<meeting-notes><meeting-notes-section-notes>\n<p />\n</meeting-notes-section-notes></meeting-notes>",
+        "attendees": ["maya-id"]
+      }
+    }
+  },
+  "success_criteria": [
+    "Uses the direct calendar after Notion account discovery returns no connected account; does not try connector search for event selection.",
+    "Selects the accepted optional rollout review.",
+    "Creates one note without calendarEvent, with a useful 15-minute agenda, event URL, time and attendee details; requests the panel immediately afterward.",
+    "Clearly states the note is not calendar-linked; does not invent account IDs, try a known-invalid link, duplicate the note, change calendar invitations, or grant access."
+  ]
+}

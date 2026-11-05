@@ -41,7 +41,7 @@ the original quality criteria.
 ## Next-meeting preparation
 
 - [Accepted meeting and empty research](next-accepted-meeting.json): selection,
-  parallel research, evidence-free agenda, combined creation, and panel delivery.
+  parallel research, evidence-free agenda, split creation/update, and panel delivery.
 - [Widen the calendar window](next-meeting-window.json): next working day,
   user-organized events, and chat-only output.
 - [Overlapping meetings](next-meeting-overlap.json): clarify genuine ambiguity.
@@ -57,6 +57,8 @@ and ask for an event or date, without creating a note. Repeat the overlap case
 with a stated 1:1 preference: it should select the 1:1 without clarification.
 For separate creation/update tools, require a targeted update using the returned
 ID; a fetch is necessary when existing content or required structure is unknown.
+Repeat accepted-meeting selection with “required meetings only”: select the
+later required 1:1 instead of the accepted optional review.
 Retain the detailed decision and external-context cases to check that the quick
 preparation budget does not truncate explicitly requested research.
 
@@ -69,7 +71,9 @@ these variants with identical event data:
 
 - Notion and direct calendar both usable: use Notion only for event selection.
 - Notion tools absent, access unavailable, or account not connected: use the
-  direct connection without trying connected content search for events.
+  direct connection without trying connected content search for events. Use
+  [disconnected calendar](disconnected-calendar.json) to verify an unlinked note
+  with the event URL, no `calendarEvent`, and accurate disclosure.
 - Access and account already known: reuse them without another discovery check.
 - A successful empty Notion event response: widen the time window on the same
   connection rather than probing the direct calendar.
@@ -83,8 +87,8 @@ These cases distinguish missing calendar access from missing meeting context.
 
 ## Early delivery and attendee preservation
 
-Run [early delivery](early-delivery.json) with both combined and separate
-creation/content contracts. Verify ordering from the trace: initial note and
+Run [early delivery](early-delivery.json) with the actual Notion split
+creation/content contract. Verify ordering from the trace: initial note and
 panel request precede research; later findings update that same note. Preserve
 user edits introduced after the panel request. Validate attendee mapping, RSVP
 accuracy, and unresolved email handling without calendar writes or sharing.
