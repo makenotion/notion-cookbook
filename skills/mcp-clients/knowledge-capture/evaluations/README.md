@@ -33,3 +33,7 @@ condition should not add a routine probe; the second must honor the requirement
 and reuse its result. Preserve source discovery, required reads, write warnings,
 and uncertain-write recovery in both conditions. Record tool calls alongside
 the original quality criteria.
+
+## Panel delivery
+
+[panel-unavailable](panel-unavailable.json) checks saved-result delivery. Also exercise link-only requests and panel-open failures: preserve the saved artifact, return its link, and do not claim an unsuccessful open succeeded.

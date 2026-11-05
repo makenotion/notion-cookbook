@@ -61,3 +61,7 @@ Assess functional correctness and visual usability separately.
 ## Build efficiency
 
 Use [the fresh-build scenario](efficient-new-build.json) to check redundant calls while retaining the existing design and content criteria. Also rerun the existing reuse and retry scenarios; search and readback remain necessary when they establish identity or resolve uncertain writes. Compare call counts and elapsed time only for runs that pass the quality criteria.
+
+## Panel delivery
+
+[panel-already-open](panel-already-open.json) checks saved-result delivery. Also exercise link-only requests and panel-open failures: preserve the saved artifact, return its link, and do not claim an unsuccessful open succeeded.

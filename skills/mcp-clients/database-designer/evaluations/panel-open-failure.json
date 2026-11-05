@@ -1,0 +1,16 @@
+{
+  "name": "panel-open-failure",
+  "skills": ["notion-database-designer"],
+  "query": "Show the tracker we just created.",
+  "context": {
+    "conversation": "The requested tracker has been created and verified. Database page ID: db-page-123. Its data-source ID is source-456. The user is not viewing it. Saved URL: https://notion.so/db-page-123.",
+    "tools": ["notion-page-panel"],
+    "tool_instructions": [
+      "notion-page-panel opens an existing page or database using its page ID; it does not modify content."
+    ],
+    "panel_result": "Opening the panel fails. The saved database remains accessible at https://notion.so/db-page-123."
+  },
+  "success_criteria": [
+    "Attempts to open the existing database, then returns its saved link and states that opening failed. Does not create another database or claim the panel opened."
+  ]
+}

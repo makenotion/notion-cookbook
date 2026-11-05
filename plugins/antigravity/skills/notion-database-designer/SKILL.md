@@ -57,9 +57,7 @@ what already works and preserving the information people rely on.
    relation targets, and view filters against the requested workflow. For
    migrations, verify mapped values,
    record coverage, and preservation of unrelated data. Trust write results,
-   including their warnings, and read back only what they do not show. If the
-   user asked to see the result somewhere, such as a side panel, open it there
-   when a tool supports it. Return the database link, what they can now track,
+   including their warnings, and read back only what they do not show. Return the database link, what they can now track,
    where to start, and any unsupported or incomplete work.
 
 ## Design decisions
@@ -118,3 +116,17 @@ expand scope.
 
 For turning notes into a tracker, see [customer requests](examples/customer-requests.md).
 For improving an existing tracker, see [support triage](examples/support-triage.md).
+
+## Show the saved result
+
+After creating or updating a Notion artifact, use the connected plugin's page-panel
+tool (such as `notion-page-panel`) when available to show the main result beside
+the conversation. Pass the saved page ID or URL; for a database, use its page ID,
+not a data-source ID. For a connected system, open its home rather than every
+record. Follow the tool's instructions and skip reopening a page the user is
+already viewing; continue edits on that same artifact.
+
+Honor requests for a link only or a different viewing destination. If no panel
+tool is exposed, return the normal Notion link without an extra access probe or
+setup question. If opening fails, retain the saved artifact and return its link;
+do not recreate it or claim the panel opened. Chat-only drafts stay in chat.
