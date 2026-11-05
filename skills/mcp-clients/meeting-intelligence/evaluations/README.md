@@ -37,3 +37,45 @@ condition should not add a routine probe; the second must honor the requirement
 and reuse its result. Preserve source discovery, required reads, write warnings,
 and uncertain-write recovery in both conditions. Record tool calls alongside
 the original quality criteria.
+
+## Next-meeting preparation
+
+- [Accepted meeting and empty research](next-accepted-meeting.json): selection,
+  parallel research, evidence-free agenda, combined creation, and panel delivery.
+- [Widen the calendar window](next-meeting-window.json): next working day,
+  user-organized events, and chat-only output.
+- [Overlapping meetings](next-meeting-overlap.json): clarify genuine ambiguity.
+- [Existing meeting note](next-meeting-existing-note.json): choose recent evidence,
+  preserve content, and avoid duplicate notes.
+
+Serve calendar events only through calendar queries, honoring calendar, time,
+attendance filters, and pagination. Serve search results and source bodies only
+through their matching tools. Expose the stated creation contract in the tool
+schema; return creation IDs only after a successful write. For the empty-window
+case, also run a variant with no events in either window: the agent should stop
+and ask for an event or date, without creating a note. Repeat the overlap case
+with a stated 1:1 preference: it should select the 1:1 without clarification.
+For separate creation/update tools, require a targeted update using the returned
+ID; a fetch is necessary when existing content or required structure is unknown.
+Retain the detailed decision and external-context cases to check that the quick
+preparation budget does not truncate explicitly requested research.
+
+## Calendar connection selection
+
+[Calendar connection](calendar-connection.json) exposes both dedicated calendar
+routes and connected content search. Serve access and account information only
+through the corresponding tools, and events only through event queries. Run
+these variants with identical event data:
+
+- Notion and direct calendar both usable: use Notion only for event selection.
+- Notion tools absent, access unavailable, or account not connected: use the
+  direct connection without trying connected content search for events.
+- Access and account already known: reuse them without another discovery check.
+- A successful empty Notion event response: widen the time window on the same
+  connection rather than probing the direct calendar.
+- User explicitly chooses the direct connection: honor that choice.
+- Neither route usable: ask for meeting details without searching indexed content
+  for a purported next meeting or creating a guessed event-linked note.
+
+Connected-source searches for prior discussion remain allowed after selection.
+These cases distinguish missing calendar access from missing meeting context.

@@ -1,0 +1,99 @@
+{
+  "name": "Choose a calendar connection before meeting research",
+  "skills": ["notion-meeting-intelligence"],
+  "query": "Prepare for my next accepted meeting in Notion.",
+  "context": {
+    "current_time": "2026-11-06T16:00:00-05:00",
+    "timezone": "America/New_York",
+    "primary_calendar": "primary",
+    "tools": [
+      "get-tool-access",
+      "notion-calendar-list-calendars",
+      "notion-calendar-list-events",
+      "direct-calendar-list-events",
+      "search",
+      "connector-search",
+      "create-meeting-note",
+      "notion-page-panel"
+    ],
+    "search_routes": [
+      {
+        "intent": "Prior notes or recent context for the selected meeting",
+        "results": []
+      }
+    ],
+    "connector_results": [],
+    "meeting_note_creation": {
+      "accepts_event_and_content": true,
+      "returns": {
+        "page_id": "note-123",
+        "url": "https://notion.so/note-123"
+      }
+    },
+    "destination": "Established private meeting notes location",
+    "calendar_events": [
+      {
+        "id": "focus",
+        "calendar": "primary",
+        "start": "2026-11-06T16:30:00-05:00",
+        "type": "focusTime",
+        "response": "accepted"
+      },
+      {
+        "id": "pending",
+        "calendar": "primary",
+        "start": "2026-11-06T17:00:00-05:00",
+        "response": "needsAction",
+        "title": "Launch review"
+      },
+      {
+        "id": "optional",
+        "calendar": "primary",
+        "start": "2026-11-06T17:15:00-05:00",
+        "response": "accepted",
+        "optional": true
+      },
+      {
+        "id": "one-on-one",
+        "calendar": "primary",
+        "start": "2026-11-06T17:30:00-05:00",
+        "end": "2026-11-06T18:00:00-05:00",
+        "response": "accepted",
+        "title": "Weekly 1:1",
+        "attendees": [
+          {
+            "name": "Maya",
+            "email": "maya@example.test"
+          }
+        ],
+        "type": "oneOnOne"
+      }
+    ],
+    "calendar_access": {
+      "notion-calendar-list-calendars": "available",
+      "notion-calendar-list-events": "available",
+      "direct-calendar-list-events": "available"
+    },
+    "calendar_accounts": [
+      {
+        "account": "work@example.test",
+        "calendar": "primary",
+        "primary": true,
+        "connection": "notion"
+      }
+    ],
+    "tool_contracts": {
+      "notion_calendar": "Access check required unless already known. List calendars returns connected accounts and calendar metadata. List events accepts time range and timezone, returns events across connected calendars, and has no calendar filter.",
+      "direct_calendar": "Available for the same account; accepts a calendar and time range."
+    }
+  },
+  "success_criteria": [
+    "Checks required Notion tool access once, identifies the primary calendar, and uses Notion calendar events without querying the direct connection.",
+    "Filters returned events using calendar and attendance metadata; does not invent unsupported query parameters.",
+    "Does not use connected content search for event selection or to discover calendar availability; may use it for context after selection.",
+    "Selects one-on-one without asking for confirmation or selecting focus, pending, or optional events.",
+    "Runs one independent parallel research pass; empty results do not trigger repeated searches or attendee lookups.",
+    "Creates one event-linked note with suggested 1:1 questions timed within 30 minutes, an accurate evidence-gap statement, and empty decisions/actions sections.",
+    "Uses event and content together under the supplied creation contract; opens returned note-123 in the panel without an exploratory fetch or duplicate create."
+  ]
+}
