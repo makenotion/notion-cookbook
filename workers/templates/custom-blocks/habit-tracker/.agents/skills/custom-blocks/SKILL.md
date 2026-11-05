@@ -211,41 +211,59 @@ build command. Do not use `ntn workers exec` for a custom block. It has no
 ### 6. Create and connect an instance
 
 Every declared data source needs a binding before the block can initialize.
-Set bindings on the definition for instances to inherit, or on an individual
-instance to override its defaults.
+Set shared defaults on the definition or override them for an individual instance.
 
 Resolve each database with `ntn datasources resolve <database-id>` and read its
-schema with `ntn api v1/data_sources/<data-source-id>`. Map declared keys to the
-actual data source and property IDs. Pass property IDs exactly as returned by
-the schema.
+schema with `ntn api v1/data_sources/<data-source-id>`. Map declared keys to actual
+data source and property IDs. Pass property IDs exactly as returned by the schema.
 
-Run `ntn workers customblocks make --help` before choosing the command. If it
-lists `--bindings`, prepare the binding array described in
-[Instance bindings](reference/instance-bindings.md), then run from the deployed
-Worker root:
+Write `bindings.json` as an array:
+
+```json
+[
+  {
+    "key": "issues",
+    "data_source_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    "property_ids_by_key": { "title": "title" }
+  }
+]
+```
+
+Replace the example values with the resolved IDs. Check
+`ntn workers customblocks make --help`. If it lists `--bindings`, run from the
+deployed Worker root:
 
 ```shell
 ntn workers customblocks make --key issueBoard --target <page-id-or-url> --bindings @bindings.json --json
 ```
 
-`--key` selects the deployed definition. `--target` places an inline instance
-under a page or block, or configures an existing custom instance. Omit it to
-create a private custom page. Preserve the returned instance ID and URL.
+`--key` selects the deployed definition. `--target` places a custom block instance
+under a page or block, or configures an existing custom instance. Omit `--target`
+to create a private custom page instance. Preserve the returned instance ID and URL.
 
-A supplied binding array replaces all instance overrides. Omit `--bindings` to
-preserve them, or use `--bindings '[]'` to clear them and inherit definition
-defaults. If `--bindings` is unavailable, run `make` without it and configure the
-returned instance through the API. See [Instance bindings](reference/instance-bindings.md)
-for request shapes and later updates.
+If `--bindings` is unavailable, run `make` without it, then configure bindings
+through `ntn api`. Use these endpoints for later updates or definition defaults too:
 
-An existing definition can also be placed inline through
+| Configure             | Endpoint                                  | Binding array field         |
+| --------------------- | ----------------------------------------- | --------------------------- |
+| Definition defaults   | `PATCH /v1/custom_block_definitions/{id}` | `data_sources`              |
+| Custom block instance | `PATCH /v1/blocks/{id}`                   | `custom_block.data_sources` |
+| Custom page instance  | `PATCH /v1/pages/{id}`                    | `custom_page.data_sources`  |
+| Custom view instance  | Not yet supported                         | Not yet supported           |
+
+Put the binding array in the indicated field of a JSON request body.
+Omit `definition_id` for bindings-only updates.
+
+A supplied array replaces all bindings at that level. Include every binding that
+must remain. Omitting instance bindings preserves existing overrides. An empty
+instance array clears overrides so definition defaults apply. Legacy saved mappings
+may contain encoded IDs that the host resolves without rewriting storage. Do not
+decode an ID just because it contains `%`.
+
+An existing definition can also be placed as a custom block instance through
 [Notion-flavored Markdown](https://developers.notion.com/custom-blocks/guides/markdown),
-including through MCP page tools. These instances inherit the definition's
-bindings. Markdown does not accept instance bindings. Custom database views are
-not supported by this CLI/Public API flow.
-
-Report any permission, feature-gate, or configuration failure instead of claiming
-setup is complete.
+including through MCP page tools. These instances inherit definition defaults.
+Markdown does not accept instance bindings.
 
 ### 7. Share with your teammates
 
