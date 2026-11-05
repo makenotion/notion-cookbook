@@ -6,8 +6,54 @@
     "execution": "Live testing only when explicitly authorized; isolated private sample destinations. Otherwise supply a stateful mock.",
     "reference": "Use the skill\u2019s documented layout guidance; compare functionality and rendered hierarchy, not exact prose.",
     "tool_instructions": [
-      "Every tool needed for the build is exposed and authorized; no tool requires an access probe. Serve current formatting and view specifications through fetch when the tool descriptions require them. Required database fetches still apply. Independent pages sharing a parent can be created in one call."
-    ]
+      "Every tool needed for the build is exposed and authorized; no tool requires an access probe. Serve current formatting and view specifications through fetch when the tool descriptions require them. Required database fetches still apply. Independent pages sharing a parent can be created in one call.",
+      "Expose search and get-tool-access in both the previous-skill and revised-skill runs, with identical schemas and fixture responses. Log calls to both tools even though this fresh build does not need them; omitting either tool invalidates the call-count comparison."
+    ],
+    "tools": [
+      "fetch",
+      "search",
+      "get-tool-access",
+      "create-pages",
+      "update-page",
+      "create-database",
+      "update-data-source",
+      "create-view",
+      "query-data-sources"
+    ],
+    "search_routes": [
+      {
+        "intent": "Any discovery search for an existing home, project, database, or source material for this new fictional build",
+        "results": []
+      }
+    ],
+    "tool_access": {
+      "current_tool_access": {
+        "fetch": {
+          "status": "available"
+        },
+        "search": {
+          "status": "available"
+        },
+        "create_pages": {
+          "status": "available"
+        },
+        "update_page": {
+          "status": "available"
+        },
+        "create_database": {
+          "status": "available"
+        },
+        "update_data_source": {
+          "status": "available"
+        },
+        "create_view": {
+          "status": "available"
+        },
+        "query_data_sources": {
+          "status": "available"
+        }
+      }
+    }
   },
   "success_criteria": [
     "Release interpretation beside live status-count chart before detailed work.",
