@@ -57,3 +57,7 @@ composition principles, not exact prose or pixels. Record two separate results:
   A reviewer-polished reference is not evidence of an unassisted skill pass.
 
 Assess functional correctness and visual usability separately.
+
+## Build efficiency
+
+Use [the fresh-build scenario](efficient-new-build.json) to check redundant calls while retaining the existing design and content criteria. Also rerun the existing reuse and retry scenarios; search and readback remain necessary when they establish identity or resolve uncertain writes. Compare call counts and elapsed time only for runs that pass the quality criteria.

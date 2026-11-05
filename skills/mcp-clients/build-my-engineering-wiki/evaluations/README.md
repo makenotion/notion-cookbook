@@ -41,3 +41,7 @@ the saved views and relations, and walk the rendered workspace in Notion. Compar
 workflow, hierarchy, visible metadata and detail-page usefulness with the documented
 layout guidance, not exact prose or pixels. A reviewer-polished output is
 not a passing forward test. Report retries and the visual checks performed.
+
+## Build efficiency
+
+Use [the fresh-build scenario](efficient-new-build.json) to check redundant calls while retaining the existing design and content criteria. Also rerun the existing reuse and retry scenarios; search and readback remain necessary when they establish identity or resolve uncertain writes. Compare call counts and elapsed time only for runs that pass the quality criteria.
