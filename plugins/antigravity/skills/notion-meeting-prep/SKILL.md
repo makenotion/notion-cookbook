@@ -103,14 +103,8 @@ After creating or updating a Notion artifact, use the connected plugin's page-pa
 tool (such as `notion-page-panel`) when available to show the main result beside
 the conversation. Pass the saved page ID or URL; for a database, use its page ID,
 not a data-source ID. For a connected system, open its home rather than every
-record. Before calling the panel tool, use the current open-page context or a
-confirmed panel result to check whether this same note is already visible. If it
-is, do not call the panel tool again: update the note in place so the user can
-follow the remaining changes. This also applies to follow-up turns. Do not reopen
-it after adding research, attendees, or the final agenda merely to refresh it.
-A different open page does not establish that this note is visible; an explicit
-closed-panel state overrides an earlier successful opening. Follow tool instructions
-and do not treat an authorization handoff as confirmed visibility.
+record. If the current open-page context shows this note, skip the panel call
+and update it in place, including on follow-up turns. Follow tool instructions.
 
 Honor requests for a link only or a different viewing destination. If no panel
 tool is exposed, return the normal Notion link without an extra access probe or
