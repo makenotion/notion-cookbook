@@ -1,0 +1,40 @@
+{
+  "name": "Update a meeting note already visible in the panel",
+  "skills": ["notion-meeting-prep"],
+  "query": "Add the latest launch context to this meeting agenda.",
+  "context": {
+    "open_page": {
+      "page_id": "note-123",
+      "url": "https://notion.so/note-123"
+    },
+    "conversation": "The launch review note is open beside the chat. Its initial agenda was saved and the panel confirmed opening in the previous turn.",
+    "tools": [
+      "fetch",
+      "search",
+      "update-page",
+      "notion-page-panel",
+      "create-meeting-note"
+    ],
+    "sources": {
+      "https://notion.so/note-123": "Launch review, 30 minutes. Existing agenda: rollout decision and support readiness. User note: Keep five minutes for support questions.",
+      "https://notion.so/launch": "Current rollout: 10%. Rehearsal is still open, owned by Maya. No expansion decision."
+    },
+    "search_routes": [
+      {
+        "intent": "Latest launch context",
+        "results": [
+          {
+            "url": "https://notion.so/launch",
+            "title": "Launch status"
+          }
+        ]
+      }
+    ]
+  },
+  "success_criteria": [
+    "Updates note-123 with supported rollout and rehearsal context, preserving the existing agenda and user support note.",
+    "Makes zero panel calls because the same note is already visible, including after the final update.",
+    "Creates no duplicate note and does not ask the user to reopen the panel.",
+    "Does not claim expansion was approved or invent commitments."
+  ]
+}

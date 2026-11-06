@@ -99,3 +99,12 @@ request. Record total elapsed time, including reasoning and time between calls;
 summed tool durations are not end-to-end latency. Targets for routine preparation
 are 15 seconds to a visible note, 30 seconds to a useful agenda, and 60 seconds to
 completion; report actual results rather than treating targets as achieved.
+
+## Reuse the open meeting note
+
+[Already-open note](panel-already-open.json) supplies the open-page context through
+the client and prior opening confirmation through conversation history. Require
+zero panel calls while updating the same note, even across follow-up turns.
+Also run with an explicit closed-panel state or a different visible page: the
+agent may open the requested note once, then must not reopen it after updates.
+An earlier authorization handoff alone is not evidence that a page is visible.

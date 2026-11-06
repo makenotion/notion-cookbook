@@ -77,10 +77,13 @@ account IDs or retry a known-disconnected link operation.
 
 For a connected Notion Calendar event, `create_meeting_note` takes `calendarEvent`
 without `parent`, `title`, or `content`; it returns a new or existing note. Open
-the returned note immediately, then add the agenda with a separate targeted
+the returned note immediately only if it is not already visible in the panel,
+then add the agenda with a separate targeted
 update. Fetch only when required by the tool or needed to preserve existing
 content; reuse that read for attendee verification. If creation accepts the
-agenda, open the populated note immediately afterward. Follow the main skill's
+agenda, open the populated note immediately afterward unless it is already visible.
+Once visible, apply subsequent updates to that same note without another panel
+call, including on follow-up turns. Follow the main skill's
 panel guidance and accurately distinguish requesting a panel from confirmed
 opening. Do not wait for research or recreate a note if opening fails.
 
