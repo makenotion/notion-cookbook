@@ -43,7 +43,7 @@ both for every meeting.
 
 For quick preparation when the user says “next” or “upcoming” without naming an
 event, follow [next-meeting preparation](reference/next-meeting.md): select a
-calendar event using Notion calendar tools or a direct calendar connection, run
+calendar event using Notion calendar tools or a direct calendar connection,
 create and show an initial agenda with attendees, then improve that same note
 with one focused research pass. Do not use connector search in this path when
 Notion calendar tools are available. This path does not cap research for a requested
@@ -103,8 +103,8 @@ After creating or updating a Notion artifact, use the connected plugin's page-pa
 tool (such as `notion-page-panel`) when available to show the main result beside
 the conversation. Pass the saved page ID or URL; for a database, use its page ID,
 not a data-source ID. For a connected system, open its home rather than every
-record. Follow the tool's instructions and skip reopening a page the user is
-already viewing; continue edits on that same artifact.
+record. If the current open-page context shows this note, skip the panel call
+and update it in place, including on follow-up turns. Follow tool instructions.
 
 Honor requests for a link only or a different viewing destination. If no panel
 tool is exposed, return the normal Notion link without an extra access probe or

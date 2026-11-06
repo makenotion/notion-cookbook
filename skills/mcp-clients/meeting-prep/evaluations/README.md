@@ -92,6 +92,8 @@ creation/content contract. Verify ordering from the trace: initial note and
 panel request precede research; later findings update that same note. Preserve
 user edits introduced after the panel request. Validate attendee mapping, RSVP
 accuracy, and unresolved email handling without calendar writes or sharing.
+Repeat with the same note already visible in client context: require zero panel
+calls, including on a follow-up turn that updates the agenda.
 
 Measure wall-clock time from the user request to the panel request, first useful
 agenda, and final update separately. Confirm panel visibility separately from the
