@@ -389,7 +389,7 @@ When `ntn datasources query <id>` returns 404 or "Could not find data source", t
 - `ntn login`: connect to a Notion workspace.
 - `ntn workers deploy`: build and publish capabilities. Does not reset sync state.
 - `ntn workers exec <capability>`: run a sync or tool.
-- `ntn customblocks dev`: render custom blocks locally in the dev shell; test there before deploying.
+- `ntn workers customblocks dev -- --json`: start local block servers. Follow the `custom-blocks` skill to choose dev shell or in-app preview verification before deploying.
 - `ntn workers sync status`: monitor sync health (live-updating).
 - `ntn workers sync trigger <key> --preview`: preview sync output without writing to the database.
 - `ntn workers sync trigger <key>`: trigger a real sync immediately (writes to the database).
@@ -466,7 +466,7 @@ ntn workers sync state reset <key>
 ## Testing Guidelines
 
 - No test runner configured; validate with `npm run check` and end-to-end testing via `ntn workers exec`.
-- Custom blocks are exercised in the dev shell (`ntn customblocks dev`), not with `ntn workers exec`.
+- Verify custom blocks through the dev shell or in-app preview, following the `custom-blocks` skill. `ntn workers exec` does not run a custom block.
 - Write a test script that exercises each tool capability using `ntn workers exec`. This can be a bash script (`test.sh`) or a TypeScript script (`test.ts`, run via `npx tsx test.ts`). Use the `--local` flag for local execution or omit it to run against the deployed worker.
 
 **Local execution** runs your worker code directly on your machine. Any `.env` file in the project root is automatically loaded, so secrets and config values are available via `process.env`.

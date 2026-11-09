@@ -177,25 +177,33 @@ npm run check
 npm test
 ```
 
-Use the [dev shell](https://developers.notion.com/custom-blocks/guides/preview)
-to test the custom block with local sample data:
+Choose the host for the check. Use the dev shell with local sample data for
+rendering and interactions. Use in-app preview when you need the Notion host
+and workspace data, if the Notion UI offers **In-app preview** and the browser
+can reach your local server. Do not assume an agent sandbox shares your
+browser's localhost.
+
+Read `node_modules/@notionhq/custom-blocks/docs/local-development.md` for the
+shared procedure. If the installed SDK predates that guide, read
+[Verify a custom block locally](https://unpkg.com/@notionhq/custom-blocks@latest/docs/local-development.md)
+from the latest published SDK.
+
+Start the local server from the Worker root:
 
 ```shell
 ntn workers customblocks dev -- --json
 ```
 
-The command emits startup JSON and keeps running. Open its `shellUrl` to test
-the block, rather than the frontend URL directly.
+Read the startup record while the process stays running. Use `shellUrl` for
+the dev shell, or the matching capability's `customBlocks[].url` in Notion's
+**Local preview URL** field. Opening a frontend URL alone provides no SDK host.
+Restart after Worker declaration changes to regenerate manifest metadata.
 
-The dev shell builds the Worker and runs the frontend locally with hot reload.
-It creates and binds empty sample databases for declared data sources. Add rows
-manually or use `ntn workers customblocks sample` to sample an existing database.
-Check rendering and the main interaction. Restart the dev shell after changing
-the Worker declaration so it rebuilds the manifest.
-
-In React blocks, press `\` to toggle the SDK debug console. Report what was
-tested and any checks that could not be completed. The dev shell uses a mock
-host. It does not verify production permissions or sandbox behavior.
+Check rendering and the main interaction. In-app preview can read and write
+real workspace data under the viewer's permissions; use suitable test data.
+If in-app preview is unavailable, use the dev shell and report that the Notion
+host remains unverified. Report which host you used and what you observed.
+Server readiness and project checks alone do not verify browser behavior.
 
 ### 5. Deploy the Worker
 
