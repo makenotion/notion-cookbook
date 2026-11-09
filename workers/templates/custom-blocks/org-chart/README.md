@@ -14,10 +14,10 @@ cd workers/templates/custom-blocks/org-chart
 npm install
 npm run check
 npm test
-ntn workers customblocks dev
+ntn customblocks dev
 ```
 
-Open the shell URL printed by the command to preview the block in the custom blocks dev
+Open http://localhost:9873 to preview the block in the custom blocks dev
 shell — a mock Notion host with sample data sources to bind. When it looks
 right, deploy:
 
@@ -66,7 +66,7 @@ host instead of reporting a fixed 520px height.
 
 ## Local development
 
-Test the block in the custom blocks dev shell (`ntn workers customblocks dev`,
+Test the block in the custom blocks dev shell (`ntn customblocks dev`,
 above), which renders it in a mock Notion host with sample data sources to
 bind against, before any deploy.
 
@@ -100,7 +100,3 @@ blocks/org-chart/
 - The chart loads up to 999 people.
 - Search matches name and role substrings only.
 - Collapse state lives in the session; it isn't persisted to the block.
-
-For in-app preview with workspace data, follow
-[Verify a custom block locally](https://unpkg.com/@notionhq/custom-blocks@latest/docs/local-development.md).
-The dev shell uses a mock host with sample data; in-app preview uses the Notion host.

@@ -15,10 +15,10 @@ cd workers/templates/custom-blocks/whiteboard
 npm install
 npm run check
 npm test
-ntn workers customblocks dev
+ntn customblocks dev
 ```
 
-Open the shell URL printed by the command to preview the block in the custom blocks dev
+Open http://localhost:9873 to preview the block in the custom blocks dev
 shell — a mock Notion host with sample data sources to bind. When it looks
 right, deploy:
 
@@ -70,7 +70,7 @@ edits a selected sticky, and Shift snaps lines and arrows to 45°.
 
 ## Local development
 
-Test the block in the custom blocks dev shell (`ntn workers customblocks dev`,
+Test the block in the custom blocks dev shell (`ntn customblocks dev`,
 above), which renders it in a mock Notion host with sample data sources to
 bind against, before any deploy.
 
@@ -102,7 +102,3 @@ blocks/whiteboard/
 ## Limitations
 
 - No resize handles, multi-select, or undo; stickies are fixed at 160×160.
-
-For in-app preview with workspace data, follow
-[Verify a custom block locally](https://unpkg.com/@notionhq/custom-blocks@latest/docs/local-development.md).
-The dev shell uses a mock host with sample data; in-app preview uses the Notion host.

@@ -12,10 +12,10 @@ From the repository root:
 cd workers/templates/custom-blocks/custom
 npm install
 npm run check
-ntn workers customblocks dev
+ntn customblocks dev
 ```
 
-Open the shell URL printed by the command to preview the block in the custom blocks dev
+Open http://localhost:9873 to preview the block in the custom blocks dev
 shell — a mock Notion host that serves the block from this project. When it
 looks right, deploy:
 
@@ -29,7 +29,7 @@ because it does not need a database mapping.
 
 ## Local development
 
-The dev shell (`ntn workers customblocks dev`, above) is the local test loop: it
+The dev shell (`ntn customblocks dev`, above) is the local test loop: it
 builds the worker, serves the block with this project's Vite, and renders it
 in a mock Notion host. Edit `blocks/hello-world/src/index.tsx` to change the
 rendered content; edits hot-reload. Add data-source definitions to
@@ -51,7 +51,3 @@ blocks/hello-world/
 npm run check
 npm run build
 ```
-
-For in-app preview with workspace data, follow
-[Verify a custom block locally](https://unpkg.com/@notionhq/custom-blocks@latest/docs/local-development.md).
-The dev shell uses a mock host with sample data; in-app preview uses the Notion host.
