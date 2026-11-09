@@ -25,8 +25,7 @@ npm run check
 
 ## Develop locally
 
-Get a fast iteration cycle as you build and test your UI with sample data.
-The dev shell provides a mock Notion host and updates as you edit.
+Iterate on your UI with sample data and hot reload in the dev shell.
 
 ```sh
 ntn workers customblocks dev -- --json
