@@ -26,3 +26,9 @@ This feature is in private alpha. Coming soon.
 
 Each template uses one shared `package.json`. If a dependency is needed for
 neither the Worker runtime nor repository operations, put it in `devDependencies`.
+
+## Template documentation
+
+Edit `README.template.md` to update all custom block template READMEs, then run
+`npm run agents:sync` from the repository root. The sync uses each recipe’s title
+and deploy command from `catalog.json`. `npm run agents:check` detects stale copies.

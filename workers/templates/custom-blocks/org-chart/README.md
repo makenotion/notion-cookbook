@@ -1,7 +1,8 @@
+<!-- Generated from workers/templates/custom-blocks/README.template.md. Run npm run agents:sync to update. -->
+
 # Org chart custom block
 
-An interactive org chart inside Notion. Display people and roles, explore
-reporting relationships, and search or collapse teams.
+A starting point for building your own interface inside Notion.
 
 Develop locally with sample data, preview inside Notion with workspace
 data, or deploy the block to use and share it.
@@ -20,7 +21,6 @@ Run these commands from this template’s directory:
 ```sh
 npm install
 npm run check
-npm test
 ```
 
 ## Develop locally
@@ -54,7 +54,4 @@ ntn workers deploy --name org-chart
 ```
 
 Insert the deployed block into a Notion page and share the page.
-Connect the block’s `people` data source when setting it up in Notion.
-Map names, roles, and the self-referencing reports-to relation.
-
 Deploy again to publish later changes.

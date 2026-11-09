@@ -1,7 +1,8 @@
+<!-- Generated from workers/templates/custom-blocks/README.template.md. Run npm run agents:sync to update. -->
+
 # Whiteboard custom block
 
-A whiteboard inside Notion with sticky notes, drawing tools, lines, and
-arrows. Each canvas object is stored as a row in a Notion database.
+A starting point for building your own interface inside Notion.
 
 Develop locally with sample data, preview inside Notion with workspace
 data, or deploy the block to use and share it.
@@ -20,7 +21,6 @@ Run these commands from this template’s directory:
 ```sh
 npm install
 npm run check
-npm test
 ```
 
 ## Develop locally
@@ -54,8 +54,4 @@ ntn workers deploy --name whiteboard
 ```
 
 Insert the deployed block into a Notion page and share the page.
-Connect the block’s `items` data source to a database when setting it up
-in Notion. Use the data setup controls to create a matching database or
-map the required properties to an existing one.
-
 Deploy again to publish later changes.

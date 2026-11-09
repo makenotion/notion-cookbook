@@ -1,7 +1,8 @@
+<!-- Generated from workers/templates/custom-blocks/README.template.md. Run npm run agents:sync to update. -->
+
 # Habit tracker custom block
 
-A monthly habit grid inside Notion. Track habits and streaks, with each
-completed day recorded in a Notion database.
+A starting point for building your own interface inside Notion.
 
 Develop locally with sample data, preview inside Notion with workspace
 data, or deploy the block to use and share it.
@@ -20,7 +21,6 @@ Run these commands from this template’s directory:
 ```sh
 npm install
 npm run check
-npm test
 ```
 
 ## Develop locally
@@ -54,7 +54,4 @@ ntn workers deploy --name habit-tracker
 ```
 
 Insert the deployed block into a Notion page and share the page.
-Connect the block’s `habits` and `log` data sources when setting it up in
-Notion. The log records completed days and relates each entry to a habit.
-
 Deploy again to publish later changes.

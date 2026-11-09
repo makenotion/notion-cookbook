@@ -1,7 +1,8 @@
+<!-- Generated from workers/templates/custom-blocks/README.template.md. Run npm run agents:sync to update. -->
+
 # Hello world custom block
 
 A starting point for building your own interface inside Notion.
-This template renders “Hello world” and requires no data sources.
 
 Develop locally with sample data, preview inside Notion with workspace
 data, or deploy the block to use and share it.
