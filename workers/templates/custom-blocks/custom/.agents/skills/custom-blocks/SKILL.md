@@ -177,33 +177,19 @@ npm run check
 npm test
 ```
 
-Choose the host for the check. Use the dev shell with local sample data for
-rendering and interactions. Use in-app preview when you need the Notion host
-and workspace data, if the Notion UI offers **In-app preview** and the browser
-can reach your local server. Do not assume an agent sandbox shares your
-browser's localhost.
+Use the dev shell for rendering and interactions with local sample data.
+Use in-app preview to test local UI changes against workspace data before
+deployment. Preview writes still change real data under the viewer's
+permissions.
 
-Read `node_modules/@notionhq/custom-blocks/docs/local-development.md` for the
-shared procedure. If the installed SDK predates that guide, read
-[Verify a custom block locally](https://unpkg.com/@notionhq/custom-blocks@latest/docs/local-development.md)
+Follow the SDK's local development guide for startup, connection, and browser
+verification. Read the installed guide at
+`node_modules/@notionhq/custom-blocks/docs/local-development.md`. If it is
+absent, read [Verify a custom block locally](https://unpkg.com/@notionhq/custom-blocks@latest/docs/local-development.md)
 from the latest published SDK.
 
-Start the local server from the Worker root:
-
-```shell
-ntn workers customblocks dev -- --json
-```
-
-Read the startup record while the process stays running. Use `shellUrl` for
-the dev shell, or the matching capability's `customBlocks[].url` in Notion's
-**Local preview URL** field. Opening a frontend URL alone provides no SDK host.
-Restart after Worker declaration changes to regenerate manifest metadata.
-
-Check rendering and the main interaction. In-app preview can read and write
-real workspace data under the viewer's permissions; use suitable test data.
 If in-app preview is unavailable, use the dev shell and report that the Notion
 host remains unverified. Report which host you used and what you observed.
-Server readiness and project checks alone do not verify browser behavior.
 
 ### 5. Deploy the Worker
 
