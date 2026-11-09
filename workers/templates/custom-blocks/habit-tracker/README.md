@@ -4,8 +4,8 @@
 
 A starting point for building your own interface inside Notion.
 
-Develop locally with sample data, then deploy the block to use and share
-it inside Notion.
+Develop locally with sample data, preview inside Notion with workspace
+data, or deploy the block to use and share it.
 
 ## Prerequisites
 
@@ -34,6 +34,14 @@ ntn workers customblocks dev -- --json
 
 Open the shell URL printed by the command. Follow the SDK’s local
 development guide for details.
+
+## Preview inside Notion
+
+Use in-app preview to test your local changes against production data
+before anyone else sees the updates. Your code runs inside Notion
+without deploying it. Writes can change real data.
+
+Follow the SDK’s local development guide to connect your block.
 
 ## Deploy and share
 
