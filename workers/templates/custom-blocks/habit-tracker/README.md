@@ -1,107 +1,60 @@
-# Worker custom block: Habit tracker
+# Habit tracker custom block
 
-**TL;DR:** A month-at-a-glance habit grid rendered inside a Notion page.
-Habits run down the left with streaks; days run across the top; checking a dot
-creates a row in a Habits Log database, so history stays in plain Notion data.
+A monthly habit grid inside Notion. Track habits and streaks, with each
+completed day recorded in a Notion database.
 
-## Quickstart
+Develop locally with sample data, preview inside Notion with workspace
+data, or deploy the block to use and share it.
 
-From the repository root:
+## Prerequisites
 
-```zsh
-npm install --global ntn
-cd workers/templates/custom-blocks/habit-tracker
+- Node.js 22 or later and npm 10 or later.
+- The [Notion CLI (`ntn`)](https://developers.notion.com/cli/get-started/installation).
+- A Notion workspace.
+
+## Set up
+
+Install dependencies and check that the project is ready to develop.
+Run these commands from this template’s directory:
+
+```sh
 npm install
 npm run check
 npm test
-ntn customblocks dev
 ```
 
-Open http://localhost:9873 to preview the block in the custom blocks dev
-shell — a mock Notion host with sample data sources to bind. When it looks
-right, deploy:
+## Develop locally
 
-```zsh
+Get a fast iteration cycle as you build and test your UI with sample data.
+The dev shell provides a mock Notion host and updates as you edit.
+
+```sh
+ntn workers customblocks dev -- --json
+```
+
+Open the shell URL printed by the command. Follow the SDK’s local
+development guide for details.
+
+## Preview inside Notion
+
+Use in-app preview to test your local changes against production data
+before anyone else sees the updates. Your code runs inside Notion
+without deploying it. Writes can change real data.
+
+Follow the SDK’s local development guide to connect your block.
+
+## Deploy and share
+
+Publish your block so you and your teammates can use it in Notion
+without running a local server.
+
+```sh
 ntn login
 ntn workers deploy --name habit-tracker
 ```
 
-In Notion, insert the custom block into a page and map both data sources. The
-block renders a sample month and a setup hint until they are bound.
+Insert the deployed block into a Notion page and share the page.
+Connect the block’s `habits` and `log` data sources when setting it up in
+Notion. The log records completed days and relates each entry to a habit.
 
-## Databases
-
-Two data sources:
-
-`habits` ("Habits") — one row per habit:
-
-| Property | Type      | Meaning                                                              |
-| -------- | --------- | -------------------------------------------------------------------- |
-| `name`   | title     | Habit name                                                           |
-| `icon`   | rich_text | An emoji shown next to the name                                      |
-| `color`  | select    | `yellow`, `blue`, `pink`, `green`, `purple`, `red`, `orange`, `teal` |
-
-`log` ("Habits Log") — one row per completed habit-day:
-
-| Property | Type     | Meaning                                     |
-| -------- | -------- | ------------------------------------------- |
-| `name`   | title    | Written as `{habit} — {YYYY-MM-DD}`         |
-| `date`   | date     | The completed day                           |
-| `habit`  | relation | The habit (relation to the Habits database) |
-
-A log row's existence marks that habit complete for that day. Toggling a dot
-on creates a row; toggling off archives every matching row (duplicates are
-deduplicated on render). Writes are optimistic with quiet inline errors and
-reverts on failure. Day keys are derived from local calendar dates, so
-completions never shift across timezones.
-
-## The grid
-
-Today's column is banded and its day number chipped; completing every habit on
-a day tints the chip. Streaks count consecutive days ending today (or
-yesterday if today is untouched) and walk back across month boundaries — when
-older data falls outside the loaded window the streak shows as `12+` rather
-than guessing. Future days are visible but disabled; past months stay
-toggleable. The grid is fully keyboard-navigable (arrow keys move, Space or
-Enter toggles), and the habit column stays sticky while the days scroll on
-narrow blocks. The iframe automatically grows with the habit list, so longer
-trackers stay in the page's scroll flow instead of opening a nested vertical
-scroller.
-
-## Local development
-
-Test the block in the custom blocks dev shell (`ntn customblocks dev`,
-above), which renders it in a mock Notion host with sample data sources to
-bind against, before any deploy.
-
-The view also renders standalone with seeded sample data, no Notion host
-required:
-
-```zsh
-cd blocks/habit-tracker
-npx vite
-```
-
-Open `http://localhost:5173/?mock=1`. Harness parameters: `theme=dark`,
-`empty`, `unbound`, `loading`, `many` (16 habits), and `failwrites` (exercises
-revert paths).
-
-## Project structure
-
-```text
-src/
-  index.ts       Worker definition and both data-source schemas
-blocks/habit-tracker/
-  src/
-    App.tsx      Store-state switch and setup shell
-    components/Tracker.tsx   Month grid, header, streaks, keyboard navigation
-    dates.ts     Local-date keys, month math, streak counting
-    notionStore.ts / mockStore.ts   Real and mock data layers
-```
-
-## Limitations
-
-- The log query loads up to 999 rows; very long histories truncate streak
-  lookback (shown as `N+`).
-- Milestone effects were intentionally removed — the only motion is a 150ms
-  fill-in on check, per Notion's motion register.
+Deploy again to publish later changes.
