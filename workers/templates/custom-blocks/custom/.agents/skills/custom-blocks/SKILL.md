@@ -177,25 +177,19 @@ npm run check
 npm test
 ```
 
-Use the [dev shell](https://developers.notion.com/custom-blocks/guides/preview)
-to test the custom block with local sample data:
+Use the dev shell for rendering and interactions with local sample data.
+Use in-app preview to test local UI changes against workspace data before
+deployment. Preview writes still change real data under the viewer's
+permissions.
 
-```shell
-ntn workers customblocks dev -- --json
-```
+Follow the SDK's local development guide for startup, connection, and browser
+verification. Read the installed guide at
+`node_modules/@notionhq/custom-blocks/docs/local-development.md`. If it is
+absent, read [Verify a custom block locally](https://unpkg.com/@notionhq/custom-blocks@latest/docs/local-development.md)
+from the latest published SDK.
 
-The command emits startup JSON and keeps running. Open its `shellUrl` to test
-the block, rather than the frontend URL directly.
-
-The dev shell builds the Worker and runs the frontend locally with hot reload.
-It creates and binds empty sample databases for declared data sources. Add rows
-manually or use `ntn workers customblocks sample` to sample an existing database.
-Check rendering and the main interaction. Restart the dev shell after changing
-the Worker declaration so it rebuilds the manifest.
-
-In React blocks, press `\` to toggle the SDK debug console. Report what was
-tested and any checks that could not be completed. The dev shell uses a mock
-host. It does not verify production permissions or sandbox behavior.
+If in-app preview is unavailable, use the dev shell and report that the Notion
+host remains unverified. Report which host you used and what you observed.
 
 ### 5. Deploy the Worker
 
