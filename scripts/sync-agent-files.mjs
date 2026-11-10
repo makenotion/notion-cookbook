@@ -59,7 +59,8 @@ const OVERRIDE_GROUPS = {
     // Edit README.template.md, then run npm run agents:sync to regenerate the
     // custom block READMEs. Titles and deploy commands come from catalog.json.
     // npm run agents:check detects stale copies.
-    readmeTemplate: "workers/templates/custom-blocks/README.template.md",
+    customBlocksTemplateReadme:
+      "workers/templates/custom-blocks/README.template.md",
     skills: [...DEFAULT_SKILLS, "custom-blocks"],
   },
   "worker-workflow": {
@@ -232,8 +233,11 @@ for (const group of groups.values()) {
     }
   }
 
-  const readmeTemplate = group.config.readmeTemplate
-    ? await readFile(resolve(repoRoot, group.config.readmeTemplate), "utf8")
+  const customBlocksTemplateReadme = group.config.customBlocksTemplateReadme
+    ? await readFile(
+        resolve(repoRoot, group.config.customBlocksTemplateReadme),
+        "utf8"
+      )
     : undefined
 
   for (const recipe of group.recipes) {
@@ -268,11 +272,11 @@ for (const group of groups.values()) {
       rewritten += 1
     }
 
-    if (readmeTemplate !== undefined) {
+    if (customBlocksTemplateReadme !== undefined) {
       const target = join(recipeRoots.get(recipe), "README.md")
       const expected =
-        `<!-- Generated from ${group.config.readmeTemplate}. Run npm run agents:sync to update. -->\n\n` +
-        readmeTemplate
+        `<!-- Generated from ${group.config.customBlocksTemplateReadme}. Run npm run agents:sync to update. -->\n\n` +
+        customBlocksTemplateReadme
           .replaceAll("{{title}}", () => recipe.title)
           .replaceAll("{{deployCommand}}", () => recipe.commands.deploy)
       if (isDryRun) {
