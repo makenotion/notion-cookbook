@@ -29,8 +29,8 @@ Iterate on your UI with sample data and hot reload in the dev shell.
 ntn workers customblocks dev -- --json
 ```
 
-Open the shell URL printed by the command. Follow the SDK’s local
-development guide for details.
+Open the shell URL printed by the command. See the documentation in
+`@notionhq/custom-blocks-dev-shell` for more details.
 
 ## Deploy and share
 

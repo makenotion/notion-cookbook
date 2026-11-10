@@ -56,6 +56,9 @@ const OVERRIDE_GROUPS = {
   "worker-custom-block": {
     skillsRoot: WORKER_SKILLS_ROOT,
     instructions: `${INSTRUCTIONS_ROOT}/custom-blocks`,
+    // Edit README.template.md, then run npm run agents:sync to regenerate the
+    // custom block READMEs. Titles and deploy commands come from catalog.json.
+    // npm run agents:check detects stale copies.
     readmeTemplate: "workers/templates/custom-blocks/README.template.md",
     skills: [...DEFAULT_SKILLS, "custom-blocks"],
   },
