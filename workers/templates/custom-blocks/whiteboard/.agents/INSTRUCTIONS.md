@@ -3,7 +3,6 @@
 ## Project Structure & Module Organization
 
 - `src/index.ts` defines the worker and capabilities.
-- `.examples/` has focused samples (sync, tool, OAuth, webhook).
 - Shared agent skills live in `.agents/skills/`.
 - Generated: `dist/` build output, `workers.json` CLI config.
 
@@ -389,7 +388,7 @@ When `ntn datasources query <id>` returns 404 or "Could not find data source", t
 - `ntn login`: connect to a Notion workspace.
 - `ntn workers deploy`: build and publish capabilities. Does not reset sync state.
 - `ntn workers exec <capability>`: run a sync or tool.
-- `ntn customblocks dev`: render custom blocks locally in the dev shell; test there before deploying.
+- `ntn workers customblocks dev`: render custom blocks locally in the dev shell; test there before deploying.
 - `ntn workers sync status`: monitor sync health (live-updating).
 - `ntn workers sync trigger <key> --preview`: preview sync output without writing to the database.
 - `ntn workers sync trigger <key>`: trigger a real sync immediately (writes to the database).
@@ -465,8 +464,8 @@ ntn workers sync state reset <key>
 
 ## Testing Guidelines
 
-- No test runner configured; validate with `npm run check` and end-to-end testing via `ntn workers exec`.
-- Custom blocks are exercised in the dev shell (`ntn customblocks dev`), not with `ntn workers exec`.
+- Validate with `npm run check`, `npm test` when the project defines it, and end-to-end testing via `ntn workers exec`.
+- Custom blocks are exercised in the dev shell (`ntn workers customblocks dev`), not with `ntn workers exec`.
 - Write a test script that exercises each tool capability using `ntn workers exec`. This can be a bash script (`test.sh`) or a TypeScript script (`test.ts`, run via `npx tsx test.ts`). Use the `--local` flag for local execution or omit it to run against the deployed worker.
 
 **Local execution** runs your worker code directly on your machine. Any `.env` file in the project root is automatically loaded, so secrets and config values are available via `process.env`.

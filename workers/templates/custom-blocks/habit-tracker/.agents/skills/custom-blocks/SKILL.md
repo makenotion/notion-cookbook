@@ -31,7 +31,7 @@ Take into account these limits when building a custom block:
 - **Browser capabilities:** The sandbox and content security policy restrict browser capabilities,
   including browser workers, form submissions, popups, and top-level navigation.
   See [Security](#security) for details.
-- **Data source query results:** Individual queries return up to 1,000 rows.
+- **Data source query results:** Individual queries return up to 999 rows.
   They do not support pagination. Use filters to narrow results and `hasMore` to detect incomplete results.
 - **Page property support:** Property support varies across
   [page reads and writes](https://developers.notion.com/custom-blocks/sdk/pages) and
@@ -204,6 +204,11 @@ Deploy only when the user asks for a live deployment:
 ```shell
 ntn workers deploy
 ```
+
+The first deploy creates the Worker and needs a name. Interactive terminals
+prompt for one. In a non-interactive shell, pass `--name <worker-name>` and
+choose a name that describes the block. Later deploys read the Worker from
+`workers.json` and reject `--name`.
 
 Normal deployment builds the Worker and frontend remotely using the declared
 build command. Do not use `ntn workers exec` for a custom block. It has no

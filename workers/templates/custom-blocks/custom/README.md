@@ -24,7 +24,7 @@ Deploy the block to use it in Notion:
 
 ```sh
 ntn login
-ntn workers deploy --name custom
+ntn workers deploy --name <worker-name>
 ```
 
 Insert the deployed block into a Notion page. Share the page so others can
