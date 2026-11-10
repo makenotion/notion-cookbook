@@ -2,47 +2,43 @@
 
 # Org chart custom block
 
-A starting point for building your own interface inside Notion.
-
-Develop locally with sample data, then deploy the block to use and share
-it inside Notion.
+Build your own interface inside Notion with this template.
 
 ## Prerequisites
 
-- Node.js 22 or later and npm 10 or later.
+- Node.js 22+ and npm 10+.
 - The [Notion CLI (`ntn`)](https://developers.notion.com/cli/get-started/installation).
 - A Notion workspace.
 
 ## Set up
 
-Install dependencies and check that the project is ready to develop.
-Run these commands from this template’s directory:
+From this template’s directory, install dependencies:
 
 ```sh
 npm install
-npm run check
 ```
-
-## Develop locally
-
-Iterate on your UI with sample data and hot reload in the dev shell.
-
-```sh
-ntn workers customblocks dev -- --json
-```
-
-Open the shell URL printed by the command. See the documentation in
-`@notionhq/custom-blocks-dev-shell` for more details.
 
 ## Deploy and share
 
-Publish your block so you and your teammates can use it in Notion
-without running a local server.
+Deploy the block to use it in Notion:
 
 ```sh
 ntn login
 ntn workers deploy --name org-chart
 ```
 
-Insert the deployed block into a Notion page and share the page.
+Insert the deployed block into a Notion page. Share the page so others can
+use the block.
+
 Deploy again to publish later changes.
+
+## Develop locally
+
+Use the dev shell to verify changes locally with sample data before you deploy:
+
+```sh
+ntn workers customblocks dev
+```
+
+Open the shell URL printed by the command. See the documentation in
+`@notionhq/custom-blocks-dev-shell` for more details.
