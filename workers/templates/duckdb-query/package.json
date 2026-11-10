@@ -12,9 +12,9 @@
     "npm": ">=10.9.9"
   },
   "devDependencies": {
-    "@types/node": "^22.9.0",
-    "tsx": "^4.20.6",
-    "typescript": "^5.8.0"
+    "@types/node": "^22.20.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
   },
   "dependencies": {
     "@duckdb/node-api": "^1.5.4-r.1",
