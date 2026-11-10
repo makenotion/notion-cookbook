@@ -1,53 +1,44 @@
-# Worker custom block: Hello world
+<!-- Generated from workers/templates/custom-blocks/README.template.md. Run npm run agents:sync to update. -->
 
-This is the smallest custom block in the cookbook. It renders "Hello world"
-inside a Notion page and declares no data sources, so it is a useful starting
-point for a new block.
+# Hello world custom block
 
-## Quickstart
+Build your own interface inside Notion with this template.
 
-From the repository root:
+## Prerequisites
 
-```zsh
-cd workers/templates/custom-blocks/custom
+- Node.js 22+ and npm 10+.
+- The [Notion CLI (`ntn`)](https://developers.notion.com/cli/get-started/installation).
+- A Notion workspace.
+
+## Set up
+
+From this template’s directory, install dependencies:
+
+```sh
 npm install
-npm run check
-ntn customblocks dev
 ```
 
-Open http://localhost:9873 to preview the block in the custom blocks dev
-shell — a mock Notion host that serves the block from this project. When it
-looks right, deploy:
+## Deploy and share
 
-```zsh
+Deploy the block to use it in Notion:
+
+```sh
 ntn login
 ntn workers deploy --name custom
 ```
 
-Insert the deployed custom block into a Notion page. It renders immediately
-because it does not need a database mapping.
+Insert the deployed block into a Notion page. Share the page so others can
+use the block.
 
-## Local development
+Deploy again to publish later changes.
 
-The dev shell (`ntn customblocks dev`, above) is the local test loop: it
-builds the worker, serves the block with this project's Vite, and renders it
-in a mock Notion host. Edit `blocks/hello-world/src/index.tsx` to change the
-rendered content; edits hot-reload. Add data-source definitions to
-`src/index.ts` when the block needs Notion data, then restart the dev shell
-to pick up the new manifest and bind sample data.
+## Develop locally
 
-## Project structure
+Use the dev shell to verify changes locally with sample data before you deploy:
 
-```text
-src/index.ts                 Worker definition and custom block ID
-blocks/hello-world/
-  src/index.tsx              React entry point
-  src/index.css              Notion token-based styles
+```sh
+ntn workers customblocks dev
 ```
 
-## Verification
-
-```zsh
-npm run check
-npm run build
-```
+Open the shell URL printed by the command. See the documentation in
+`@notionhq/custom-blocks-dev-shell` for more details.
