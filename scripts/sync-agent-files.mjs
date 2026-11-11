@@ -61,6 +61,11 @@ const OVERRIDE_GROUPS = {
     // npm run agents:check detects stale copies.
     customBlocksTemplateReadme:
       "workers/templates/custom-blocks/README.template.md",
+    // Extra files copied into `.agents/`, keyed by their path there. The
+    // general Worker guide comes from the default group so it cannot drift.
+    instructionFiles: {
+      "workers.md": `${INSTRUCTIONS_ROOT}/default/INSTRUCTIONS.md`,
+    },
     skills: [...DEFAULT_SKILLS, "custom-blocks"],
   },
   "worker-workflow": {
@@ -219,6 +224,12 @@ for (const group of groups.values()) {
   const contents = new Map()
   for (const file of files) {
     contents.set(file, await readFile(join(canonicalPath, file), "utf8"))
+  }
+  for (const [file, source] of Object.entries(
+    group.config.instructionFiles ?? {}
+  )) {
+    if (contents.has(file)) fail(`${file} is already in ${instructionsDir}`)
+    contents.set(file, await readFile(resolve(repoRoot, source), "utf8"))
   }
   for (const skill of group.config.skills ?? []) {
     const skillPath = resolve(repoRoot, group.config.skillsRoot, skill)
