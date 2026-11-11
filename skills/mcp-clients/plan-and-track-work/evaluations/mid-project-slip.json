@@ -1,0 +1,70 @@
+{
+  "name": "mid-project-slip",
+  "skills": ["notion-planner"],
+  "query": "The design review slipped to Nov 12. Update the plan.",
+  "context": {
+    "client": {
+      "choice_ui": "ask-user-question"
+    },
+    "search_routes": [
+      {
+        "intent": "Find the launch plan",
+        "results": [
+          {
+            "url": "https://notion.so/launch",
+            "title": "Saved views launch"
+          }
+        ]
+      }
+    ],
+    "sources": {
+      "https://notion.so/launch": {
+        "type": "project row",
+        "Target": "2026-11-19",
+        "tasks": [
+          {
+            "title": "Design review",
+            "Status": "In progress",
+            "Due": "2026-11-05"
+          },
+          {
+            "title": "Build onboarding tour",
+            "Status": "To do",
+            "Due": "2026-11-12",
+            "Blocked by": "Design review"
+          },
+          {
+            "title": "Help article",
+            "Status": "Drafting",
+            "Due": "2026-11-14"
+          },
+          {
+            "title": "Go/no-go check",
+            "Status": "To do",
+            "Due": "2026-11-18",
+            "Blocked by": "Build onboarding tour"
+          }
+        ]
+      }
+    },
+    "tools": [
+      "search",
+      "fetch",
+      "get-users",
+      "get-tool-access",
+      "create-pages",
+      "create-database",
+      "update-page",
+      "update-data-source",
+      "create-view",
+      "query-data-sources",
+      "ask-user-question"
+    ]
+  },
+  "success_criteria": [
+    "Triggers on a mid-project update (not only on 'plan'), finds the existing plan, and creates no new plan or tracker.",
+    "Moves Design review to Nov 12 and identifies the knock-on risk to the onboarding tour and the go/no-go check; notes the help article is unaffected.",
+    "Does not silently compress the schedule; presents the trade-off as one choice card with a recommendation (move the launch vs cut scope).",
+    "After the choice, updates the dependent dates and logs the decision with date, reason and who decided in the Status section; the old target stays in the log."
+  ]
+}

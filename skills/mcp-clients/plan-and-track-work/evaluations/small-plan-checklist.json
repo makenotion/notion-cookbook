@@ -1,0 +1,34 @@
+{
+  "name": "small-plan-checklist",
+  "skills": ["notion-planner"],
+  "query": "Help me plan my sister's birthday dinner this Saturday. Just a few things: book a table, order the cake, pick up a gift.",
+  "context": {
+    "client": {
+      "choice_ui": "ask-user-question"
+    },
+    "search_routes": [
+      {
+        "intent": "Find an existing plan",
+        "results": []
+      }
+    ],
+    "tools": [
+      "search",
+      "fetch",
+      "get-users",
+      "get-tool-access",
+      "create-pages",
+      "create-database",
+      "update-page",
+      "update-data-source",
+      "create-view",
+      "query-data-sources",
+      "ask-user-question"
+    ]
+  },
+  "success_criteria": [
+    "Recognizes a short one-off plan: either recommends 'Simple checklist' first on the setup card, or (because the request is small and explicit) builds a single private page with a checklist and says it can become a database later.",
+    "Does not create a Projects database, a guest form, a calendar view or partner-tool offers for three to-dos.",
+    "Keeps it to at most one card before building; delivers the link and the next action."
+  ]
+}
