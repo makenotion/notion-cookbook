@@ -108,7 +108,7 @@ Before writing code that uses `context.notion` in a non-tool capability, check w
 
 #### Strategy and Pagination
 
-Syncs run in a "sync cycle": a back-to-back chain of `execute` calls that starts at a scheduled trigger and ends when an execution returns `hasMore: false`. By default, syncs run every 30 minutes. Set `schedule` to an interval like `"15m"`, `"1h"`, `"1d"` (min `"1m"`, max `"7d"`), or `"continuous"` to run as fast as possible.
+Syncs run in a "sync cycle": a back-to-back chain of `execute` calls that starts at a scheduled trigger and ends when an execution returns `hasMore: false`. By default, syncs run every 30 minutes. Set `schedule` to an interval like `"15m"`, `"1h"`, `"1d"` (min `"5m"`, max `"7d"`), or `"continuous"` to run as fast as possible.
 
 - Always use pagination, when available. Returning too many changes in one execution will fail. Start with batch sizes of ~100 changes.
 - `mode=replace` is simpler — use it when the API has no change tracking (no `updated_at` filter, no event feed)

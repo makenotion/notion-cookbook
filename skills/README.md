@@ -15,11 +15,15 @@ The [mcp-clients](mcp-clients/) directory contains reusable workflows for any MC
 - **[database-designer](mcp-clients/database-designer/)**: Turn scattered notes into useful trackers for requests, content plans, and team work
 - **[weekly-project-digest](mcp-clients/weekly-project-digest/)**: Compare reporting periods and produce evidence-based project updates
 - **[knowledge-capture](mcp-clients/knowledge-capture/)**: Transform conversations and discussions into structured documentation
-- **[meeting-intelligence](mcp-clients/meeting-intelligence/)**: Prepare for meetings by gathering context and creating agendas
+- **[meeting-prep](mcp-clients/meeting-prep/)**: Prepare for meetings by gathering context and creating agendas
 - **[research-documentation](mcp-clients/research-documentation/)**: Research topics and document findings in Notion
 - **[spec-to-implementation](mcp-clients/spec-to-implementation/)**: Parse specifications and create implementation plans with task tracking
 - **[setup](mcp-clients/setup/)**: Onboarding skill that sets up Notion by following the official setup guide
 - **[plan-marketing-campaigns](mcp-clients/plan-marketing-campaigns/)**: Connect campaign briefs, content production, and brand resources.
+- **[Create my team handbook](mcp-clients/create-my-team-handbook/)**: Find complete procedures and handle operational requests.
+- **[Set up my project](mcp-clients/set-up-my-project/)**: Set up a project with tasks, docs, and meeting notes, then confirm the team and where it belongs.
+- **[Organize my semester](mcp-clients/organize-my-semester/)**: Create a personal study space with course notes and upcoming assignments.
+- **[Build my engineering wiki](mcp-clients/build-my-engineering-wiki/)**: Navigate setup, current architecture, operations, and proposals.
 
 ## Using skills
 

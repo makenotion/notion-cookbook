@@ -3,7 +3,8 @@
 // listed in OVERRIDE_GROUPS, so a new kind inherits the default instead of
 // being silently skipped. Sync deletes `.agents/` and copies the set back, so a
 // renamed or removed canonical file needs no special handling. `--dryRun` writes
-// nothing and exits non-zero when a template's `.agents/` differs from its set.
+// nothing and exits non-zero when generated files differ from their sources.
+// Custom block READMEs also use one shared template and catalog metadata.
 
 import {
   lstat,
@@ -55,6 +56,11 @@ const OVERRIDE_GROUPS = {
   "worker-custom-block": {
     skillsRoot: WORKER_SKILLS_ROOT,
     instructions: `${INSTRUCTIONS_ROOT}/custom-blocks`,
+    // Edit README.template.md, then run npm run agents:sync to regenerate the
+    // custom block READMEs. Titles and deploy commands come from catalog.json.
+    // npm run agents:check detects stale copies.
+    customBlocksTemplateReadme:
+      "workers/templates/custom-blocks/README.template.md",
     skills: [...DEFAULT_SKILLS, "custom-blocks"],
   },
   "worker-workflow": {
@@ -227,6 +233,13 @@ for (const group of groups.values()) {
     }
   }
 
+  const customBlocksTemplateReadme = group.config.customBlocksTemplateReadme
+    ? await readFile(
+        resolve(repoRoot, group.config.customBlocksTemplateReadme),
+        "utf8"
+      )
+    : undefined
+
   for (const recipe of group.recipes) {
     const templatesRoot = resolve(
       repoRoot,
@@ -259,6 +272,24 @@ for (const group of groups.values()) {
       rewritten += 1
     }
 
+    if (customBlocksTemplateReadme !== undefined) {
+      const target = join(recipeRoots.get(recipe), "README.md")
+      const expected =
+        `<!-- Generated from ${group.config.customBlocksTemplateReadme}. Run npm run agents:sync to update. -->\n\n` +
+        customBlocksTemplateReadme
+          .replaceAll("{{title}}", () => recipe.title)
+          .replaceAll("{{deployCommand}}", () => recipe.commands.deploy)
+      if (isDryRun) {
+        if ((await readIfExists(target)) !== expected) {
+          drifted.push(relative(repoRoot, target))
+        }
+      } else {
+        // Replace the output itself so an existing symlink cannot redirect the write.
+        await rm(target, { force: true })
+        await writeFile(target, expected)
+      }
+    }
+
     for (const link of AGENT_SYMLINKS) {
       const linkPath = join(recipeRoots.get(recipe), link.name)
       if (isDryRun) {
@@ -282,7 +313,7 @@ for (const group of groups.values()) {
 if (isDryRun) {
   if (drifted.length > 0) {
     console.error(
-      "Template agent files drifted from workers/agents/ or apps/agents/:"
+      "Generated template files drifted from their canonical sources:"
     )
     for (const file of drifted) {
       console.error(`  ${file}`)
@@ -290,7 +321,7 @@ if (isDryRun) {
     console.error("Run `npm run agents:sync` and commit the result.")
     process.exit(1)
   }
-  console.log("Template agent files match workers/agents/ and apps/agents/.")
+  console.log("Generated template files match their canonical sources.")
 } else {
-  console.log(`Rewrote .agents/ for ${rewritten} template(s).`)
+  console.log(`Synced generated files for ${rewritten} template(s).`)
 }

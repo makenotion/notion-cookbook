@@ -1,111 +1,46 @@
-# Worker custom block: Habit tracker
+<!-- Generated from workers/templates/custom-blocks/README.template.md. Run npm run agents:sync to update. -->
 
-**TL;DR:** A month-at-a-glance habit grid rendered inside a Notion page.
-Habits run down the left with streaks; days run across the top; checking a dot
-creates a row in a Habits Log database, so history stays in plain Notion data.
+# Habit tracker custom block
 
-## Quickstart
+Build your own interface inside Notion with this template.
 
-Requires Node.js >= 22.23.4.
+## Prerequisites
+
+- Node.js 22+ and npm 10+.
+- The [Notion CLI (`ntn`)](https://developers.notion.com/cli/get-started/installation).
+- A Notion workspace.
+
+## Set up
 
 pnpm is recommended for new projects; npm also works.
 
-From the repository root:
+From this template’s directory, install dependencies:
 
-```zsh
-npm install --global ntn
-cd workers/templates/custom-blocks/habit-tracker
+```sh
 pnpm install
-pnpm run check
-pnpm test
-ntn customblocks dev
 ```
 
-Open http://localhost:9873 to preview the block in the custom blocks dev
-shell — a mock Notion host with sample data sources to bind. When it looks
-right, deploy:
+## Deploy and share
 
-```zsh
+Deploy the block to use it in Notion:
+
+```sh
 ntn login
 ntn workers deploy --name habit-tracker
 ```
 
-In Notion, insert the custom block into a page and map both data sources. The
-block renders a sample month and a setup hint until they are bound.
+Insert the deployed block into a Notion page. Share the page so others can
+use the block.
 
-## Databases
+Deploy again to publish later changes.
 
-Two data sources:
+## Develop locally
 
-`habits` ("Habits") — one row per habit:
+Use the dev shell to verify changes locally with sample data before you deploy:
 
-| Property | Type      | Meaning                                                              |
-| -------- | --------- | -------------------------------------------------------------------- |
-| `name`   | title     | Habit name                                                           |
-| `icon`   | rich_text | An emoji shown next to the name                                      |
-| `color`  | select    | `yellow`, `blue`, `pink`, `green`, `purple`, `red`, `orange`, `teal` |
-
-`log` ("Habits Log") — one row per completed habit-day:
-
-| Property | Type     | Meaning                                     |
-| -------- | -------- | ------------------------------------------- |
-| `name`   | title    | Written as `{habit} — {YYYY-MM-DD}`         |
-| `date`   | date     | The completed day                           |
-| `habit`  | relation | The habit (relation to the Habits database) |
-
-A log row's existence marks that habit complete for that day. Toggling a dot
-on creates a row; toggling off archives every matching row (duplicates are
-deduplicated on render). Writes are optimistic with quiet inline errors and
-reverts on failure. Day keys are derived from local calendar dates, so
-completions never shift across timezones.
-
-## The grid
-
-Today's column is banded and its day number chipped; completing every habit on
-a day tints the chip. Streaks count consecutive days ending today (or
-yesterday if today is untouched) and walk back across month boundaries — when
-older data falls outside the loaded window the streak shows as `12+` rather
-than guessing. Future days are visible but disabled; past months stay
-toggleable. The grid is fully keyboard-navigable (arrow keys move, Space or
-Enter toggles), and the habit column stays sticky while the days scroll on
-narrow blocks. The iframe automatically grows with the habit list, so longer
-trackers stay in the page's scroll flow instead of opening a nested vertical
-scroller.
-
-## Local development
-
-Test the block in the custom blocks dev shell (`ntn customblocks dev`,
-above), which renders it in a mock Notion host with sample data sources to
-bind against, before any deploy.
-
-The view also renders standalone with seeded sample data, no Notion host
-required:
-
-```zsh
-cd blocks/habit-tracker
-npx vite
+```sh
+ntn workers customblocks dev
 ```
 
-Open `http://localhost:5173/?mock=1`. Harness parameters: `theme=dark`,
-`empty`, `unbound`, `loading`, `many` (16 habits), and `failwrites` (exercises
-revert paths).
-
-## Project structure
-
-```text
-src/
-  index.ts       Worker definition and both data-source schemas
-blocks/habit-tracker/
-  src/
-    App.tsx      Store-state switch and setup shell
-    components/Tracker.tsx   Month grid, header, streaks, keyboard navigation
-    dates.ts     Local-date keys, month math, streak counting
-    notionStore.ts / mockStore.ts   Real and mock data layers
-```
-
-## Limitations
-
-- The log query loads up to 999 rows; very long histories truncate streak
-  lookback (shown as `N+`).
-- Milestone effects were intentionally removed — the only motion is a 150ms
-  fill-in on check, per Notion's motion register.
+Open the shell URL printed by the command. See the documentation in
+`@notionhq/custom-blocks-dev-shell` for more details.

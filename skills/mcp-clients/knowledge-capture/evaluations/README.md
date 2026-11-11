@@ -24,3 +24,16 @@ Require factual fidelity, requested scope, and correct persisted state before
 comparing efficiency. Accept equivalent output structures and exposed tool names.
 Review both full-workflow and short-request results on each tested model; do not
 accept reduced token usage that drops requirements or weakens attribution.
+
+## Access-check efficiency
+
+Run the existing scenarios with all required tools exposed and no required access
+probe, then with a tool that explicitly requires an access check. The first
+condition should not add a routine probe; the second must honor the requirement
+and reuse its result. Preserve source discovery, required reads, write warnings,
+and uncertain-write recovery in both conditions. Record tool calls alongside
+the original quality criteria.
+
+## Panel delivery
+
+[panel-unavailable](panel-unavailable.json) checks saved-result delivery. Also exercise link-only requests and panel-open failures: preserve the saved artifact, return its link, and do not claim an unsuccessful open succeeded.

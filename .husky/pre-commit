@@ -1,8 +1,8 @@
-if ! git diff --quiet -- workers/agents/; then
-  echo "pre-commit: workers/agents/ has unstaged changes; the sync would embed them in generated copies."
-  echo "Stage or stash your workers/agents/ edits, then commit again."
+if ! git diff --quiet -- workers/agents/ workers/templates/custom-blocks/README.template.md; then
+  echo "pre-commit: Canonical template sources have unstaged changes; the sync would embed them in generated copies."
+  echo "Stage your source edits, then commit again."
   exit 1
 fi
 npm run --silent agents:sync
-git add 'workers/*/.agents/*' 'workers/*/AGENTS.md' 'workers/*/CLAUDE.md'
+git add 'workers/*/.agents/*' 'workers/*/AGENTS.md' 'workers/*/CLAUDE.md' 'workers/templates/custom-blocks/*/README.md'
 npx lint-staged

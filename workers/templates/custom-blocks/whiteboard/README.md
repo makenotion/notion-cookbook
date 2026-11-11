@@ -1,108 +1,46 @@
-# Worker custom block: Whiteboard
+<!-- Generated from workers/templates/custom-blocks/README.template.md. Run npm run agents:sync to update. -->
 
-**TL;DR:** A freeform whiteboard rendered inside a Notion page — sticky notes,
-pen, lines, and arrows on a dot-grid canvas. Every object on the board is a row
-in a regular Notion database, so a sketch is as durable (and as queryable) as
-any other page data.
+# Whiteboard custom block
 
-## Quickstart
+Build your own interface inside Notion with this template.
 
-Requires Node.js >= 22.23.4.
+## Prerequisites
+
+- Node.js 22+ and npm 10+.
+- The [Notion CLI (`ntn`)](https://developers.notion.com/cli/get-started/installation).
+- A Notion workspace.
+
+## Set up
 
 pnpm is recommended for new projects; npm also works.
 
-From the repository root:
+From this template’s directory, install dependencies:
 
-```zsh
-npm install --global ntn
-cd workers/templates/custom-blocks/whiteboard
+```sh
 pnpm install
-pnpm run check
-pnpm test
-ntn customblocks dev
 ```
 
-Open http://localhost:9873 to preview the block in the custom blocks dev
-shell — a mock Notion host with sample data sources to bind. When it looks
-right, deploy:
+## Deploy and share
 
-```zsh
+Deploy the block to use it in Notion:
+
+```sh
 ntn login
 ntn workers deploy --name whiteboard
 ```
 
-In Notion, insert the custom block into a page and map its `items` data source
-to a database with the schema below (or let block configuration create it).
-The block shows setup hints until the data source and required property keys
-are bound. The SDK reports key mappings but does not expose the database
-schema, so the block cannot check mapped property types or select options.
+Insert the deployed block into a Notion page. Share the page so others can
+use the block.
 
-## Database
+Deploy again to publish later changes.
 
-One data source, semantic key `items` ("Whiteboard items"). Each canvas object
-is one row:
+## Develop locally
 
-| Property          | Type      | Meaning                                                                                |
-| ----------------- | --------- | -------------------------------------------------------------------------------------- |
-| `title`           | title     | Sticky text, or an auto label for strokes and arrows                                   |
-| `type`            | select    | `sticky`, `stroke`, `line`, or `arrow`                                                 |
-| `color`           | select    | `yellow`, `blue`, `pink`, `green`, `purple`, `red`, `gray`                             |
-| `x`, `y`          | number    | Canvas position                                                                        |
-| `width`, `height` | number    | Bounding box (sticky size for notes)                                                   |
-| `strokeWidth`     | number    | Ink width for strokes, lines, and arrows                                               |
-| `z`               | number    | Stacking order                                                                         |
-| `points`          | rich_text | JSON point array relative to `x`/`y`, chunked under the 2000-character rich-text limit |
+Use the dev shell to verify changes locally with sample data before you deploy:
 
-Rows stay synchronized through the SDK data-source subscription (limit 999).
-The block reports missing property mappings; verify that the mapped properties
-use the types and select options listed above. Writes are
-optimistic: creates and deletes go out eagerly, moves and edits are debounced
-~500ms, and failed writes revert quietly from a persisted baseline.
-
-## Tools and shortcuts
-
-Select (`V`), Hand (`H`), Pen (`P`), Eraser (`E`), Sticky (`S`), Line (`L`),
-Arrow (`A`). Pan with the Hand tool, Space-drag, middle-drag, or a two-finger
-trackpad gesture. The canvas is bounded to 2400×1600 pixels. The options row
-above the toolbar switches with the tool:
-ink swatches and S/M/L widths for pen/line/arrow, fill swatches for stickies,
-three radii for the eraser. Selecting an existing item opens the same property
-controls, and selected stickies include an explicit text-edit action. Sticky
-text is left-aligned in both display and edit modes. `Delete` removes the
-selection, `Esc` returns to Select, arrow keys nudge (Shift = 10px), `Enter`
-edits a selected sticky, and Shift snaps lines and arrows to 45°.
-
-## Local development
-
-Test the block in the custom blocks dev shell (`ntn customblocks dev`,
-above), which renders it in a mock Notion host with sample data sources to
-bind against, before any deploy.
-
-The view also renders standalone with seeded sample data, no Notion host
-required:
-
-```zsh
-cd blocks/whiteboard
-npx vite
+```sh
+ntn workers customblocks dev
 ```
 
-Open `http://localhost:5173/?mock=1`. Harness parameters: `theme=dark`,
-`empty=1`, `loading=1`, `unbound=1`, `schema=1`.
-
-## Project structure
-
-```text
-src/
-  index.ts       Worker definition and the items data-source schema
-blocks/whiteboard/
-  src/
-    App.tsx      Canvas, tools, selection, and pointer handling
-    Toolbar.tsx  Floating tool pill and contextual options row
-    model.ts     Item model and (de)serialization
-    geometry.ts  Stroke smoothing, hit testing, arrowheads
-    notionStore.ts / mockStore.ts   Real and mock data layers
-```
-
-## Limitations
-
-- No resize handles, multi-select, or undo; stickies are fixed at 160×160.
+Open the shell URL printed by the command. See the documentation in
+`@notionhq/custom-blocks-dev-shell` for more details.

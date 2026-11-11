@@ -8,16 +8,20 @@ depend on your client.
 
 ## Choose a skill
 
-| Skill                                                         | Use it to                                                                                                |
-| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| [Database designer](database-designer/SKILL.md)               | Turn notes or a messy workflow into a tracker that shows what needs attention and who is handling it.    |
-| [Weekly project digest](weekly-project-digest/SKILL.md)       | Explain reporting-period changes, continuing blockers, and next steps from project evidence.             |
-| [Knowledge capture](knowledge-capture/SKILL.md)               | Turn a conversation into a decision record, how-to guide, FAQ, or other durable workspace documentation. |
-| [Meeting intelligence](meeting-intelligence/SKILL.md)         | Prepare agendas, internal pre-reads, and meeting follow-up from Notion context.                          |
-| [Research and documentation](research-documentation/SKILL.md) | Find information across a workspace, synthesize it, and publish a cited report in Notion.                |
-| [Spec to implementation](spec-to-implementation/SKILL.md)     | Convert a product or technical spec into an implementation plan and trackable Notion tasks.              |
-| [Setup](setup/SKILL.md)                                       | Set up Notion as shared agent context by following the official setup guide after install.               |
-| [Plan marketing campaigns](plan-marketing-campaigns/SKILL.md) | Connect campaign briefs, content production, and brand resources.                                        |
+| Skill                                                           | Use it to                                                                                                |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| [Database designer](database-designer/SKILL.md)                 | Turn notes or a messy workflow into a tracker that shows what needs attention and who is handling it.    |
+| [Weekly project digest](weekly-project-digest/SKILL.md)         | Explain reporting-period changes, continuing blockers, and next steps from project evidence.             |
+| [Knowledge capture](knowledge-capture/SKILL.md)                 | Turn a conversation into a decision record, how-to guide, FAQ, or other durable workspace documentation. |
+| [Meeting prep](meeting-prep/SKILL.md)                           | Prepare agendas, internal pre-reads, and meeting follow-up from Notion context.                          |
+| [Research and documentation](research-documentation/SKILL.md)   | Find information across a workspace, synthesize it, and publish a cited report in Notion.                |
+| [Spec to implementation](spec-to-implementation/SKILL.md)       | Convert a product or technical spec into an implementation plan and trackable Notion tasks.              |
+| [Setup](setup/SKILL.md)                                         | Set up Notion as shared agent context by following the official setup guide after install.               |
+| [Plan marketing campaigns](plan-marketing-campaigns/SKILL.md)   | Connect campaign briefs, content production, and brand resources.                                        |
+| [Create my team handbook](create-my-team-handbook/SKILL.md)     | Find complete procedures and handle operational requests.                                                |
+| [Set up my project](set-up-my-project/SKILL.md)                 | Set up a project with tasks, docs, and meeting notes, then confirm the team and where it belongs.        |
+| [Organize my semester](organize-my-semester/SKILL.md)           | Create a personal study space with course notes and upcoming assignments.                                |
+| [Build my engineering wiki](build-my-engineering-wiki/SKILL.md) | Navigate setup, current architecture, operations, and proposals.                                         |
 
 ## Install
 
@@ -42,10 +46,14 @@ from your connected Notion MCP server and follow its available input schema.
 ```text
 mcp-clients/
 ├── plan-marketing-campaigns/
+├── create-my-team-handbook/
+├── set-up-my-project/
+├── organize-my-semester/
+├── build-my-engineering-wiki/
 ├── database-designer/
 ├── weekly-project-digest/
 ├── knowledge-capture/
-├── meeting-intelligence/
+├── meeting-prep/
 ├── research-documentation/
 ├── setup/
 └── spec-to-implementation/
