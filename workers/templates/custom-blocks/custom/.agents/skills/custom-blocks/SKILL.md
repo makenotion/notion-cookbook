@@ -54,7 +54,9 @@ Choose `custom` for a minimal app, or start from `whiteboard`, `habit-tracker`, 
 configuration, dependencies, and type checks. Inspect and adapt the generated
 files instead of recreating them.
 
-From the generated Worker root, run `npm install` if dependencies are not already
+pnpm is recommended for new projects; npm also works.
+
+From the generated Worker root, run `pnpm install` if dependencies are not already
 installed.
 
 Keep frontend packages in the Worker's root `devDependencies`. The `dependencies`
@@ -173,8 +175,8 @@ another frontend, add its type check alongside the template's existing checks.
 Run the project's type checks and applicable tests from the Worker root:
 
 ```shell
-npm run check
-npm test
+pnpm run check
+pnpm test
 ```
 
 Use the [dev shell](https://developers.notion.com/custom-blocks/guides/preview)

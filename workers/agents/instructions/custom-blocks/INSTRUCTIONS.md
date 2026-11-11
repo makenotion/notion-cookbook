@@ -383,9 +383,11 @@ When `ntn datasources query <id>` returns 404 or "Could not find data source", t
 
 ## Build, Test, and Development Commands
 
-- Node >= 22.23.4 and npm >= 10.9.9 (see `package.json` engines).
-- `npm run build`: compile TypeScript to `dist/`.
-- `npm run check`: type-check only (no emit).
+pnpm is recommended for new projects; npm also works.
+
+- Node >= 22.23.4 (see `package.json` engines).
+- `pnpm run build`: compile TypeScript to `dist/`.
+- `pnpm run check`: type-check only (no emit).
 - `ntn login`: connect to a Notion workspace.
 - `ntn workers deploy`: build and publish capabilities. Does not reset sync state.
 - `ntn workers exec <capability>`: run a sync or tool.
@@ -465,7 +467,7 @@ ntn workers sync state reset <key>
 
 ## Testing Guidelines
 
-- No test runner configured; validate with `npm run check` and end-to-end testing via `ntn workers exec`.
+- No test runner configured; validate with `pnpm run check` and end-to-end testing via `ntn workers exec`.
 - Custom blocks are exercised in the dev shell (`ntn customblocks dev`), not with `ntn workers exec`.
 - Write a test script that exercises each tool capability using `ntn workers exec`. This can be a bash script (`test.sh`) or a TypeScript script (`test.ts`, run via `npx tsx test.ts`). Use the `--local` flag for local execution or omit it to run against the deployed worker.
 
