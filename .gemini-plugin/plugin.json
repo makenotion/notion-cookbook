@@ -10,6 +10,6 @@
   "repository": "https://github.com/makenotion/notion-cookbook",
   "license": "MIT",
   "keywords": ["notion", "mcp", "productivity", "documentation", "knowledge"],
-  "skills": "./skills/",
+  "skills": "./skills/mcp-clients/",
   "mcpServers": "./.mcp.json"
 }
