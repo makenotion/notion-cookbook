@@ -164,3 +164,21 @@ test("sync renders custom block READMEs from catalog metadata and detects drift 
   assert.equal(run().status, 0)
   assert.equal(await readFile(readmePath, "utf8"), expected)
 })
+
+test("custom block templates get the default Worker guide as workers.md", async (t) => {
+  const { root, put, run } = await fixture(t)
+  await put(
+    "workers/agents/instructions/default/INSTRUCTIONS.md",
+    "default worker guide"
+  )
+  assert.equal(run().status, 0)
+  const workersMd = join(root, "workers/templates/blocks/.agents/workers.md")
+  assert.equal(await readFile(workersMd, "utf8"), "default worker guide")
+  await assert.rejects(
+    readFile(join(root, "workers/templates/workflow/.agents/workers.md")),
+    { code: "ENOENT" }
+  )
+  assert.equal(run("--dryRun").status, 0)
+  await put("workers/agents/instructions/default/INSTRUCTIONS.md", "edited")
+  assert.equal(run("--dryRun").status, 1)
+})

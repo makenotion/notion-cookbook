@@ -44,3 +44,8 @@ ntn workers customblocks dev
 
 Open the shell URL printed by the command. See the documentation in
 `@notionhq/custom-blocks-dev-shell` for more details.
+
+## Agent instructions
+
+The full custom block guide ships in `@notionhq/workers`, so updating that
+package updates the guidance.
