@@ -1,6 +1,6 @@
 ---
 name: notion-knowledge-capture
-description: Captures conversations and supplied notes as Notion wiki pages, how-to guides, FAQs, decision records, or retrospectives. Use when saving or updating durable knowledge from existing context; use research-documentation when new source discovery and synthesis is the main task.
+description: Captures conversations and supplied notes as Notion wiki pages, how-to guides, FAQs, decision records, or retrospectives. Use when saving or updating durable knowledge from existing context; use research-documentation when new source discovery and synthesis is the main task. Example request "Save the pricing decision we just made as a decision record in Notion."
 ---
 
 # Knowledge capture

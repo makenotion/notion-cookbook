@@ -1,0 +1,15 @@
+{
+  "name": "notion",
+  "version": "0.1.0",
+  "description": "Connect Gemini to your Notion workspace with the Notion MCP server, plus skills for research, documentation, meeting prep, specs, trackers, and project updates.",
+  "author": {
+    "name": "Notion Labs",
+    "url": "https://www.notion.com"
+  },
+  "homepage": "https://developers.notion.com/docs/notion-mcp",
+  "repository": "https://github.com/makenotion/notion-cookbook",
+  "license": "MIT",
+  "keywords": ["notion", "mcp", "productivity", "documentation", "knowledge"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json"
+}

@@ -1,6 +1,6 @@
 ---
 name: notion-research-documentation
-description: Researches questions across Notion sources and synthesizes cited briefs, comparisons, or reports. Use when answering requires discovering and reconciling workspace information, optionally with external research, and returning or saving the findings.
+description: Researches questions across Notion sources and synthesizes cited briefs, comparisons, or reports. Use when answering requires discovering and reconciling workspace information, optionally with external research, and returning or saving the findings. Example request "Research what our Notion docs say about SSO and write a cited brief."
 ---
 
 # Research and documentation

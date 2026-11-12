@@ -1,6 +1,6 @@
 ---
 name: notion-build-my-engineering-wiki
-description: Build a personalized Notion engineering home from technical docs, project context, and chat or connected sources. Use to get started with an engineering wiki and a clear view of current work.
+description: Build a personalized Notion engineering home from technical docs, project context, and chat or connected sources. Use to get started with an engineering wiki and a clear view of current work. Example request "Build an engineering wiki in Notion from our architecture docs and runbooks."
 ---
 
 # Build my engineering wiki

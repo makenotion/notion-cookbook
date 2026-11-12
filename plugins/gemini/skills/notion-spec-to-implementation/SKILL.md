@@ -1,6 +1,6 @@
 ---
 name: notion-spec-to-implementation
-description: Converts Notion product or technical specs into implementation plans, linked tasks, and evidence-based progress updates. Use for planning or implementing a spec, creating tasks from requirements, or reconciling implementation with spec changes.
+description: Converts Notion product or technical specs into implementation plans, linked tasks, and evidence-based progress updates. Use for planning or implementing a spec, creating tasks from requirements, or reconciling implementation with spec changes. Example request "Turn the checkout redesign spec in Notion into an implementation plan with tasks."
 ---
 
 # Spec to implementation

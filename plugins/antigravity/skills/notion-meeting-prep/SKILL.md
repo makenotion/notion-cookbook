@@ -1,6 +1,6 @@
 ---
 name: notion-meeting-prep
-description: Prepares meeting agendas, internal pre-reads, and decision briefs using Notion context and relevant research. Use for preparing the next or upcoming meeting, meeting preparation, recurring meeting context, or updating meeting outcomes; use knowledge-capture for a standalone record of an existing discussion.
+description: Prepares meeting agendas, internal pre-reads, and decision briefs using Notion context and relevant research. Use for preparing the next or upcoming meeting, meeting preparation, recurring meeting context, or updating meeting outcomes; use knowledge-capture for a standalone record of an existing discussion. Example request "Prep an agenda and pre-read in Notion for tomorrow's roadmap review."
 ---
 
 # Meeting prep
