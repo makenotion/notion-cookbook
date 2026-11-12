@@ -12,10 +12,12 @@ Build your own interface inside Notion with this template.
 
 ## Set up
 
+pnpm is recommended for new projects; npm also works.
+
 From this template’s directory, install dependencies:
 
 ```sh
-npm install
+pnpm install
 ```
 
 ## Deploy and share
