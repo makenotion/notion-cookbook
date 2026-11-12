@@ -26,7 +26,7 @@ Deploy the block to use it in Notion:
 
 ```sh
 ntn login
-ntn workers deploy --name <worker-name>
+ntn workers deploy --name custom
 ```
 
 Insert the deployed block into a Notion page. Share the page so others can
@@ -47,5 +47,5 @@ Open the shell URL printed by the command. See the documentation in
 
 ## Agent instructions
 
-Coding agents start from `AGENTS.md`. The full custom block guide ships in
-`@notionhq/workers`, so updating that package updates the guidance.
+The full custom block guide ships in `@notionhq/workers`, so updating that
+package updates the guidance.

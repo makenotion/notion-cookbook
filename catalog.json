@@ -211,7 +211,7 @@
         "install": "npm install",
         "check": "npm run check",
         "build": "npm run build",
-        "deploy": "ntn workers deploy --name <worker-name>"
+        "deploy": "ntn workers deploy --name custom"
       }
     },
     {
