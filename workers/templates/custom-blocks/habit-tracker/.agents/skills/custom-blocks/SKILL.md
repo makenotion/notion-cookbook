@@ -14,3 +14,7 @@ Follow the instructions in that file.
 If the file is missing, install the project dependencies.
 If it remains missing, update `@notionhq/workers` to a release that includes the skill.
 Do not continue with custom block changes until you can read the SDK skill.
+
+For instance creation and definition or instance bindings, then read
+[Bind custom block data sources and pages](bindings.md). That guide supersedes
+older binding-array replacement instructions in installed SDK guides.
