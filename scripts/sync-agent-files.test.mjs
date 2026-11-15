@@ -182,3 +182,22 @@ test("custom block templates get the default Worker guide as workers.md", async 
   await put("workers/agents/instructions/default/INSTRUCTIONS.md", "edited")
   assert.equal(run("--dryRun").status, 1)
 })
+
+test("a custom block can keep its own generated setup guide", async (t) => {
+  const { root, put, run } = await fixture(t)
+  await put(
+    "workers/templates/blocks/README.template.md",
+    "Setup for {{title}}\n\n{{deployCommand}}\n"
+  )
+  assert.equal(run().status, 0)
+  const target = join(root, "workers/templates/blocks/README.md")
+  assert.match(
+    await readFile(target, "utf8"),
+    /Setup for Example custom block\n\nntn workers deploy --name example/
+  )
+  assert.equal(run("--dryRun").status, 0)
+  await put("workers/templates/blocks/README.template.md", "Changed setup\n")
+  assert.equal(run("--dryRun").status, 1)
+  assert.equal(run().status, 0)
+  assert.match(await readFile(target, "utf8"), /Changed setup/)
+})
