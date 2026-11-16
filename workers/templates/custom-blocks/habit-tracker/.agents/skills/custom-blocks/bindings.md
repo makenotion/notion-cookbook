@@ -5,6 +5,13 @@ is installed. Run `ntn workers customblocks bind --help` to check availability.
 Older SDK instructions that say arrays replace whole binding lists predate this
 intentional private-alpha change.
 
+Page binding targets must be regular Notion pages (internal type `page`), including
+database row pages. Custom pages, inline custom blocks, full-page databases, and
+meeting-note pages cannot be page targets. A custom page or inline custom block
+can still own bindings: for example, bind a custom-page dashboard instance to a
+regular Settings page, not to another custom-page dashboard. This restriction
+applies to declared page bindings, not generic SDK current-page operations.
+
 ## Create an instance
 
 ```sh
