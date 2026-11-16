@@ -39,7 +39,8 @@ supported host version.
 - Setup completion allows data reads before render readiness. The React wrapper
   signals readiness after its first application commit; a loading screen counts.
   For plain JavaScript or a custom root, call root-level `notifyReady()` after
-  rendering the initial UI. It measures height and sends readiness once.
+  rendering the initial UI inside `#root`. It measures that element, sends
+  readiness once, and keeps later height changes in sync.
 - `getContainingPage()` returns a result containing a page reference or
   `undefined`; lookup does not fetch page contents. Read its key with
   `page.getKey()` and its details with `await page.get()`.

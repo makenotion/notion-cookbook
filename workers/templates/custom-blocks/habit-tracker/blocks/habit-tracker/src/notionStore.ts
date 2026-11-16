@@ -1,9 +1,7 @@
+import type { NotionDateInput } from "@notionhq/custom-blocks"
 import { useCallback, useMemo, useRef, useState } from "react"
 import { NotionPage, createPage } from "@notionhq/custom-blocks/pages"
-import type {
-  NotionPageData,
-  NotionDateInput,
-} from "@notionhq/custom-blocks/pages"
+import type { NotionPageData } from "@notionhq/custom-blocks/pages"
 import type {
   CellKey,
   Habit,

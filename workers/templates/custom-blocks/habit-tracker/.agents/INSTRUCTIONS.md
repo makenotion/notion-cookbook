@@ -21,8 +21,8 @@ asynchronous reads and writes return status results that callers must check.
 Setup completion permits data reads. The React wrapper signals render readiness
 after the first application commit, including a loading screen. For plain
 JavaScript or a custom root, call root-level `notifyReady()` after rendering
-your initial UI; the SDK measures its height. Initialization alone does not
-reveal the iframe.
+your initial UI inside `#root`. The SDK measures that element and keeps later
+height changes in sync. Initialization alone does not reveal the iframe.
 
 Do not treat a query row as loaded page data. Call `row.get()` before using
 page properties, or use `usePage(row)` in React. Protocol 12 currently maps
