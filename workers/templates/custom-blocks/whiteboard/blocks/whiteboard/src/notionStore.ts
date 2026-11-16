@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { pages } from "@notionhq/custom-blocks"
+import { createPage } from "@notionhq/custom-blocks/pages"
 import type {
   NotionPage,
+  NotionPageData,
   NotionPagePropertyValue,
   NotionPagePropertyInputValue,
-} from "@notionhq/custom-blocks"
-import { useDataSource } from "@notionhq/custom-blocks/react"
+} from "@notionhq/custom-blocks/pages"
+import { useLoadedDataSource } from "./useLoadedDataSource"
 import type { BoardItem, WhiteboardStore, SaveState } from "./model"
 import {
   autoLabel,
@@ -40,7 +41,11 @@ function richTextContent(property: NotionPagePropertyValue | null): string {
   return ""
 }
 
-function numberValue(row: NotionPage, key: string, fallback: number): number {
+function numberValue(
+  row: NotionPageData,
+  key: string,
+  fallback: number
+): number {
   const property = row.getPropertyByKey(key)
   return property?.type === "number" &&
     typeof property.number === "number" &&
@@ -49,7 +54,7 @@ function numberValue(row: NotionPage, key: string, fallback: number): number {
     : fallback
 }
 
-function rowToItem(row: NotionPage): BoardItem | null {
+function rowToItem(row: NotionPageData): BoardItem | null {
   const typeProperty = row.getPropertyByKey("type")
   const type =
     typeProperty?.type === "select" ? typeProperty.select?.name : undefined
@@ -58,7 +63,7 @@ function rowToItem(row: NotionPage): BoardItem | null {
   const colorValue =
     colorProperty?.type === "select" ? colorProperty.select?.name : undefined
   return {
-    id: row.id,
+    id: row.pageKey,
     type,
     title: richTextContent(row.getPropertyByKey("title")),
     color: isItemColor(colorValue)
@@ -130,12 +135,16 @@ function patchToProperties(
  * Failed writes revert quietly; a small inline wisp shows save status.
  */
 export function useNotionStore(): WhiteboardStore {
-  const {
-    items: rows,
-    isLoading,
-    error,
-    propertyIdsByKey,
-  } = useDataSource(DATA_SOURCE_KEY, DATA_SOURCE_OPTIONS)
+  const dataSource = useLoadedDataSource(DATA_SOURCE_KEY, DATA_SOURCE_OPTIONS)
+  const rows = dataSource.status === "success" ? dataSource.value.items : []
+  const isLoading =
+    dataSource.status === "loading" ||
+    (dataSource.status === "success" &&
+      dataSource.value.isLoading &&
+      dataSource.value.items.length === 0)
+  const error = dataSource.status === "error" ? dataSource.error : undefined
+  const propertyIdsByKey =
+    dataSource.status === "success" ? dataSource.value.propertyIdsByKey : {}
 
   const [local, setLocal] = useState<BoardItem[] | null>(null)
   const [saveState, setSaveState] = useState<SaveState>("idle")
@@ -158,7 +167,7 @@ export function useNotionStore(): WhiteboardStore {
   const errorUntil = useRef(0)
   const idleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const pageCache = useRef(new Map<string, NotionPage>())
-  for (const row of rows) pageCache.current.set(row.id, row)
+  for (const row of rows) pageCache.current.set(row.data.pageKey, row.reference)
   const localSeq = useRef(0)
 
   // The SDK exposes an empty, non-loading snapshot before its query effect runs.
@@ -176,7 +185,7 @@ export function useNotionStore(): WhiteboardStore {
     const synced: BoardItem[] = []
     const syncedIds = new Set<string>()
     for (const row of rows) {
-      const remoteItem = rowToItem(row)
+      const remoteItem = rowToItem(row.data)
       if (!remoteItem) continue
 
       const localId = localIdByPageId.get(remoteItem.id) ?? remoteItem.id
@@ -340,16 +349,15 @@ export function useNotionStore(): WhiteboardStore {
       }
 
       beginWrite()
-      void pages
-        .create({
-          parent: { type: "data_source_key", key: DATA_SOURCE_KEY },
-          properties: patchToProperties(withTitle),
-        })
+      void createPage({
+        parent: { type: "data_source_key", dataSourceKey: DATA_SOURCE_KEY },
+        properties: patchToProperties(withTitle),
+      })
         .then((result) => {
           if (result.status === "success") {
             if (pageIds.current.has(localId)) {
-              pageIds.current.set(localId, result.page.id)
-              pageCache.current.set(result.page.id, result.page)
+              pageIds.current.set(localId, result.page.getKey())
+              pageCache.current.set(result.page.getKey(), result.page)
               baselines.current.set(localId, { ...withTitle, id: localId })
             } else {
               // Item was deleted while the create was in flight.
