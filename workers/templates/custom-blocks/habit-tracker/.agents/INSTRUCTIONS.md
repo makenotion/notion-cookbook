@@ -13,15 +13,25 @@ supported by this release. Keep these pins fixed until the host rollout allows
 a coordinated update.
 
 The SDK's React integration lives at `@notionhq/custom-blocks/react`.
-Framework-neutral APIs are imported from `/context`, `/appearance`, `/pages`,
-`/users`, `/data-sources`, and `/navigation`. Initialize explicitly with
+Import initialization, readiness, block location, and manifest APIs from the
+package root. Other APIs use `/preferences`, `/pages`, `/users`,
+`/data-sources`, and `/navigation`. Initialize explicitly with
 `<NotionCustomBlock>` or `initCustomBlock()`. Reference factories are local;
 asynchronous reads and writes return status results that callers must check.
+Setup completion permits data reads. The React wrapper signals render readiness
+after the first application commit, including a loading screen. For plain
+JavaScript or a custom root, call root-level `notifyReady()` after rendering
+your initial UI; the SDK measures its height. Initialization alone does not
+reveal the iframe.
 
 Do not treat a query row as loaded page data. Call `row.get()` before using
 page properties, or use `usePage(row)` in React. Protocol 12 currently maps
 page keys to raw page IDs at the wire boundary, and user field getters read the
 whole profile. Consult the domain docs before assuming different wire behavior.
+
+SDK-owned fields use camelCase, including `nextCursor`, `hasMore`, and parent
+reference fields. Preserve fields inside Notion API-compatible payloads, error
+codes, discriminants, and user-defined property keys.
 
 For syncs, tools, webhooks, OAuth, CLI commands, or Worker debugging, read
 `.agents/workers.md`.

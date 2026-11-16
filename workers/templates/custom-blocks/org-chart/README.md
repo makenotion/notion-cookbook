@@ -41,7 +41,9 @@ the SDK and host versions pinned in this template.
 ## SDK entry points
 
 Import React components and hooks from `@notionhq/custom-blocks/react`.
-Framework-neutral APIs use domain subpaths such as
+Initialization, readiness, block location, and manifest APIs are exported from
+`@notionhq/custom-blocks`. Theme and contrast APIs use `/preferences`.
+Other framework-neutral APIs use domain subpaths such as
 `@notionhq/custom-blocks/pages` and
 `@notionhq/custom-blocks/data-sources`.
 
@@ -66,6 +68,12 @@ async function inspectPage(pageKey: string) {
 Reference construction does not initialize the SDK or perform host I/O. Use
 `<NotionCustomBlock>` in React or await `initCustomBlock()` before making
 asynchronous reads. Check each operation's `status` result.
+
+Setup completion allows data reads while the iframe remains hidden.
+`<NotionCustomBlock>` signals render readiness after its first application
+commit, including a loading screen. With plain JavaScript or a custom root,
+call root-level `notifyReady()` after rendering the initial UI. The SDK measures
+height; repeated calls do not send another readiness notification.
 
 The protocol 12 SDK currently maps page keys to raw page IDs at the wire
 boundary. See the domain documentation shipped in

@@ -30,12 +30,22 @@ supported host version.
 ## SDK usage
 
 - Import React components and hooks from `@notionhq/custom-blocks/react`.
-- Import framework-neutral APIs from their domain subpaths:
-  `/context`, `/appearance`, `/pages`, `/users`, `/data-sources`, and
-  `/navigation`.
+- Import initialization, readiness, block location, and manifest APIs from
+  `@notionhq/custom-blocks`. Use `/preferences`, `/pages`, `/users`,
+  `/data-sources`, and `/navigation` for their respective APIs.
 - Use `<NotionCustomBlock>` or call `initCustomBlock()` before reading host
   data. Reference factories such as `NotionPage.fromKey(key)` are local and do
   not initialize the SDK or perform I/O.
+- Setup completion allows data reads before render readiness. The React wrapper
+  signals readiness after its first application commit; a loading screen counts.
+  For plain JavaScript or a custom root, call root-level `notifyReady()` after
+  rendering the initial UI. It measures height and sends readiness once.
+- `getContainingPage()` returns a result containing a page reference or
+  `undefined`; lookup does not fetch page contents. Read its key with
+  `page.getKey()` and its details with `await page.get()`.
+- SDK-owned fields use camelCase, including list pagination and parent reference
+  fields. Preserve Notion API-compatible payload fields, error codes,
+  discriminants, and user-defined keys.
 - Check each asynchronous operation's `status` result. Do not treat an
   uninitialized read as an empty value or assume query rows are loaded page
   data; call `page.get()` or use the React `usePage(page)` hook.

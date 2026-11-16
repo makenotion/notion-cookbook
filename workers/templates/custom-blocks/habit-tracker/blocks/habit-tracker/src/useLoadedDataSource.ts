@@ -41,8 +41,7 @@ export function useLoadedDataSource(
   options: { limit?: number } = {}
 ): LoadedDataSourceResult {
   const query = useDataSource(key, options)
-  if (query.status !== "success") return query
-  const snapshot = query.value
+  const snapshot = query.status === "success" ? query.value : undefined
   const [loadedState, setLoadedState] = useState<LoadedState>()
   const snapshotRead = useRef<SnapshotRead | undefined>(undefined)
 
@@ -90,7 +89,12 @@ export function useLoadedDataSource(
     }
   }, [snapshot])
 
-  if (loadedState === undefined || loadedState.snapshot !== snapshot) {
+  if (query.status !== "success") return query
+  if (
+    snapshot === undefined ||
+    loadedState === undefined ||
+    loadedState.snapshot !== snapshot
+  ) {
     return { status: "loading" }
   }
   if (loadedState.status === "error") return loadedState
