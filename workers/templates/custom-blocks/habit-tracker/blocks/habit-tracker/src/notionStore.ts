@@ -1,10 +1,9 @@
 import { useCallback, useMemo, useRef, useState } from "react"
-import { pages } from "@notionhq/custom-blocks"
+import { NotionPage, createPage } from "@notionhq/custom-blocks/pages"
 import type {
-  NotionPage,
-  NotionPageId,
+  NotionPageData,
   NotionDateInput,
-} from "@notionhq/custom-blocks"
+} from "@notionhq/custom-blocks/pages"
 import type {
   CellKey,
   Habit,
@@ -14,7 +13,8 @@ import type {
 } from "./types"
 import { cellKey, HABIT_COLORS, isHabitColor } from "./types"
 import { todayYmd } from "./dates"
-import { useDataSource } from "@notionhq/custom-blocks/react"
+import { useLoadedDataSource } from "./useLoadedDataSource"
+import type { LoadedPageReference } from "./useLoadedDataSource"
 
 const HABITS_KEY = "habits"
 const LOG_KEY = "log"
@@ -29,14 +29,14 @@ function parseDate(value: NotionDateInput | null): string | null {
   return value?.start.slice(0, 10) ?? null
 }
 
-function parseRelation(row: NotionPage): string | null {
+function parseRelation(row: NotionPageData): string | null {
   const property = row.getPropertyByKey("habit")
   return property?.type === "relation"
     ? (property.relation[0]?.id ?? null)
     : null
 }
 
-function richTextContent(row: NotionPage, key: string): string {
+function richTextContent(row: NotionPageData, key: string): string {
   const property = row.getPropertyByKey(key)
   if (property?.type !== "rich_text") return ""
   return property.rich_text
@@ -47,7 +47,7 @@ function richTextContent(row: NotionPage, key: string): string {
     .join("")
 }
 
-function parseHabit(row: NotionPage): Habit {
+function parseHabit(row: NotionPageData): Habit {
   const title = row.getPropertyByKey("name")
   const name =
     title?.type === "title"
@@ -63,28 +63,30 @@ function parseHabit(row: NotionPage): Habit {
     colorProperty?.type === "select" ? colorProperty.select?.name : undefined
   // Unknown or missing color -> neutral gray, never a broken slot.
   const color = isHabitColor(colorValue) ? colorValue : "gray"
-  return { id: row.id, name: name || "Untitled", icon, color }
+  return { id: row.pageKey, name: name || "Untitled", icon, color }
 }
 
-type LogRow = { id: NotionPageId; key: CellKey }
+type LogRow = { reference: NotionPage; key: CellKey }
 
-function parseLog(row: NotionPage): LogRow | null {
-  const dateProperty = row.getPropertyByKey("date")
+function parseLog(row: LoadedPageReference): LogRow | null {
+  const dateProperty = row.data.getPropertyByKey("date")
   const date = parseDate(
     dateProperty?.type === "date" ? dateProperty.date : null
   )
-  const habitId = parseRelation(row)
+  const habitId = parseRelation(row.data)
   if (!date || !habitId) return null
-  return { id: row.id, key: cellKey(habitId, date) }
+  return { reference: row.reference, key: cellKey(habitId, date) }
 }
 
 export function useNotionStore(): HabitStore {
-  const habitsDS = useDataSource(HABITS_KEY, DATA_SOURCE_OPTIONS)
-  const logDS = useDataSource(LOG_KEY, DATA_SOURCE_OPTIONS)
+  const habitsDS = useLoadedDataSource(HABITS_KEY, DATA_SOURCE_OPTIONS)
+  const logDS = useLoadedDataSource(LOG_KEY, DATA_SOURCE_OPTIONS)
+  const habitsItems = habitsDS.status === "success" ? habitsDS.value.items : []
+  const logItems = logDS.status === "success" ? logDS.value.items : []
 
   // Optimistic overlay on top of host-delivered rows.
   // addedByKey: cellKey -> created page id ("" while the create is in flight).
-  const [addedByKey, setAddedByKey] = useState<Map<CellKey, NotionPageId | "">>(
+  const [addedByKey, setAddedByKey] = useState<Map<CellKey, NotionPage | "">>(
     () => new Map()
   )
   const [removedKeys, setRemovedKeys] = useState<Set<CellKey>>(() => new Set())
@@ -96,37 +98,41 @@ export function useNotionStore(): HabitStore {
   // Duplicate rows for the same habit+day collapse to one completed cell;
   // all row ids are kept so toggling off deletes every duplicate.
   const serverLogs = useMemo(() => {
-    const byKey = new Map<CellKey, NotionPageId[]>()
-    for (const row of logDS.items) {
+    const byKey = new Map<CellKey, NotionPage[]>()
+    for (const row of logItems) {
       const log = parseLog(row)
       if (!log) continue
       const ids = byKey.get(log.key)
-      if (ids) ids.push(log.id)
-      else byKey.set(log.key, [log.id])
+      if (ids) ids.push(log.reference)
+      else byKey.set(log.key, [log.reference])
     }
     return byKey
-  }, [logDS.items])
+  }, [logItems])
 
   // When the log query is truncated, remember where the loaded window starts
   // so streaks can cap gracefully instead of under-counting silently.
   const logWindowStart = useMemo(() => {
-    if (!logDS.hasMore) return undefined
+    if (logDS.status !== "success" || !logDS.value.hasMore) return undefined
     let min: string | undefined
-    for (const row of logDS.items) {
+    for (const row of logItems) {
       const log = parseLog(row)
       if (!log) continue
       const date = log.key.slice(log.key.indexOf("|") + 1)
       if (min === undefined || date < min) min = date
     }
     return min ?? todayYmd()
-  }, [logDS.hasMore, logDS.items])
+  }, [
+    logDS.status,
+    logDS.status === "success" ? logDS.value.hasMore : false,
+    logItems,
+  ])
 
   const habits = useMemo(() => {
-    const fromServer = habitsDS.items.map(parseHabit)
+    const fromServer = habitsItems.map(({ data }) => parseHabit(data))
     const seen = new Set(fromServer.map((h) => h.id))
     const extras = localHabits.filter((h) => !seen.has(h.id))
     return [...fromServer, ...extras]
-  }, [habitsDS.items, localHabits])
+  }, [habitsItems, localHabits])
 
   const completed = useMemo(() => {
     const set = new Set<CellKey>(serverLogs.keys())
@@ -154,8 +160,8 @@ export function useNotionStore(): HabitStore {
           return copy
         })
         const habitName = habitsById.get(habitId)?.name ?? "Habit"
-        const result = await pages.create({
-          parent: { type: "data_source_key", key: LOG_KEY },
+        const result = await createPage({
+          parent: { type: "data_source_key", dataSourceKey: LOG_KEY },
           properties: {
             name: {
               type: "title",
@@ -168,8 +174,7 @@ export function useNotionStore(): HabitStore {
           },
         })
         if (result.status === "success") {
-          const pageId = result.page.id
-          setAddedByKey((prev) => new Map(prev).set(key, pageId))
+          setAddedByKey((prev) => new Map(prev).set(key, result.page))
           return true
         }
         // Revert.
@@ -183,20 +188,21 @@ export function useNotionStore(): HabitStore {
       }
 
       // Toggling off: archive every matching row (duplicates included).
-      const localId = addedByKey.get(key)
-      if (localId === "") {
+      const localPage = addedByKey.get(key)
+      if (localPage === "") {
         // The create is still in flight; ignore this tap rather than race it.
         return false
       }
-      const ids = new Set<NotionPageId>(serverLogs.get(key) ?? [])
-      if (localId !== undefined) ids.add(localId)
-      if (ids.size === 0) return false
+      const pages = new Map<string, NotionPage>()
+      for (const page of serverLogs.get(key) ?? [])
+        pages.set(page.getKey(), page)
+      if (localPage !== undefined) {
+        pages.set(localPage.getKey(), localPage)
+      }
+      if (pages.size === 0) return false
       setRemovedKeys((prev) => new Set(prev).add(key))
       const results = await Promise.all(
-        [...ids].map(async (id) => {
-          const page = await pages.get(id)
-          return page.status === "success" ? page.page.archive() : page
-        })
+        [...pages.values()].map((page) => page.archive())
       )
       if (results.every((r) => r.status === "success")) return true
       // Revert.
@@ -236,8 +242,8 @@ export function useNotionStore(): HabitStore {
         ...prev,
         { id: tempId, name, icon, color, pending: true },
       ])
-      const result = await pages.create({
-        parent: { type: "data_source_key", key: HABITS_KEY },
+      const result = await createPage({
+        parent: { type: "data_source_key", dataSourceKey: HABITS_KEY },
         properties: {
           name: {
             type: "title",
@@ -251,10 +257,10 @@ export function useNotionStore(): HabitStore {
         },
       })
       if (result.status === "success") {
-        const pageId = result.page.id
+        const pageKey = result.page.getKey()
         setLocalHabits((prev) =>
           prev.map((h) =>
-            h.id === tempId ? { id: pageId, name, icon, color } : h
+            h.id === tempId ? { id: pageKey, name, icon, color } : h
           )
         )
         return true
@@ -272,16 +278,29 @@ export function useNotionStore(): HabitStore {
   let status: StoreStatus = "ready"
   let unboundDetail: string | undefined
   const missingBinding =
-    !habitsDS.propertyIdsByKey.name ||
-    !habitsDS.propertyIdsByKey.icon ||
-    !habitsDS.propertyIdsByKey.color ||
-    !logDS.propertyIdsByKey.name ||
-    !logDS.propertyIdsByKey.date ||
-    !logDS.propertyIdsByKey.habit
-  const dataSourceError = habitsDS.error ?? logDS.error
+    habitsDS.status === "success" &&
+    logDS.status === "success" &&
+    (!habitsDS.value.propertyIdsByKey.name ||
+      !habitsDS.value.propertyIdsByKey.icon ||
+      !habitsDS.value.propertyIdsByKey.color ||
+      !logDS.value.propertyIdsByKey.name ||
+      !logDS.value.propertyIdsByKey.date ||
+      !logDS.value.propertyIdsByKey.habit)
+  const dataSourceError =
+    habitsDS.status === "error"
+      ? habitsDS.error
+      : logDS.status === "error"
+        ? logDS.error
+        : undefined
   if (
-    (habitsDS.isLoading && habitsDS.items.length === 0) ||
-    (logDS.isLoading && logDS.items.length === 0)
+    habitsDS.status === "loading" ||
+    logDS.status === "loading" ||
+    (habitsDS.status === "success" &&
+      habitsDS.value.isLoading &&
+      habitsItems.length === 0) ||
+    (logDS.status === "success" &&
+      logDS.value.isLoading &&
+      logItems.length === 0)
   ) {
     status = "loading"
   } else if (dataSourceError || missingBinding) {
