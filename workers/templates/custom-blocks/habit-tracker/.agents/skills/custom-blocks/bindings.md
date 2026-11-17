@@ -15,15 +15,23 @@ applies to declared page bindings, not generic SDK current-page operations.
 ## Create an instance
 
 ```sh
-ntn workers customblocks make --key issueBoard --data-sources @data-sources.json --pages @pages.json --json
+instance_id=$(ntn workers customblocks make --key issueBoard --json | jq -r '.block_id')
+ntn workers customblocks bind --target "$instance_id" --data-sources @data-sources.json --pages @pages.json --json
 ```
 
 `make --target <page-or-block-id-or-url>` selects the destination. Without it,
 `make` creates a private custom page. `--definition <id>` selects a definition
 without a local Worker project and conflicts with `--key`. With neither selector,
-`make` selects the configured Worker's sole custom block. Keep the returned URL.
-`--bindings` is a deprecated alias for `--data-sources`; do not supply both.
+`make` selects the configured Worker's sole custom block. Use the returned
+`block_id` as the instance selector for `bind`; keep `block_url` when present.
+The example uses `jq` to extract the ID from JSON. `make` creates or connects the
+instance and selects its definition; use `bind` afterward for bindings.
 Existing configured instances cannot switch definitions.
+
+Legacy `make --bindings <JSON|@path>` still applies data-source overrides,
+including `[]` to clear them, but emits a deprecation warning on stderr.
+JSON stdout remains valid. For new work, always create with `make`, then use
+`bind --target <instance-id> --data-sources ...`.
 
 ## Update defaults or overrides
 
