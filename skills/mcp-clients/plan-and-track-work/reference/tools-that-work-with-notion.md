@@ -8,7 +8,7 @@ Only use this when a plan needs something Notion doesn't do itself. The person's
 - **Finished assets** (readable text, a logo, brand colors, several sizes, or a matching series from the tracker): the person's design tool. If they have none, **Canva**:
   - text stays editable
   - one design can be resized
-  - a template can be filled from the tracker rows
+  - a design can be created from the tracker row
   - designs show up live on each Notion row
 
   Use the selected design tool’s installed instructions and current tool schemas.
