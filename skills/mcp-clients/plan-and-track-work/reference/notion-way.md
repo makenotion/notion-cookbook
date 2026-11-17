@@ -6,17 +6,17 @@ The agent drafts the content, and the person chooses the structure. Explain how 
 
 ## The building blocks
 
-| Piece              | What it is                                               | In a plan                                                         |
-| ------------------ | -------------------------------------------------------- | ----------------------------------------------------------------- |
-| **Page**           | A document you can write in and nest                     | The plan's home: goal, next action, milestones, status            |
-| **Database**       | A collection of pages with properties                    | The Tasks: one row per piece of work, each one a page             |
-| **Properties**     | Typed fields on each row                                 | Status, Owner, Due, Project, plus one or two that fit the work    |
-| **Views**          | Different ways to see the same database                  | Board by status, calendar by due date, timeline, "Needs a date"   |
-| **Relations**      | Links between databases                                  | A task belongs to a project; a post belongs to a campaign         |
-| **Data coming in** | Forms and connected apps                                 | RSVPs, sign-ups and requests become rows automatically            |
-| **Keep it moving** | Reminders, automations, recurring templates              | Due-date reminders, a weekly post template, a status-change alert |
-| **AI**             | Notion AI and agents, plus ChatGPT or Claude through MCP | Drafting, summarizing, the weekly check-in                        |
-| **Sharing**        | Inviting people to pages and assigning them work         | Teammates see their own tasks in the plan                         |
+| Piece              | What it is                                               | In a plan                                                                             |
+| ------------------ | -------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| **Page**           | A document you can write in and nest                     | The plan's home: goal, next action, milestones, status                                |
+| **Database**       | A collection of pages with properties                    | The Tasks: one row per piece of work, each one a page                                 |
+| **Properties**     | Typed fields on each row                                 | Status, Owner, Due, Project (Notion Projects only), plus one or two that fit the work |
+| **Views**          | Different ways to see the same database                  | Board by status, calendar by due date, timeline, "Needs a date"                       |
+| **Relations**      | Links between databases                                  | A task belongs to a project; a post belongs to a campaign                             |
+| **Data coming in** | Forms and connected apps                                 | RSVPs, sign-ups and requests become rows automatically                                |
+| **Keep it moving** | Reminders, automations, recurring templates              | Due-date reminders, a weekly post template, a status-change alert                     |
+| **AI**             | Notion AI and agents, plus ChatGPT or Claude through MCP | Drafting, summarizing, the weekly check-in                                            |
+| **Sharing**        | Inviting people to pages and assigning them work         | Teammates see their own tasks in the plan                                             |
 
 ## How much structure to start with
 
@@ -31,7 +31,7 @@ The agent drafts the content, and the person chooses the structure. Explain how 
 
 ## Fields that fit the work
 
-Keep the four core fields: Status, Owner, Due and Project. Rename the status steps and add at most two more fields that fit the work:
+Keep the core fields: Status, Owner and Due, plus the Project relation when the plan is a row in a Projects database. Rename the status steps and add at most two more fields that fit the work:
 
 | Work       | Rows are        | Status steps                                         | Extra fields                    |
 | ---------- | --------------- | ---------------------------------------------------- | ------------------------------- |

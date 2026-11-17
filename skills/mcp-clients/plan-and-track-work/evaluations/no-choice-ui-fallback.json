@@ -27,6 +27,7 @@
   },
   "success_criteria": [
     "With no choice tool, shows the setup choice as a numbered list with each option's full description, recommended first, ending with 'Reply with a number.'",
+    "Shows the useful-additions card as a numbered list too, ending with 'Reply with one or more numbers', and builds every addition the person lists.",
     "Asks nothing the conversation already answers and builds right after the reply."
   ]
 }

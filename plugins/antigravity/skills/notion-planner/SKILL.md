@@ -24,7 +24,7 @@ Don't use it for:
 - **A quick list or one-off answer:** answer in chat.
 - **A single post or design:** just make it.
 - **Comparing options:** `notion-research-documentation`.
-- **A meeting agenda:** `notion-meeting-intelligence`.
+- **A meeting agenda:** `notion-meeting-prep`.
 - **A spec into engineering tasks:** `notion-spec-to-implementation`.
 
 If another installed skill handles part of the work, such as a brief or the designs, use it for that part and keep the plan and tasks here.
@@ -50,7 +50,7 @@ When the person needs to make a choice, show a **choice card**, never a plain-te
 
 - **Use the platform's built-in choice UI.** For example, the ask-user-question tool in Claude, clickable choices in ChatGPT, and `request_user_input` in Codex. Put the question in the question field and each option as its own clickable choice.
 - **Shape:** 2–4 options. The recommended option goes first, marked "(Recommended)". Every option shows its full one-line description, not just a name; if the UI only shows labels, write "Name: description" in the label. Use multi-select for optional additions.
-- **Fallback:** only if the platform has no choice UI at all, show a numbered list with the descriptions and say "reply with a number."
+- **Fallback:** show a numbered list with the descriptions when the platform has no choice UI, or when a multi-select card meets a UI that allows only one pick (Codex's `request_user_input` takes one selection per question). End with "Reply with a number," or "Reply with one or more numbers" for a multi-select card.
 - **Limits:**
   - At most one card before the first build, and one after it.
   - Skip any card the conversation already answers.
@@ -64,7 +64,7 @@ The card wording and when to show each card are in [choice cards](reference/choi
 2. **Setup card.** Ask how to set it up. The options depend on what already exists; see choice cards.
 3. **Build.**
    - Work back from the date, with milestones written as outcomes.
-   - Create tasks with Status, Owner, Due and the project relation.
+   - Create tasks with Status, Owner and Due. Set the Project relation only when the plan is a row in a Projects database; for a standalone plan, the nested Tasks database and a link back to the home are enough.
    - Write real content into task pages, such as drafts, run sheets or captions.
    - Compose the home following [page layout](reference/page-layout.md).
    - Never invent people, bookings, prices, approvals or completed work.
@@ -77,7 +77,7 @@ The card wording and when to show each card are in [choice cards](reference/choi
 - **Find the existing plan first, and never create a second one.** Read [review and re-plan](reference/review-and-replan.md).
 - **Updates:** change the same records. Show the consequences (what moves, and what's now at risk), and record decisions with a reason and date.
 - **Trade-offs are the person's call** (move the date or cut scope). Use a choice card with a recommendation.
-- **Check-ins:** compare against the last check-in. Don't treat edit times as progress. Update the status section on the home and set the next actions.
+- **Check-ins:** read the plan's completed tasks as well as the open ones, and compare both against the last check-in. Don't treat edit times as progress. Update the status section on the home and set the next actions.
 
 ## Save, verify and deliver
 

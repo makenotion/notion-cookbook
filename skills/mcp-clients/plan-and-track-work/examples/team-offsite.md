@@ -58,6 +58,8 @@ The **Offsite tasks** database (inside the page) has Status (To do → In progre
 > - **Share with Priya:** she sees the plan and the tasks assigned to her.
 > - **Reminders:** a nudge the day before each due date.
 
+In a client that allows only one pick per question, such as Codex, the same options appear as a numbered list and the person replies with several numbers.
+
 The person picks Calendar, RSVP form and Share with Priya:
 
 - **Calendar view:** created.
@@ -66,10 +68,12 @@ The person picks Calendar, RSVP form and Share with Priya:
 
 ## The reason to come back
 
-> I've set the venue task for Jan 15. Want a 15-minute check-in on your calendar
-> each Monday until the offsite, with a meeting note linked to this plan?
+> I've set the venue task for Jan 15. Want a 15-minute check-in with Priya each
+> Monday at 10:00 until the offsite, with a meeting note linked to this plan?
+> Priya will get a calendar invitation.
 
 On a yes, the agent creates the recurring Notion Calendar event with you and
-Priya as attendees, then the linked meeting note.
+Priya as attendees, then the linked meeting note. If the person would rather
+keep it to themselves, it creates a personal event and invites no one.
 
 Not built here: no venue was invented, no costs were guessed, no one was invited without a yes, and nothing was booked or sent.

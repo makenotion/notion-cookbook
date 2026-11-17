@@ -58,6 +58,7 @@
     ]
   },
   "success_criteria": [
+    "Reads the plan's completed tasks as well as the open ones before writing; the venue shortlist has already left the open view.",
     "Compares with the Jan 6 check-in: reports the venue shortlist as done this period (done date Jan 10).",
     "Reports 'Outdoor activity' as currently marked done without claiming it was done this week; does not treat the agenda's edit time as progress.",
     "Writes Moved / Stuck / Next (with owners and dates) at the top of the plan's Status section, not as a new page.",

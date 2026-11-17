@@ -4,7 +4,7 @@ Most project management happens after day one. This skill also handles those mom
 
 ## Find the plan
 
-Search by name, or use the link. Read the home, the Status section and the open tasks. If there's no plan yet, switch to "Start a plan."
+Search by name, or use the link. Read the home, the Status section and all of the plan's tasks, including completed ones, since open-work views hide finished work. If there's no plan yet, switch to "Start a plan."
 
 ## Update: add work, move dates, a slip, a scope change
 
@@ -16,7 +16,7 @@ Search by name, or use the link. Read the home, the Status section and the open 
 
 ## Check in: weekly or ad hoc
 
-Compare now with the last check-in, not with memory.
+Compare now with the last check-in, not with memory. Before writing, read this plan's completed tasks as well as the open ones, and compare both with the last check-in's snapshot: work finished since then has already left the open view, but it belongs under Moved.
 
 | Evidence                                 | What it supports                                      |
 | ---------------------------------------- | ----------------------------------------------------- |

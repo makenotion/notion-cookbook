@@ -8,7 +8,7 @@ A choice card is a question with clickable options. It lets the person make the 
 - **2–4 options. The recommended option goes first, marked "(Recommended)".**
 - **Every option shows its full description,** exactly as written below, adapted to the person's words. If the UI only shows labels, write "Name: description" in the label. Never show an option name alone.
 - **Use multi-select** for the choice card for useful additions; everything else is single-select.
-- **Fallback:** only if there is no choice UI at all, show a numbered list with the descriptions and end with "Reply with a number."
+- **Fallback:** show a numbered list with the descriptions when there is no choice UI, or when the card is multi-select and the UI allows only one pick (Codex's `request_user_input` takes one selection per question). End with "Reply with a number," or "Reply with one or more numbers" for a multi-select card.
 - **When:**
   - At most one card before the first build, and one after it.
   - Skip any card the conversation already answers. If the person says "just do it," use the recommended option and say which one.
@@ -68,7 +68,7 @@ Use it when a change forces a decision that belongs to the person.
 
 > **The design review moved to Nov 12. What should give?**
 >
-> 1. **Move the launch to Nov 26 (Recommended):** keeps the full scope; the announcement and help article move with it.
+> 1. **Move the launch to Nov 26 (Recommended):** keeps the full scope; the tour, the announcement and the go/no-go check move a week.
 > 2. **Keep Nov 19 and cut the onboarding tour:** ships on time; the tour follows in a later release.
 
 ## Visuals: concepts or finished (only when it's unclear)

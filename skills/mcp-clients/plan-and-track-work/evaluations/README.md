@@ -15,7 +15,7 @@ These are specifications, not completed runs.
 | [own-design-tool-wins](own-design-tool-wins.json)         | The user's own tool (Figma) replaces any partner suggestion                                                                                                                                   |
 | [mid-project-slip](mid-project-slip.json)                 | Triggers mid-project; updates the same records; trade-off card; decision log                                                                                                                  |
 | [weekly-checkin](weekly-checkin.json)                     | Evidence rules; Moved, Stuck, Next written in the Status section; an offer to repeat                                                                                                          |
-| [no-choice-ui-fallback](no-choice-ui-fallback.json)       | A numbered list with full descriptions only when there's no choice UI                                                                                                                         |
+| [no-choice-ui-fallback](no-choice-ui-fallback.json)       | Numbered lists with full descriptions when there's no choice UI; several numbers accepted for useful additions                                                                                |
 
 ## How to grade choice cards
 
@@ -23,7 +23,7 @@ Expose an `ask-user-question` tool, or the client's equivalent, whenever `client
 
 A card passes only if:
 
-- it uses the tool, not plain text
+- it uses the tool, not plain text, unless the numbered fallback applies: no choice UI, or a multi-select card in a client that allows one pick
 - it has 2–4 options
 - the recommended option is first and marked
 - every option shows its description
@@ -48,4 +48,4 @@ With all Notion skills installed, check which skill gets picked. Naming the skil
 | Make a packing list for a weekend away                   | None (answer in chat)                                                             |
 | Compare three venues for the offsite                     | Research documentation                                                            |
 | Turn this spec into engineering tasks                    | Spec to implementation                                                            |
-| Prepare an agenda for Monday's sync                      | Meeting intelligence                                                              |
+| Prepare an agenda for Monday's sync                      | Meeting prep                                                                      |
