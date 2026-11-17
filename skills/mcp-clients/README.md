@@ -22,6 +22,7 @@ depend on your client.
 | [Set up my project](set-up-my-project/SKILL.md)                 | Set up a project with tasks, docs, and meeting notes, then confirm the team and where it belongs.        |
 | [Organize my semester](organize-my-semester/SKILL.md)           | Create a personal study space with course notes and upcoming assignments.                                |
 | [Build my engineering wiki](build-my-engineering-wiki/SKILL.md) | Navigate setup, current architecture, operations, and proposals.                                         |
+| [Plan and track work](plan-and-track-work/SKILL.md)             | Start plans, adjust schedules, and run progress check-ins.                                               |
 
 ## Install
 
@@ -45,6 +46,7 @@ from your connected Notion MCP server and follow its available input schema.
 
 ```text
 mcp-clients/
+├── plan-and-track-work/
 ├── plan-marketing-campaigns/
 ├── create-my-team-handbook/
 ├── set-up-my-project/

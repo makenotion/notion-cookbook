@@ -1,0 +1,35 @@
+{
+  "name": "own-design-tool-wins",
+  "skills": ["notion-planner"],
+  "query": "Plan the launch campaign for our spring collection. We do all our design in Figma.",
+  "context": {
+    "conversation": "Channels: Instagram, email. Launch April 8.",
+    "client": {
+      "choice_ui": "ask-user-question"
+    },
+    "search_routes": [
+      {
+        "intent": "Find an existing campaign plan",
+        "results": []
+      }
+    ],
+    "tools": [
+      "search",
+      "fetch",
+      "get-users",
+      "get-tool-access",
+      "create-pages",
+      "create-database",
+      "update-page",
+      "update-data-source",
+      "create-view",
+      "query-data-sources",
+      "ask-user-question"
+    ]
+  },
+  "success_criteria": [
+    "Every visuals step and option names Figma; Canva is not offered anywhere.",
+    "Builds the campaign with one asset row per asset and channel, copy drafted in the rows, and a calendar view.",
+    "Publishes or sends nothing."
+  ]
+}

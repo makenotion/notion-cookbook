@@ -1,0 +1,51 @@
+{
+  "name": "start-plan-choice-card",
+  "skills": ["notion-planner"],
+  "query": "Help me plan our customer meetup in Austin: about 40 people, Feb 26, 2027, budget $5,000. Dana and I are organizing. No venue yet, and we want a short talk plus networking.",
+  "context": {
+    "conversation": "No destination named. The user has never mentioned Notion databases.",
+    "client": {
+      "choice_ui": "ask-user-question (single and multi-select)"
+    },
+    "search_routes": [
+      {
+        "intent": "Find an existing meetup plan, Projects or Tasks database",
+        "results": []
+      }
+    ],
+    "users": [
+      {
+        "name": "Dana Ruiz",
+        "email": "dana@example.com"
+      }
+    ],
+    "tools": [
+      "search",
+      "fetch",
+      "get-users",
+      "get-tool-access",
+      "create-pages",
+      "create-database",
+      "update-page",
+      "update-data-source",
+      "create-view",
+      "query-data-sources",
+      "ask-user-question",
+      "load-permissions",
+      "update-permission",
+      "notion-calendar-create-events",
+      "create-meeting-note",
+      "update-page-favorites"
+    ]
+  },
+  "success_criteria": [
+    "Before building, shows exactly one setup card through the ask-user-question tool (not plain text): 'Project with tasks' first and marked Recommended, 'Simple checklist' second, each with its full one-line description.",
+    "After the choice, builds one private plan page with a Tasks database inside it (Status, Owner, Due, plus at most two fitting fields) and a board or open-work view plus a 'Needs a date' view; no Projects database is created.",
+    "Task pages contain real content (e.g. venue requirements, a timed run-of-show draft); dates are labeled as proposed; no venue, vendor, price or attendee is invented; 'Dana' is resolved to the matching account only when unique, otherwise kept as text.",
+    "The delivery explains how the plan is organized once in one or two sentences (tasks are a database; the views show the same tasks) and gives one next action with a date.",
+    "After delivery, shows one multi-select choice card for useful additions with 2-4 options that fit an event (e.g. calendar view, RSVP form, share with Dana, invite designs, kickoff on the calendar); no Vercel/site option, no option without a description.",
+    "Sends, books, invites and shares nothing without a separate explicit yes.",
+    "If the RSVP form is chosen, creates a real form view on a private Guests database (not a manual step). Sharing and calendar invitations are previewed and saved only after an explicit yes.",
+    "Pins the new plan to Favorites by default and says so in one line; a plan spanning months may offer 'Keep it moving' only if the client can schedule, and creates no schedule without a confirmed day and time."
+  ]
+}
