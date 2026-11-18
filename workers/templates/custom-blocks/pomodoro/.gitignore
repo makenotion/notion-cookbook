@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.dev-shell/
+workers.json
+.env
+.env.*
+!.env.example

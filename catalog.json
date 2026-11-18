@@ -253,6 +253,25 @@
       }
     },
     {
+      "id": "pomodoro",
+      "title": "Pomodoro timer custom block",
+      "summary": "Run a focus timer with short and long breaks inside a Notion page. No data source setup required.",
+      "path": "workers/templates/custom-blocks/pomodoro",
+      "kind": "worker-custom-block",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "notion-custom-blocks"],
+      "entrypoints": ["src/index.ts"],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name pomodoro"
+      }
+    },
+    {
       "id": "whiteboard",
       "title": "Whiteboard custom block",
       "summary": "Render a freeform whiteboard with sticky notes, pen, lines, and arrows inside a Notion page, persisted to a Whiteboard items database.",
