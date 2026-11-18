@@ -40,8 +40,7 @@ Use the dev shell to verify changes locally with sample data before you deploy:
 ntn workers customblocks dev
 ```
 
-Open the shell URL printed by the command. See the documentation in
-`@notionhq/custom-blocks-dev-shell` for more details.
+The CLI fetches the dev shell as needed. Open the shell URL printed by the command.
 
 ## Agent instructions
 
