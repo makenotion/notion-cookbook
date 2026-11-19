@@ -1,0 +1,32 @@
+{
+  "name": "@notion-cookbook/pomodoro",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc && vite build blocks/pomodoro",
+    "check": "tsc --noEmit && tsc -p blocks/pomodoro/tsconfig.json --noEmit && tsc -p test/tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "engines": {
+    "node": ">=22.23.4",
+    "npm": ">=10.9.9"
+  },
+  "devDependencies": {
+    "@notionhq/custom-blocks": "^0.5.0",
+    "@notionhq/custom-blocks-dev-shell": "^0.3.1",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5",
+    "jsdom": "^29.0.0"
+  },
+  "dependencies": {
+    "@notionhq/workers": ">=0.0.0"
+  }
+}

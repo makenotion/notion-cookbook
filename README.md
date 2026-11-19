@@ -29,6 +29,8 @@ directory.
   [Postgres](workers/templates/postgres-query/), [Snowflake query](workers/templates/snowflake-query/), [PowerPoint creator](workers/templates/powerpoint-creator/), [Vercel](workers/templates/vercel-production-deployment-tools/), and more.
 - **React to external events:** receive and verify
   [Zendesk webhooks](workers/templates/zendesk-webhook/).
+- **Add a focus timer to a Notion page:** use the
+  [Pomodoro custom block](workers/templates/custom-blocks/pomodoro/).
 
 ## Quickstarts
 

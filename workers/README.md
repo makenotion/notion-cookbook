@@ -55,6 +55,11 @@ For self-hosted integrations built directly with the Notion API, see the [API ex
 | ----------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | [Zendesk webhook](zendesk-webhook/) | Verifies signed ticket events, enriches them with comments, and upserts them into a Notion database. |
 
+## Custom blocks
+
+[Pomodoro](templates/custom-blocks/pomodoro/) is a focus timer with short and long breaks.
+It runs inside a Notion page and needs no data source bindings.
+
 ## Quickstart
 
 The DuckDB query Worker is a useful first deployment because it has offline
