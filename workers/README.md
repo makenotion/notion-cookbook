@@ -55,6 +55,16 @@ For self-hosted integrations built directly with the Notion API, see the [API ex
 | ----------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | [Zendesk webhook](zendesk-webhook/) | Verifies signed ticket events, enriches them with comments, and upserts them into a Notion database. |
 
+## Custom blocks
+
+Five custom block templates provide interfaces inside Notion:
+[Hello world](templates/custom-blocks/custom/),
+[Habit tracker](templates/custom-blocks/habit-tracker/),
+[Org chart](templates/custom-blocks/org-chart/),
+[Whiteboard](templates/custom-blocks/whiteboard/), and
+[Icon picker](templates/custom-blocks/icon-picker/). The icon picker includes
+its current release requirements in its README.
+
 ## Quickstart
 
 The DuckDB query Worker is a useful first deployment because it has offline

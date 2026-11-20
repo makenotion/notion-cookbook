@@ -272,6 +272,29 @@
       }
     },
     {
+      "id": "icon-picker",
+      "title": "Icon picker",
+      "summary": "Search Notion icons and colors with a reusable controlled React picker and an explicit page-icon demo.",
+      "path": "workers/templates/custom-blocks/icon-picker",
+      "kind": "worker-custom-block",
+      "status": "ready",
+      "language": "typescript",
+      "runtime": "node",
+      "integrations": ["notion-workers", "notion-custom-blocks"],
+      "entrypoints": [
+        "src/index.ts",
+        "blocks/icon-picker/src/IconPicker.tsx",
+        "blocks/icon-picker/src/Demo.tsx"
+      ],
+      "commands": {
+        "install": "npm install",
+        "check": "npm run check",
+        "test": "npm test",
+        "build": "npm run build",
+        "deploy": "ntn workers deploy --name icon-picker"
+      }
+    },
+    {
       "id": "workers-default",
       "title": "Default Worker template",
       "summary": "The base Worker scaffold with an example agent tool.",

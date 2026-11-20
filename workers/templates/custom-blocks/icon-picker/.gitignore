@@ -1,0 +1,7 @@
+.env
+.env.*
+dist/
+node_modules/
+workers.*.json
+workers.json
+.dev-shell/

@@ -285,9 +285,18 @@ for (const group of groups.values()) {
 
     if (customBlocksTemplateReadme !== undefined) {
       const target = join(recipeRoots.get(recipe), "README.md")
+      const localTemplatePath = join(
+        recipeRoots.get(recipe),
+        "README.template.md"
+      )
+      const localTemplate = await readIfExists(localTemplatePath)
+      const templatePath =
+        localTemplate === null
+          ? group.config.customBlocksTemplateReadme
+          : relative(repoRoot, localTemplatePath)
       const expected =
-        `<!-- Generated from ${group.config.customBlocksTemplateReadme}. Run npm run agents:sync to update. -->\n\n` +
-        customBlocksTemplateReadme
+        `<!-- Generated from ${templatePath}. Run npm run agents:sync to update. -->\n\n` +
+        (localTemplate ?? customBlocksTemplateReadme)
           .replaceAll("{{title}}", () => recipe.title)
           .replaceAll("{{deployCommand}}", () => recipe.commands.deploy)
       if (isDryRun) {

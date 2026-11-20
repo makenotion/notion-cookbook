@@ -1,0 +1,8 @@
+{
+  "extends": "./blocks/icon-picker/tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "noEmit": true
+  },
+  "include": ["test", "blocks/icon-picker/src/selection.ts"]
+}

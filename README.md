@@ -154,6 +154,16 @@ find and inspect an issue in Sentry, then declare an incident in PagerDuty.
 | Learn the database-query pattern with seeded data   | [SQLite query](workers/templates/sqlite-query/)                                             | SQLite              |
 | Inspect, promote, or roll back a Vercel deployment  | [Vercel production deployment tools](workers/templates/vercel-production-deployment-tools/) | Notion, Vercel      |
 
+### Custom blocks
+
+Five custom block templates provide interfaces inside Notion:
+[Hello world](workers/templates/custom-blocks/custom/),
+[Habit tracker](workers/templates/custom-blocks/habit-tracker/),
+[Org chart](workers/templates/custom-blocks/org-chart/),
+[Whiteboard](workers/templates/custom-blocks/whiteboard/), and
+[Icon picker](workers/templates/custom-blocks/icon-picker/). The icon picker includes
+its current release requirements in its README.
+
 ### Handle webhooks
 
 | Task                                                 | Worker                                                | Integration |
