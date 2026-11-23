@@ -25,6 +25,8 @@ The [mcp-clients](mcp-clients/) directory contains reusable workflows for any MC
 - **[Organize my semester](mcp-clients/organize-my-semester/)**: Create a personal study space with course notes and upcoming assignments.
 - **[Build my engineering wiki](mcp-clients/build-my-engineering-wiki/)**: Navigate setup, current architecture, operations, and proposals.
 
+- **[Plan and track work](mcp-clients/plan-and-track-work/)**: Start plans, adjust schedules, and run progress check-ins.
+
 ## Using skills
 
 1. Connect your MCP client to the [Notion MCP server](https://developers.notion.com/docs/notion-mcp).

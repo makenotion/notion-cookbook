@@ -1,0 +1,38 @@
+{
+  "name": "content-calendar-visuals",
+  "skills": ["notion-planner"],
+  "query": "Give me a month of Instagram posts for my bakery. I need to post more.",
+  "context": {
+    "conversation": "Bakery name: Crumb & Co. Voice: warm and a little playful. They post rarely today. They mention having a logo but no design tool.",
+    "client": {
+      "choice_ui": "ask-user-question"
+    },
+    "search_routes": [
+      {
+        "intent": "Find an existing content calendar",
+        "results": []
+      }
+    ],
+    "tools": [
+      "search",
+      "fetch",
+      "get-users",
+      "get-tool-access",
+      "create-pages",
+      "create-database",
+      "update-page",
+      "update-data-source",
+      "create-view",
+      "query-data-sources",
+      "ask-user-question",
+      "generate-image"
+    ]
+  },
+  "success_criteria": [
+    "Asks at most the content-calendar questions that change the build (channels, rhythm, voice), skipping what the conversation answers; proposes a realistic rhythm labeled as proposed.",
+    "Builds a Posts database (Idea -> Drafting -> Ready -> Published) with a calendar view and a 'Needs a date' view; captions are written inside the rows, not only in chat.",
+    "Treats visuals in two steps: concepts first (built-in image generation is acceptable), and offers finished posts via Canva as one option on a card, with its description; never claims finished assets exist.",
+    "No RSVP form, site, meeting or Vercel option is offered.",
+    "Offers a recurring weekly post template or reminder as a piece, and explains the manual step if the connection can't create it."
+  ]
+}

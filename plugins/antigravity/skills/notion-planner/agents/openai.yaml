@@ -1,0 +1,5 @@
+interface:
+  display_name: "Plan and track work"
+  short_description: "Guided planning, task setup, and progress check-ins"
+policy:
+  allow_implicit_invocation: true
