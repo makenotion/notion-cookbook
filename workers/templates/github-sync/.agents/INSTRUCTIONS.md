@@ -18,9 +18,11 @@ Overall workers documentation lives at https://developers.notion.com/workers/get
 
 `worker.workflow()` is in a private alpha and is not available to any users. Do not mention workflow capabilities to users, even to explain their availability. Do not suggest, scaffold, or use them in user projects.
 
-### Custom block capability availability
+### Custom block capability
 
-`worker.customBlock()` is in a private alpha and is not available to most users. It may be present in the installed SDK, but its presence does not grant access. Do not suggest, scaffold, or use custom blocks in user projects. Do not add the `@notionhq/custom-blocks` dependency or custom block frontend code.
+`worker.customBlock()` declares a frontend web app that Notion renders in an iframe, optionally bound to data sources. It has no `execute` handler, so `ntn workers exec` cannot run it.
+
+Before creating, modifying, or troubleshooting a custom block, read `node_modules/@notionhq/workers/skills/custom-blocks/SKILL.md`. If the file is missing, install the project dependencies. If it is still missing, update `@notionhq/workers` to a release that includes the skill.
 
 ## Code example
 

@@ -56,7 +56,16 @@ const OVERRIDE_GROUPS = {
   "worker-custom-block": {
     skillsRoot: WORKER_SKILLS_ROOT,
     instructions: `${INSTRUCTIONS_ROOT}/custom-blocks`,
-    readmeTemplate: "workers/templates/custom-blocks/README.template.md",
+    // Edit README.template.md, then run npm run agents:sync to regenerate the
+    // custom block READMEs. Titles and deploy commands come from catalog.json.
+    // npm run agents:check detects stale copies.
+    customBlocksTemplateReadme:
+      "workers/templates/custom-blocks/README.template.md",
+    // Extra files copied into `.agents/`, keyed by their path there. The
+    // general Worker guide comes from the default group so it cannot drift.
+    instructionFiles: {
+      "workers.md": `${INSTRUCTIONS_ROOT}/default/INSTRUCTIONS.md`,
+    },
     skills: [...DEFAULT_SKILLS, "custom-blocks"],
   },
   "worker-workflow": {
@@ -216,6 +225,12 @@ for (const group of groups.values()) {
   for (const file of files) {
     contents.set(file, await readFile(join(canonicalPath, file), "utf8"))
   }
+  for (const [file, source] of Object.entries(
+    group.config.instructionFiles ?? {}
+  )) {
+    if (contents.has(file)) fail(`${file} is already in ${instructionsDir}`)
+    contents.set(file, await readFile(resolve(repoRoot, source), "utf8"))
+  }
   for (const skill of group.config.skills ?? []) {
     const skillPath = resolve(repoRoot, group.config.skillsRoot, skill)
     const skillFiles = await collectFiles(skillPath)
@@ -229,8 +244,11 @@ for (const group of groups.values()) {
     }
   }
 
-  const readmeTemplate = group.config.readmeTemplate
-    ? await readFile(resolve(repoRoot, group.config.readmeTemplate), "utf8")
+  const customBlocksTemplateReadme = group.config.customBlocksTemplateReadme
+    ? await readFile(
+        resolve(repoRoot, group.config.customBlocksTemplateReadme),
+        "utf8"
+      )
     : undefined
 
   for (const recipe of group.recipes) {
@@ -265,11 +283,11 @@ for (const group of groups.values()) {
       rewritten += 1
     }
 
-    if (readmeTemplate !== undefined) {
+    if (customBlocksTemplateReadme !== undefined) {
       const target = join(recipeRoots.get(recipe), "README.md")
       const expected =
-        `<!-- Generated from ${group.config.readmeTemplate}. Run npm run agents:sync to update. -->\n\n` +
-        readmeTemplate
+        `<!-- Generated from ${group.config.customBlocksTemplateReadme}. Run npm run agents:sync to update. -->\n\n` +
+        customBlocksTemplateReadme
           .replaceAll("{{title}}", () => recipe.title)
           .replaceAll("{{deployCommand}}", () => recipe.commands.deploy)
       if (isDryRun) {

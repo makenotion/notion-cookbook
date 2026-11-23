@@ -6,7 +6,7 @@ templates ship in their `.agents/` directory.
 | Path                          | Holds                                                    |
 | ----------------------------- | -------------------------------------------------------- |
 | `instructions/default/`       | instructions for every `worker-` recipe with no override |
-| `instructions/custom-blocks/` | instructions for `kind: "worker-custom-block"`           |
+| `instructions/custom-blocks/` | short instructions for `kind: "worker-custom-block"`     |
 | `instructions/workflow/`      | instructions for `kind: "worker-workflow"`               |
 | `skills/`                     | every skill, whether or not a given template ships it    |
 
@@ -43,6 +43,11 @@ lists. Spread `DEFAULT_SKILLS` to add to them instead of repeating them.
 
 App recipes use their own group and [canonical App guidance](../../apps/agents/).
 `skillsRoot` keeps each group's skill names scoped to its SDK family.
+
+A group can also set `instructionFiles` to copy other files into `.agents/`.
+Custom block templates use it to ship `default/INSTRUCTIONS.md` as
+`.agents/workers.md`, so their short instructions can point to the general
+Worker guide without keeping a second copy.
 
 Each template also gets an `AGENTS.md` and a `CLAUDE.md` symlink pointing at
 `.agents/INSTRUCTIONS.md`, so both discovery conventions resolve to one file.
