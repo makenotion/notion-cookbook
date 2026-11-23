@@ -27,6 +27,8 @@ async function fixture(t) {
     {
       id: "blocks",
       kind: "worker-custom-block",
+      title: "Example custom block",
+      commands: { deploy: "ntn workers deploy --name example" },
       path: "workers/templates/blocks",
     },
     {
@@ -40,6 +42,10 @@ async function fixture(t) {
     await writeFile(join(root, path), contents)
   }
   await put("catalog.json", JSON.stringify({ recipes }))
+  await put(
+    "workers/templates/custom-blocks/README.template.md",
+    "# {{title}}\n\n{{deployCommand}}\n"
+  )
   for (const family of ["apps", "workers"]) {
     for (const group of ["default", "custom-blocks", "workflow"]) {
       await put(
@@ -132,4 +138,47 @@ test("sync refuses to traverse a symlinked App template", async (t) => {
     await readFile(join(root, "outside/.agents/INSTRUCTIONS.md"), "utf8"),
     "preserve"
   )
+})
+
+test("sync renders custom block READMEs from catalog metadata and detects drift without writing", async (t) => {
+  const { root, put, run } = await fixture(t)
+  await put(
+    "workers/templates/workflow/README.md",
+    "Hand-maintained workflow guide"
+  )
+  assert.equal(run().status, 0)
+  const readmePath = join(root, "workers/templates/blocks/README.md")
+  const expected =
+    "<!-- Generated from workers/templates/custom-blocks/README.template.md. Run npm run agents:sync to update. -->\n\n# Example custom block\n\nntn workers deploy --name example\n"
+  assert.equal(await readFile(readmePath, "utf8"), expected)
+  assert.equal(
+    await readFile(join(root, "workers/templates/workflow/README.md"), "utf8"),
+    "Hand-maintained workflow guide"
+  )
+  assert.equal(run("--dryRun").status, 0)
+  await writeFile(readmePath, "Edited generated copy")
+  const checked = run("--dryRun")
+  assert.equal(checked.status, 1)
+  assert.match(checked.stderr, /workers\/templates\/blocks\/README\.md/)
+  assert.equal(await readFile(readmePath, "utf8"), "Edited generated copy")
+  assert.equal(run().status, 0)
+  assert.equal(await readFile(readmePath, "utf8"), expected)
+})
+
+test("custom block templates get the default Worker guide as workers.md", async (t) => {
+  const { root, put, run } = await fixture(t)
+  await put(
+    "workers/agents/instructions/default/INSTRUCTIONS.md",
+    "default worker guide"
+  )
+  assert.equal(run().status, 0)
+  const workersMd = join(root, "workers/templates/blocks/.agents/workers.md")
+  assert.equal(await readFile(workersMd, "utf8"), "default worker guide")
+  await assert.rejects(
+    readFile(join(root, "workers/templates/workflow/.agents/workers.md")),
+    { code: "ENOENT" }
+  )
+  assert.equal(run("--dryRun").status, 0)
+  await put("workers/agents/instructions/default/INSTRUCTIONS.md", "edited")
+  assert.equal(run("--dryRun").status, 1)
 })

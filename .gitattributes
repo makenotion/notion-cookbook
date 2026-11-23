@@ -2,3 +2,4 @@ workers/templates/**/.agents/** linguist-generated=true
 workers/templates/**/AGENTS.md linguist-generated=true
 workers/templates/**/CLAUDE.md linguist-generated=true
 plugins/*/skills/** linguist-generated=true
+workers/templates/custom-blocks/*/README.md linguist-generated=true
