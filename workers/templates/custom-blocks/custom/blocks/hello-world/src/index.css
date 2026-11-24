@@ -33,7 +33,7 @@ main {
   align-items: center;
   gap: var(--spacing-6);
   margin-bottom: var(--spacing-20);
-  color: var(--content-tertiary);
+  color: var(--content-primary);
   font-size: 12px;
   font-weight: var(--font-weight-medium);
   letter-spacing: 0.02em;
@@ -91,7 +91,7 @@ h1 {
 .next-step > span {
   display: block;
   margin-bottom: var(--spacing-4);
-  color: var(--content-tertiary);
+  color: var(--content-primary);
   font-size: 11px;
   font-weight: var(--font-weight-semibold);
   letter-spacing: 0.04em;
