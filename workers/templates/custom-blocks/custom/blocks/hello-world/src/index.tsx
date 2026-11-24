@@ -10,7 +10,7 @@ function App() {
   return (
     <main aria-labelledby="starter-title">
       <section className="starter-card">
-        <div className="starter-status">
+        <div className="starter-status" data-theme="green">
           <span className="status-dot" aria-hidden="true" />
           Custom block
         </div>
