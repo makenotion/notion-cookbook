@@ -12,6 +12,15 @@ Load the `custom-blocks` skill before writing or changing block code. It points 
 that ships in `@notionhq/workers`. The installed `@notionhq/workers` and `@notionhq/custom-blocks`
 packages may include more skills and docs than `.agents/skills/` lists.
 
+## UI appearance
+
+Use Notion styling by default when creating a block without a specified design. Follow a design
+the user supplies, and preserve the design of an existing block unless the request changes it.
+
+Before editing styles, read the appearance guidance in
+`node_modules/@notionhq/custom-blocks/README.md`. Use the installed SDK's instructions for theme
+and contrast. Preview appearance changes in both light and dark themes in the dev shell.
+
 ## Other Worker features
 
 For syncs, tools, webhooks, OAuth, CLI commands, and debugging runs, read `.agents/workers.md`.
