@@ -14,12 +14,14 @@ packages may include more skills and docs than `.agents/skills/` lists.
 
 ## UI appearance
 
-Use Notion styling by default when creating a block without a specified design. Follow a design
-the user supplies, and preserve the design of an existing block unless the request changes it.
+For a new block without a specified design, we recommend Notion styling. Import `nds.css` and use
+semantic design tokens for light and dark themes. When the block has an internal scroll area,
+we recommend the optional `scrollbars.css` if the installed SDK provides it. Follow a design the
+user supplies, and preserve the design of an existing block unless the request changes it.
 
 Before editing styles, read the appearance guidance in
-`node_modules/@notionhq/custom-blocks/README.md`. Use the installed SDK's instructions for theme
-and contrast. Preview appearance changes in both light and dark themes in the dev shell.
+`node_modules/@notionhq/custom-blocks/README.md` for the installed SDK's setup and contrast guidance.
+Preview appearance changes in both light and dark themes in the dev shell.
 
 ## Other Worker features
 
