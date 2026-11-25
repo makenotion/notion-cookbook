@@ -1,4 +1,4 @@
-import type { DataSourceQueryOptions } from "@notionhq/apps/custom-blocks"
+import type { DataSourceQueryOptions } from "@notionhq/custom-blocks/data-sources"
 
 import { dayBounds, sortByStart, text } from "./meeting"
 import type { PageRow } from "./meeting"
@@ -16,10 +16,9 @@ import {
 // People, and Companies. Everything else is derived here, in memory.
 //
 // Why so few: the SDK re-sends every subscription's query whenever the host
-// reports a change to that data source (subscribeToDataSource compares the
-// data source's signature and force-requeries on a change), and it offers
-// no debounce. During research the workflows write many Meetings, People,
-// and Companies rows, so each extra subscription multiplies the requests.
+// reports a change to that data source. During research the workflows write
+// many Meetings, People, and Companies rows, so each extra subscription
+// multiplies the requests.
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -31,8 +30,7 @@ export const RUNS_LIMIT = 10
 
 /**
  * Start of the meetings window: local midnight MEETINGS_LOOKBACK_DAYS ago.
- * It changes once a day, so the query options stay identical between
- * renders and the subscription is not replaced.
+ * The block uses this value to keep the subscription stable during the day.
  */
 export function meetingsWindowStart(now: number): string {
   return new Date(
@@ -40,10 +38,9 @@ export function meetingsWindowStart(now: number): string {
   ).toISOString()
 }
 
-/** The one Meetings query. Same input, same JSON, so no resubscribe. */
+/** The Meetings filter and sort order. */
 export function meetingsQuery(windowStart: string): DataSourceQueryOptions {
   return {
-    limit: MEETINGS_LIMIT,
     filter: {
       and: [
         { key: "When", date: { on_or_after: windowStart } },
@@ -55,12 +52,8 @@ export function meetingsQuery(windowStart: string): DataSourceQueryOptions {
 }
 
 export const RUNS_QUERY: DataSourceQueryOptions = {
-  limit: RUNS_LIMIT,
   sorts: [{ key: "Started", direction: "descending" }],
 }
-
-export const PEOPLE_QUERY: DataSourceQueryOptions = { limit: 999 }
-export const COMPANIES_QUERY: DataSourceQueryOptions = { limit: 999 }
 
 /** Actual agent status, independent of whether a meeting brief is ready. */
 export function researchCounts(
@@ -132,7 +125,7 @@ export function deriveRuns(rows: readonly PageRow[]): {
   return {
     latestRun: latest
       ? {
-          id: latest.id,
+          id: latest.pageKey,
           status: text(latest.getPropertyByKey("Status")) || null,
           startedMs: runStartedMs(latest),
           finishedMs: dateMs(latest.getPropertyByKey("Finished")),

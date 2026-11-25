@@ -1,19 +1,19 @@
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  background: var(--bg-base);
-}
-
-.nds {
-  color: var(--content-primary);
-  background: var(--bg-base);
-  font-family: var(--font-sans);
 }
 
 main {
+  color: var(--content-primary);
+  background: var(--bg-base);
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
   width: 100%;
   padding: var(--spacing-16);
 }
@@ -33,7 +33,7 @@ main {
   align-items: center;
   gap: var(--spacing-6);
   margin-bottom: var(--spacing-20);
-  color: var(--content-tertiary);
+  color: var(--content-primary);
   font-size: 12px;
   font-weight: var(--font-weight-medium);
   letter-spacing: 0.02em;
@@ -44,7 +44,6 @@ main {
   height: 7px;
   border-radius: 50%;
   background: var(--green-80);
-  box-shadow: 0 0 0 3px var(--translucent-green-30);
 }
 
 .starter-heading {
@@ -91,7 +90,7 @@ h1 {
 .next-step > span {
   display: block;
   margin-bottom: var(--spacing-4);
-  color: var(--content-tertiary);
+  color: var(--content-primary);
   font-size: 11px;
   font-weight: var(--font-weight-semibold);
   letter-spacing: 0.04em;
@@ -111,7 +110,7 @@ code {
   border-radius: var(--radius-4);
   color: var(--content-primary);
   background: var(--bg-base);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.9em;
   white-space: nowrap;
 }

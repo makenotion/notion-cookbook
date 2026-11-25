@@ -170,7 +170,7 @@ describe("first-run stages", () => {
 
   it("stops the activity indicator for stale research and failed syncs", () => {
     const stale = row("Researching")
-    stale.last_edited_time = "2026-10-01T12:00:00Z"
+    stale.lastEditedTime = "2026-10-01T12:00:00Z"
     const stages = setupStages(
       { kind: "failed", error: "Calendar disconnected" },
       queries({ people: loaded([stale]) }),

@@ -1,9 +1,7 @@
-/* Notion design tokens only (@notionhq/apps/nds.css). Hues come from a
+/* Notion design tokens only (@notionhq/custom-blocks/nds.css). Hues come from a
    data-theme attribute, which remaps the --content-* and --bg-* tokens to
    that color in light and dark mode. */
 
-/* body sits outside NotionTokenScope, where the tokens are defined, so it
-   needs a fallback; .card gets the real token. */
 body {
   margin: 0;
   background: transparent;

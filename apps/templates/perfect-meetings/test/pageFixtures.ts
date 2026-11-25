@@ -1,18 +1,16 @@
-import type {
-  NotionDateInput,
-  NotionPagePropertyValue,
-} from "@notionhq/apps/custom-blocks"
+import type { NotionDateInput } from "@notionhq/custom-blocks"
+import type { NotionPagePropertyValue } from "@notionhq/custom-blocks/pages"
 import type { PageRow } from "../blocks/main_ui/meeting.js"
 
 type PropertyFixture = string | NotionDateInput | NotionPagePropertyValue | null
 export type PageProperties = Record<string, PropertyFixture>
 
 export function pageRow(
-  id: string,
+  pageKey: string,
   values: PageProperties,
   metadata: {
-    created_time?: string | null
-    last_edited_time?: string | null
+    createdTime?: string | null
+    lastEditedTime?: string | null
   } = {}
 ): PageRow & { properties: Record<string, NotionPagePropertyValue | null> } {
   const properties: Record<string, NotionPagePropertyValue | null> = {}
@@ -20,10 +18,10 @@ export function pageRow(
     properties[key] = propertyValue(key, value)
   }
   return {
-    id,
+    pageKey,
     properties,
-    created_time: metadata.created_time ?? null,
-    last_edited_time: metadata.last_edited_time ?? null,
+    createdTime: metadata.createdTime ?? null,
+    lastEditedTime: metadata.lastEditedTime ?? null,
     getPropertyByKey: (key) => properties[key] ?? null,
   }
 }

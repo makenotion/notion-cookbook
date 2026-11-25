@@ -101,7 +101,7 @@ describe("research activity", () => {
         `${status}-${edited}`,
         { "Research status": status },
         {
-          last_edited_time: `2026-10-02T${edited}:00Z`,
+          lastEditedTime: `2026-10-02T${edited}:00Z`,
         }
       )
     const counts = researchActivity(

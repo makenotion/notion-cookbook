@@ -113,7 +113,7 @@ describe("deriveMeetings", () => {
       }),
     ]
     const queued = deriveMeetings(rows)
-    expect(queued.meetings.map((r) => r.id)).toEqual(["early", "late"])
+    expect(queued.meetings.map((r) => r.pageKey)).toEqual(["early", "late"])
     expect(queued).toMatchObject({
       hasPrepUpdated: false,
       hasPrepFinished: false,

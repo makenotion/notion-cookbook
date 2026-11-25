@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import type { NotionDateInput } from "@notionhq/apps/custom-blocks"
+import type { NotionDateInput } from "@notionhq/custom-blocks"
 import type { PageRow } from "../blocks/main_ui/meeting.js"
 import { pageRow } from "./pageFixtures.js"
 import {
@@ -63,7 +63,7 @@ function meeting(
       },
     },
     {
-      last_edited_time: new Date(
+      lastEditedTime: new Date(
         props.lastEditedMs ?? NOW - 60_000
       ).toISOString(),
     }
@@ -396,7 +396,7 @@ describe("runStartedMs", () => {
       pageRow(
         "r",
         { Started: started },
-        { created_time: "2026-09-29T16:00:00Z" }
+        { createdTime: "2026-09-29T16:00:00Z" }
       )
     expect(runStartedMs(row(null))).toBe(Date.parse("2026-09-29T16:00:00Z"))
     expect(runStartedMs(row({ start: "2026-09-29T16:30:00Z" }))).toBe(
