@@ -42,6 +42,14 @@ ntn workers customblocks dev
 
 The CLI fetches the dev shell as needed. Open the shell URL printed by the command.
 
+## Preview inside Notion
+
+Use in-app preview to test local changes with workspace data before you deploy.
+Preview writes change workspace data under your Notion permissions.
+
+To connect your block, follow the
+[SDK's local development guide](https://unpkg.com/@notionhq/custom-blocks@latest/docs/local-development.md#verify-inside-notion).
+
 ## Agent instructions
 
 The full custom block guide ships in `@notionhq/workers`, so updating that
