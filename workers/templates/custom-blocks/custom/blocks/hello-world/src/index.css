@@ -43,8 +43,7 @@ main {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--content-interactive-primary);
-  box-shadow: 0 0 0 3px var(--bg-muted);
+  background: var(--green-80);
 }
 
 .starter-heading {

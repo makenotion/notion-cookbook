@@ -1,8 +1,5 @@
 import "@notionhq/custom-blocks/nds.css"
-import {
-  NotionCustomBlock,
-  NotionTokenScope,
-} from "@notionhq/custom-blocks/react"
+import { NotionCustomBlock } from "@notionhq/custom-blocks/react"
 import ReactDOM from "react-dom/client"
 import "./index.css"
 
@@ -11,7 +8,7 @@ function App() {
     <main aria-labelledby="starter-title">
       <section className="starter-card">
         <div className="starter-status">
-          <span className="status-dot" data-theme="green" aria-hidden="true" />
+          <span className="status-dot" aria-hidden="true" />
           Custom block
         </div>
 
@@ -42,8 +39,6 @@ if (!root) throw new Error("Missing #root element")
 
 ReactDOM.createRoot(root).render(
   <NotionCustomBlock>
-    <NotionTokenScope>
-      <App />
-    </NotionTokenScope>
+    <App />
   </NotionCustomBlock>
 )
