@@ -1,21 +1,20 @@
 import { useMemo } from "react"
-import { useDataSource } from "@notionhq/custom-blocks/react"
+import { NotionDataSource } from "@notionhq/custom-blocks/data-sources"
+import { useQuerySubscription } from "@notionhq/custom-blocks/react"
 import type { OrgDataState, Person, PersonIcon } from "./types"
 
-const DATA_SOURCE_KEY = "people"
-const DATA_SOURCE_OPTIONS = { limit: 999 }
+const PEOPLE_QUERY = NotionDataSource.fromKey("people").createQuery()
 
 /**
  * Real data layer: reads the `people` data source and its page icons.
  */
 export function useNotionPeople(): OrgDataState {
-  const { items, isLoading, error, propertyIdsByKey } = useDataSource(
-    DATA_SOURCE_KEY,
-    DATA_SOURCE_OPTIONS
-  )
+  const result = useQuerySubscription(PEOPLE_QUERY, { limit: 999 })
   return useMemo<OrgDataState>(() => {
+    if (result.status === "loading") return { status: "loading" }
+    if (result.status === "error") return { status: "unbound" }
+    const { items, isLoading, propertyIdsByKey } = result.value
     if (isLoading && items.length === 0) return { status: "loading" }
-    if (error) return { status: "unbound" }
     if (
       !propertyIdsByKey.name ||
       !propertyIdsByKey.role ||
@@ -25,42 +24,46 @@ export function useNotionPeople(): OrgDataState {
     }
 
     const people: Person[] = []
-    for (const item of items) {
-      const nameProperty = item.getPropertyByKey("name")
+    for (const { data } of items) {
+      const nameProperty = data.getPropertyByKey("name")
       const name =
         nameProperty?.type === "title"
-          ? nameProperty.title
-              .map((segment) => segment["plain_text"])
-              .filter((part): part is string => typeof part === "string")
-              .join("")
-              .trim()
+          ? nameProperty.title.map(readTextSegment).join("").trim()
           : ""
       if (name === "") continue
-      const roleProperty = item.getPropertyByKey("role")
+      const roleProperty = data.getPropertyByKey("role")
       const role =
         roleProperty?.type === "rich_text"
-          ? roleProperty.rich_text
-              .map((segment) => segment["plain_text"])
-              .filter((part): part is string => typeof part === "string")
-              .join("")
-              .trim()
+          ? roleProperty.rich_text.map(readTextSegment).join("").trim()
           : ""
-      const relationProperty = item.getPropertyByKey("reportsTo")
+      const relationProperty = data.getPropertyByKey("reportsTo")
       const managerIds =
         relationProperty?.type === "relation"
           ? relationProperty.relation.map((pointer) => pointer.id)
           : []
       people.push({
-        id: item.id,
+        id: data.pageKey,
         name,
         role,
         managerIds,
-        icon: toPersonIcon(item.icon) ?? undefined,
+        icon: toPersonIcon(data.icon) ?? undefined,
       })
     }
     if (people.length === 0) return { status: "empty" }
     return { status: "ready", people }
-  }, [items, isLoading, error, propertyIdsByKey])
+  }, [result])
+}
+
+function readTextSegment(segment: Record<string, unknown>): string {
+  const plainText = segment["plain_text"]
+  if (typeof plainText === "string") return plainText
+  const text = segment["text"]
+  return typeof text === "object" &&
+    text !== null &&
+    "content" in text &&
+    typeof text.content === "string"
+    ? text.content
+    : ""
 }
 
 type NotionPageIconLike =
