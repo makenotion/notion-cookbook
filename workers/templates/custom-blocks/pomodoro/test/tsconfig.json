@@ -1,0 +1,7 @@
+{
+  "extends": "../blocks/pomodoro/tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["./*.tsx", "../blocks/pomodoro/src"]
+}
