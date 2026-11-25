@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { pages } from "@notionhq/custom-blocks"
-import type {
-  NotionPage,
-  NotionPagePropertyValue,
-  NotionPagePropertyInputValue,
-} from "@notionhq/custom-blocks"
-import { useDataSource } from "@notionhq/custom-blocks/react"
+import { NotionDataSource } from "@notionhq/custom-blocks/data-sources"
+import {
+  createPage,
+  type NotionPage,
+  type NotionPageData,
+  type NotionPagePropertyValue,
+  type NotionPagePropertyInputValue,
+} from "@notionhq/custom-blocks/pages"
+import { useQuerySubscription } from "@notionhq/custom-blocks/react"
 import type { BoardItem, WhiteboardStore, SaveState } from "./model"
 import {
   autoLabel,
@@ -20,27 +22,37 @@ const DATA_SOURCE_KEY = "items"
 const WRITE_DEBOUNCE_MS = 500
 /** Notion rich text segments cap at 2000 chars; stay under it. */
 const TEXT_CHUNK = 1900
-const DATA_SOURCE_OPTIONS = { limit: 999 }
+const ITEMS_QUERY = NotionDataSource.fromKey(DATA_SOURCE_KEY).createQuery()
 
 type ItemPatch = Partial<Omit<BoardItem, "id">>
 
+function readTextSegment(segment: Record<string, unknown>): string {
+  const plainText = segment["plain_text"]
+  if (typeof plainText === "string") return plainText
+  const text = segment["text"]
+  return typeof text === "object" &&
+    text !== null &&
+    "content" in text &&
+    typeof text.content === "string"
+    ? text.content
+    : ""
+}
+
 function richTextContent(property: NotionPagePropertyValue | null): string {
   if (property?.type === "rich_text") {
-    return property.rich_text
-      .map((segment) => segment["plain_text"])
-      .filter((text): text is string => typeof text === "string")
-      .join("")
+    return property.rich_text.map(readTextSegment).join("")
   }
   if (property?.type === "title") {
-    return property.title
-      .map((segment) => segment["plain_text"])
-      .filter((text): text is string => typeof text === "string")
-      .join("")
+    return property.title.map(readTextSegment).join("")
   }
   return ""
 }
 
-function numberValue(row: NotionPage, key: string, fallback: number): number {
+function numberValue(
+  row: NotionPageData,
+  key: string,
+  fallback: number
+): number {
   const property = row.getPropertyByKey(key)
   return property?.type === "number" &&
     typeof property.number === "number" &&
@@ -49,7 +61,7 @@ function numberValue(row: NotionPage, key: string, fallback: number): number {
     : fallback
 }
 
-function rowToItem(row: NotionPage): BoardItem | null {
+function rowToItem(row: NotionPageData): BoardItem | null {
   const typeProperty = row.getPropertyByKey("type")
   const type =
     typeProperty?.type === "select" ? typeProperty.select?.name : undefined
@@ -58,7 +70,7 @@ function rowToItem(row: NotionPage): BoardItem | null {
   const colorValue =
     colorProperty?.type === "select" ? colorProperty.select?.name : undefined
   return {
-    id: row.id,
+    id: row.pageKey,
     type,
     title: richTextContent(row.getPropertyByKey("title")),
     color: isItemColor(colorValue)
@@ -130,17 +142,14 @@ function patchToProperties(
  * Failed writes revert quietly; a small inline wisp shows save status.
  */
 export function useNotionStore(): WhiteboardStore {
-  const {
-    items: rows,
-    isLoading,
-    error,
-    propertyIdsByKey,
-  } = useDataSource(DATA_SOURCE_KEY, DATA_SOURCE_OPTIONS)
+  const result = useQuerySubscription(ITEMS_QUERY, { limit: 999 })
+  const snapshot = result.status === "success" ? result.value : undefined
+  const rows = snapshot?.items
+  const isLoading = snapshot?.isLoading ?? result.status === "loading"
+  const hasLoadError = result.status === "error"
 
   const [local, setLocal] = useState<BoardItem[] | null>(null)
   const [saveState, setSaveState] = useState<SaveState>("idle")
-  const queryStarted = useRef(false)
-  if (isLoading) queryStarted.current = true
 
   // localId -> real Notion page id ("" while a create is in flight).
   const pageIds = useRef(new Map<string, string>())
@@ -158,15 +167,14 @@ export function useNotionStore(): WhiteboardStore {
   const errorUntil = useRef(0)
   const idleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const pageCache = useRef(new Map<string, NotionPage>())
-  for (const row of rows) pageCache.current.set(row.id, row)
+  for (const { page, data } of rows ?? []) {
+    pageCache.current.set(data.pageKey, page)
+  }
   const localSeq = useRef(0)
 
-  // The SDK exposes an empty, non-loading snapshot before its query effect runs.
-  // Wait until we have observed the query cycle (or actual rows), then reconcile
-  // every live snapshot while preserving local creates and unconfirmed writes.
+  // Reconcile each settled snapshot while preserving local creates and unconfirmed writes.
   useEffect(() => {
-    if (isLoading || error || (!queryStarted.current && rows.length === 0))
-      return
+    if (isLoading || rows === undefined) return
 
     const localIdByPageId = new Map<string, string>()
     for (const [localId, pageId] of pageIds.current) {
@@ -175,8 +183,8 @@ export function useNotionStore(): WhiteboardStore {
 
     const synced: BoardItem[] = []
     const syncedIds = new Set<string>()
-    for (const row of rows) {
-      const remoteItem = rowToItem(row)
+    for (const { data } of rows) {
+      const remoteItem = rowToItem(data)
       if (!remoteItem) continue
 
       const localId = localIdByPageId.get(remoteItem.id) ?? remoteItem.id
@@ -200,7 +208,7 @@ export function useNotionStore(): WhiteboardStore {
       )
       return [...synced, ...localOnly].sort((a, b) => a.z - b.z)
     })
-  }, [isLoading, error, rows])
+  }, [isLoading, rows])
 
   useEffect(() => {
     const timerMap = timers.current
@@ -340,16 +348,16 @@ export function useNotionStore(): WhiteboardStore {
       }
 
       beginWrite()
-      void pages
-        .create({
-          parent: { type: "data_source_key", key: DATA_SOURCE_KEY },
-          properties: patchToProperties(withTitle),
-        })
+      void createPage({
+        parent: { type: "data_source_key", dataSourceKey: DATA_SOURCE_KEY },
+        properties: patchToProperties(withTitle),
+      })
         .then((result) => {
           if (result.status === "success") {
             if (pageIds.current.has(localId)) {
-              pageIds.current.set(localId, result.page.id)
-              pageCache.current.set(result.page.id, result.page)
+              const pageKey = result.page.getKey()
+              pageIds.current.set(localId, pageKey)
+              pageCache.current.set(pageKey, result.page)
               baselines.current.set(localId, { ...withTitle, id: localId })
             } else {
               // Item was deleted while the create was in flight.
@@ -424,11 +432,11 @@ export function useNotionStore(): WhiteboardStore {
 
   return {
     items: local ?? [],
-    isLoading: local === null && !error,
-    loadError: error
+    isLoading: local === null && !hasLoadError,
+    loadError: hasLoadError
       ? "Couldn't load the whiteboard database. Map a database to the “items” key in the block settings."
       : null,
-    setupIssues: validateWhiteboardBindings(propertyIdsByKey),
+    setupIssues: validateWhiteboardBindings(snapshot?.propertyIdsByKey ?? {}),
     saveState,
     createItem,
     updateItem,
