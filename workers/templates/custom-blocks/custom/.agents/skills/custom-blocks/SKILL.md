@@ -14,3 +14,15 @@ Follow the instructions in that file.
 If the file is missing, install the project dependencies.
 If it remains missing, update `@notionhq/workers` to a release that includes the skill.
 Do not continue with custom block changes until you can read the SDK skill.
+
+## Choose a preview host
+
+Use the dev shell to test rendering and interactions with sample data.
+Use in-app preview to test local changes with workspace data or verify Notion
+permissions. Preview writes change workspace data under the viewer's permissions.
+Use test data when verifying writes.
+
+Follow the SDK's [local development guide](https://unpkg.com/@notionhq/custom-blocks@latest/docs/local-development.md)
+for startup and connection steps. If in-app preview is unavailable, use the dev
+shell and report that the Notion host remains unverified. Report which host you
+tested and what you observed.
