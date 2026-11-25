@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import type { NotionDateInput } from "@notionhq/apps/custom-blocks"
+import type { NotionDateInput } from "@notionhq/custom-blocks"
 import type { PageRow } from "../blocks/main_ui/meeting.js"
 import { pageRow, propertyValue } from "./pageFixtures.js"
 import {
@@ -155,17 +155,18 @@ describe("pickMeeting", () => {
   ]
 
   it("picks the meeting in progress", () => {
-    expect(pickMeeting(rows, Date.parse("2026-09-29T17:30:00Z"))?.row.id).toBe(
-      "now"
-    )
+    expect(
+      pickMeeting(rows, Date.parse("2026-09-29T17:30:00Z"))?.row.pageKey
+    ).toBe("now")
   })
 
   it("between meetings, an all-day event in progress beats the next meeting", () => {
-    expect(pickMeeting(rows, Date.parse("2026-09-29T19:00:00Z"))?.row.id).toBe(
-      "all-day"
-    )
     expect(
-      pickMeeting(rows.slice(1), Date.parse("2026-09-29T19:00:00Z"))?.row.id
+      pickMeeting(rows, Date.parse("2026-09-29T19:00:00Z"))?.row.pageKey
+    ).toBe("all-day")
+    expect(
+      pickMeeting(rows.slice(1), Date.parse("2026-09-29T19:00:00Z"))?.row
+        .pageKey
     ).toBe("later")
   })
 
@@ -231,9 +232,9 @@ describe("multi-day events", () => {
       offsite,
       offsite,
     ])
-    expect(merged.map((r) => r.id)).toEqual(["offsite", "later"])
+    expect(merged.map((r) => r.pageKey)).toEqual(["offsite", "later"])
     const noon = new Date(2026, 8, 29, 12).getTime()
-    expect(pickMeeting(merged, noon)?.row.id).toBe("offsite")
+    expect(pickMeeting(merged, noon)?.row.pageKey).toBe("offsite")
   })
 })
 
@@ -259,7 +260,7 @@ describe("layoutDay", () => {
       day
     )
     const byId = Object.fromEntries(
-      timed.map((e) => [e.row.id, [e.column, e.columns]])
+      timed.map((e) => [e.row.pageKey, [e.column, e.columns]])
     )
     expect(byId).toEqual({ a: [0, 2], b: [1, 2], c: [0, 2], d: [0, 1] })
   })
@@ -277,8 +278,8 @@ describe("layoutDay", () => {
       ],
       day
     )
-    expect(allDay.map((e) => e.row.id)).toEqual(["offsite", "all-day"])
-    expect(timed.map((e) => e.row.id)).toEqual(["meeting"])
+    expect(allDay.map((e) => e.row.pageKey)).toEqual(["offsite", "all-day"])
+    expect(timed.map((e) => e.row.pageKey)).toEqual(["meeting"])
   })
 })
 

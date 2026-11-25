@@ -4,10 +4,8 @@
 // ---- Data source queries ---------------------------------------------------
 
 /**
- * The parts of a data source snapshot the block relies on. `useDataSource`
- * returns an empty, not-loading result before its first snapshot and after
- * every change of options, so that alone cannot tell "no rows" apart from
- * "not asked yet".
+ * The query rows and loading state used to keep the previous results visible
+ * while a new subscription starts.
  */
 export type Snapshot<T> = {
   items: readonly T[]
@@ -45,9 +43,8 @@ export function initialQuery<T>(): QueryState<T> {
 /**
  * Track one live query. Rows are replaced only by a settled result: a
  * not-loading snapshot after the query was seen loading, or one that has
- * rows. An empty, not-loading snapshot before that is the SDK's placeholder
- * and is ignored. A resubscribe (new options) keeps the previous rows until
- * the new query settles, so changing a filter does not flash empty states.
+ * rows. An empty snapshot before a query starts leaves the previous rows
+ * visible, so changing a filter does not flash empty states.
  */
 export function reduceQuery<T>(
   state: QueryState<T>,

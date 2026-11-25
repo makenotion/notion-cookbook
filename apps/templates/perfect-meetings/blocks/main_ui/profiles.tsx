@@ -7,7 +7,8 @@ import {
   Loader2,
   UsersRound,
 } from "lucide-react"
-import { pages, type NotionPage } from "@notionhq/apps/custom-blocks"
+import { openPage } from "@notionhq/custom-blocks/navigation"
+import type { NotionPageData } from "@notionhq/custom-blocks/pages"
 
 import { Avatar, AvatarFallback, AvatarImage } from "./components/ui/avatar"
 import { Badge } from "./components/ui/badge"
@@ -25,7 +26,7 @@ function initials(name: string) {
     .join("")
 }
 
-function ProfileActivity({ row, now }: { row: NotionPage; now: number }) {
+function ProfileActivity({ row, now }: { row: NotionPageData; now: number }) {
   const counts = researchActivity([row], now)
   if (counts.done || counts.unrequested) return null
   return (
@@ -51,7 +52,7 @@ export function PersonCard({
   person,
   now,
 }: {
-  person: NotionPage
+  person: NotionPageData
   now: number
 }) {
   const email = text(person.getPropertyByKey("Email"))
@@ -80,7 +81,7 @@ export function PersonCard({
                 className="profile-name"
                 title={`Open ${name}'s profile`}
                 onClick={() =>
-                  void pages.open(person.id, { mode: "side_peek" })
+                  void openPage(person.pageKey, { mode: "side_peek" })
                 }
               >
                 <span>{name}</span>
@@ -164,8 +165,8 @@ export function CompanyCard({
   now,
 }: {
   domain: string
-  company: NotionPage | undefined
-  attendees: NotionPage[]
+  company: NotionPageData | undefined
+  attendees: NotionPageData[]
   now: number
 }) {
   const name = company
@@ -188,7 +189,7 @@ export function CompanyCard({
                   className="profile-name"
                   title={`Open ${name}'s profile`}
                   onClick={() =>
-                    void pages.open(company.id, { mode: "side_peek" })
+                    void openPage(company.pageKey, { mode: "side_peek" })
                   }
                 >
                   <span>{name}</span>

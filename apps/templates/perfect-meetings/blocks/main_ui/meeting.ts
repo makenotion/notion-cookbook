@@ -1,16 +1,14 @@
 import type {
-  NotionPage,
+  NotionPageData,
   NotionPagePropertyValue,
-} from "@notionhq/apps/custom-blocks"
+} from "@notionhq/custom-blocks/pages"
 
 // Pure helpers for picking and describing the current or next meeting.
 
-export type PageRow<Id extends string = string> = {
-  id: Id
-  getPropertyByKey: NotionPage["getPropertyByKey"]
-  created_time: string | null
-  last_edited_time: string | null
-}
+export type PageRow = Pick<
+  NotionPageData,
+  "pageKey" | "getPropertyByKey" | "createdTime" | "lastEditedTime"
+>
 
 const HOUR_MS = 60 * 60 * 1000
 
@@ -153,7 +151,7 @@ export function text(
 
 /** Rows ordered by start time, dropping duplicates by ID. */
 export function sortByStart<Row extends PageRow>(rows: readonly Row[]): Row[] {
-  const unique = [...new Map(rows.map((row) => [row.id, row])).values()]
+  const unique = [...new Map(rows.map((row) => [row.pageKey, row])).values()]
   const start = (row: Row) =>
     dateRange(row.getPropertyByKey("When"))?.startMs ?? Infinity
   return unique.sort((a, b) => start(a) - start(b))

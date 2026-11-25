@@ -1,4 +1,4 @@
-import type { NotionPagePropertyValue } from "@notionhq/apps/custom-blocks"
+import type { NotionPagePropertyValue } from "@notionhq/custom-blocks/pages"
 
 import { dateRange, splitEmails, text } from "./meeting"
 import type { PageRow } from "./meeting"
@@ -172,14 +172,14 @@ export function dateMs(value: NotionPagePropertyValue | null): number | null {
 
 /** A run row's start: Started, or its created time when Started is empty. */
 export function runStartedMs(row: PageRow): number | null {
-  return dateMs(row.getPropertyByKey("Started")) ?? dateTimeMs(row.created_time)
+  return dateMs(row.getPropertyByKey("Started")) ?? dateTimeMs(row.createdTime)
 }
 
 /** When a meeting last changed: Prep updated or its last edit, if later. */
 export function lastActivityMs(row: PageRow): number | null {
   const times = [
     dateMs(row.getPropertyByKey("Prep updated")),
-    dateTimeMs(row.last_edited_time),
+    dateTimeMs(row.lastEditedTime),
   ].filter((ms): ms is number => ms !== null)
   return times.length > 0 ? Math.max(...times) : null
 }
@@ -232,7 +232,7 @@ export function researchProgress(
   let done = 0
   let total = 0
   let stalled = 0
-  const unique = new Map(rows.map((row) => [row.id, row]))
+  const unique = new Map(rows.map((row) => [row.pageKey, row]))
   for (const row of unique.values()) {
     if (text(row.getPropertyByKey("Status")) === "Cancelled") continue
     if (splitEmails(text(row.getPropertyByKey("Attendee emails"))).length === 0)

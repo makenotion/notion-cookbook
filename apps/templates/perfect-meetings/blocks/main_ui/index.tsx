@@ -1,13 +1,13 @@
 import React from "react"
 import { createRoot } from "react-dom/client"
 import {
-  customBlock,
-  pages,
+  NotionDataSource,
   type DataSourceQueryOptions,
-  type NotionPage,
-} from "@notionhq/apps/custom-blocks"
-import { NotionCustomBlock, NotionTokenScope } from "@notionhq/apps/react"
-import "@notionhq/apps/nds.css"
+} from "@notionhq/custom-blocks/data-sources"
+import { openPage } from "@notionhq/custom-blocks/navigation"
+import { createPage, type NotionPageData } from "@notionhq/custom-blocks/pages"
+import { NotionCustomBlock } from "@notionhq/custom-blocks/react"
+import "@notionhq/custom-blocks/nds.css"
 import "./shadcn.css"
 import "./style.css"
 import "./dashboard.css"
@@ -23,8 +23,8 @@ import {
   type DayEvent,
 } from "./meeting"
 import {
-  COMPANIES_QUERY,
-  PEOPLE_QUERY,
+  MEETINGS_LIMIT,
+  RUNS_LIMIT,
   RUNS_QUERY,
   deriveMeetings,
   deriveRuns,
@@ -36,7 +36,6 @@ import {
   initialQuery,
   reduceQuery,
   reduceSync,
-  type QueryEvent,
   type QueryState,
   type Snapshot,
   type SyncEvent,
@@ -73,7 +72,7 @@ type Mode = "next" | "day"
 /** Which view is showing; `selectedId` is a meeting opened from the day view. */
 type ViewState = { mode: Mode; selectedId: string | null }
 type Picked = {
-  row: NotionPage
+  row: NotionPageData
   startMs: number
   endMs: number
   allDay: boolean
@@ -119,9 +118,9 @@ function useViewState(): [ViewState, (next: ViewState) => void] {
 }
 
 function byKey(
-  rows: readonly NotionPage[],
+  rows: readonly NotionPageData[],
   key: string
-): Map<string, NotionPage> {
+): Map<string, NotionPageData> {
   return new Map(
     rows.map((row) => [
       text(row.getPropertyByKey(key)).trim().toLowerCase(),
@@ -212,8 +211,8 @@ function MeetingCards({
 }: {
   meeting: Picked
   eyebrow: string
-  people: Map<string, NotionPage>
-  companies: Map<string, NotionPage>
+  people: Map<string, NotionPageData>
+  companies: Map<string, NotionPageData>
   peopleLoading: boolean
   now: number
 }) {
@@ -265,7 +264,7 @@ function MeetingCards({
           <Button
             type="button"
             className="dashboard-sync"
-            onClick={() => void pages.open(row.id, { mode: "center_peek" })}
+            onClick={() => void openPage(row.pageKey, { mode: "center_peek" })}
           >
             Open prep
           </Button>
@@ -304,7 +303,7 @@ function MeetingCards({
             <h3 className="section">People</h3>
             <ul className="profiles-grid">
               {attendees.map((person) => (
-                <PersonCard key={person.id} person={person} now={now} />
+                <PersonCard key={person.pageKey} person={person} now={now} />
               ))}
             </ul>
           </section>
@@ -327,7 +326,7 @@ function DayView({
   now,
   onSelect,
 }: {
-  meetings: readonly NotionPage[]
+  meetings: readonly NotionPageData[]
   highlightId: string | null
   now: number
   onSelect: (id: string) => void
@@ -339,7 +338,7 @@ function DayView({
   const scroller = React.useRef<HTMLDivElement>(null)
 
   // Open scrolled to an hour before the highlighted meeting, or before now.
-  const highlighted = timed.find((event) => event.row.id === highlightId)
+  const highlighted = timed.find((event) => event.row.pageKey === highlightId)
   const anchorMs = highlighted?.topMs ?? now
   React.useEffect(() => {
     if (scroller.current)
@@ -347,10 +346,10 @@ function DayView({
     // Only on mount and when the day changes.
   }, [day.startMs])
 
-  const className = (event: { row: NotionPage; endMs: number }) =>
+  const className = (event: { row: NotionPageData; endMs: number }) =>
     [
       "event",
-      event.row.id === highlightId && "event-highlight",
+      event.row.pageKey === highlightId && "event-highlight",
       event.endMs <= now && "event-past",
     ]
       .filter(Boolean)
@@ -376,10 +375,10 @@ function DayView({
           <div className="all-day-events">
             {allDay.map((event) => (
               <button
-                key={event.row.id}
+                key={event.row.pageKey}
                 type="button"
                 className={className(event)}
-                onClick={() => onSelect(event.row.id)}
+                onClick={() => onSelect(event.row.pageKey)}
               >
                 <span className="event-title">
                   {text(event.row.getPropertyByKey("Title")) ||
@@ -401,14 +400,14 @@ function DayView({
             </div>
           ))}
           <div className="events" data-theme="blue">
-            {timed.map((event: DayEvent<NotionPage>) => {
+            {timed.map((event: DayEvent<NotionPageData>) => {
               const height = px(event.bottomMs) - px(event.topMs)
               const title =
                 text(event.row.getPropertyByKey("Title")) || "Untitled meeting"
               const time = `${formatTime(event.startMs)} – ${formatTime(event.endMs)}`
               return (
                 <button
-                  key={event.row.id}
+                  key={event.row.pageKey}
                   type="button"
                   className={`${className(event)}${height < 40 ? " event-compact" : ""}`}
                   title={`${title}, ${time}`}
@@ -418,7 +417,7 @@ function DayView({
                     left: `${(event.column / event.columns) * 100}%`,
                     width: `calc(${100 / event.columns}% - 4px)`,
                   }}
-                  onClick={() => onSelect(event.row.id)}
+                  onClick={() => onSelect(event.row.pageKey)}
                 >
                   <span className="event-title">{title}</span>
                   <span className="event-time">
@@ -511,29 +510,28 @@ function useSyncRequest(latestRunId: string | null): {
     const now = Date.now()
     apply({ type: "click", now, latestRunId: latest.current })
     const failed = (message: string) => apply({ type: "failed", message })
-    void pages
-      .create({
-        parent: { type: "data_source_key", key: "runs" },
-        properties: {
-          Name: {
-            type: "title",
-            title: [{ type: "text", text: { content: "Sync calendar" } }],
-          },
-          // Empty or "Run now" marks a request (src/workflows/lib/runs.ts).
-          Trigger: { type: "select", select: { name: "Run now" } },
-          Started: {
-            type: "date",
-            date: { start: new Date(now).toISOString() },
-          },
+    void createPage({
+      parent: { type: "data_source_key", dataSourceKey: "runs" },
+      properties: {
+        Name: {
+          type: "title",
+          title: [{ type: "text", text: { content: "Sync calendar" } }],
         },
-      })
-      .then(
-        (result) => {
-          if (result.status === "error") failed(result.error.message)
+        // Empty or "Run now" marks a request (src/workflows/lib/runs.ts).
+        Trigger: { type: "select", select: { name: "Run now" } },
+        Started: {
+          type: "date",
+          date: { start: new Date(now).toISOString() },
         },
-        (cause: unknown) =>
-          failed(cause instanceof Error ? cause.message : String(cause))
-      )
+      },
+    })
+    .then(
+      (result) => {
+        if (result.status === "error") failed(result.error.message)
+      },
+      (cause: unknown) =>
+        failed(cause instanceof Error ? cause.message : String(cause))
+    )
   }, [apply])
 
   return {
@@ -543,8 +541,6 @@ function useSyncRequest(latestRunId: string | null): {
   }
 }
 
-type Row = NotionPage
-
 /**
  * A live query that reports `loaded` only after its first real result and
  * keeps the previous rows while a changed query reloads (see reduceQuery).
@@ -552,28 +548,32 @@ type Row = NotionPage
  */
 function useLiveQuery(
   key: string,
-  options: DataSourceQueryOptions,
+  options: DataSourceQueryOptions | undefined,
+  limit: number,
   attempt: number
-): QueryState<Row> {
-  const identity = JSON.stringify(options)
+): QueryState<NotionPageData> {
   const [state, dispatch] = React.useReducer(
-    reduceQuery as (s: QueryState<Row>, e: QueryEvent<Row>) => QueryState<Row>,
+    reduceQuery<NotionPageData>,
     undefined,
-    () => initialQuery<Row>()
+    () => initialQuery<NotionPageData>()
   )
   React.useEffect(() => {
     dispatch({ type: "resubscribe" })
-    let last: Snapshot<Row> = { items: [], isLoading: false }
-    const unsubscribe = customBlock.subscribeToDataSource({
-      key,
-      options: JSON.parse(identity) as DataSourceQueryOptions,
-      onSnapshot: (snapshot) => {
-        last = snapshot
-        dispatch({ type: "snapshot", snapshot })
-      },
-      onError: (error) =>
-        dispatch({ type: "snapshot", snapshot: { ...last, error } }),
-    })
+    let last: Snapshot<NotionPageData> = { items: [], isLoading: false }
+    const unsubscribe = NotionDataSource.fromKey(key)
+      .createQuery(options)
+      .subscribe({
+        limit,
+        onSnapshot: ({ items, isLoading, hasMore, error }) => {
+          last = {
+            items: items.map(({ data }) => data),
+            isLoading,
+            hasMore,
+            error,
+          }
+          dispatch({ type: "snapshot", snapshot: last })
+        },
+      })
     const timer = window.setTimeout(
       () => dispatch({ type: "timeout", snapshot: last }),
       10_000
@@ -582,7 +582,7 @@ function useLiveQuery(
       window.clearTimeout(timer)
       unsubscribe()
     }
-  }, [key, identity, attempt])
+  }, [key, options, limit, attempt])
   return state
 }
 
@@ -597,11 +597,12 @@ function MeetingsBlock() {
   const meetingsQ = useLiveQuery(
     "meetings",
     React.useMemo(() => meetingsQuery(windowStart), [windowStart]),
+    MEETINGS_LIMIT,
     retries
   )
-  const runsQ = useLiveQuery("runs", RUNS_QUERY, retries)
-  const people = useLiveQuery("people", PEOPLE_QUERY, retries)
-  const companies = useLiveQuery("companies", COMPANIES_QUERY, retries)
+  const runsQ = useLiveQuery("runs", RUNS_QUERY, RUNS_LIMIT, retries)
+  const people = useLiveQuery("people", undefined, 999, retries)
+  const companies = useLiveQuery("companies", undefined, 999, retries)
 
   const { meetings, hasPrepUpdated, hasPrepFinished } = React.useMemo(
     () => deriveMeetings(meetingsQ.items),
@@ -729,14 +730,14 @@ function MeetingsBlock() {
     content = emptyState
   } else if (view.mode === "day") {
     const selected = view.selectedId
-      ? meetings.find((row) => row.id === view.selectedId)
+      ? meetings.find((row) => row.pageKey === view.selectedId)
       : undefined
     const range = selected && dateRange(selected.getPropertyByKey("When"))
     content =
       selected && range ? (
         cards(
           { row: selected, ...range },
-          selected.id === picked?.row.id
+          selected.pageKey === picked?.row.pageKey
             ? relative(range.startMs, range.endMs, now) || "Next meeting"
             : "Meeting"
         )
@@ -745,7 +746,7 @@ function MeetingsBlock() {
       ) : (
         <DayView
           meetings={meetings}
-          highlightId={picked?.row.id ?? null}
+          highlightId={picked?.row.pageKey ?? null}
           now={now}
           onSelect={(id) => setView({ mode: "day", selectedId: id })}
         />
@@ -808,8 +809,6 @@ const root = document.getElementById("root")
 if (!root) throw new Error("Missing root element")
 createRoot(root).render(
   <NotionCustomBlock>
-    <NotionTokenScope>
-      <MeetingsBlock />
-    </NotionTokenScope>
+    <MeetingsBlock />
   </NotionCustomBlock>
 )
